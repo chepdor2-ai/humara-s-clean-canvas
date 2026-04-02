@@ -82,41 +82,39 @@ export default function Home() {
   };
 
   return (
-    <main className="pt-24 pb-10">
-      <div className="w-[92%] max-w-7xl mx-auto space-y-6">
-        <section className="glass rounded-2xl p-6 md:p-8 shadow-lg">
+    <main className="pb-10 pt-10 md:pt-14">
+      <div className="app-frame space-y-6">
+        <section className="panel hero-panel p-6 md:p-8 lg:p-10">
           <div className="max-w-3xl space-y-3">
-            <div className="inline-flex items-center rounded-full border border-orange-200 bg-white px-3 py-1 text-[11px] font-bold uppercase tracking-[0.24em] text-gray-600">
-              Humara Engine
-            </div>
-            <h1 className="text-3xl md:text-5xl font-black tracking-tight text-gray-900">Humara AI Humanizer</h1>
-            <p className="text-sm md:text-base text-gray-600 leading-relaxed">
+            <div className="eyebrow">Humara Engine</div>
+            <h1 className="hero-title">Rewritten for human flow, built on your existing engine.</h1>
+            <p className="hero-copy">
               Humanize AI-written text using your existing engines, then review the detector impact instantly.
             </p>
           </div>
         </section>
 
-        <section className="glass rounded-2xl p-5 md:p-6 shadow-lg space-y-5">
+        <section className="panel p-5 md:p-6 space-y-5">
           <div className="grid gap-4 md:grid-cols-3">
             <div>
-              <label className="mb-2 block text-[11px] font-bold uppercase tracking-[0.22em] text-gray-500">Engine</label>
-              <select value={engine} onChange={(e) => setEngine(e.target.value)} className="w-full rounded-xl border border-gray-200 bg-white px-3 py-3 text-sm font-semibold text-gray-900 outline-none">
+              <label className="field-label">Engine</label>
+              <select value={engine} onChange={(e) => setEngine(e.target.value)} className="field">
                 <option value="ghost_mini">Ghost Mini</option>
                 <option value="ghost_pro">Ghost Pro</option>
                 <option value="ninja">Ninja</option>
               </select>
             </div>
             <div>
-              <label className="mb-2 block text-[11px] font-bold uppercase tracking-[0.22em] text-gray-500">Strength</label>
-              <select value={strength} onChange={(e) => setStrength(e.target.value)} className="w-full rounded-xl border border-gray-200 bg-white px-3 py-3 text-sm font-semibold text-gray-900 outline-none">
+              <label className="field-label">Strength</label>
+              <select value={strength} onChange={(e) => setStrength(e.target.value)} className="field">
                 <option value="light">Light</option>
                 <option value="balanced">Balanced</option>
                 <option value="deep">Deep</option>
               </select>
             </div>
             <div>
-              <label className="mb-2 block text-[11px] font-bold uppercase tracking-[0.22em] text-gray-500">Status</label>
-              <div className="rounded-xl border border-gray-200 bg-white px-3 py-3 text-sm font-semibold text-gray-900">
+              <label className="field-label">Status</label>
+              <div className="status-chip">
                 {isProcessing ? 'Processing…' : 'Ready'}
               </div>
             </div>
@@ -125,51 +123,51 @@ export default function Home() {
           <div className="grid gap-4 lg:grid-cols-2">
             <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <label className="text-[11px] font-bold uppercase tracking-[0.22em] text-gray-500">Original text</label>
-                <button onClick={() => { setInputText(''); setOutputText(''); setMessage(''); }} className="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-bold text-gray-700">Clear</button>
+                <label className="field-label">Original text</label>
+                <button onClick={() => { setInputText(''); setOutputText(''); setMessage(''); }} className="subtle-button px-3 py-2 text-[0.7rem]">Clear</button>
               </div>
-              <textarea value={inputText} onChange={(e) => setInputText(e.target.value)} rows={14} className="w-full rounded-2xl border border-gray-200 bg-white p-4 text-sm leading-6 text-gray-900 outline-none" placeholder="Paste AI-generated text here..." />
-              <p className="text-xs font-semibold text-gray-500">{inputWords} words • {inputText.length} characters</p>
+               <textarea value={inputText} onChange={(e) => setInputText(e.target.value)} rows={14} className="field min-h-[21rem] resize-y leading-7" placeholder="Paste AI-generated text here..." />
+              <p className="text-xs font-semibold muted-copy">{inputWords} words • {inputText.length} characters</p>
             </div>
 
             <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <label className="text-[11px] font-bold uppercase tracking-[0.22em] text-gray-500">Humanized output</label>
+                <label className="field-label">Humanized output</label>
                 <button
                   onClick={async () => {
                     if (!outputText) return;
                     await navigator.clipboard.writeText(outputText);
                     setMessage('Output copied to clipboard.');
                   }}
-                  className="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-bold text-gray-700"
+                  className="subtle-button px-3 py-2 text-[0.7rem]"
                 >
                   Copy
                 </button>
               </div>
-              <textarea value={outputText} readOnly rows={14} className="w-full rounded-2xl border border-gray-200 bg-white p-4 text-sm leading-6 text-gray-900 outline-none" placeholder="Humanized text will appear here..." />
-              <p className="text-xs font-semibold text-gray-500">{outputWords} words • {outputText.length} characters</p>
+              <textarea value={outputText} readOnly rows={14} className="field min-h-[21rem] resize-y leading-7" placeholder="Humanized text will appear here..." />
+              <p className="text-xs font-semibold muted-copy">{outputWords} words • {outputText.length} characters</p>
             </div>
           </div>
 
           <div className="space-y-3">
-            <button onClick={handleHumanize} disabled={isProcessing} className="gradient-orange w-full rounded-2xl px-5 py-3 text-sm font-black uppercase tracking-[0.22em] text-white shadow-md disabled:opacity-60">
+            <button onClick={handleHumanize} disabled={isProcessing} className="primary-button w-full px-5 py-4">
               {isProcessing ? 'Processing…' : 'Humanize text'}
             </button>
-            {message ? <div className="rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm font-medium text-gray-700">{message}</div> : null}
+            {message ? <div className="message-box text-sm font-medium">{message}</div> : null}
           </div>
         </section>
 
         <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-6">
           {detectorCards.map((item) => (
-            <article key={item.key} className="glass rounded-2xl p-4 text-center shadow-sm">
-              <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-gray-500">{item.label}</p>
-              <p className="mt-2 text-2xl font-black text-gray-900">{typeof scores[item.key] === 'number' ? `${Math.round(scores[item.key] as number)}%` : '--'}</p>
+            <article key={item.key} className="metric-card text-center">
+              <p className="metric-label">{item.label}</p>
+              <p className="metric-value">{typeof scores[item.key] === 'number' ? `${Math.round(scores[item.key] as number)}%` : '--'}</p>
             </article>
           ))}
-          <article className="glass rounded-2xl p-4 text-center shadow-sm md:col-span-2 xl:col-span-1">
-            <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-gray-500">Overall</p>
-            <p className="mt-2 text-2xl font-black text-gray-900">{typeof scores.overall === 'number' ? `${Math.round(scores.overall as number)}%` : '--'}</p>
-            <p className="mt-2 text-xs font-semibold text-gray-500">Engine: {String(scores.engine_used ?? '--')}</p>
+          <article className="metric-card text-center md:col-span-2 xl:col-span-1">
+            <p className="metric-label">Overall</p>
+            <p className="metric-value">{typeof scores.overall === 'number' ? `${Math.round(scores.overall as number)}%` : '--'}</p>
+            <p className="mt-2 text-xs font-semibold muted-copy">Engine: {String(scores.engine_used ?? '--')}</p>
           </article>
         </section>
       </div>
