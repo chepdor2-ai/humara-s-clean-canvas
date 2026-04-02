@@ -1,13 +1,13 @@
-﻿@import "../node_modules/tailwindcss/index.css";
+@import "../node_modules/tailwindcss/index.css";
 
 @theme {
   --color-background: #FFF8F0;
   --color-foreground: #5C4033;
-  --color-primary: #D97757;
+  --color-primary: #FF5A1F;
   --color-primary-foreground: #FFF8F0;
   --color-secondary: #7A8F6A;
   --color-secondary-foreground: #FFF8F0;
-  --color-accent: #FAD7C8;
+  --color-accent: #FFE2D7;
   --color-accent-foreground: #5C4033;
   --color-muted: #EADDCF;
   --color-muted-foreground: #8A7263;

@@ -1,0 +1,6 @@
+{
+  "projectId": "b607c826-4a3d-4d8d-a3d9-99866ba1a641",
+  "createdAt": 1775096149009,
+  "startupCommands": ["cd humanizer-engine/frontend && npm install && npx next dev --hostname 0.0.0.0 --port 3000"],
+  "templateId": "any"
+}
