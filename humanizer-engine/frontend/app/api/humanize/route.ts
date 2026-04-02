@@ -1,9 +1,11 @@
-﻿import { NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { humanize } from '@/lib/engine/humanizer';
+import { ghostProHumanize } from '@/lib/engine/ghost-pro';
+import { llmHumanize } from '@/lib/engine/llm-humanizer';
 import { getDetector } from '@/lib/engine/multi-detector';
 import { isMeaningPreservedSync } from '@/lib/engine/semantic-guard';
 
-export const maxDuration = 60; // Vercel Pro: up to 60s
+export const maxDuration = 120; // LLM engines need more time
 
 export async function POST(req: Request) {
   try {
@@ -18,27 +20,42 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Text too long (max 50,000 characters)' }, { status: 400 });
     }
 
-    // Map engine names to mode
-    const modeMap: Record<string, string> = {
-      ghost_mini: 'ghost_mini',
-      ghost_pro: 'ghost_pro',
-      ninja: 'ghost_pro', // Ninja uses ghost_pro pipeline + extra post-processing
-    };
-    const mode = modeMap[engine] ?? 'ghost_mini';
-
     // Detect input scores
     const detector = getDetector();
     const inputAnalysis = detector.analyze(text);
 
-    // Humanize
-    const humanized = humanize(text, {
-      mode,
-      strength: strength ?? 'medium',
-      tone: tone ?? 'neutral',
-      strictMeaning: strict_meaning ?? false,
-      enablePostProcessing: enable_post_processing !== false,
-      stealth: true,
-    });
+    let humanized: string;
+
+    if (engine === 'ninja') {
+      // Ninja: 3 LLM phases + rule-based + post-processing + detector feedback loop
+      humanized = await llmHumanize(
+        text,
+        strength ?? 'medium',
+        true,  // preserveSentences
+        strict_meaning ?? true,
+        tone ?? 'academic',
+        no_contractions !== false,
+        enable_post_processing !== false,
+      );
+    } else if (engine === 'ghost_pro') {
+      // Ghost Pro: Deep LLM rewrite + signal-aware post-processing
+      humanized = await ghostProHumanize(text, {
+        strength: strength ?? 'medium',
+        tone: tone ?? 'neutral',
+        strictMeaning: strict_meaning ?? false,
+        enablePostProcessing: enable_post_processing !== false,
+      });
+    } else {
+      // Ghost Mini: Statistical-only pipeline (no LLM)
+      humanized = humanize(text, {
+        mode: 'ghost_mini',
+        strength: strength ?? 'medium',
+        tone: tone ?? 'neutral',
+        strictMeaning: strict_meaning ?? false,
+        enablePostProcessing: enable_post_processing !== false,
+        stealth: true,
+      });
+    }
 
     // Detect output scores
     const outputAnalysis = detector.analyze(humanized);

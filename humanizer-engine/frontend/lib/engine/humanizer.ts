@@ -21,7 +21,6 @@ import { analyze as analyzeContext, type TextContext } from "./context-analyzer"
 import {
   voiceShift,
   deepRestructure,
-  expandContractions,
   hasFirstPerson,
   mergeShortSentences,
 } from "./advanced-transforms";
@@ -29,6 +28,29 @@ import { getDictionary, type HumanizerDictionary } from "./dictionary";
 import { getDetector, type AnalysisResult } from "./multi-detector";
 import { protectSpecialContent, restoreSpecialContent, type ProtectionMap } from "./content-protection";
 import { semanticSimilaritySync } from "./semantic-guard";
+
+// ── Input Feature Detection ──
+// These detect whether the ORIGINAL input uses contractions, first-person, or rhetorical questions.
+// The engine must never inject these features unless they already appear in the input.
+
+interface InputFeatures {
+  hasContractions: boolean;
+  hasFirstPerson: boolean;
+  hasRhetoricalQuestions: boolean;
+}
+
+function detectInputFeatures(text: string): InputFeatures {
+  // Detect contractions: don't, can't, it's, they're, etc.
+  const hasContractions = /\b\w+'(?:t|s|re|ve|ll|d|m)\b/i.test(text);
+
+  // Detect first-person pronouns (I, me, my, mine, myself, we, us, our, ours, ourselves)
+  const hasFirstPerson = /\b(?:I|me|my|mine|myself|we|us|our|ours|ourselves)\b/.test(text);
+
+  // Detect rhetorical questions (sentences ending with ?)
+  const hasRhetoricalQuestions = /[A-Za-z][^.!?]*\?/.test(text);
+
+  return { hasContractions, hasFirstPerson, hasRhetoricalQuestions };
+}
 
 // ── Helpers ──
 
@@ -661,37 +683,39 @@ function addContractions(text: string): string {
 
 // ── Cleanup ──
 
-function cleanup(text: string): string {
-  // Preserve paragraph boundaries by processing each paragraph independently
-  const paragraphs = text.split(/\n\s*\n/);
-  return paragraphs.map((para) => {
-    let p = para;
-    p = p.replace(/  +/g, " ");
-    p = p.replace(/\.{2,}/g, ".");
-    p = p.replace(/\s+([.,;:!?])/g, "$1");
-    p = p.replace(/\b(\w+(?:\s+\w+){0,2})\s+\1\b/gi, "$1");
-    p = p.replace(/,{2,}/g, ",");
-    p = p.replace(/;{2,}/g, ";");
-    p = p.replace(/ — /g, ", ").replace(/—/g, ", ");
-    p = p.replace(/ – /g, ", ").replace(/–/g, ", ");
-    p = p.replace(/ - (?=[A-Za-z])/g, ", ");
-    p = p.replace(/,\s*,/g, ",");
-    p = p.replace(/\(\s*\)/g, "");
-    p = p.replace(/ {2,}/g, " ");
-    p = p.replace(/\band\b[,;]?\s+\band\b/gi, "and");
-    p = p.replace(/\bbut\b[,;]?\s+\bbut\b/gi, "but");
-    p = p.replace(/,\s+and\s+the\b/g, ", the");
-    p = p.replace(/\ba ([aeiouAEIOU])/g, "an $1");
-    p = p.replace(/\bA ([aeiouAEIOU])/g, "An $1");
-    p = p.replace(/\ban ([bcdfghjklmnpqrstvwxyzBCDFGHJKLMNPQRSTVWXYZ])/g, "a $1");
-    // Mid-sentence capitalization fix
-      p = p.replace(/(?<=[a-z,;] )([A-Z])([a-z]{2,})/g, (_m, c1: string, rest: string) => c1.toLowerCase() + rest);
-      // Add contractions for naturalness (human text uses contractions; AI doesn't)
-      p = addContractions(p);
-      const sentences = sentTokenize(p);
-    return sentences.map((s) => { s = s.trim(); return s ? s[0].toUpperCase() + s.slice(1) : s; }).filter(Boolean).join(" ");
-  }).join("\n\n");
-}
+function cleanup(text: string, inputFeatures?: InputFeatures): string {
+    // Preserve paragraph boundaries by processing each paragraph independently
+    const paragraphs = text.split(/\n\s*\n/);
+    return paragraphs.map((para) => {
+      let p = para;
+      p = p.replace(/  +/g, " ");
+      p = p.replace(/\.{2,}/g, ".");
+      p = p.replace(/\s+([.,;:!?])/g, "$1");
+      p = p.replace(/\b(\w+(?:\s+\w+){0,2})\s+\1\b/gi, "$1");
+      p = p.replace(/,{2,}/g, ",");
+      p = p.replace(/;{2,}/g, ";");
+      p = p.replace(/ — /g, ", ").replace(/—/g, ", ");
+      p = p.replace(/ – /g, ", ").replace(/–/g, ", ");
+      p = p.replace(/ - (?=[A-Za-z])/g, ", ");
+      p = p.replace(/,\s*,/g, ",");
+      p = p.replace(/\(\s*\)/g, "");
+      p = p.replace(/ {2,}/g, " ");
+      p = p.replace(/\band\b[,;]?\s+\band\b/gi, "and");
+      p = p.replace(/\bbut\b[,;]?\s+\bbut\b/gi, "but");
+      p = p.replace(/,\s+and\s+the\b/g, ", the");
+      p = p.replace(/\ba ([aeiouAEIOU])/g, "an $1");
+      p = p.replace(/\bA ([aeiouAEIOU])/g, "An $1");
+      p = p.replace(/\ban ([bcdfghjklmnpqrstvwxyzBCDFGHJKLMNPQRSTVWXYZ])/g, "a $1");
+      // Mid-sentence capitalization fix
+        p = p.replace(/(?<=[a-z,;] )([A-Z])([a-z]{2,})/g, (_m, c1: string, rest: string) => c1.toLowerCase() + rest);
+        // Only add contractions if the original input already used contractions
+        if (inputFeatures?.hasContractions) {
+          p = addContractions(p);
+        }
+        const sentences = sentTokenize(p);
+      return sentences.map((s) => { s = s.trim(); return s ? s[0].toUpperCase() + s.slice(1) : s; }).filter(Boolean).join(" ");
+    }).join("\n\n");
+  }
 
 // ── Sentence enforcement ──
 
@@ -1108,8 +1132,8 @@ function fixFunctionWordFreq(sentences: string[], _intensity: number): string[] 
     "due to the fact that": "because", "for the purpose of": "to",
     "with regard to": "about", "in terms of": "for",
     "on the basis of": "based on", "in the context of": "in",
-    "with respect to": "about", "it is important to": "we should",
-    "it is necessary to": "we need to", "it is evident that": "clearly",
+    "with respect to": "about", "it is important to": "",
+    "it is necessary to": "", "it is evident that": "clearly",
     "it should be noted that": "",
   };
   return sentences.map((sent) => {
@@ -1200,84 +1224,85 @@ function fixTokenPredictability(sentences: string[], intensity: number, used: Se
   });
 }
 
-function fixLowStylometric(sentences: string[], intensity: number): string[] {
-    // Improve stylometric score: personal pronouns, contractions, rhetorical questions, parenthetical asides
-    const pronounInserts = [
-      "we can see that ", "one might argue that ", "we find that ",
-      "it is worth asking whether ", "one could say that ",
-      "we should note that ", "looking at this, we notice ",
-    ];
-    const parentheticals = [
-      " (at least in part)", " (though not always)", " (or so it appears)",
-      " (to some extent)", " (in most cases)", " (admittedly)",
-      " (to be precise)", " (roughly speaking)",
-    ];
-    const rhetoricalEndings = [
-      " But is that really the case?", " And why does that matter?",
-      " The question is: how far does this go?", " But at what cost?",
-      " So what does this tell us?", " And what follows from this?",
-    ];
-    const contractionInserts: [RegExp, string][] = [
-      [/\bdo not\b/gi, "don't"], [/\bcannot\b/gi, "can't"],
-      [/\bwill not\b/gi, "won't"], [/\bdoes not\b/gi, "doesn't"],
-      [/\bis not\b/gi, "isn't"], [/\bare not\b/gi, "aren't"],
-      [/\bwould not\b/gi, "wouldn't"], [/\bshould not\b/gi, "shouldn't"],
-      [/\bcould not\b/gi, "couldn't"], [/\bhas not\b/gi, "hasn't"],
-      [/\bhave not\b/gi, "haven't"], [/\bdid not\b/gi, "didn't"],
-      [/\bit is\b/gi, "it's"], [/\bthat is\b/gi, "that's"],
-      [/\bthey are\b/gi, "they're"], [/\bwe are\b/gi, "we're"],
-    ];
-    let pronounCount = 0;
-    let rhetoricalDone = false;
-    let parentheticalCount = 0;
+function fixLowStylometric(sentences: string[], intensity: number, inputFeatures?: InputFeatures): string[] {
+      // Improve stylometric score: parenthetical asides always allowed.
+      // Contractions, first-person pronouns, and rhetorical questions ONLY if present in the original input.
+      const pronounInserts = [
+        "we can see that ", "one might argue that ", "we find that ",
+        "it is worth asking whether ", "one could say that ",
+        "we should note that ", "looking at this, we notice ",
+      ];
+      const parentheticals = [
+        " (at least in part)", " (though not always)", " (or so it appears)",
+        " (to some extent)", " (in most cases)", " (admittedly)",
+        " (to be precise)", " (roughly speaking)",
+      ];
+      const rhetoricalEndings = [
+        " But is that really the case?", " And why does that matter?",
+        " The question is: how far does this go?", " But at what cost?",
+        " So what does this tell us?", " And what follows from this?",
+      ];
+      const contractionInserts: [RegExp, string][] = [
+        [/\bdo not\b/gi, "don't"], [/\bcannot\b/gi, "can't"],
+        [/\bwill not\b/gi, "won't"], [/\bdoes not\b/gi, "doesn't"],
+        [/\bis not\b/gi, "isn't"], [/\bare not\b/gi, "aren't"],
+        [/\bwould not\b/gi, "wouldn't"], [/\bshould not\b/gi, "shouldn't"],
+        [/\bcould not\b/gi, "couldn't"], [/\bhas not\b/gi, "hasn't"],
+        [/\bhave not\b/gi, "haven't"], [/\bdid not\b/gi, "didn't"],
+        [/\bit is\b/gi, "it's"], [/\bthat is\b/gi, "that's"],
+        [/\bthey are\b/gi, "they're"], [/\bwe are\b/gi, "we're"],
+      ];
+      let pronounCount = 0;
+      let rhetoricalDone = false;
+      let parentheticalCount = 0;
 
-    return sentences.map((sent, i) => {
-      const words = sent.split(/\s+/);
-      let result = sent;
+      return sentences.map((sent, i) => {
+        const words = sent.split(/\s+/);
+        let result = sent;
 
-      // Add contractions (30% chance per sentence) — makes text more human
-      if (Math.random() < 0.30 * intensity) {
-        for (const [pattern, repl] of contractionInserts) {
-          if (pattern.test(result)) {
-            result = result.replace(pattern, repl);
-            break;
+        // Add contractions ONLY if the original input already contained contractions
+        if (inputFeatures?.hasContractions && Math.random() < 0.30 * intensity) {
+          for (const [pattern, repl] of contractionInserts) {
+            if (pattern.test(result)) {
+              result = result.replace(pattern, repl);
+              break;
+            }
           }
         }
-      }
 
-      // Insert personal pronoun opener (max 2 per text, 15% chance)
-      if (pronounCount < 2 && Math.random() < 0.15 * intensity && words.length > 6 && i > 0) {
-        const insert = pronounInserts[Math.floor(Math.random() * pronounInserts.length)];
-        result = insert + safeDowncaseFirst(result);
-        pronounCount++;
-      }
-
-      // Add parenthetical aside (max 2 per text, 10% chance)
-      if (parentheticalCount < 2 && Math.random() < 0.10 * intensity && words.length > 12) {
-        const commaPositions: number[] = [];
-        const w = result.split(/\s+/);
-        for (let j = 4; j < w.length - 3; j++) {
-          if (w[j].endsWith(",")) commaPositions.push(j);
+        // Insert personal pronoun opener ONLY if the original input already used first-person
+        if (inputFeatures?.hasFirstPerson && pronounCount < 2 && Math.random() < 0.15 * intensity && words.length > 6 && i > 0) {
+          const insert = pronounInserts[Math.floor(Math.random() * pronounInserts.length)];
+          result = insert + safeDowncaseFirst(result);
+          pronounCount++;
         }
-        if (commaPositions.length > 0) {
-          const pos = commaPositions[Math.floor(Math.random() * commaPositions.length)];
-          const aside = parentheticals[Math.floor(Math.random() * parentheticals.length)];
-          w.splice(pos + 1, 0, aside.trim());
-          result = w.join(" ");
-          parentheticalCount++;
+
+        // Add parenthetical aside (always allowed — not a voice/person issue)
+        if (parentheticalCount < 2 && Math.random() < 0.10 * intensity && words.length > 12) {
+          const commaPositions: number[] = [];
+          const w = result.split(/\s+/);
+          for (let j = 4; j < w.length - 3; j++) {
+            if (w[j].endsWith(",")) commaPositions.push(j);
+          }
+          if (commaPositions.length > 0) {
+            const pos = commaPositions[Math.floor(Math.random() * commaPositions.length)];
+            const aside = parentheticals[Math.floor(Math.random() * parentheticals.length)];
+            w.splice(pos + 1, 0, aside.trim());
+            result = w.join(" ");
+            parentheticalCount++;
+          }
         }
-      }
 
-      // Add rhetorical question after a long statement (max 1 per text, 8% chance)
-      if (!rhetoricalDone && Math.random() < 0.08 * intensity && words.length > 15 && i > 2) {
-        const q = rhetoricalEndings[Math.floor(Math.random() * rhetoricalEndings.length)];
-        result = result.replace(/\.$/, ".") + q;
-        rhetoricalDone = true;
-      }
+        // Add rhetorical question ONLY if the original input already contained questions
+        if (inputFeatures?.hasRhetoricalQuestions && !rhetoricalDone && Math.random() < 0.08 * intensity && words.length > 15 && i > 2) {
+          const q = rhetoricalEndings[Math.floor(Math.random() * rhetoricalEndings.length)];
+          result = result.replace(/\.$/, ".") + q;
+          rhetoricalDone = true;
+        }
 
-      return result;
-    });
-  }
+        return result;
+      });
+    }
 
 function fixWordCommonality(sentences: string[], intensity: number, used: Set<string>, ctx: TextContext | null, dict: HumanizerDictionary, cw: Set<string>): string[] {
   // Replace overly common words with curated + large dictionary synonyms
@@ -1359,8 +1384,8 @@ function fixParagraphUniformity(paragraphs: string[]): string[] {
   }
 
 function applySignalFixes(text: string, weakSignals: [string, number][], intensity: number,
-  used: Set<string>, ctx: TextContext | null, settings: HumanizeSettings,
-  dict: HumanizerDictionary, commonWords: Set<string>): string {
+    used: Set<string>, ctx: TextContext | null, settings: HumanizeSettings,
+    dict: HumanizerDictionary, commonWords: Set<string>, inputFeatures?: InputFeatures): string {
   const fixes = new Set(weakSignals.slice(0, 4).map(([s]) => s));
   const paragraphs = text.split(/\n\s*\n/).filter((p) => p.trim());
   const fixed: string[] = [];
@@ -1384,7 +1409,7 @@ function applySignalFixes(text: string, weakSignals: [string, number][], intensi
     if (fixes.has("dependency_depth")) sentences = fixLowDependencyDepth(sentences, intensity);
     if (fixes.has("shannon_entropy")) sentences = fixLowShannonEntropy(sentences, intensity, used, ctx, dict, commonWords);
     if (fixes.has("token_predictability")) sentences = fixTokenPredictability(sentences, intensity, used, ctx, dict, commonWords);
-    if (fixes.has("stylometric_score")) sentences = fixLowStylometric(sentences, intensity);
+    if (fixes.has("stylometric_score")) sentences = fixLowStylometric(sentences, intensity, inputFeatures);
     if (fixes.has("avg_word_commonality")) sentences = fixWordCommonality(sentences, intensity, used, ctx, dict, commonWords);
 
     sentences = enforceSentenceDistribution(sentences);
@@ -1403,10 +1428,10 @@ function applySignalFixes(text: string, weakSignals: [string, number][], intensi
 // ── Single-pass paragraph humanization ──
 
 function humanizeParagraph(
-  para: string, intensity: number, usedWords: Set<string>,
-  ctx: TextContext | null, settings: HumanizeSettings, iteration: number,
-  dict: HumanizerDictionary, commonWords: Set<string>,
-): string {
+    para: string, intensity: number, usedWords: Set<string>,
+    ctx: TextContext | null, settings: HumanizeSettings, iteration: number,
+    dict: HumanizerDictionary, commonWords: Set<string>, inputFeatures?: InputFeatures,
+  ): string {
   const rawSentences = sentTokenize(para);
 
   // Step 0: 50% sentence restructuring — reorder clauses/phrases for variation
@@ -1462,8 +1487,8 @@ function humanizeParagraph(
   transformed = enforceSentenceDistribution(transformed);
 
   let result = transformed.join(" ");
-  // 13. Cleanup
-  result = cleanup(result);
+    // 13. Cleanup
+    result = cleanup(result, inputFeatures);
   return result;
 }
 
@@ -1490,8 +1515,12 @@ export function humanize(
     enablePostProcessing = true,
   } = opts;
 
-  // Protect brackets, figures, percentages before any processing
-  const { text: protectedText, map: protectionMap } = protectSpecialContent(text);
+    // Protect brackets, figures, percentages before any processing
+    const { text: protectedText, map: protectionMap } = protectSpecialContent(text);
+
+    // Detect input features — engine must NOT inject contractions, first-person, or
+    // rhetorical questions unless the original input already contains them.
+    const inputFeatures = detectInputFeatures(text);
 
   const settings = buildSettings({ stealth, strength, preserveSentences, strictMeaning, tone, mode });
   if (opts.targetScore != null) settings.targetScore = opts.targetScore;
@@ -1554,12 +1583,12 @@ export function humanize(
         processed.push(trimmedPara);
         continue;
       }
-      const r = humanizeParagraph(trimmedPara, intensity, usedWords, ctx, settings, iteration, dict, commonWords);
+      const r = humanizeParagraph(trimmedPara, intensity, usedWords, ctx, settings, iteration, dict, commonWords, inputFeatures);
       if (r) processed.push(r);
     }
 
     let currentResult = processed.join("\n\n");
-      currentResult = addContractions(currentResult);
+        if (inputFeatures.hasContractions) currentResult = addContractions(currentResult);
 
     if ((mode === "ghost_mini" || mode === "ghost_pro") && enablePostProcessing) {
       currentResult = postProcess(currentResult);
@@ -1596,9 +1625,9 @@ export function humanize(
       if (settings.signalFixEnabled && iteration >= 2) {
         const weak = identifyWeakSignals(signals);
         if (weak.length > 0) {
-          let fixed = applySignalFixes(bestResult, weak, intensity, usedWordsGlobal, ctx, settings, dict, commonWords);
-            fixed = addContractions(fixed);
-          fixed = cleanup(fixed);
+            let fixed = applySignalFixes(bestResult, weak, intensity, usedWordsGlobal, ctx, settings, dict, commonWords, inputFeatures);
+              if (inputFeatures.hasContractions) fixed = addContractions(fixed);
+            fixed = cleanup(fixed, inputFeatures);
           if (enablePostProcessing) fixed = postProcess(fixed);
 
           const fixedAnalysis = detector.analyze(fixed);
@@ -1632,9 +1661,9 @@ export function humanize(
 
       const p2Cap = ({ light: 2.5, medium: 4.5, strong: 6.5 } as Record<string, number>)[strength] ?? 4.5;
       const intensity = Math.min(2.0 + ep * 0.15, p2Cap);
-      let fixed = applySignalFixes(bestResult, weak, intensity, usedWordsGlobal, ctx, settings, dict, commonWords);
-        fixed = addContractions(fixed);
-        fixed = cleanup(fixed);
+        let fixed = applySignalFixes(bestResult, weak, intensity, usedWordsGlobal, ctx, settings, dict, commonWords, inputFeatures);
+          if (inputFeatures.hasContractions) fixed = addContractions(fixed);
+          fixed = cleanup(fixed, inputFeatures);
       if (enablePostProcessing) fixed = postProcess(fixed);
 
       const { maxAiScore: fm } = checkDetectorTargets(detector.analyze(fixed), mode);
@@ -1819,34 +1848,32 @@ export function extractStyleProfile(sampleText: string): WritingStyleProfile {
  * Apply a writing style profile to humanized text to make it match
  * the user's personal writing patterns.
  */
-export function applyStyleProfile(text: string, profile: WritingStyleProfile): string {
-  let result = text;
+export function applyStyleProfile(text: string, profile: WritingStyleProfile, inputFeatures?: InputFeatures): string {
+    let result = text;
 
-  // Match contraction rate
-  if (profile.contractionRate > 0.02) {
-    // User uses contractions freely — add more
-    result = addContractions(result);
-  }
-
-  // Match first person usage
-  if (profile.firstPersonRate > 0.01) {
-    // User writes in first person — add some personal pronouns
-    const sentences = sentTokenize(result);
-    const enhanced = sentences.map((sent, i) => {
-      if (i > 0 && i % 5 === 0 && Math.random() < profile.firstPersonRate * 10) {
-        const inserts = ["We find that ", "In our view, ", "We note that "];
-        return inserts[Math.floor(Math.random() * inserts.length)] + safeDowncaseFirst(sent);
-      }
-      return sent;
-    });
-    const paragraphs = result.split(/\n\s*\n/);
-    if (paragraphs.length === 1) {
-      result = enhanced.join(" ");
+    // Match contraction rate — only if original input already had contractions
+    if (profile.contractionRate > 0.02 && inputFeatures?.hasContractions) {
+      result = addContractions(result);
     }
-  }
 
-  return result;
-}
+    // Match first person usage — only if original input already used first-person
+    if (profile.firstPersonRate > 0.01 && inputFeatures?.hasFirstPerson) {
+      const sentences = sentTokenize(result);
+      const enhanced = sentences.map((sent, i) => {
+        if (i > 0 && i % 5 === 0 && Math.random() < profile.firstPersonRate * 10) {
+          const inserts = ["We find that ", "In our view, ", "We note that "];
+          return inserts[Math.floor(Math.random() * inserts.length)] + safeDowncaseFirst(sent);
+        }
+        return sent;
+      });
+      const paragraphs = result.split(/\n\s*\n/);
+      if (paragraphs.length === 1) {
+        result = enhanced.join(" ");
+      }
+    }
+
+    return result;
+  }
 
 // ── Real Detector API Validation Hooks ──
 
