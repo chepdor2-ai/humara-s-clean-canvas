@@ -2,10 +2,10 @@
   "name": "humara-workspace",
   "private": true,
   "scripts": {
-    "dev": "sh -c 'cd humanizer-engine/frontend && if [ ! -d node_modules ]; then npm install; fi && npm run dev -- --hostname 0.0.0.0 --port 3000'",
+    "dev": "sh -c 'cd humanizer-engine/frontend && if [ ! -d node_modules ]; then npm install; fi && npm run dev -- --hostname 0.0.0.0 --port ${PORT:-${npm_config_port:-3000}}'",
     "build:dev": "npm run build",
     "build": "sh -c 'cd humanizer-engine/frontend && if [ ! -d node_modules ]; then npm install; fi && npm run build && rm -rf ../../dist && mkdir -p ../../dist && cp -R .next/static ../../dist/static && cp -R public ../../dist/public'",
-    "start": "sh -c 'cd humanizer-engine/frontend && npm run start'"
+    "start": "sh -c 'cd humanizer-engine/frontend && npm run start -- --hostname 0.0.0.0 --port ${PORT:-${npm_config_port:-3000}}'"
   },
   "dependencies": {
     "compromise": "^14.15.0"
