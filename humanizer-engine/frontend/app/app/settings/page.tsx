@@ -13,7 +13,7 @@ export default function SettingsPage() {
       <div className="flex bg-white rounded-3xl overflow-hidden shadow-sm border border-[#EADDCF] flex-col md:flex-row h-full">
         <nav className="w-full md:w-64 bg-[#FFF8F0] p-6 border-r border-[#EADDCF] space-y-2">
           {['Profile', 'Billing & Plans', 'API Keys', 'Notifications', 'Support'].map((item, i) => (
-             <button key={i} className="w-full text-left px-5 py-3 rounded-xl font-bold transition-colors">
+             <button key={i} className={w-full text-left px-5 py-3 rounded-xl font-bold transition-colors }>
                {item}
              </button>
           ))}
