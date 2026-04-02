@@ -59,43 +59,43 @@ export default function DetectorPage() {
   };
 
   return (
-    <main className="pt-24 pb-10">
-      <div className="w-[92%] max-w-7xl mx-auto space-y-6">
-        <section className="glass rounded-2xl p-6 md:p-8 shadow-lg space-y-3">
-          <div className="inline-flex items-center rounded-full border border-gray-200 bg-white px-3 py-1 text-[11px] font-bold uppercase tracking-[0.24em] text-gray-600">Detector Suite</div>
-          <h1 className="text-3xl md:text-5xl font-black tracking-tight text-gray-900">Humara AI Detector</h1>
-          <p className="text-sm md:text-base text-gray-600 leading-relaxed">Run the existing multi-detector engine and review every detector score in one place.</p>
+    <main className="pb-10 pt-10 md:pt-14">
+      <div className="app-frame space-y-6">
+        <section className="panel hero-panel space-y-3 p-6 md:p-8 lg:p-10">
+          <div className="eyebrow">Detector Suite</div>
+          <h1 className="hero-title">Measure AI probability across the full detector stack.</h1>
+          <p className="hero-copy">Run the existing multi-detector engine and review every detector score in one place.</p>
         </section>
 
-        <section className="glass rounded-2xl p-5 md:p-6 shadow-lg space-y-4">
-          <textarea value={inputText} onChange={(e) => setInputText(e.target.value)} rows={12} className="w-full rounded-2xl border border-gray-200 bg-white p-4 text-sm leading-6 text-gray-900 outline-none" placeholder="Paste text here to analyze..." />
+        <section className="panel space-y-4 p-5 md:p-6">
+          <textarea value={inputText} onChange={(e) => setInputText(e.target.value)} rows={12} className="field min-h-[18rem] resize-y leading-7" placeholder="Paste text here to analyze..." />
 
           <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-            <div className="text-sm font-semibold text-gray-500">{words} words • {inputText.length} characters</div>
+            <div className="text-sm font-semibold muted-copy">{words} words • {inputText.length} characters</div>
             <div className="flex gap-3">
-              <button onClick={() => { setInputText(''); setResults(null); setMessage(''); }} className="rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm font-bold text-gray-700">Clear</button>
-              <button onClick={handleAnalyze} disabled={isProcessing} className="gradient-orange rounded-xl px-5 py-2 text-sm font-black uppercase tracking-[0.2em] text-white disabled:opacity-60">
+              <button onClick={() => { setInputText(''); setResults(null); setMessage(''); }} className="subtle-button px-4 py-3">Clear</button>
+              <button onClick={handleAnalyze} disabled={isProcessing} className="primary-button px-5 py-3">
                 {isProcessing ? 'Analyzing…' : 'Analyze'}
               </button>
             </div>
           </div>
 
-          {message ? <div className="rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm font-medium text-gray-700">{message}</div> : null}
+          {message ? <div className="message-box text-sm font-medium">{message}</div> : null}
         </section>
 
         {results ? (
           <>
             <section className="grid gap-4 md:grid-cols-4">
-              <article className="glass rounded-2xl p-4 shadow-sm"><p className="text-[11px] font-bold uppercase tracking-[0.22em] text-gray-500">Overall AI</p><p className="mt-2 text-3xl font-black text-gray-900">{Math.round(results.summary.overall_ai_score)}%</p></article>
-              <article className="glass rounded-2xl p-4 shadow-sm"><p className="text-[11px] font-bold uppercase tracking-[0.22em] text-gray-500">Overall Human</p><p className="mt-2 text-3xl font-black text-gray-900">{Math.round(results.summary.overall_human_score)}%</p></article>
-              <article className="glass rounded-2xl p-4 shadow-sm"><p className="text-[11px] font-bold uppercase tracking-[0.22em] text-gray-500">Engines</p><p className="mt-2 text-3xl font-black text-gray-900">{results.summary.total_detectors}</p></article>
-              <article className="glass rounded-2xl p-4 shadow-sm"><p className="text-[11px] font-bold uppercase tracking-[0.22em] text-gray-500">Verdict</p><p className="mt-2 text-lg font-black text-gray-900">{results.summary.overall_verdict}</p></article>
+              <article className="metric-card"><p className="metric-label">Overall AI</p><p className="metric-value">{Math.round(results.summary.overall_ai_score)}%</p></article>
+              <article className="metric-card"><p className="metric-label">Overall Human</p><p className="metric-value">{Math.round(results.summary.overall_human_score)}%</p></article>
+              <article className="metric-card"><p className="metric-label">Engines</p><p className="metric-value">{results.summary.total_detectors}</p></article>
+              <article className="metric-card"><p className="metric-label">Verdict</p><p className="mt-2 text-xl font-extrabold tracking-[-0.04em]">{results.summary.overall_verdict}</p></article>
             </section>
 
-            <section className="glass rounded-2xl p-5 md:p-6 shadow-lg overflow-x-auto">
-              <table className="w-full min-w-[720px] text-left">
+            <section className="panel overflow-x-auto p-5 md:p-6">
+              <table className="score-table w-full min-w-[720px] text-left">
                 <thead>
-                  <tr className="border-b border-gray-200 text-[11px] uppercase tracking-[0.22em] text-gray-500">
+                  <tr className="text-[11px] uppercase tracking-[0.22em] muted-copy">
                     <th className="py-3 font-bold">Detector</th>
                     <th className="py-3 font-bold">AI score</th>
                     <th className="py-3 font-bold">Human score</th>
@@ -104,7 +104,7 @@ export default function DetectorPage() {
                 </thead>
                 <tbody>
                   {[...results.detectors].sort((a, b) => b.ai_score - a.ai_score).map((row) => (
-                    <tr key={row.detector} className="border-b border-gray-100 text-sm text-gray-800 last:border-0">
+                    <tr key={row.detector} className="text-sm">
                       <td className="py-3 font-semibold">{row.detector}</td>
                       <td className="py-3">{Math.round(row.ai_score)}%</td>
                       <td className="py-3">{Math.round(row.human_score)}%</td>
