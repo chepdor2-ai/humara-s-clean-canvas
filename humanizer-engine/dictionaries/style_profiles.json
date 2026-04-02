@@ -1,0 +1,82 @@
+[
+  {
+    "name": "academic_2005",
+    "description": "Pre-2010 journal article style: long sentences, heavy hedging, formal",
+    "avg_sentence_length": 28.0,
+    "sentence_length_std": 10.0,
+    "hedging_rate": 0.25,
+    "clause_density": 1.8,
+    "passive_voice_rate": 0.30,
+    "lexical_diversity": 0.65,
+    "avg_paragraph_length": 5.0,
+    "punctuation_rates": {
+      "semicolons_per_1k": 3.2,
+      "colons_per_1k": 2.0,
+      "dashes_per_1k": 0.8
+    }
+  },
+  {
+    "name": "academic_2010",
+    "description": "2010-era journal: moderate length, balanced hedging, some variation",
+    "avg_sentence_length": 24.0,
+    "sentence_length_std": 9.0,
+    "hedging_rate": 0.20,
+    "clause_density": 1.5,
+    "passive_voice_rate": 0.22,
+    "lexical_diversity": 0.63,
+    "avg_paragraph_length": 4.5,
+    "punctuation_rates": {
+      "semicolons_per_1k": 2.5,
+      "colons_per_1k": 1.8,
+      "dashes_per_1k": 1.2
+    }
+  },
+  {
+    "name": "journal_natural",
+    "description": "Natural social-science journal prose: varied rhythm, moderate formality",
+    "avg_sentence_length": 22.0,
+    "sentence_length_std": 8.5,
+    "hedging_rate": 0.18,
+    "clause_density": 1.3,
+    "passive_voice_rate": 0.18,
+    "lexical_diversity": 0.60,
+    "avg_paragraph_length": 4.0,
+    "punctuation_rates": {
+      "semicolons_per_1k": 2.0,
+      "colons_per_1k": 1.5,
+      "dashes_per_1k": 1.5
+    }
+  },
+  {
+    "name": "thesis_formal",
+    "description": "Formal thesis/dissertation style: longer paragraphs, high formality",
+    "avg_sentence_length": 26.0,
+    "sentence_length_std": 11.0,
+    "hedging_rate": 0.22,
+    "clause_density": 1.6,
+    "passive_voice_rate": 0.28,
+    "lexical_diversity": 0.64,
+    "avg_paragraph_length": 6.0,
+    "punctuation_rates": {
+      "semicolons_per_1k": 2.8,
+      "colons_per_1k": 2.2,
+      "dashes_per_1k": 0.6
+    }
+  },
+  {
+    "name": "accessible_academic",
+    "description": "Readable academic style: shorter sentences, less hedging, clearer",
+    "avg_sentence_length": 18.0,
+    "sentence_length_std": 6.0,
+    "hedging_rate": 0.12,
+    "clause_density": 1.1,
+    "passive_voice_rate": 0.12,
+    "lexical_diversity": 0.58,
+    "avg_paragraph_length": 3.5,
+    "punctuation_rates": {
+      "semicolons_per_1k": 1.0,
+      "colons_per_1k": 1.2,
+      "dashes_per_1k": 2.0
+    }
+  }
+]

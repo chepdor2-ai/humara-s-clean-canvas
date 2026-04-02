@@ -1,0 +1,41 @@
+# Python backup files
+python-backup/
+*.pyc
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+.venv/
+venv/
+humanizer-env/
+venv_clean/
+
+# Development
+.env
+.env.local
+*.log
+
+# Data and dictionaries (too large for deployment)
+data/
+dictionaries/
+tests/
+
+# TypeScript build
+ts-engine/node_modules/
+*.tsbuildinfo
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Misc
+server_log.txt
+test_output.txt
+*.backup.py

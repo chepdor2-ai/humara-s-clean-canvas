@@ -1,0 +1,215 @@
+/**
+ * Smart Semantic Dictionary — ported from dictionary.py
+ * Multi-source synonym lookup: curated → thesaurus → fallback
+ */
+
+import { readFileSync, existsSync } from "fs";
+import { join, dirname } from "path";
+
+const BASE_DIR = join(dirname(new URL(import.meta.url).pathname.replace(/^\/([A-Z]:)/, "$1")), "..", "..");
+const DICT_DIR = join(BASE_DIR, "dictionaries");
+
+interface ThesaurusEntry {
+  word: string;
+  synonyms: string[];
+}
+
+export class HumanizerDictionary {
+  private safeWords: Set<string> = new Set();
+  private curated: Map<string, string[]> = new Map();
+  thesaurus: Map<string, string[]> = new Map();
+  private synonymsCache: Map<string, string[]> = new Map();
+  private wordValidityCache: Map<string, boolean> = new Map();
+
+  constructor() {
+    this.loadSafeWords();
+    this.loadCurated();
+    this.loadThesaurus();
+  }
+
+  private loadSafeWords(): void {
+    // Try mega dictionary first (619K+ words)
+    const megaPath = join(DICT_DIR, "mega_dictionary.json");
+    if (existsSync(megaPath)) {
+      try {
+        const data = JSON.parse(readFileSync(megaPath, "utf-8"));
+        if (typeof data === "object" && data !== null) {
+          for (const key of Object.keys(data)) {
+            this.safeWords.add(key.toLowerCase());
+          }
+          return;
+        }
+      } catch { /* ignore */ }
+    }
+
+    // Fallback: words_dictionary.json
+    const jsonPath = join(DICT_DIR, "words_dictionary.json");
+    if (existsSync(jsonPath)) {
+      try {
+        const data = JSON.parse(readFileSync(jsonPath, "utf-8"));
+        if (typeof data === "object" && data !== null) {
+          for (const key of Object.keys(data)) {
+            this.safeWords.add(key.toLowerCase());
+          }
+          return;
+        }
+      } catch { /* ignore */ }
+    }
+
+    // Fallback: words_alpha.txt
+    const txtPath = join(DICT_DIR, "words_alpha.txt");
+    if (existsSync(txtPath)) {
+      try {
+        const lines = readFileSync(txtPath, "utf-8").split("\n");
+        for (const line of lines) {
+          const w = line.trim().toLowerCase();
+          if (w) this.safeWords.add(w);
+        }
+      } catch { /* ignore */ }
+    }
+  }
+
+  private loadCurated(): void {
+    const path = join(DICT_DIR, "curated_synonyms.json");
+    if (!existsSync(path)) return;
+    try {
+      const data: Record<string, string[]> = JSON.parse(readFileSync(path, "utf-8"));
+      for (const [word, syns] of Object.entries(data)) {
+        this.curated.set(word.toLowerCase(), syns);
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  private loadThesaurus(): void {
+    // Load both thesaurus files and merge
+    for (const filename of ["mega_thesaurus.jsonl", "en_thesaurus.jsonl"]) {
+      const path = join(DICT_DIR, filename);
+      if (!existsSync(path)) continue;
+      try {
+        const lines = readFileSync(path, "utf-8").split("\n");
+        for (const line of lines) {
+          if (!line.trim()) continue;
+          try {
+            const entry: ThesaurusEntry = JSON.parse(line);
+            const word = entry.word?.toLowerCase();
+            if (!word) continue;
+            // Lowercase all synonyms (matches Python: s.lower())
+            const syns = entry.synonyms.map((s) => s.toLowerCase());
+            const existing = this.thesaurus.get(word);
+            if (existing) {
+              const merged = [...new Set([...existing, ...syns])];
+              this.thesaurus.set(word, merged);
+            } else {
+              this.thesaurus.set(word, syns);
+            }
+          } catch {
+            continue;
+          }
+        }
+      } catch {
+        // ignore
+      }
+    }
+  }
+
+  getSynonyms(word: string, maxReturn: number = 8, qualityFilter: boolean = true): string[] {
+    const lower = word.toLowerCase();
+    const cacheKey = `${lower}_${qualityFilter}`;
+    const cached = this.synonymsCache.get(cacheKey);
+    if (cached) return cached;
+
+    const synonyms = new Set<string>();
+
+    // Source 1: Curated dictionary (highest priority)
+    const curatedSyns = this.curated.get(lower);
+    if (curatedSyns) {
+      for (const s of curatedSyns) synonyms.add(s);
+    }
+
+    // Source 2: Thesaurus — ONLY if curated dict is entirely empty (not loaded)
+    // This matches Python: `if not synonyms and not self.curated`
+    if (synonyms.size === 0 && this.curated.size === 0) {
+      const thesaurusSyns = this.thesaurus.get(lower);
+      if (thesaurusSyns) {
+        for (const s of thesaurusSyns) synonyms.add(s);
+      }
+    }
+
+    // Filter: only keep valid words if quality filter enabled
+    let result: string[];
+    if (qualityFilter && this.safeWords.size > 0) {
+      result = [...synonyms].filter((s) => s !== lower && this.isValidWord(s));
+    } else {
+      synonyms.delete(lower); // never return the word itself
+      result = [...synonyms];
+    }
+
+    result = result.slice(0, maxReturn);
+    this.synonymsCache.set(cacheKey, result);
+    return result;
+  }
+
+  replaceWordSmartly(
+    word: string,
+    context: string,
+    avoidWords?: Set<string>,
+  ): string {
+    const lower = word.toLowerCase();
+    const avoid = avoidWords ?? new Set<string>();
+
+    // Use getContextualSynonyms (matches Python: self.get_contextual_synonyms)
+    const synonyms = this.getContextualSynonyms(lower, context, 5);
+    if (synonyms.length === 0) return word;
+
+    // Filter out avoided words, multi-word synonyms, and validate
+    const candidates = synonyms.filter(
+      (s) =>
+        !s.includes(" ") &&
+        s.toLowerCase() !== lower &&
+        !avoid.has(s.toLowerCase()) &&
+        this.isValidWord(s),
+    );
+
+    if (candidates.length === 0) return word;
+
+    // Prefer shorter synonyms, pick from top 3
+    candidates.sort((a, b) => a.length - b.length);
+    const topN = candidates.slice(0, Math.min(3, candidates.length));
+    return topN[Math.floor(Math.random() * topN.length)];
+  }
+
+  isValidWord(word: string): boolean {
+    const lower = word.toLowerCase();
+    const cached = this.wordValidityCache.get(lower);
+    if (cached !== undefined) return cached;
+
+    // Check against safe words
+    let valid = this.safeWords.has(lower) || this.safeWords.size === 0;
+
+    // Fallback: accept basic alphabetic tokens if no safe words loaded
+    if (!valid && this.safeWords.size === 0) {
+      valid = /^[a-z]+$/i.test(lower);
+    }
+
+    this.wordValidityCache.set(lower, valid);
+    return valid;
+  }
+
+  getContextualSynonyms(word: string, _sentence: string, maxReturn: number = 5): string[] {
+    // Get wider pool then trim (matches Python: max_return * 2)
+    const synonyms = this.getSynonyms(word, maxReturn * 2);
+    return [...synonyms].sort().slice(0, maxReturn);
+  }
+}
+
+// Singleton
+let _instance: HumanizerDictionary | null = null;
+
+export function getDictionary(): HumanizerDictionary {
+  if (!_instance) {
+    _instance = new HumanizerDictionary();
+  }
+  return _instance;
+}

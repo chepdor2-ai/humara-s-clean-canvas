@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Humanizer — Ghost Engine</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .toast { visibility: hidden; opacity: 0; transition: visibility 0s, opacity 0.5s linear; position: fixed; top: 20px; right: 20px; z-index: 1000; }
+        .toast.show { visibility: visible; opacity: 1; }
+    </style>
+</head>
+<body class="bg-gray-50 text-gray-800 font-sans antialiased min-h-screen flex flex-col">
+
+    <!-- Navbar -->
+    <nav class="bg-white border-b border-gray-200 shadow-sm">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between h-16">
+                <div class="flex items-center">
+                    <svg class="h-8 w-8 text-orange-600 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 2c-3.3 0-6 2.7-6 6v4c0 1.1-.9 2-2 2v2h16v-2c-1.1 0-2-.9-2-2V8c0-3.3-2.7-6-6-6zM8 18h8m-5 4h2" />
+                    </svg>
+                    <a href="/" class="text-xl font-bold text-gray-900">GhostEngine</a>
+                </div>
+                <div class="flex items-center space-x-4">
+                    <a href="/detector" class="text-gray-600 hover:text-gray-900">AI Detector</a>
+                    <a href="/" class="text-gray-600 hover:text-gray-900">Home</a>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div class="bg-white rounded-lg shadow-lg p-8">
+            <h1 class="text-3xl font-bold text-gray-900 mb-2">AI Text Humanizer</h1>
+            <p class="text-gray-600 mb-6">Transform AI-generated text into natural, human-like content that bypasses AI detectors.</p>
+
+            <!-- Engine Selection -->
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Engine</label>
+                    <select id="engineSelect" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent">
+                        <option value="ghost_mini">Ghost Mini (Fast)</option>
+                        <option value="ghost_pro">Ghost Pro (Maximum Quality)</option>
+                        <option value="ninja">Ninja (LLM-Powered)</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Strength</label>
+                    <select id="strengthSelect" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent">
+                        <option value="light">Light</option>
+                        <option value="balanced" selected>Balanced</option>
+                        <option value="deep">Deep</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Status</label>
+                    <div id="statusBadge" class="px-4 py-2 rounded-lg bg-green-100 text-green-800 font-medium text-center">
+                        Ready
+                    </div>
+                </div>
+            </div>
+
+            <!-- Input -->
+            <div class="mb-6">
+                <label class="block text-sm font-medium text-gray-700 mb-2">Input Text (AI-Generated)</label>
+                <textarea id="inputText" rows="10" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent resize-none" placeholder="Paste your AI-generated text here..."></textarea>
+                <div class="mt-2 flex justify-between text-sm text-gray-500">
+                    <span id="inputWordCount">0 words</span>
+                    <button id="clearInput" class="text-orange-600 hover:text-orange-700">Clear</button>
+                </div>
+            </div>
+
+            <!-- Humanize Button -->
+            <div class="mb-6">
+                <button id="humanizeBtn" class="w-full bg-orange-600 hover:bg-orange-700 text-white font-bold py-4 px-6 rounded-lg transition-colors shadow-lg">
+                    Humanize Text
+                </button>
+            </div>
+
+            <!-- Output -->
+            <div class="mb-6">
+                <label class="block text-sm font-medium text-gray-700 mb-2">Humanized Output</label>
+                <textarea id="outputText" rows="10" class="w-full px-4 py-3 border border-gray-300 rounded-lg bg-gray-50 resize-none" placeholder="Humanized text will appear here..." readonly></textarea>
+                <div class="mt-2 flex justify-between text-sm text-gray-500">
+                    <span id="outputWordCount">0 words</span>
+                    <button id="copyOutput" class="text-orange-600 hover:text-orange-700">Copy to Clipboard</button>
+                </div>
+            </div>
+
+            <!-- Detection Results -->
+            <div id="detectionResults" class="hidden">
+                <h3 class="text-lg font-semibold text-gray-900 mb-4">Detection Scores</h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <!-- Top 5 Detectors -->
+                    <div class="bg-gray-50 rounded-lg p-4">
+                        <h4 class="font-medium text-gray-700 mb-3">Top 5 Detectors</h4>
+                        <div class="space-y-2">
+                            <div class="flex justify-between items-center">
+                                <span class="text-sm">GPTZero</span>
+                                <span id="score-gptzero" class="font-semibold">--%</span>
+                            </div>
+                            <div class="flex justify-between items-center">
+                                <span class="text-sm">Turnitin</span>
+                                <span id="score-turnitin" class="font-semibold">--%</span>
+                            </div>
+                            <div class="flex justify-between items-center">
+                                <span class="text-sm">Originality.AI</span>
+                                <span id="score-originality" class="font-semibold">--%</span>
+                            </div>
+                            <div class="flex justify-between items-center">
+                                <span class="text-sm">Winston AI</span>
+                                <span id="score-winston" class="font-semibold">--%</span>
+                            </div>
+                            <div class="flex justify-between items-center">
+                                <span class="text-sm">Copyleaks</span>
+                                <span id="score-copyleaks" class="font-semibold">--%</span>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- Overall Stats -->
+                    <div class="bg-gray-50 rounded-lg p-4">
+                        <h4 class="font-medium text-gray-700 mb-3">Overall Stats</h4>
+                        <div class="space-y-2">
+                            <div class="flex justify-between items-center">
+                                <span class="text-sm">Average AI Score</span>
+                                <span id="score-overall" class="font-semibold">--%</span>
+                            </div>
+                            <div class="flex justify-between items-center">
+                                <span class="text-sm">Processing Time</span>
+                                <span id="processingTime" class="font-semibold">--s</span>
+                            </div>
+                            <div class="flex justify-between items-center">
+                                <span class="text-sm">Engine Used</span>
+                                <span id="engineUsed" class="font-semibold">--</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Toast Notification -->
+    <div id="toast" class="toast bg-green-500 text-white px-6 py-3 rounded-lg shadow-lg">
+        Text copied to clipboard!
+    </div>
+
+    <script>
+        const API_BASE = window.location.origin;
+        
+        const elements = {
+            inputText: document.getElementById('inputText'),
+            outputText: document.getElementById('outputText'),
+            humanizeBtn: document.getElementById('humanizeBtn'),
+            engineSelect: document.getElementById('engineSelect'),
+            strengthSelect: document.getElementById('strengthSelect'),
+            statusBadge: document.getElementById('statusBadge'),
+            inputWordCount: document.getElementById('inputWordCount'),
+            outputWordCount: document.getElementById('outputWordCount'),
+            clearInput: document.getElementById('clearInput'),
+            copyOutput: document.getElementById('copyOutput'),
+            detectionResults: document.getElementById('detectionResults'),
+            toast: document.getElementById('toast')
+        };
+
+        // Word count
+        function updateWordCount() {
+            const inputWords = elements.inputText.value.trim().split(/\s+/).filter(w => w).length;
+            const outputWords = elements.outputText.value.trim().split(/\s+/).filter(w => w).length;
+            elements.inputWordCount.textContent = `${inputWords} words`;
+            elements.outputWordCount.textContent = `${outputWords} words`;
+        }
+
+        elements.inputText.addEventListener('input', updateWordCount);
+
+        // Clear input
+        elements.clearInput.addEventListener('click', () => {
+            elements.inputText.value = '';
+            updateWordCount();
+        });
+
+        // Copy output
+        elements.copyOutput.addEventListener('click', async () => {
+            if (!elements.outputText.value) return;
+            await navigator.clipboard.writeText(elements.outputText.value);
+            elements.toast.classList.add('show');
+            setTimeout(() => elements.toast.classList.remove('show'), 3000);
+        });
+
+        // Humanize
+        elements.humanizeBtn.addEventListener('click', async () => {
+            const text = elements.inputText.value.trim();
+            if (!text) {
+                alert('Please enter some text to humanize');
+                return;
+            }
+
+            elements.humanizeBtn.disabled = true;
+            elements.humanizeBtn.textContent = 'Processing...';
+            elements.statusBadge.className = 'px-4 py-2 rounded-lg bg-yellow-100 text-yellow-800 font-medium text-center';
+            elements.statusBadge.textContent = 'Processing...';
+
+            const startTime = Date.now();
+
+            try {
+                const response = await fetch(`${API_BASE}/api/humanize`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        text,
+                        engine: elements.engineSelect.value,
+                        strength: elements.strengthSelect.value,
+                        preserve_sentences: true,
+                        strict_meaning: true,
+                        no_contractions: true,
+                        tone: 'neutral',
+                        enable_post_processing: true
+                    })
+                });
+
+                if (!response.ok) throw new Error('Server error');
+
+                const data = await response.json();
+                const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+
+                elements.outputText.value = data.humanized;
+                updateWordCount();
+
+                // Show detection results
+                elements.detectionResults.classList.remove('hidden');
+                if (data.output_detector_results) {
+                    const scores = data.output_detector_results;
+                    document.getElementById('score-gptzero').textContent = `${scores.gptzero?.toFixed(1) || '--'}%`;
+                    document.getElementById('score-turnitin').textContent = `${scores.turnitin?.toFixed(1) || '--'}%`;
+                    document.getElementById('score-originality').textContent = `${scores.originality?.toFixed(1) || '--'}%`;
+                    document.getElementById('score-winston').textContent = `${scores.winston?.toFixed(1) || '--'}%`;
+                    document.getElementById('score-copyleaks').textContent = `${scores.copyleaks?.toFixed(1) || '--'}%`;
+                    document.getElementById('score-overall').textContent = `${scores.overall?.toFixed(1) || '--'}%`;
+                }
+                document.getElementById('processingTime').textContent = `${elapsed}s`;
+                document.getElementById('engineUsed').textContent = data.engine_used || elements.engineSelect.value;
+
+                elements.statusBadge.className = 'px-4 py-2 rounded-lg bg-green-100 text-green-800 font-medium text-center';
+                elements.statusBadge.textContent = 'Complete';
+
+            } catch (error) {
+                alert('Error: ' + error.message);
+                elements.statusBadge.className = 'px-4 py-2 rounded-lg bg-red-100 text-red-800 font-medium text-center';
+                elements.statusBadge.textContent = 'Error';
+            } finally {
+                elements.humanizeBtn.disabled = false;
+                elements.humanizeBtn.textContent = 'Humanize Text';
+            }
+        });
+    </script>
+</body>
+</html>

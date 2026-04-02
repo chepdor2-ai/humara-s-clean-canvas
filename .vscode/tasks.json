@@ -1,0 +1,19 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "NextJS Dev Server",
+			"type": "shell",
+			"command": "cd \"e:\\Websites\\Humanizer Engine\\humanizer-engine\\frontend\" && npm run dev",
+			"isBackground": true,
+			"group": "build"
+		},
+		{
+			"label": "Python API Server",
+			"type": "shell",
+			"command": "cd \"e:\\Websites\\Humanizer Engine\\humanizer-engine\" && python simple_server.py",
+			"isBackground": true,
+			"group": "build"
+		}
+	]
+}

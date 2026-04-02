@@ -1,0 +1,406 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Make AI Text Undetectable | Ghost Humanizer - Bypass AI Detection</title>
+    <meta name="description" content="High-end AI text humanizer. Make your ChatGPT content undetectable, preserve SEO ranking, and sound 100% human with Ghost Engine.">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            50: '#fff3e0',
+                            100: '#ffe0b2',
+                            200: '#ffcc80',
+                            300: '#ffb74d',
+                            400: '#ffa726',
+                            500: '#ff9800',
+                            600: '#fb8c00',
+                            700: '#f57c00',
+                            800: '#ef6c00',
+                            900: '#e65100',
+                            950: '#fff1f1'
+                        }
+                    },
+                    fontFamily: { sans: ['Inter', 'sans-serif'] },
+                    animation: {
+                        'fade-in-up': 'fadeInUp 0.8s ease-out forwards',
+                        'float': 'float 6s ease-in-out infinite',
+                    },
+                    keyframes: {
+                        fadeInUp: {
+                            '0%': { opacity: '0', transform: 'translateY(20px)' },
+                            '100%': { opacity: '1', transform: 'translateY(0)' },
+                        },
+                        float: {
+                            '0%, 100%': { transform: 'translateY(0)' },
+                            '50%': { transform: 'translateY(-15px)' },
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        .glass-nav {
+            background: rgba(255, 255, 255, 0.9);
+            backdrop-filter: blur(10px);
+            border-bottom: 1px solid rgba(0,0,0,0.05);
+        }
+        .sketch-card {
+            border: 2px solid #fb8c00;
+            box-shadow: 6px 6px 0px #fb8c00;
+            transition: all 0.2s ease;
+        }
+        .sketch-card:hover {
+            transform: translate(-3px, -3px);
+            box-shadow: 9px 9px 0px #fb8c00;
+        }
+        .sketch-btn {
+            border: 2px solid #1f2937;
+            box-shadow: 4px 4px 0px #1f2937;
+            transition: all 0.2s ease;
+        }
+        .sketch-btn:hover {
+            transform: translate(-2px, -2px);
+            box-shadow: 6px 6px 0px #1f2937;
+        }
+        .sketch-btn:active {
+            transform: translate(2px, 2px);
+            box-shadow: 0px 0px 0px #1f2937;
+        }
+    </style>
+</head>
+<body class="bg-brand-950 text-gray-900 font-sans antialiased flex flex-col min-h-screen">
+    <!-- Navbar -->
+    <nav class="fixed w-full z-50 glass-nav transition-all duration-300">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between items-center h-20">
+                <div class="flex items-center space-x-2">
+                    <svg class="h-10 w-10 text-brand-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 2c-3.3 0-6 2.7-6 6v4c0 1.1-.9 2-2 2v2h16v-2c-1.1 0-2-.9-2-2V8c0-3.3-2.7-6-6-6zM8 18h8m-5 4h2" />
+                    </svg>
+                    <a href="/" class="text-2xl font-black tracking-tight text-gray-900 shadow-brand">GhostEngine<span class="text-brand-600">.</span></a>
+                </div>
+                <div class="hidden md:flex space-x-8">
+                    <a href="/how-it-works" class="text-gray-600 hover:text-brand-600 font-medium transition-colors">How it Works</a>
+                    <a href="/pricing" class="text-gray-600 hover:text-brand-600 font-medium transition-colors">Pricing</a>
+                    <a href="/about" class="text-gray-600 hover:text-brand-600 font-medium transition-colors">About Us</a>
+                    <a href="/detector" class="text-gray-600 hover:text-brand-600 font-medium transition-colors">AI Detector</a>
+                </div>
+                <div class="hidden md:flex items-center space-x-4">
+                    <a href="/login" class="text-gray-600 hover:text-brand-600 font-bold transition-colors">Log In</a>
+                    <a href="/app" class="bg-brand-500 text-white px-6 py-2.5 rounded-none font-bold sketch-btn">Get Started &rarr;</a>
+                </div>
+            </div>
+        </div>
+    </nav>
+    <main class="flex-grow pt-20">
+        
+    <!-- 1. Hero Section -->
+    <section class="relative overflow-hidden bg-brand-50 pt-24 pb-32">
+        <!-- Abstract illustrative backgrounds -->
+        <div class="absolute inset-0 z-0 opacity-10">
+            <svg class="absolute top-10 left-10 w-64 h-64 animate-float" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg"><path fill="#f97316" d="M45.7,-76.4C58.9,-69.3,68.9,-54.6,76.5,-40.1C84.1,-25.6,89.3,-11.3,86.9,1.7C84.5,14.7,74.5,26.4,65.6,39.3C56.7,52.2,48.9,66.4,36.5,74C24.1,81.6,7.1,82.6,-8.8,80.1C-24.7,77.6,-39.5,71.6,-53.4,62.8C-67.3,54,-80.3,42.4,-86.2,27.5C-92.1,12.6,-90.9,-5.6,-83.4,-20.9C-75.9,-36.2,-62.1,-48.6,-48,-55.8C-33.9,-63,-19.5,-65,-4.4,-59.6C10.7,-54.2,21.4,-41.4,45.7,-76.4Z" transform="translate(100 100)"/></svg>
+        </div>
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10 text-center">
+            <span class="inline-block py-1 px-3 rounded-full bg-brand-100 text-brand-800 font-bold uppercase text-xs mb-6 border border-brand-300">V3 Engine is Live</span>
+            <h1 class="text-5xl md:text-7xl font-black text-gray-900 tracking-tight leading-tight mb-8 animate-fade-in-up">
+                Bypass AI Detection.<br>
+                <span class="text-brand-600 underline decoration-8 decoration-gray-900">Rank Higher on Google.</span>
+            </h1>
+            <p class="mt-4 max-w-3xl mx-auto text-xl text-gray-600 mb-10 leading-relaxed animate-fade-in-up" style="animation-delay: 0.1s;">
+                Transform ChatGPT blocks into authentic, human-like prose. Our Ghost Engine structurally rewrites definitions, vocabulary, and burstiness to achieve 100% human scores on Turnitin & Originality.
+            </p>
+            <div class="flex flex-col sm:flex-row justify-center items-center gap-4 animate-fade-in-up" style="animation-delay: 0.2s;">
+                <a href="/app" class="bg-brand-500 hover:bg-brand-600 text-white px-8 py-4 text-lg font-black sketch-btn w-full sm:w-auto text-center flex items-center justify-center gap-2">
+                    Try the Humanizer Free <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6"></path></svg>
+                </a>
+                <a href="/pricing" class="bg-white text-gray-900 px-8 py-4 text-lg font-black sketch-btn w-full sm:w-auto text-center flex items-center justify-center gap-2">
+                    View Pricing
+                </a>
+            </div>
+            <!-- Sketch UI Representation -->
+            <div class="mt-20 mx-auto max-w-4xl bg-white sketch-card p-6 animate-fade-in-up" style="animation-delay: 0.3s; text-align: left;">
+                <div class="flex space-x-2 mb-4 border-b pb-4">
+                    <div class="w-3 h-3 bg-red-400 rounded-full"></div>
+                    <div class="w-3 h-3 bg-yellow-400 rounded-full"></div>
+                    <div class="w-3 h-3 bg-green-400 rounded-full"></div>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    <div>
+                        <span class="text-xs font-bold text-gray-400 uppercase tracking-widest">Input: Robotic AI</span>
+                        <p class="text-gray-500 text-sm mt-2 opacity-50 italic">"Artificial intelligence has fundamentally transformed numerous sectors..."</p>
+                        <div class="mt-6 flex items-center text-red-500 font-bold"><svg class="w-5 h-5 mr-1" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"></path></svg> 98% AI Detected</div>
+                    </div>
+                    <div class="border-l pl-8 border-dashed border-gray-200">
+                        <span class="text-xs font-bold text-brand-600 uppercase tracking-widest">Output: Ghost Engine</span>
+                        <p class="text-gray-800 text-sm mt-2 font-medium leading-relaxed">"These tools radically shift how we work. Instead of typing by hand, machines spot patterns we can't see, changing fields like healthcare and finance overnight."</p>
+                        <div class="mt-6 flex items-center text-green-500 font-bold"><svg class="w-5 h-5 mr-1" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"></path></svg> 100% Human Score</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- 2. Trust Logos -->
+    <section class="py-10 bg-white border-y border-gray-100">
+        <div class="max-w-7xl mx-auto px-4 text-center">
+            <p class="text-sm font-bold text-gray-400 uppercase tracking-widest mb-6">Trusted by SEO agencies, freelancers, and students to bypass:</p>
+            <div class="flex flex-wrap justify-center gap-8 opacity-60 grayscale hover:grayscale-0 transition-all">
+                <span class="font-black text-xl italic text-gray-800">Turnitin</span>
+                <span class="font-black text-xl text-blue-900 border-l-2 border-blue-900 pl-2">GPTZero</span>
+                <span class="font-black text-xl text-green-700">Originality.AI</span>
+                <span class="font-black text-xl text-amber-600">Copyleaks</span>
+            </div>
+        </div>
+    </section>
+
+    <!-- 3. Problem Section -->
+    <section class="py-24 bg-white">
+        <div class="max-w-7xl mx-auto px-6 grid md:grid-cols-2 gap-16 items-center">
+            <div>
+                <svg class="w-full text-gray-200 sketch-card bg-gray-50" viewBox="0 0 400 300" fill="none"><rect width="400" height="300" fill="#f9fafb"/><path d="M100 150 L150 100 L200 180 L250 120 L300 200" stroke="#f87171" stroke-width="8" stroke-linejoin="round" stroke-linecap="round"/><circle cx="300" cy="200" r="10" fill="#ef4444"/><text x="150" y="80" fill="#ef4444" font-family="sans-serif" font-weight="bold" font-size="16">Google Core Update Penalty</text></svg>
+            </div>
+            <div>
+                <h2 class="text-4xl font-black text-gray-900 mb-6">AI Discovery is Destroying Rankings & Grades</h2>
+                <p class="text-lg text-gray-600 mb-6 leading-relaxed">Most content spinners just swap synonyms (spintax), resulting in unreadable essays or weirdly phrased articles. Advanced AI detectors catch them immediately because the underlying sentence structure (burstiness and perplexity) still flags as machine-written.</p>
+                <ul class="space-y-4 text-gray-800 font-medium">
+                    <li class="flex items-start"><svg class="w-6 h-6 text-red-500 mr-2 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg> Google penalizes robotic "helpful content"</li>
+                    <li class="flex items-start"><svg class="w-6 h-6 text-red-500 mr-2 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg> Academic institutions flag false positives</li>
+                    <li class="flex items-start"><svg class="w-6 h-6 text-red-500 mr-2 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg> Clients reject obvious AI fluff ("Delve into the realm...")</li>
+                </ul>
+            </div>
+        </div>
+    </section>
+
+    <!-- 4. How it works -->
+    <section class="py-24 bg-brand-950 border-t-2 border-brand-200">
+        <div class="max-w-7xl mx-auto px-6">
+            <div class="text-center max-w-3xl mx-auto mb-16">
+                <h2 class="text-4xl font-black text-gray-900 mb-4">How GhostEngine Outsmarts the Bots</h2>
+                <p class="text-xl text-gray-600">We don't just swap synonyms. Our 8-Phase contextual pipeline fundamentally restructures your text—like a pro editor would.</p>
+            </div>
+            
+            <div class="grid md:grid-cols-3 gap-8">
+                <!-- Card 1 -->
+                <div class="bg-white p-8 sketch-card">
+                    <div class="w-14 h-14 bg-brand-100 rounded-full flex items-center justify-center mb-6">
+                        <span class="text-2xl font-black text-brand-600">1</span>
+                    </div>
+                    <h3 class="text-2xl font-bold mb-3">AI Pattern Purge</h3>
+                    <p class="text-gray-600">We aggressively strip out ChatGPT markers ("fundamentally transformed", "in conclusion", "crucial") before altering structure.</p>
+                </div>
+                <!-- Card 2 -->
+                <div class="bg-white p-8 sketch-card">
+                    <div class="w-14 h-14 bg-brand-100 rounded-full flex items-center justify-center mb-6">
+                        <span class="text-2xl font-black text-brand-600">2</span>
+                    </div>
+                    <h3 class="text-2xl font-bold mb-3">Deep Clause Reorder</h3>
+                    <p class="text-gray-600">The engine actively combines short strings and breaks apart massive, symmetrical paragraphs to add authentic "burstiness".</p>
+                </div>
+                <!-- Card 3 -->
+                <div class="bg-white p-8 sketch-card">
+                    <div class="w-14 h-14 bg-brand-100 rounded-full flex items-center justify-center mb-6">
+                        <span class="text-2xl font-black text-brand-600">3</span>
+                    </div>
+                    <h3 class="text-2xl font-bold mb-3">Targeted Ninja Pipeline</h3>
+                    <p class="text-gray-600">Ghost checks output against an ensemble of 22 detection APIs locally, iterating up to 8 times until the score hits <5%.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- 5. Features Grid Deep Dive -->
+
+    <!-- 6. SEO Content Block: AI Detection Explained -->
+    <section class="py-20 bg-brand-50 border-t-2 border-brand-200">
+        <div class="max-w-7xl mx-auto px-6 grid md:grid-cols-2 gap-12 items-center">
+            <div>
+                <h2 class="text-3xl font-black text-gray-900 mb-4">Why Turnitin and Originality Catch ChatGPT</h2>
+                <p class="text-gray-700 leading-relaxed mb-4">Language models like GPT-4 predict the most statistically probable next word. This generates highly regular, predictable text known as low perplexity and low burstiness. Human writers naturally vary sentence lengths and vocabulary choices.</p>
+                <p class="text-gray-700 leading-relaxed font-bold">GhostEngine injects controlled chaos ("burstiness") back into the document, breaking algorithmic predictability.</p>
+            </div>
+            <div class="bg-white p-6 sketch-card text-center">
+                <svg class="w-24 h-24 mx-auto text-brand-500 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"></path></svg>
+                <h3 class="text-xl font-bold">Algorithmic Chaos Engine</h3>
+            </div>
+        </div>
+    </section>
+
+    <!-- 7. Use Cases / Target Audience -->
+    <section class="py-20 bg-white">
+        <div class="max-w-7xl mx-auto px-6 text-center">
+            <h2 class="text-4xl font-black text-gray-900 mb-12">Who Uses GhostEngine?</h2>
+            <div class="grid md:grid-cols-3 gap-8">
+                <div class="p-6">
+                    <h3 class="text-2xl font-bold text-gray-900 mb-2">SEO Freelancers</h3>
+                    <p class="text-gray-600">Scale high-quality blog content without throwing Google's "Helpful Content Update" spam filters.</p>
+                </div>
+                <div class="p-6">
+                    <h3 class="text-2xl font-bold text-gray-900 mb-2">Academics & Students</h3>
+                    <p class="text-gray-600">Ensure research papers and essay drafts aren't falsely flagged by university Turnitin integrations.</p>
+                </div>
+                <div class="p-6">
+                    <h3 class="text-2xl font-bold text-gray-900 mb-2">Content Agencies</h3>
+                    <p class="text-gray-600">Deliver undetectable web copy to clients without worrying about them running ZeroGPT checks.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- 8. Testimonials/Reviews -->
+    <section class="py-20 bg-gray-900 text-white">
+        <div class="max-w-7xl mx-auto px-6">
+            <h2 class="text-center text-4xl font-black mb-16">Ranked #1 in Humanization</h2>
+            <div class="grid md:grid-cols-2 gap-8">
+                <div class="bg-gray-800 p-8 sketch-card border-brand-500">
+                    <div class="flex text-yellow-400 mb-4">★★★★★</div>
+                    <p class="text-xl italic mb-6">"Ghost Engine saved our agency. We were getting smashed by the March Google core update. Re-running our content through the Ninja pipeline brought our rankings back in 3 weeks."</p>
+                    <p class="font-bold">— Sarah T. (SEO Director)</p>
+                </div>
+                <div class="bg-gray-800 p-8 sketch-card border-brand-500">
+                    <div class="flex text-yellow-400 mb-4">★★★★★</div>
+                    <p class="text-xl italic mb-6">"Originality.ai was flagging my 100% human-typed articles. Ghost tweaked the burstiness just enough that I always score 95%+ human now."</p>
+                    <p class="font-bold">— Mike R. (Freelancer)</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="py-24 bg-white">
+        <div class="max-w-7xl mx-auto px-6 text-center">
+            <h2 class="text-4xl font-black text-gray-900 mb-16">The Ultimate Anti-Detection Feature Set</h2>
+            <div class="grid md:grid-cols-2 gap-12 text-left">
+                <!-- Feature -->
+                <div class="flex">
+                    <div class="mr-6 bg-brand-100 p-4 rounded sketch-card h-16 w-16 flex-shrink-0 flex items-center justify-center"><svg class="w-8 h-8 text-brand-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg></div>
+                    <div>
+                        <h4 class="text-xl font-bold text-gray-900 mb-2">Preserve Strict Meaning</h4>
+                        <p class="text-gray-600">Unlike rudimentary spinners, our Context Analyzer maps protected entities and nouns, ensuring technical accuracy for medical or legal writing.</p>
+                    </div>
+                </div>
+                <!-- Feature -->
+                <div class="flex">
+                    <div class="mr-6 bg-brand-100 p-4 rounded sketch-card h-16 w-16 flex-shrink-0 flex items-center justify-center"><svg class="w-8 h-8 text-brand-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path></svg></div>
+                    <div>
+                        <h4 class="text-xl font-bold text-gray-900 mb-2">On-Demand Ninja LLM Refinement</h4>
+                        <p class="text-gray-600">Switch from Ghost Mini (Local Rule-based) to Ninja (LLM-driven multipass) for articles that need supreme academic vocabulary adjustments.</p>
+                    </div>
+                </div>
+                 <!-- Feature -->
+                <div class="flex">
+                    <div class="mr-6 bg-brand-100 p-4 rounded sketch-card h-16 w-16 flex-shrink-0 flex items-center justify-center"><svg class="w-8 h-8 text-brand-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4h13M3 8h9m-9 4h6m4 0l4-4m0 0l4 4m-4-4v12"></path></svg></div>
+                    <div>
+                        <h4 class="text-xl font-bold text-gray-900 mb-2">Built-In 22x Multi-Detector</h4>
+                        <p class="text-gray-600">Scan texts before and after. We query Turnitin, Originality, ZeroGPT, Copyleaks, Winston, and 17 others instantly to guarantee security.</p>
+                    </div>
+                </div>
+                 <!-- Feature -->
+                <div class="flex">
+                    <div class="mr-6 bg-brand-100 p-4 rounded sketch-card h-16 w-16 flex-shrink-0 flex items-center justify-center"><svg class="w-8 h-8 text-brand-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"></path></svg></div>
+                    <div>
+                        <h4 class="text-xl font-bold text-gray-900 mb-2">Granular Quality Controls</h4>
+                        <p class="text-gray-600">Easily dictate the 'Tone' (Academic, Professional, Neutral), toggle structural splitting, and apply post-processing refinement layers.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- 9. Pricing -->
+    <section class="py-24 bg-brand-100">
+        <div class="max-w-7xl mx-auto px-6 text-center">
+            <h2 class="text-4xl font-black text-gray-900 mb-4">Straightforward Pricing</h2>
+            <p class="text-xl text-gray-600 mb-16">Humanize text efficiently without breaking the bank.</p>
+            <div class="grid md:grid-cols-3 gap-8 max-w-5xl mx-auto text-left">
+                <!-- Free -->
+                <div class="bg-white p-8 sketch-card border-gray-200 border-2">
+                    <h3 class="text-2xl font-bold text-gray-900 mb-2">Starter</h3>
+                    <p class="text-gray-500 mb-6">Perfect to test Ghost Mini.</p>
+                    <p class="text-4xl font-black text-gray-900 mb-6">$0<span class="text-base text-gray-500 font-normal">/mo</span></p>
+                    <ul class="space-y-3 mb-8 text-gray-600 font-medium">
+                        <li>— 2,000 words limit</li>
+                        <li>— Standard Ghost Mini Engine</li>
+                        <li>— Basic AI Detection</li>
+                    </ul>
+                    <a href="/signup" class="block w-full text-center text-gray-900 border-2 border-gray-900 font-bold py-3 hover:bg-gray-100 transition-colors sketch-btn">Sign Up Free</a>
+                </div>
+                <!-- Pro -->
+                <div class="bg-gray-900 p-8 sketch-card border-brand-500 border-2 transform md:-translate-y-4">
+                    <span class="bg-brand-500 text-white font-bold text-xs uppercase tracking-widest py-1 px-3 rounded inline-block mb-4">Most Popular</span>
+                    <h3 class="text-2xl font-bold text-white mb-2">Ghost Pro</h3>
+                    <p class="text-gray-400 mb-6">For content creators and pros.</p>
+                    <p class="text-4xl font-black text-white mb-6">$19<span class="text-base text-gray-500 font-normal">/mo</span></p>
+                    <ul class="space-y-3 mb-8 text-gray-300 font-medium">
+                        <li>— 100,000 words</li>
+                        <li>— Advanced Ghost Pro Engine</li>
+                        <li>— Full 22x Detector suite</li>
+                        <li>— SEO Tone formatting</li>
+                    </ul>
+                    <a href="/signup" class="block w-full text-center bg-brand-500 text-white border-2 border-brand-500 font-bold py-3 sketch-btn ring-0">Go Ghost Pro</a>
+                </div>
+                <!-- Agency -->
+                <div class="bg-white p-8 sketch-card border-gray-200 border-2">
+                    <h3 class="text-2xl font-bold text-gray-900 mb-2">Ninja Suite</h3>
+                    <p class="text-gray-500 mb-6">Unlimited precision rules.</p>
+                    <p class="text-4xl font-black text-gray-900 mb-6">$49<span class="text-base text-gray-500 font-normal">/mo</span></p>
+                    <ul class="space-y-3 mb-8 text-gray-600 font-medium">
+                        <li>— 500,000 words</li>
+                        <li>— Advanced Ninja LLM Multi-pass</li>
+                        <li>— API Access</li>
+                        <li>— Early Access to V4</li>
+                    </ul>
+                    <a href="/signup" class="block w-full text-center text-gray-900 border-2 border-gray-900 font-bold py-3 hover:bg-gray-100 transition-colors sketch-btn">Contact Us</a>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- 10. Final CTA -->
+    <section class="py-24 bg-white text-center border-t-2 border-gray-100">
+        <h2 class="text-4xl md:text-5xl font-black text-gray-900 mb-6">Stop Failing AI Tests.</h2>
+        <p class="text-xl text-gray-600 mb-10 max-w-2xl mx-auto">Join over 50,000 users who trust GhostEngine to write naturally, rank highly, and read perfectly.</p>
+        <a href="/app" class="bg-gray-900 text-white px-10 py-5 text-xl font-black sketch-btn inline-block tracking-wide hover:bg-brand-500 hover:border-brand-500 transition-colors">Start Humanizing Text</a>
+    </section>
+
+    </main>
+    <footer class="bg-gray-900 border-t-4 border-brand-500 pt-16 pb-8">
+        <div class="max-w-7xl mx-auto px-6 lg:px-8">
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-12 mb-12">
+                <div class="col-span-1 md:col-span-2">
+                    <a href="/" class="text-2xl font-black tracking-tight text-white mb-4 block">GhostEngine<span class="text-brand-500">.</span></a>
+                    <p class="text-gray-400 max-w-sm mb-6 leading-relaxed">The premier AI text humanizer. We rewrite robotic text into engaging, undetectable prose that outsmarts Turnitin, Originality.ai, and GPTZero while preserving your SEO intent.</p>
+                </div>
+                <div>
+                    <h3 class="text-lg font-bold text-white mb-4">Product</h3>
+                    <ul class="space-y-3">
+                        <li><a href="/app" class="text-gray-400 hover:text-brand-400 transition-colors">Humanizer App</a></li>
+                        <li><a href="/detector" class="text-gray-400 hover:text-brand-400 transition-colors">AI Detector API</a></li>
+                        <li><a href="/pricing" class="text-gray-400 hover:text-brand-400 transition-colors">Pricing</a></li>
+                        <li><a href="/how-it-works" class="text-gray-400 hover:text-brand-400 transition-colors">How it Works</a></li>
+                    </ul>
+                </div>
+                <div>
+                    <h3 class="text-lg font-bold text-white mb-4">Legal</h3>
+                    <ul class="space-y-3">
+                        <li><a href="/terms" class="text-gray-400 hover:text-brand-400 transition-colors">Terms of Service</a></li>
+                        <li><a href="/privacy" class="text-gray-400 hover:text-brand-400 transition-colors">Privacy Policy</a></li>
+                        <li><a href="/about" class="text-gray-400 hover:text-brand-400 transition-colors">About Us</a></li>
+                        <li><a href="/contact" class="text-gray-400 hover:text-brand-400 transition-colors">Contact</a></li>
+                    </ul>
+                </div>
+            </div>
+            <div class="border-t border-gray-800 pt-8 text-center md:text-left flex flex-col md:flex-row justify-between items-center">
+                <p class="text-gray-500 text-sm">© 2026 GhostEngine. All rights reserved.</p>
+                <div class="flex space-x-4 mt-4 md:mt-0">
+                    <a href="#" class="text-gray-400 hover:text-white"><svg class="h-6 w-6" fill="currentColor" viewBox="0 0 24 24"><path d="M24 4.5..."></svg></a>
+                </div>
+            </div>
+        </div>
+    </footer>
+</body>
+</html>

@@ -1,0 +1,19 @@
+import type { NextConfig } from "next";
+import path from "path";
+
+const nextConfig: NextConfig = {
+  turbopack: {
+    root: path.resolve(process.cwd()),
+  },
+  webpack: (config) => {
+    // Resolve compromise & openai from ts-engine/node_modules
+    // (avoids needing to install them separately in frontend)
+    config.resolve.modules = [
+      ...(config.resolve.modules || []),
+      path.resolve(process.cwd(), "..", "ts-engine", "node_modules"),
+    ];
+    return config;
+  },
+};
+
+export default nextConfig;
