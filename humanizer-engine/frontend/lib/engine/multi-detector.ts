@@ -3,7 +3,7 @@
  * 20 statistical signals + 22 detector profiles with logistic scoring.
  */
 
-import { sentTokenize, wordTokenize } from "./utils.js";
+import { sentTokenize, wordTokenize } from "./utils";
 
 // ── Math helpers ──
 

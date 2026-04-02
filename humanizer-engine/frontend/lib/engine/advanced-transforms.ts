@@ -5,8 +5,8 @@
  */
 
 import nlp from "compromise";
-import * as rules from "./rules.js";
-import { sentTokenize } from "./utils.js";
+import * as rules from "./rules";
+import { sentTokenize } from "./utils";
 
 // ── Irregular past participles ──
 
