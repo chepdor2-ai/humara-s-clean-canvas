@@ -201,6 +201,7 @@ export default function EditorPage() {
             <select
               value={tone}
               onChange={(e) => setTone(e.target.value)}
+              aria-label="Target Tone"
               className="w-full bg-[#F5EBE1] border border-[#EADDCF] rounded-lg p-2.5 text-sm text-[#5C4033] outline-none"
             >
               {TONES.map((t) => (
@@ -214,6 +215,7 @@ export default function EditorPage() {
             <label className="text-sm font-bold text-[#5C4033]">Strict Meaning</label>
             <button
               onClick={() => setStrictMeaning(!strictMeaning)}
+              aria-label="Toggle strict meaning preservation"
               className={`w-10 h-5 rounded-full transition-all relative ${
                 strictMeaning ? 'bg-[#D97757]' : 'bg-[#EADDCF]'
               }`}
