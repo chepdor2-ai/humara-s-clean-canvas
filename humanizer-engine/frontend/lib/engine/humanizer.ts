@@ -14,20 +14,20 @@ import {
   varyConnectors,
   makeBurstier,
   rejoinTokens,
-} from "./utils.js";
-import { SYNONYM_BANK, PROTECTED_WORDS, BURSTINESS_TARGET } from "./rules.js";
-import { postProcess } from "./post-processor.js";
-import { analyze as analyzeContext, type TextContext } from "./context-analyzer.js";
+} from "./utils";
+import { SYNONYM_BANK, PROTECTED_WORDS, BURSTINESS_TARGET } from "./rules";
+import { postProcess } from "./post-processor";
+import { analyze as analyzeContext, type TextContext } from "./context-analyzer";
 import {
   voiceShift,
   deepRestructure,
   expandContractions,
   hasFirstPerson,
   mergeShortSentences,
-} from "./advanced-transforms.js";
-import { getDictionary, type HumanizerDictionary } from "./dictionary.js";
-import { getDetector, type AnalysisResult } from "./multi-detector.js";
-import { protectSpecialContent, restoreSpecialContent, type ProtectionMap } from "./content-protection.js";
+} from "./advanced-transforms";
+import { getDictionary, type HumanizerDictionary } from "./dictionary";
+import { getDetector, type AnalysisResult } from "./multi-detector";
+import { protectSpecialContent, restoreSpecialContent, type ProtectionMap } from "./content-protection";
 
 // ── Helpers ──
 

@@ -1,9 +1,9 @@
-﻿import type { Metadata } from 'next';
+import type { Metadata } from 'next';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'AI Humanizer  Premium Ghost Engine',
-  description: 'Transform AI-generated content into authentic text that bypasses all major AI detectors.',
+  title: 'Humara | AI Humanizer & Detector',
+  description: 'Humara combines AI humanization and AI detection in one working interface powered by the existing engine stack.',
 };
 
 export default function RootLayout({
@@ -27,18 +27,14 @@ export default function RootLayout({
                         </div>
                         <div>
                             <a href="/" className="text-sm font-black bg-gradient-to-r from-orange-600 to-red-600 bg-clip-text text-transparent tracking-tight">        
-                                GhostEngine
+                                Humara
                             </a>
-                            <p className="text-[9px] text-gray-500 font-semibold uppercase tracking-widest leading-none mt-0.5">AI Humanization</p>
+                            <p className="text-[9px] text-gray-500 font-semibold uppercase tracking-widest leading-none mt-0.5">Humanizer + Detector</p>
                         </div>
                     </div>
                     <div className="hidden md:flex items-center space-x-6">
                         <a href="/" className="text-gray-600 hover:text-orange-600 font-bold text-[10px] uppercase tracking-wider transition-colors"><i className="fas fa-home mr-1.5 opacity-70"></i>Home</a>
                         <a href="/detector" className="text-gray-600 hover:text-orange-600 font-bold text-[10px] uppercase tracking-wider transition-colors"><i className="fas fa-shield-alt mr-1.5 opacity-70"></i>AI Detector</a>
-                        <a href="/pricing" className="text-gray-600 hover:text-orange-600 font-bold text-[10px] uppercase tracking-wider transition-colors"><i className="fas fa-dollar-sign mr-1.5 opacity-70"></i>Pricing</a>
-                        <button className="bg-gradient-orange text-white px-4 py-1.5 rounded text-[10px] font-bold uppercase tracking-wider shadow-sm hover:shadow-md transition-all hover:scale-105 btn-premium">
-                            <i className="fas fa-user pr-1"></i> Sign In
-                        </button>
                     </div>
                     <button className="md:hidden text-gray-700 hover:text-orange-600 text-sm">
                         <i className="fas fa-bars"></i>
@@ -53,8 +49,8 @@ export default function RootLayout({
         <footer className="glass mt-12 border-t border-gray-200">
             <div className="max-w-6xl mx-auto px-4 py-6">
                 <div className="text-center text-xs text-gray-500">
-                    <p>&copy; 2026 GhostEngine. All rights reserved. <strong>Premium AI Humanization Technology</strong></p>
-                    <p className="mt-1.5">Trusted by 500,000+ users worldwide  99.9% Success Rate  24/7 Support</p>
+                    <p>&copy; 2026 Humara. All rights reserved. <strong>Premium Humanizer + Detector Technology</strong></p>
+                    <p className="mt-1.5">Built on the existing engine stack with a working frontend and secured backend configuration.</p>
                 </div>
             </div>
         </footer>

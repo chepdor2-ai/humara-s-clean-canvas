@@ -18,19 +18,19 @@
  */
 
 import OpenAI from "openai";
-import { sentTokenize } from "./utils.js";
-import * as rules from "./rules.js";
-import * as utils from "./utils.js";
-import { voiceShift, deepRestructure, expandContractions } from "./advanced-transforms.js";
-import { getDictionary } from "./dictionary.js";
-import { getDetector } from "./multi-detector.js";
-import { getStyleMemory, profileSummaryText, type StyleProfile } from "./style-memory.js";
-import { analyzeText, computeGap, gapToInstructions } from "./text-analyzer.js";
-import { analyze as analyzeContext } from "./context-analyzer.js";
-import { postProcess } from "./post-processor.js";
-import { executeNinjaNonLlmPhases } from "./ninja-post-processor.js";
-import { validateAll } from "./validation.js";
-import { protectSpecialContent, restoreSpecialContent } from "./content-protection.js";
+import { sentTokenize } from "./utils";
+import * as rules from "./rules";
+import * as utils from "./utils";
+import { voiceShift, deepRestructure, expandContractions } from "./advanced-transforms";
+import { getDictionary } from "./dictionary";
+import { getDetector } from "./multi-detector";
+import { getStyleMemory, profileSummaryText, type StyleProfile } from "./style-memory";
+import { analyzeText, computeGap, gapToInstructions } from "./text-analyzer";
+import { analyze as analyzeContext } from "./context-analyzer";
+import { postProcess } from "./post-processor";
+import { executeNinjaNonLlmPhases } from "./ninja-post-processor";
+import { validateAll } from "./validation";
+import { protectSpecialContent, restoreSpecialContent } from "./content-protection";
 
 // ── Config ──
 

@@ -4,7 +4,7 @@
  */
 
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from "fs";
-import { join } from "path";
+import { dirname, join } from "path";
 
 const DICT_DIR = join(process.cwd(), "..", "dictionaries");
 const PROFILES_PATH = join(DICT_DIR, "style_profiles.json");

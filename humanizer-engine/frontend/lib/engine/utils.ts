@@ -4,8 +4,8 @@
  */
 
 import nlp from "compromise";
-import * as rules from "./rules.js";
-import { getDictionary } from "./dictionary.js";
+import * as rules from "./rules";
+import { getDictionary } from "./dictionary";
 
 // ── Real word validation cache ──
 
