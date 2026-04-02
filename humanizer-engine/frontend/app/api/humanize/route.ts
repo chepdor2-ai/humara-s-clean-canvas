@@ -1,23 +1,25 @@
 import { NextRequest, NextResponse } from "next/server";
-import { humanize } from "@/lib/engine/humanizer.js";
-import { getDetector } from "@/lib/engine/multi-detector.js";
-import { runPipelineAsync } from "@/lib/engine/llm-pipeline.js";
+import { humanize } from "@/lib/engine/humanizer";
+import { getDetector } from "@/lib/engine/multi-detector";
+import { runPipelineAsync } from "@/lib/engine/llm-pipeline";
+
+export const runtime = "nodejs";
 
 // ── Lazy LLM humanizer import ──
 
-let llmHumanize: typeof import("@/lib/engine/llm-humanizer.js").llmHumanize | null = null;
+let llmHumanize: typeof import("@/lib/engine/llm-humanizer").llmHumanize | null = null;
 let hasPipeline = false;
 
 async function initModules() {
   if (llmHumanize === null) {
     try {
-      const mod = await import("@/lib/engine/llm-humanizer.js");
+      const mod = await import("@/lib/engine/llm-humanizer");
       llmHumanize = mod.llmHumanize;
     } catch { /* LLM humanizer not available */ }
   }
   if (!hasPipeline) {
     try {
-      await import("@/lib/engine/llm-pipeline.js");
+      await import("@/lib/engine/llm-pipeline");
       hasPipeline = true;
     } catch { /* pipeline not available */ }
   }
@@ -53,7 +55,20 @@ function findDetectorAiScore(detection: Record<string, any>, name: string): numb
 export async function POST(req: NextRequest) {
   await initModules();
 
-  const body = await req.json();
+  const body = (await req.json()) as {
+    text?: string;
+    engine?: string;
+    strength?: string;
+    preserve_sentences?: boolean;
+    strict_meaning?: boolean;
+    tone?: string;
+    no_contractions?: boolean;
+    enable_post_processing?: boolean;
+  };
+
+  if (!body.text?.trim()) {
+    return NextResponse.json({ error: "Empty text provided" }, { status: 400 });
+  }
 
   const strengthMap: Record<string, string> = { light: "light", balanced: "medium", deep: "strong" };
   const engineStrength = strengthMap[body.strength ?? "balanced"] ?? "medium";

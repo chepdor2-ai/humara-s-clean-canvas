@@ -12,10 +12,10 @@ import { readFileSync } from "fs";
 import { join } from "path";
 // @ts-ignore — OpenAI types
 import OpenAI from "openai";
-import { sentTokenize } from "./utils.js";
-import { PROTECTED_WORDS } from "./rules.js";
-import { expandContractions } from "./advanced-transforms.js";
-import { protectSpecialContent, restoreSpecialContent } from "./content-protection.js";
+import { sentTokenize } from "./utils";
+import { PROTECTED_WORDS } from "./rules";
+import { expandContractions } from "./advanced-transforms";
+import { protectSpecialContent, restoreSpecialContent } from "./content-protection";
 
 // ── Config ──
 

@@ -5,7 +5,7 @@
  *           connector de-monotony → weak copula chain breaking → surface cleanup
  */
 
-import { sentTokenize } from "./utils.js";
+import { sentTokenize } from "./utils";
 
 // ── Phase 1: Filler removal ──
 
