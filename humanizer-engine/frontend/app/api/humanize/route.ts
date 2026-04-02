@@ -3,6 +3,8 @@ import { humanize } from "@/lib/engine/humanizer";
 import { getDetector } from "@/lib/engine/multi-detector";
 import { runPipelineAsync } from "@/lib/engine/llm-pipeline";
 
+export const runtime = "nodejs";
+
 // ── Lazy LLM humanizer import ──
 
 let llmHumanize: typeof import("@/lib/engine/llm-humanizer").llmHumanize | null = null;
@@ -53,7 +55,20 @@ function findDetectorAiScore(detection: Record<string, any>, name: string): numb
 export async function POST(req: NextRequest) {
   await initModules();
 
-  const body = await req.json();
+  const body = (await req.json()) as {
+    text?: string;
+    engine?: string;
+    strength?: string;
+    preserve_sentences?: boolean;
+    strict_meaning?: boolean;
+    tone?: string;
+    no_contractions?: boolean;
+    enable_post_processing?: boolean;
+  };
+
+  if (!body.text?.trim()) {
+    return NextResponse.json({ error: "Empty text provided" }, { status: 400 });
+  }
 
   const strengthMap: Record<string, string> = { light: "light", balanced: "medium", deep: "strong" };
   const engineStrength = strengthMap[body.strength ?? "balanced"] ?? "medium";
