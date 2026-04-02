@@ -28,6 +28,7 @@ import {
 import { getDictionary, type HumanizerDictionary } from "./dictionary";
 import { getDetector, type AnalysisResult } from "./multi-detector";
 import { protectSpecialContent, restoreSpecialContent, type ProtectionMap } from "./content-protection";
+import { semanticSimilaritySync } from "./semantic-guard";
 
 // ── Helpers ──
 
@@ -400,15 +401,15 @@ export function buildSettings(opts: {
     minChangeRatio = 0.70;
     signalFixEnabled = true;
   } else if (stealth) {
-    targetScore = 5.0;
-    maxIterations = strengthMap3(8, 14, 22);
-    baseIntensity = strengthMap3(2.0, 10.0, 30.0);
-    minChangeRatio = 0.65;
-    signalFixEnabled = false;
-  } else {
+      targetScore = 5.0;
+      maxIterations = strengthMap3(8, 14, 22);
+      baseIntensity = strengthMap3(1.5, 2.5, 4.0);
+      minChangeRatio = 0.65;
+      signalFixEnabled = true; // Enable signal-aware feedback for stealth mode
+    } else {
     targetScore = 20.0;
     maxIterations = strengthMap3(4, 8, 14);
-    baseIntensity = strengthMap3(1.8, 9.0, 27.0);
+    baseIntensity = strengthMap3(1.2, 1.8, 2.5);
     minChangeRatio = 0.55;
     signalFixEnabled = false;
   }
@@ -604,6 +605,60 @@ function applyHumanTexture(sentences: string[], intensity: number, _settings: Hu
   return result;
 }
 
+// ── Add contractions (opposite of expandContractions) ──
+
+const ADD_CONTRACTION_MAP: [RegExp, string][] = [
+  [/\bdo not\b/gi, "don't"],
+  [/\bdoes not\b/gi, "doesn't"],
+  [/\bdid not\b/gi, "didn't"],
+  [/\bcannot\b/gi, "can't"],
+  [/\bwill not\b/gi, "won't"],
+  [/\bwould not\b/gi, "wouldn't"],
+  [/\bshould not\b/gi, "shouldn't"],
+  [/\bcould not\b/gi, "couldn't"],
+  [/\bis not\b/gi, "isn't"],
+  [/\bare not\b/gi, "aren't"],
+  [/\bwas not\b/gi, "wasn't"],
+  [/\bwere not\b/gi, "weren't"],
+  [/\bhas not\b/gi, "hasn't"],
+  [/\bhave not\b/gi, "haven't"],
+  [/\bhad not\b/gi, "hadn't"],
+  [/\bmust not\b/gi, "mustn't"],
+  [/\bit is\b/gi, "it's"],
+  [/\bthat is\b/gi, "that's"],
+  [/\bthey are\b/gi, "they're"],
+  [/\bwe are\b/gi, "we're"],
+  [/\byou are\b/gi, "you're"],
+  [/\bthey have\b/gi, "they've"],
+  [/\bwe have\b/gi, "we've"],
+  [/\byou have\b/gi, "you've"],
+  [/\bthey will\b/gi, "they'll"],
+  [/\bwe will\b/gi, "we'll"],
+  [/\byou will\b/gi, "you'll"],
+  [/\bhe will\b/gi, "he'll"],
+  [/\bshe will\b/gi, "she'll"],
+  [/\bit will\b/gi, "it'll"],
+  [/\blet us\b/gi, "let's"],
+];
+
+function addContractions(text: string): string {
+  let result = text;
+  // Apply contractions with 40% probability per match to keep it natural (not ALL contracted)
+  for (const [pattern, replacement] of ADD_CONTRACTION_MAP) {
+    result = result.replace(pattern, (match) => {
+      if (Math.random() < 0.40) {
+        // Preserve capitalization of first char
+        if (match[0] === match[0].toUpperCase() && replacement[0] === replacement[0].toLowerCase()) {
+          return replacement[0].toUpperCase() + replacement.slice(1);
+        }
+        return replacement;
+      }
+      return match;
+    });
+  }
+  return result;
+}
+
 // ── Cleanup ──
 
 function cleanup(text: string): string {
@@ -630,9 +685,10 @@ function cleanup(text: string): string {
     p = p.replace(/\bA ([aeiouAEIOU])/g, "An $1");
     p = p.replace(/\ban ([bcdfghjklmnpqrstvwxyzBCDFGHJKLMNPQRSTVWXYZ])/g, "a $1");
     // Mid-sentence capitalization fix
-    p = p.replace(/(?<=[a-z,;] )([A-Z])([a-z]{2,})/g, (_m, c1: string, rest: string) => c1.toLowerCase() + rest);
-    p = expandContractions(p);
-    const sentences = sentTokenize(p);
+      p = p.replace(/(?<=[a-z,;] )([A-Z])([a-z]{2,})/g, (_m, c1: string, rest: string) => c1.toLowerCase() + rest);
+      // Add contractions for naturalness (human text uses contractions; AI doesn't)
+      p = addContractions(p);
+      const sentences = sentTokenize(p);
     return sentences.map((s) => { s = s.trim(); return s ? s[0].toUpperCase() + s.slice(1) : s; }).filter(Boolean).join(" ");
   }).join("\n\n");
 }
@@ -1144,11 +1200,84 @@ function fixTokenPredictability(sentences: string[], intensity: number, used: Se
   });
 }
 
-function fixLowStylometric(sentences: string[], _intensity: number): string[] {
-  // Improve stylometric score: more punctuation variety, personal touches
-  // Currently minimal — creates over-long sentences if aggressive
-  return sentences;
-}
+function fixLowStylometric(sentences: string[], intensity: number): string[] {
+    // Improve stylometric score: personal pronouns, contractions, rhetorical questions, parenthetical asides
+    const pronounInserts = [
+      "we can see that ", "one might argue that ", "we find that ",
+      "it is worth asking whether ", "one could say that ",
+      "we should note that ", "looking at this, we notice ",
+    ];
+    const parentheticals = [
+      " (at least in part)", " (though not always)", " (or so it appears)",
+      " (to some extent)", " (in most cases)", " (admittedly)",
+      " (to be precise)", " (roughly speaking)",
+    ];
+    const rhetoricalEndings = [
+      " But is that really the case?", " And why does that matter?",
+      " The question is: how far does this go?", " But at what cost?",
+      " So what does this tell us?", " And what follows from this?",
+    ];
+    const contractionInserts: [RegExp, string][] = [
+      [/\bdo not\b/gi, "don't"], [/\bcannot\b/gi, "can't"],
+      [/\bwill not\b/gi, "won't"], [/\bdoes not\b/gi, "doesn't"],
+      [/\bis not\b/gi, "isn't"], [/\bare not\b/gi, "aren't"],
+      [/\bwould not\b/gi, "wouldn't"], [/\bshould not\b/gi, "shouldn't"],
+      [/\bcould not\b/gi, "couldn't"], [/\bhas not\b/gi, "hasn't"],
+      [/\bhave not\b/gi, "haven't"], [/\bdid not\b/gi, "didn't"],
+      [/\bit is\b/gi, "it's"], [/\bthat is\b/gi, "that's"],
+      [/\bthey are\b/gi, "they're"], [/\bwe are\b/gi, "we're"],
+    ];
+    let pronounCount = 0;
+    let rhetoricalDone = false;
+    let parentheticalCount = 0;
+
+    return sentences.map((sent, i) => {
+      const words = sent.split(/\s+/);
+      let result = sent;
+
+      // Add contractions (30% chance per sentence) — makes text more human
+      if (Math.random() < 0.30 * intensity) {
+        for (const [pattern, repl] of contractionInserts) {
+          if (pattern.test(result)) {
+            result = result.replace(pattern, repl);
+            break;
+          }
+        }
+      }
+
+      // Insert personal pronoun opener (max 2 per text, 15% chance)
+      if (pronounCount < 2 && Math.random() < 0.15 * intensity && words.length > 6 && i > 0) {
+        const insert = pronounInserts[Math.floor(Math.random() * pronounInserts.length)];
+        result = insert + safeDowncaseFirst(result);
+        pronounCount++;
+      }
+
+      // Add parenthetical aside (max 2 per text, 10% chance)
+      if (parentheticalCount < 2 && Math.random() < 0.10 * intensity && words.length > 12) {
+        const commaPositions: number[] = [];
+        const w = result.split(/\s+/);
+        for (let j = 4; j < w.length - 3; j++) {
+          if (w[j].endsWith(",")) commaPositions.push(j);
+        }
+        if (commaPositions.length > 0) {
+          const pos = commaPositions[Math.floor(Math.random() * commaPositions.length)];
+          const aside = parentheticals[Math.floor(Math.random() * parentheticals.length)];
+          w.splice(pos + 1, 0, aside.trim());
+          result = w.join(" ");
+          parentheticalCount++;
+        }
+      }
+
+      // Add rhetorical question after a long statement (max 1 per text, 8% chance)
+      if (!rhetoricalDone && Math.random() < 0.08 * intensity && words.length > 15 && i > 2) {
+        const q = rhetoricalEndings[Math.floor(Math.random() * rhetoricalEndings.length)];
+        result = result.replace(/\.$/, ".") + q;
+        rhetoricalDone = true;
+      }
+
+      return result;
+    });
+  }
 
 function fixWordCommonality(sentences: string[], intensity: number, used: Set<string>, ctx: TextContext | null, dict: HumanizerDictionary, cw: Set<string>): string[] {
   // Replace overly common words with curated + large dictionary synonyms
@@ -1159,10 +1288,75 @@ function fixWordCommonality(sentences: string[], intensity: number, used: Set<st
   });
 }
 
-function fixParagraphUniformity(_paragraphs: string[]): string[] {
-  // Paragraph structure preserved — LLM pipeline handles this
-  return _paragraphs;
-}
+function fixParagraphUniformity(paragraphs: string[]): string[] {
+    // Vary paragraph lengths to break AI's characteristic uniformity
+    if (paragraphs.length < 3) return paragraphs;
+
+    const lengths = paragraphs.map((p) => p.split(/\s+/).length);
+    const avg = lengths.reduce((a, b) => a + b, 0) / lengths.length;
+    const variance = lengths.reduce((s, l) => s + (l - avg) ** 2, 0) / lengths.length;
+    const stdDev = Math.sqrt(variance);
+    const cv = avg > 0 ? stdDev / avg : 0;
+
+    // If paragraphs are already varied enough, skip
+    if (cv > 0.35) return paragraphs;
+
+    const result = [...paragraphs];
+
+    // Strategy 1: Split the longest paragraph at a natural sentence boundary
+    let longestIdx = 0;
+    let longestLen = 0;
+    for (let i = 0; i < result.length; i++) {
+      const wc = result[i].split(/\s+/).length;
+      if (wc > longestLen) { longestLen = wc; longestIdx = i; }
+    }
+    if (longestLen > 60) {
+      const sents = sentTokenize(result[longestIdx]);
+      if (sents.length >= 4) {
+        const mid = Math.ceil(sents.length / 2);
+        const part1 = sents.slice(0, mid).join(" ");
+        const part2 = sents.slice(mid).join(" ");
+        result.splice(longestIdx, 1, part1, part2);
+      }
+    }
+
+    // Strategy 2: Merge two short adjacent paragraphs
+    for (let i = 0; i < result.length - 1; i++) {
+      const wc1 = result[i].split(/\s+/).length;
+      const wc2 = result[i + 1].split(/\s+/).length;
+      if (wc1 < 30 && wc2 < 30 && wc1 + wc2 < 80 && !isTitleOrHeading(result[i]) && !isTitleOrHeading(result[i + 1])) {
+        result[i] = result[i] + " " + result[i + 1];
+        result.splice(i + 1, 1);
+        break;
+      }
+    }
+
+    // Strategy 3: Swap adjacent paragraphs if all same-length bucket
+    if (result.length >= 4) {
+      const bucketize = (wc: number) => wc < 40 ? 0 : wc < 70 ? 1 : 2;
+      for (let i = 1; i < result.length - 1; i++) {
+        const b0 = bucketize(result[i - 1].split(/\s+/).length);
+        const b1 = bucketize(result[i].split(/\s+/).length);
+        const b2 = bucketize(result[i + 1].split(/\s+/).length);
+        if (b0 === b1 && b1 === b2 && i + 2 < result.length) {
+          // Insert a short transitional sentence at the start of this paragraph
+          const transitions = [
+            "Put simply, ", "Looking at this more closely, ", "To elaborate, ",
+            "In practical terms, ", "On closer inspection, ",
+          ];
+          const trans = transitions[Math.floor(Math.random() * transitions.length)];
+          const sents = sentTokenize(result[i]);
+          if (sents.length > 0) {
+            sents[0] = trans + safeDowncaseFirst(sents[0]);
+            result[i] = sents.join(" ");
+          }
+          break;
+        }
+      }
+    }
+
+    return result;
+  }
 
 function applySignalFixes(text: string, weakSignals: [string, number][], intensity: number,
   used: Set<string>, ctx: TextContext | null, settings: HumanizeSettings,
@@ -1194,11 +1388,17 @@ function applySignalFixes(text: string, weakSignals: [string, number][], intensi
     if (fixes.has("avg_word_commonality")) sentences = fixWordCommonality(sentences, intensity, used, ctx, dict, commonWords);
 
     sentences = enforceSentenceDistribution(sentences);
-    fixed.push(sentences.join(" "));
-  }
+      fixed.push(sentences.join(" "));
+    }
 
-  return fixed.join("\n\n");
-}
+    // Paragraph-level uniformity fix (operates on full paragraphs)
+    if (fixes.has("paragraph_uniformity")) {
+      const varied = fixParagraphUniformity(fixed);
+      return varied.join("\n\n");
+    }
+
+    return fixed.join("\n\n");
+  }
 
 // ── Single-pass paragraph humanization ──
 
@@ -1327,20 +1527,23 @@ export function humanize(
     // Intensity cap
     let cap: number;
     if (mode === "ghost_pro") cap = ({ light: 3.1, medium: 5.5, strong: 8.0 } as Record<string, number>)[strength] ?? 5.5;
-    else if (mode === "ghost_mini") cap = ({ light: 2.8, medium: 5.0, strong: 7.5 } as Record<string, number>)[strength] ?? 5.0;
-    else cap = 2.5;
+      else if (mode === "ghost_mini") cap = ({ light: 2.8, medium: 5.0, strong: 7.5 } as Record<string, number>)[strength] ?? 5.0;
+      else if (stealth) cap = ({ light: 3.0, medium: 5.0, strong: 7.0 } as Record<string, number>)[strength] ?? 5.0;
+      else cap = ({ light: 2.5, medium: 4.0, strong: 6.0 } as Record<string, number>)[strength] ?? 4.0;
     const intensity = Math.min(settings.baseIntensity + iteration * 0.35, cap);
 
-    // Every 3 iterations restart from original
-    let source: string;
-    let usedWords: Set<string>;
-    if (iteration > 0 && iteration % 3 === 0) {
-      source = originalText;
-      usedWords = new Set();
-    } else {
-      source = iteration > 0 ? bestResult : protectedText;
-      usedWords = new Set(usedWordsGlobal);
-    }
+    // Best-of-N pool strategy: always build on the best result, never restart from scratch
+      let source: string;
+      let usedWords: Set<string>;
+      if (iteration === 0) {
+        source = protectedText;
+        usedWords = new Set();
+      } else {
+        source = bestResult;
+        usedWords = new Set(usedWordsGlobal);
+        // Reset used words periodically to prevent synonym exhaustion
+        if (iteration % 5 === 0) usedWords = new Set();
+      }
 
     const paragraphs = source.split(/\n\s*\n/).filter((p) => p.trim());
     const processed: string[] = [];
@@ -1356,7 +1559,7 @@ export function humanize(
     }
 
     let currentResult = processed.join("\n\n");
-    currentResult = expandContractions(currentResult);
+      currentResult = addContractions(currentResult);
 
     if ((mode === "ghost_mini" || mode === "ghost_pro") && enablePostProcessing) {
       currentResult = postProcess(currentResult);
@@ -1366,9 +1569,17 @@ export function humanize(
     currentResult = enforceParagraphCount(currentResult, inputParagraphCount);
 
     for (const w of usedWords) usedWordsGlobal.add(w);
-    const changeRatio = wordChangeRatio(originalText, currentResult);
+      const changeRatio = wordChangeRatio(originalText, currentResult);
 
-    if (mode === "ghost_mini" || mode === "ghost_pro") {
+      // Semantic similarity check — reject outputs that drift too far from original meaning
+      const semanticScore = semanticSimilaritySync(originalText, currentResult);
+      const semanticThreshold = settings.strictMeaning ? 0.45 : 0.30;
+      if (semanticScore < semanticThreshold) {
+        // Output drifted too far — skip this iteration
+        continue;
+      }
+
+      if (mode === "ghost_mini" || mode === "ghost_pro") {
       const analysis = detector.analyze(currentResult);
       const { passed, maxAiScore } = checkDetectorTargets(analysis, mode);
       const signals = analysis.signals;
@@ -1386,7 +1597,7 @@ export function humanize(
         const weak = identifyWeakSignals(signals);
         if (weak.length > 0) {
           let fixed = applySignalFixes(bestResult, weak, intensity, usedWordsGlobal, ctx, settings, dict, commonWords);
-          fixed = expandContractions(fixed);
+            fixed = addContractions(fixed);
           fixed = cleanup(fixed);
           if (enablePostProcessing) fixed = postProcess(fixed);
 
@@ -1422,8 +1633,8 @@ export function humanize(
       const p2Cap = ({ light: 2.5, medium: 4.5, strong: 6.5 } as Record<string, number>)[strength] ?? 4.5;
       const intensity = Math.min(2.0 + ep * 0.15, p2Cap);
       let fixed = applySignalFixes(bestResult, weak, intensity, usedWordsGlobal, ctx, settings, dict, commonWords);
-      fixed = expandContractions(fixed);
-      fixed = cleanup(fixed);
+        fixed = addContractions(fixed);
+        fixed = cleanup(fixed);
       if (enablePostProcessing) fixed = postProcess(fixed);
 
       const { maxAiScore: fm } = checkDetectorTargets(detector.analyze(fixed), mode);
@@ -1493,4 +1704,234 @@ function enforceParagraphCount(text: string, targetCount: number): string {
   }
 
   return paragraphs.join("\n\n");
+}
+
+// ── Text Chunking for Long Documents ──
+
+const CHUNK_SIZE = 800; // words per chunk
+
+/**
+ * Process long documents by splitting into ~800-word chunks,
+ * humanizing each independently, then stitching back together.
+ * Prevents pattern drift and maintains consistency in long texts.
+ */
+export function humanizeWithChunking(
+  text: string,
+  opts: Parameters<typeof humanize>[1] = {},
+): string {
+  if (!text?.trim()) return text;
+
+  const words = text.split(/\s+/);
+  if (words.length <= CHUNK_SIZE * 1.2) {
+    // Short enough to process as single block
+    return humanize(text, opts);
+  }
+
+  // Split into chunks at paragraph boundaries
+  const paragraphs = text.split(/\n\s*\n/).filter(p => p.trim());
+  const chunks: string[] = [];
+  let currentChunk: string[] = [];
+  let currentWords = 0;
+
+  for (const para of paragraphs) {
+    const paraWords = para.split(/\s+/).length;
+    if (currentWords + paraWords > CHUNK_SIZE && currentChunk.length > 0) {
+      chunks.push(currentChunk.join("\n\n"));
+      currentChunk = [para];
+      currentWords = paraWords;
+    } else {
+      currentChunk.push(para);
+      currentWords += paraWords;
+    }
+  }
+  if (currentChunk.length > 0) chunks.push(currentChunk.join("\n\n"));
+
+  // Humanize each chunk independently
+  const processed = chunks.map(chunk => humanize(chunk, opts));
+
+  return processed.join("\n\n");
+}
+
+// ── Writing Style Profile Matching ──
+
+export interface WritingStyleProfile {
+  avgSentenceLength: number;
+  sentenceLengthStdDev: number;
+  avgParagraphLength: number;
+  contractionRate: number;
+  firstPersonRate: number;
+  questionRate: number;
+  vocabularyLevel: "basic" | "intermediate" | "advanced";
+}
+
+/**
+ * Extract a writing style fingerprint from a sample text.
+ * Users can upload their own writing and the engine will match it.
+ */
+export function extractStyleProfile(sampleText: string): WritingStyleProfile {
+  const sentences = sentTokenize(sampleText);
+  const words = sampleText.split(/\s+/).filter(Boolean);
+  const totalWords = words.length;
+
+  // Sentence length stats
+  const sentLengths = sentences.map(s => s.split(/\s+/).length);
+  const avgSentLen = sentLengths.length > 0
+    ? sentLengths.reduce((a, b) => a + b, 0) / sentLengths.length
+    : 15;
+  const variance = sentLengths.reduce((s, l) => s + (l - avgSentLen) ** 2, 0) / Math.max(sentLengths.length, 1);
+  const stdDev = Math.sqrt(variance);
+
+  // Paragraph length
+  const paragraphs = sampleText.split(/\n\s*\n/).filter(p => p.trim());
+  const avgParaLen = paragraphs.length > 0
+    ? paragraphs.reduce((s, p) => s + p.split(/\s+/).length, 0) / paragraphs.length
+    : 50;
+
+  // Contraction rate
+  const contractionMatches = sampleText.match(/\b\w+'(t|s|re|ve|ll|d|m)\b/gi) ?? [];
+  const contractionRate = totalWords > 0 ? contractionMatches.length / totalWords : 0;
+
+  // First person rate
+  const firstPersonWords = words.filter(w => /^(i|me|my|mine|myself|we|us|our|ours)$/i.test(w));
+  const firstPersonRate = totalWords > 0 ? firstPersonWords.length / totalWords : 0;
+
+  // Question rate
+  const questionSents = sentences.filter(s => s.trim().endsWith("?"));
+  const questionRate = sentences.length > 0 ? questionSents.length / sentences.length : 0;
+
+  // Vocabulary level
+  const longWords = words.filter(w => w.length > 8);
+  const longWordRate = totalWords > 0 ? longWords.length / totalWords : 0;
+  const vocabularyLevel = longWordRate > 0.15 ? "advanced" : longWordRate > 0.08 ? "intermediate" : "basic";
+
+  return {
+    avgSentenceLength: avgSentLen,
+    sentenceLengthStdDev: stdDev,
+    avgParagraphLength: avgParaLen,
+    contractionRate,
+    firstPersonRate,
+    questionRate,
+    vocabularyLevel,
+  };
+}
+
+/**
+ * Apply a writing style profile to humanized text to make it match
+ * the user's personal writing patterns.
+ */
+export function applyStyleProfile(text: string, profile: WritingStyleProfile): string {
+  let result = text;
+
+  // Match contraction rate
+  if (profile.contractionRate > 0.02) {
+    // User uses contractions freely — add more
+    result = addContractions(result);
+  }
+
+  // Match first person usage
+  if (profile.firstPersonRate > 0.01) {
+    // User writes in first person — add some personal pronouns
+    const sentences = sentTokenize(result);
+    const enhanced = sentences.map((sent, i) => {
+      if (i > 0 && i % 5 === 0 && Math.random() < profile.firstPersonRate * 10) {
+        const inserts = ["We find that ", "In our view, ", "We note that "];
+        return inserts[Math.floor(Math.random() * inserts.length)] + safeDowncaseFirst(sent);
+      }
+      return sent;
+    });
+    const paragraphs = result.split(/\n\s*\n/);
+    if (paragraphs.length === 1) {
+      result = enhanced.join(" ");
+    }
+  }
+
+  return result;
+}
+
+// ── Real Detector API Validation Hooks ──
+
+export interface DetectorAPIConfig {
+  gptzeroApiKey?: string;
+  originalityApiKey?: string;
+  copyleaksApiKey?: string;
+}
+
+/**
+ * Validate humanized output against real detector APIs.
+ * Returns actual detection scores from external services.
+ * Only called when API keys are provided (optional feature).
+ */
+export async function validateWithRealDetectors(
+  text: string,
+  config: DetectorAPIConfig,
+): Promise<Record<string, number>> {
+  const scores: Record<string, number> = {};
+
+  // GPTZero API
+  if (config.gptzeroApiKey) {
+    try {
+      const response = await fetch("https://api.gptzero.me/v2/predict/text", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": config.gptzeroApiKey,
+        },
+        body: JSON.stringify({ document: text }),
+      });
+      if (response.ok) {
+        const data = await response.json() as any;
+        scores.gptzero = (data.documents?.[0]?.completely_generated_prob ?? 0) * 100;
+      }
+    } catch { /* skip */ }
+  }
+
+  // Originality.ai API
+  if (config.originalityApiKey) {
+    try {
+      const response = await fetch("https://api.originality.ai/api/v1/scan/ai", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${config.originalityApiKey}`,
+        },
+        body: JSON.stringify({ content: text }),
+      });
+      if (response.ok) {
+        const data = await response.json() as any;
+        scores.originality = (data.score?.ai ?? 0) * 100;
+      }
+    } catch { /* skip */ }
+  }
+
+  return scores;
+}
+
+// ── Dynamic Blacklist System ──
+
+const dynamicBlacklist = new Set<string>();
+
+/**
+ * Add words to the dynamic blacklist at runtime.
+ * These words will be avoided in synonym replacement.
+ * Useful for responding to new detector patterns.
+ */
+export function addToBlacklist(words: string[]): void {
+  for (const w of words) {
+    dynamicBlacklist.add(w.toLowerCase());
+  }
+}
+
+/**
+ * Get the current dynamic blacklist.
+ */
+export function getBlacklist(): Set<string> {
+  return new Set([...DICT_BLACKLIST, ...dynamicBlacklist]);
+}
+
+/**
+ * Check if a word is blacklisted (static + dynamic).
+ */
+export function isBlacklisted(word: string): boolean {
+  const lower = word.toLowerCase();
+  return DICT_BLACKLIST.has(lower) || dynamicBlacklist.has(lower);
 }

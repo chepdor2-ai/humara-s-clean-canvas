@@ -1,45 +1,32 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "../node_modules/tailwindcss/index.css";
 
-:root {
-  --color-background: rgb(10, 10, 15);
-  --color-foreground: rgb(255, 255, 255);
+@theme {
+  --color-background: #FFF8F0;
+  --color-foreground: #5C4033;
+  --color-primary: #FF5A1F;
+  --color-primary-foreground: #FFF8F0;
+  --color-secondary: #7A8F6A;
+  --color-secondary-foreground: #FFF8F0;
+  --color-accent: #FFE2D7;
+  --color-accent-foreground: #5C4033;
+  --color-muted: #EADDCF;
+  --color-muted-foreground: #8A7263;
+  --color-border: #E8DBCB;
 }
 
 @layer base {
+  :root {
+    --font-sans: var(--font-inter);
+    --font-heading: var(--font-sora);
+  }
   body {
-    @apply bg-[#0A0A0F] text-white antialiased;
+    background-color: var(--color-background);
+    color: var(--color-foreground);
+    font-family: var(--font-sans), sans-serif;
+    -webkit-font-smoothing: antialiased;
+    scroll-behavior: smooth;
   }
-}
-
-@layer utilities {
-  .glass {
-    background: rgba(30, 30, 46, 0.65);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
-  }
-  .glass-strong {
-    background: rgba(30, 30, 46, 0.85);
-    backdrop-filter: blur(16px);
-    -webkit-backdrop-filter: blur(16px);
-  }
-  .glow {
-    box-shadow: 0 0 40px rgba(99, 102, 241, 0.3);
-  }
-  .glow-green {
-    box-shadow: 0 0 40px rgba(20, 184, 166, 0.3);
-  }
-  .text-gradient {
-    background: linear-gradient(135deg, #6366F1 0%, #14B8A6 100%);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
-  }
-  .text-gradient-gold {
-    background: linear-gradient(135deg, #F59E0B 0%, #EF4444 100%);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
+  h1, h2, h3, h4, h5, h6 {
+    font-family: var(--font-heading), sans-serif;
   }
 }

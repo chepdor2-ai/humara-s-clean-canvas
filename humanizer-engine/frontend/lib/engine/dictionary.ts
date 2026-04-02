@@ -127,41 +127,40 @@ export class HumanizerDictionary {
   }
 
   getSynonyms(word: string, maxReturn: number = 8, qualityFilter: boolean = true): string[] {
-    const lower = word.toLowerCase();
-    const cacheKey = `${lower}_${qualityFilter}`;
-    const cached = this.synonymsCache.get(cacheKey);
-    if (cached) return cached;
+      const lower = word.toLowerCase();
+      const cacheKey = `${lower}_${qualityFilter}`;
+      const cached = this.synonymsCache.get(cacheKey);
+      if (cached) return cached;
 
-    const synonyms = new Set<string>();
+      const synonyms = new Set<string>();
 
-    // Source 1: Curated dictionary (highest priority)
-    const curatedSyns = this.curated.get(lower);
-    if (curatedSyns) {
-      for (const s of curatedSyns) synonyms.add(s);
-    }
-
-    // Source 2: Thesaurus — ONLY if curated dict is entirely empty (not loaded)
-    // This matches Python: `if not synonyms and not self.curated`
-    if (synonyms.size === 0 && this.curated.size === 0) {
-      const thesaurusSyns = this.thesaurus.get(lower);
-      if (thesaurusSyns) {
-        for (const s of thesaurusSyns) synonyms.add(s);
+      // Source 1: Curated dictionary (highest priority)
+      const curatedSyns = this.curated.get(lower);
+      if (curatedSyns) {
+        for (const s of curatedSyns) synonyms.add(s);
       }
-    }
 
-    // Filter: only keep valid words if quality filter enabled
-    let result: string[];
-    if (qualityFilter && this.safeWords.size > 0) {
-      result = [...synonyms].filter((s) => s !== lower && this.isValidWord(s));
-    } else {
-      synonyms.delete(lower); // never return the word itself
-      result = [...synonyms];
-    }
+      // Source 2: Thesaurus — use as fallback when curated didn't have this word
+      if (synonyms.size === 0) {
+        const thesaurusSyns = this.thesaurus.get(lower);
+        if (thesaurusSyns) {
+          for (const s of thesaurusSyns) synonyms.add(s);
+        }
+      }
 
-    result = result.slice(0, maxReturn);
-    this.synonymsCache.set(cacheKey, result);
-    return result;
-  }
+      // Filter: only keep valid words if quality filter enabled
+      let result: string[];
+      if (qualityFilter && this.safeWords.size > 0) {
+        result = [...synonyms].filter((s) => s !== lower && this.isValidWord(s));
+      } else {
+        synonyms.delete(lower); // never return the word itself
+        result = [...synonyms];
+      }
+
+      result = result.slice(0, maxReturn);
+      this.synonymsCache.set(cacheKey, result);
+      return result;
+    }
 
   replaceWordSmartly(
     word: string,
@@ -209,11 +208,38 @@ export class HumanizerDictionary {
     return valid;
   }
 
-  getContextualSynonyms(word: string, _sentence: string, maxReturn: number = 5): string[] {
-    // Get wider pool then trim (matches Python: max_return * 2)
-    const synonyms = this.getSynonyms(word, maxReturn * 2);
-    return [...synonyms].sort().slice(0, maxReturn);
-  }
+  getContextualSynonyms(word: string, sentence: string, maxReturn: number = 5): string[] {
+      // Get wider pool then score by context relevance
+      const synonyms = this.getSynonyms(word, maxReturn * 3);
+      if (synonyms.length === 0) return [];
+
+      // Extract context words from the sentence (excluding the target word)
+      const contextWords = new Set(
+        sentence.toLowerCase().split(/\s+/)
+          .map(w => w.replace(/[^a-z]/g, ""))
+          .filter(w => w.length > 3 && w !== word.toLowerCase())
+      );
+
+      // Score each synonym by how many of its own synonyms overlap with context words
+      const scored: [string, number][] = synonyms.map(syn => {
+        const synSynonyms = this.getSynonyms(syn, 10, false);
+        let score = 0;
+        // Prefer synonyms whose own synonyms appear in the sentence context
+        for (const ss of synSynonyms) {
+          if (contextWords.has(ss.toLowerCase())) score += 2;
+        }
+        // Prefer shorter, more common words
+        if (syn.length <= 6) score += 1;
+        if (syn.length <= 4) score += 1;
+        // Penalize very long words
+        if (syn.length > 10) score -= 1;
+        return [syn, score] as [string, number];
+      });
+
+      // Sort by score descending, then take top N
+      scored.sort((a, b) => b[1] - a[1]);
+      return scored.slice(0, maxReturn).map(([s]) => s);
+    }
 }
 
 // Singleton

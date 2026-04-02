@@ -1,31 +1,31 @@
-import { CheckCircle2, Minus, Sparkles, Zap } from 'lucide-react';
+import { CheckCircle2, Minus } from 'lucide-react';
 import Link from 'next/link';
 
 export default function PricingPage() {
   const tiers = [
     {
-      name: "Starter",
+      name: "Free Trial",
       price: "0",
-      description: "Perfect for trying out Humara.",
-      features: ["500 Words Free", "Ghost Mini Engine", "Basic Humanization", "Community Support"],
+      description: "Experience the core engine.",
+      features: ["500 Word Credits", "Ghost Mini Engine", "Standard Processing", "Basic Support"],
       notIncluded: ["AI Detection Reports", "Style Memory", "API Access"],
-      cta: "Start Free",
+      cta: "Get Started",
       featured: false
     },
     {
       name: "Professional",
       price: "15",
-      description: "For students and content creators.",
-      features: ["50,000 Words/month", "All Neural Engines", "Live AI Detection", "Style Memory (3 profiles)", "Priority Support"],
-      notIncluded: ["Unlimited Processing", "API Access"],
+      description: "For students and regular writers.",
+      features: ["50,000 Words / mo", "All Engines (Ninja, Pro, Mini)", "AI Detection Reports", "Style Memory (3 slots)", "Priority Support"],
+      notIncluded: ["Unlimited Words", "Full API Access"],
       cta: "Start Pro Trial",
       featured: true
     },
     {
       name: "Enterprise",
       price: "49",
-      description: "For teams and power users.",
-      features: ["Unlimited Words", "Advanced Stealth Modes", "Full Style Library", "API Access", "Dedicated Support"],
+      description: "For agencies and power users.",
+      features: ["Unlimited Words", "Deep Stealth Engines", "Full Style Library", "API Access (Beta)", "Dedicated Manager"],
       notIncluded: [],
       cta: "Contact Sales",
       featured: false
@@ -33,55 +33,45 @@ export default function PricingPage() {
   ];
 
   return (
-    <div className="max-w-7xl mx-auto px-6 py-40 relative z-10">
-      <div className="text-center max-w-3xl mx-auto mb-24">
-        <span className="text-xs font-bold uppercase tracking-[0.2em] text-indigo-400 mb-6 block">Pricing Plans</span>
-        <h1 className="text-5xl md:text-6xl font-bold font-sora text-white mb-8 leading-tight">Simple, Transparent <br /> <span className="text-gradient">Pricing</span></h1>
-        <p className="text-xl text-gray-400 leading-relaxed">Choose the plan that fits your needs. Upgrade or downgrade anytime with no commitments.</p>
+    <div className="max-w-7xl mx-auto px-6 py-40">
+      <div className="text-center max-w-3xl mx-auto mb-32">
+        <span className="text-[11px] font-black uppercase tracking-[0.3em] text-[#D97757] mb-8 block">Investment</span>
+        <h1 className="text-4xl md:text-6xl font-bold font-sora text-[#5C4033] mb-8 leading-tight">Simple, transparent <br /> scaling.</h1>
+        <p className="text-lg text-[#8A7263] leading-relaxed">Choose the plan that matches your writing volume. Upgrade or downgrade at any time.</p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-6xl mx-auto">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-1 bg-[#EADDCF] border border-[#EADDCF] max-w-6xl mx-auto shadow-2xl shadow-[#5C4033]/10">
         {tiers.map((tier, i) => (
-          <div key={i} className={`p-10 flex flex-col transition-all duration-500 rounded-2xl relative overflow-hidden ${
-            tier.featured 
-              ? 'glass-strong border-2 border-indigo-500 scale-105 shadow-2xl shadow-indigo-500/20 glow' 
-              : 'glass border border-white/10 hover:border-white/20'
-          }`}>
-            {tier.featured && (
-              <div className="absolute top-0 right-0 bg-gradient-to-r from-indigo-600 to-indigo-500 text-white text-[10px] font-bold uppercase tracking-wider px-4 py-2 rounded-bl-xl flex items-center gap-2">
-                <Sparkles className="w-3 h-3" /> Most Popular
-              </div>
-            )}
+          <div key={i} className={`p-12 flex flex-col transition-all duration-500 ${tier.featured ? 'bg-[#5C4033] text-white scale-[1.02] relative z-10 shadow-2xl' : 'bg-white text-[#5C4033] hover:bg-[#FFF8F0]'}`}>
+            <h3 className={`text-[11px] font-black uppercase tracking-[0.2em] mb-4 ${tier.featured ? 'text-[#D97757]' : 'text-[#8A7263]'}`}>{tier.name}</h3>
+            <p className={`text-sm mb-10 font-medium ${tier.featured ? 'text-white/60' : 'text-[#8A7263]'}`}>{tier.description}</p>
             
-            <h3 className={`text-xs font-bold uppercase tracking-wider mb-3 ${tier.featured ? 'text-indigo-400' : 'text-gray-500'}`}>{tier.name}</h3>
-            <p className="text-sm mb-8 text-gray-400 font-medium">{tier.description}</p>
-            
-            <div className="mb-10">
-              <span className="text-6xl font-bold font-sora tracking-tight text-white">${tier.price}</span>
-              <span className="text-xs font-bold uppercase tracking-wider ml-2 text-gray-500">/ month</span>
+            <div className="mb-12">
+              <span className="text-5xl font-bold font-sora tracking-tight">${tier.price}</span>
+              <span className={`text-[11px] font-black uppercase tracking-widest ml-2 ${tier.featured ? 'text-white/40' : 'text-[#8A7263]/40'}`}>/ mo</span>
             </div>
 
-            <div className="space-y-4 mb-12 flex-1">
+            <div className="space-y-5 mb-16 flex-1">
               {tier.features.map((feature, j) => (
-                <div key={j} className="flex items-center gap-3 text-white">
-                  <CheckCircle2 className={`w-4 h-4 ${tier.featured ? 'text-indigo-400' : 'text-teal-400'}`} />
-                  <span className="text-sm font-medium">{feature}</span>
+                <div key={j} className="flex items-center gap-3">
+                  <CheckCircle2 className={`w-3.5 h-3.5 ${tier.featured ? 'text-[#D97757]' : 'text-[#7A8F6A]'}`} />
+                  <span className="text-[13px] font-bold tracking-tight">{feature}</span>
                 </div>
               ))}
               {tier.notIncluded.map((feature, j) => (
                 <div key={j} className="flex items-center gap-3 opacity-30">
-                  <Minus className="w-4 h-4 text-gray-600" />
-                  <span className="text-sm font-medium text-gray-600 line-through">{feature}</span>
+                  <Minus className="w-3.5 h-3.5" />
+                  <span className="text-[13px] font-bold tracking-tight line-through">{feature}</span>
                 </div>
               ))}
             </div>
 
             <Link 
               href={tier.cta === "Contact Sales" ? "/contact" : "/signup"} 
-              className={`w-full py-4 text-xs font-bold uppercase tracking-wider text-center transition-all rounded-lg ${
+              className={`w-full py-5 text-[12px] font-black uppercase tracking-[0.2em] text-center transition-all ${
                 tier.featured 
-                  ? 'bg-gradient-to-r from-indigo-600 to-indigo-500 text-white hover:from-indigo-500 hover:to-teal-500 shadow-lg shadow-indigo-500/50 hover:scale-105 active:scale-95' 
-                  : 'glass border border-white/10 text-white hover:bg-white/10 hover:scale-105 active:scale-95'
+                ? 'bg-[#D97757] text-white hover:bg-[#C96342]' 
+                : 'bg-[#5C4033] text-white hover:bg-[#D97757]'
               }`}
             >
               {tier.cta}
@@ -91,20 +81,12 @@ export default function PricingPage() {
       </div>
 
       <div className="mt-32 text-center">
-        <p className="text-xs font-bold uppercase tracking-widest text-gray-600 mb-12">Used by students at top universities worldwide</p>
-        <div className="flex flex-wrap justify-center gap-16 opacity-40">
+        <p className="text-[11px] font-black uppercase tracking-[0.2em] text-[#8A7263]/60 mb-8 italic">Trusted by students and researchers at</p>
+        <div className="flex flex-wrap justify-center gap-16 opacity-30 grayscale contrast-125">
            {["Oxford", "Stanford", "MIT", "Cambridge", "Harvard"].map((uni) => (
-             <span key={uni} className="text-2xl font-bold font-sora text-gray-600 hover:text-white transition-colors">{uni}</span>
+             <span key={uni} className="text-xl font-bold font-sora tracking-tighter uppercase">{uni}</span>
            ))}
         </div>
-      </div>
-      
-      <div className="mt-32 max-w-4xl mx-auto glass-strong border border-white/10 p-12 rounded-2xl text-center">
-        <h3 className="text-3xl font-bold text-white mb-4 font-sora">Need a Custom Plan?</h3>
-        <p className="text-gray-400 mb-8 max-w-2xl mx-auto">For universities, institutions, or high-volume users, we offer custom pricing and dedicated support.</p>
-        <Link href="/contact" className="inline-flex px-8 py-4 bg-gradient-to-r from-indigo-600 to-indigo-500 text-white text-xs font-bold uppercase tracking-wider rounded-lg hover:from-indigo-500 hover:to-teal-500 transition-all shadow-lg shadow-indigo-500/50 hover:scale-105 active:scale-95">
-          Contact Our Team
-        </Link>
       </div>
     </div>
   );

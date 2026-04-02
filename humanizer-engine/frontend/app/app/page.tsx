@@ -1,6 +1,6 @@
 'use client';
 import { useState, useMemo } from 'react';
-import { Copy, Check, CheckCircle2, SlidersHorizontal, ShieldCheck, Zap, Eraser, Info, RotateCcw, Sparkles, ArrowRight } from 'lucide-react';
+import { Copy, Check, CheckCircle2, SlidersHorizontal, ShieldCheck, Zap, Eraser, Info, RotateCcw } from 'lucide-react';
 
 interface DetectorScore {
   detector: string;
@@ -27,22 +27,22 @@ interface HumanizeResponse {
 }
 
 const ENGINES = [
-  { id: 'ghost_mini', label: 'Ghost Mini', desc: 'Fast & Efficient' },
-  { id: 'ghost_pro', label: 'Ghost Pro', desc: 'Balanced Power' },
-  { id: 'ninja', label: 'Ninja Stealth', desc: 'Maximum Evasion' },
+  { id: 'ghost_mini', label: 'Ghost Mini', desc: 'Efficiency focus' },
+  { id: 'ghost_pro', label: 'Ghost Pro', desc: 'Standard balance' },
+  { id: 'ninja', label: 'Ninja Stealth', desc: 'Maximum evasion' },
 ];
 
 const STRENGTHS = [
-  { id: 'light', label: 'Light' },
-  { id: 'medium', label: 'Medium' },
-  { id: 'strong', label: 'Strong' },
+  { id: 'light', label: 'Standard' },
+  { id: 'medium', label: 'Advanced' },
+  { id: 'strong', label: 'Extreme' },
 ];
 
 const TONES = [
   { id: 'neutral', label: 'Natural' },
   { id: 'academic', label: 'Academic' },
-  { id: 'professional', label: 'Professional' },
-  { id: 'simple', label: 'Simple' },
+  { id: 'professional', label: 'Business' },
+  { id: 'simple', label: 'Direct' },
 ];
 
 const TOP_DETECTORS = ['GPTZero', 'Turnitin', 'Originality.AI', 'Winston AI', 'Copyleaks'];
@@ -127,71 +127,62 @@ export default function EditorPage() {
 
   return (
     <div className="flex flex-col gap-10 animate-in fade-in duration-700">
-      <header className="flex items-end justify-between border-b border-white/10 pb-8">
+      <header className="flex items-end justify-between border-b border-[#EADDCF] pb-8">
         <div>
-          <h1 className="text-4xl font-bold font-sora text-white tracking-tight">Neural Editor</h1>
-          <p className="text-xs font-bold uppercase tracking-wider text-gray-500 mt-3">Advanced Humanization Environment</p>
+          <h1 className="text-3xl font-bold font-sora text-[#5C4033] tracking-tight">The Editor</h1>
+          <p className="text-[11px] font-black uppercase tracking-[0.2em] text-[#8A7263] mt-2">Neural Reconstruction Environment</p>
         </div>
         <div className="flex gap-4">
-           <button onClick={handleClear} className="px-5 py-3 glass border border-white/10 text-xs font-bold uppercase tracking-wider text-gray-400 hover:text-white hover:border-white/20 transition-all flex items-center gap-2 rounded-lg">
-              <Eraser className="w-4 h-4" /> Clear All
+           <button onClick={handleClear} className="px-4 py-2 border border-[#EADDCF] text-[10px] font-black uppercase tracking-widest text-[#8A7263] hover:bg-white transition-all flex items-center gap-2">
+              <Eraser className="w-3.5 h-3.5" /> Clear Canvas
            </button>
            {meaningScore !== null && (
-             <div className="px-5 py-3 glass-strong border border-teal-500/30 flex items-center gap-3 rounded-lg glow-green">
-               <ShieldCheck className="w-5 h-5 text-teal-400" />
-               <span className="text-xs font-bold uppercase tracking-wider text-white">
-                 Meaning: {Math.round(meaningScore * 100)}%
+             <div className="px-4 py-2 bg-white border border-[#EADDCF] flex items-center gap-3">
+               <ShieldCheck className="w-4 h-4 text-[#7A8F6A]" />
+               <span className="text-[11px] font-black uppercase tracking-widest text-[#5C4033]">
+                 Logic Preservation: {Math.round(meaningScore * 100)}%
                </span>
              </div>
            )}
         </div>
       </header>
 
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-        {/* Control Panel */}
-        <div className="col-span-1 lg:col-span-3 space-y-6">
-          <div className="glass-strong border border-white/10 p-6 rounded-2xl">
-            <h3 className="text-xs font-bold uppercase tracking-wider text-gray-400 mb-6 pb-4 border-b border-white/10 flex items-center gap-2">
-              <SlidersHorizontal className="w-4 h-4" /> Engine Settings
-            </h3>
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-10">
+        <div className="col-span-1 lg:col-span-3 space-y-8">
+          <div className="bg-white border border-[#EADDCF] p-8 shadow-sm">
+            <h3 className="text-[10px] font-black uppercase tracking-[0.3em] text-[#8A7263] mb-8 pb-4 border-b border-[#FFF8F0]">Engine Parameters</h3>
             
-            <div className="space-y-6">
-              {/* Engine Selection */}
+            <div className="space-y-8">
               <div className="space-y-3">
-                <label className="text-xs font-bold uppercase tracking-wider text-white block">Model</label>
-                <div className="space-y-2">
+                <label className="text-[10px] font-black uppercase tracking-widest text-[#5C4033] block">Active Model</label>
+                <div className="space-y-1">
                   {ENGINES.map((e) => (
                     <button
                       key={e.id}
                       onClick={() => setEngine(e.id)}
-                      className={`w-full text-left px-4 py-3 rounded-lg text-xs font-bold uppercase tracking-wider transition-all relative overflow-hidden ${
+                      className={`w-full text-left px-4 py-3 rounded-sm text-[11px] font-bold uppercase tracking-widest transition-all ${
                         engine === e.id
-                          ? 'text-white shadow-xl'
-                          : 'glass text-gray-400 border border-white/5 hover:border-indigo-500/30'
+                          ? 'bg-[#5C4033] text-white shadow-xl shadow-[#5C4033]/20'
+                          : 'bg-[#FFF8F0] text-[#8A7263] border border-[#EADDCF] hover:border-[#D97757]'
                       }`}
                     >
-                      {engine === e.id && (
-                        <div className="absolute inset-0 bg-gradient-to-r from-indigo-600 to-indigo-500"></div>
-                      )}
-                      <span className="relative z-10 block">{e.label}</span>
-                      <span className="relative z-10 block text-[10px] opacity-60 mt-0.5">{e.desc}</span>
+                      {e.label}
                     </button>
                   ))}
                 </div>
               </div>
 
-              {/* Strength */}
               <div className="space-y-3">
-                <label className="text-xs font-bold uppercase tracking-wider text-white block">Intensity</label>
-                <div className="grid grid-cols-3 gap-2 glass border border-white/10 p-2 rounded-lg">
+                <label className="text-[10px] font-black uppercase tracking-widest text-[#5C4033] block">Variation Intensity</label>
+                <div className="grid grid-cols-1 gap-1 bg-[#FFF8F0] border border-[#EADDCF] p-1">
                   {STRENGTHS.map((s) => (
                     <button
                       key={s.id}
                       onClick={() => setStrength(s.id)}
-                      className={`py-2.5 text-[10px] font-bold uppercase tracking-wider transition-all rounded-md ${
+                      className={`py-2 text-[10px] font-black uppercase tracking-widest transition-all ${
                         strength === s.id
-                          ? 'bg-gradient-to-r from-indigo-600 to-indigo-500 text-white shadow-lg'
-                          : 'text-gray-400 hover:text-white hover:bg-white/5'
+                          ? 'bg-white text-[#5C4033] shadow-sm'
+                          : 'text-[#8A7263] hover:text-[#5C4033]'
                       }`}
                     >
                       {s.label}
@@ -200,107 +191,92 @@ export default function EditorPage() {
                 </div>
               </div>
 
-              {/* Tone */}
               <div className="space-y-3">
-                <label className="text-xs font-bold uppercase tracking-wider text-white block">Tone</label>
+                <label className="text-[10px] font-black uppercase tracking-widest text-[#5C4033] block">Target Tone</label>
                 <select
                   value={tone}
                   onChange={(e) => setTone(e.target.value)}
-                  className="w-full glass border border-white/10 rounded-lg px-4 py-3 text-xs font-bold uppercase tracking-wider text-white outline-none focus:border-indigo-500/50 transition-all"
+                  className="w-full bg-[#FFF8F0] border border-[#EADDCF] rounded-sm px-4 py-3 text-[11px] font-black uppercase tracking-widest text-[#5C4033] outline-none focus:border-[#D97757]"
                 >
                   {TONES.map((t) => (
-                    <option key={t.id} value={t.id} className="bg-[#1E1E2E] text-white">{t.label}</option>
+                    <option key={t.id} value={t.id}>{t.label}</option>
                   ))}
                 </select>
               </div>
 
-              {/* Strict Meaning Toggle */}
-              <div className="flex items-center justify-between pt-4 border-t border-white/10">
-                <label className="text-xs font-bold uppercase tracking-wider text-white">Strict Meaning</label>
+              <div className="flex items-center justify-between pt-4 border-t border-[#FFF8F0]">
+                <label className="text-[10px] font-black uppercase tracking-widest text-[#5C4033]">Strict Logic</label>
                 <button
                   onClick={() => setStrictMeaning(!strictMeaning)}
-                  className={`w-11 h-6 rounded-full transition-all relative ${
-                    strictMeaning ? 'bg-gradient-to-r from-teal-500 to-teal-400' : 'bg-gray-700'
+                  className={`w-9 h-5 rounded-full transition-all relative ${
+                    strictMeaning ? 'bg-[#D97757]' : 'bg-[#EADDCF]'
                   }`}
                 >
                   <div
-                    className={`w-4 h-4 bg-white rounded-full absolute top-1 transition-all shadow-lg ${
-                      strictMeaning ? 'left-6' : 'left-1'
+                    className={`w-3.5 h-3.5 bg-white rounded-full absolute top-0.5 transition-all ${
+                      strictMeaning ? 'left-5' : 'left-0.5'
                     }`}
                   />
                 </button>
               </div>
 
-              {/* Humanize Button */}
               <button
                 onClick={handleHumanize}
                 disabled={!text.trim() || loading}
-                className="w-full py-4 bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-500 hover:to-teal-500 text-white text-xs font-bold uppercase tracking-wider shadow-2xl shadow-indigo-500/50 disabled:opacity-30 disabled:shadow-none transition-all active:scale-95 flex items-center justify-center gap-3 rounded-lg relative overflow-hidden group"
+                className="w-full py-5 bg-[#5C4033] hover:bg-[#D97757] text-white text-[12px] font-black uppercase tracking-[0.2em] shadow-2xl shadow-[#5C4033]/20 disabled:opacity-30 disabled:shadow-none transition-all active:scale-95 flex items-center justify-center gap-3"
               >
-                <div className="absolute inset-0 bg-gradient-to-r from-teal-500 to-indigo-500 opacity-0 group-hover:opacity-100 transition-opacity"></div>
-                {loading ? (
-                  <><RotateCcw className="w-4 h-4 animate-spin relative z-10" /> <span className="relative z-10">Processing...</span></>
-                ) : (
-                  <><Sparkles className="w-4 h-4 relative z-10" /> <span className="relative z-10">Humanize Text</span></>
-                )}
+                {loading ? <RotateCcw className="w-4 h-4 animate-spin" /> : <><Zap className="w-4 h-4" /> Reconstruction</>}
               </button>
             </div>
           </div>
           
-          {/* Info Box */}
-          <div className="p-5 glass border border-indigo-500/20 rounded-2xl">
-             <div className="flex gap-3 mb-3">
-               <Info className="w-4 h-4 text-indigo-400" /> 
-               <span className="text-xs font-bold uppercase tracking-wider text-indigo-400">Pro Tip</span>
-             </div>
-             <p className="text-xs text-gray-400 leading-relaxed">
-                Higher intensity provides stronger detection evasion but may require minor adjustments for citations and formatting.
+          <div className="p-6 bg-[#F5EBE1] border border-[#EADDCF]">
+             <div className="flex gap-3 mb-4"><Info className="w-4 h-4 text-[#D97757]" /> <span className="text-[10px] font-black uppercase tracking-widest text-[#5C4033]">Lab Note</span></div>
+             <p className="text-[11px] text-[#8A7263] leading-relaxed font-medium">
+                Higher intensity reconstruction significantly reduces AI detection probability but may require manual review for citation placement.
              </p>
           </div>
         </div>
 
-        {/* Editor Panels */}
-        <div className="col-span-1 lg:col-span-9 space-y-6">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Input Panel */}
-            <div className="glass-strong border border-white/10 p-6 space-y-4 rounded-2xl">
+        <div className="col-span-1 lg:col-span-9 space-y-8">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-1 bg-[#EADDCF] border border-[#EADDCF] shadow-2xl">
+            <div className="bg-white p-8 space-y-4">
               <div className="flex justify-between items-center">
-                <span className="text-xs font-bold uppercase tracking-wider text-gray-400">AI Input</span>
-                <span className="text-xs font-bold uppercase tracking-wider text-gray-500">{inputWords} words</span>
+                <span className="text-[10px] font-black uppercase tracking-widest text-[#8A7263]">Source Input</span>
+                <span className="text-[10px] font-black uppercase tracking-widest text-[#8A7263]">{inputWords} words</span>
               </div>
               <textarea
                 value={text}
                 onChange={(e) => setText(e.target.value)}
-                className="w-full h-[550px] bg-transparent outline-none resize-none text-sm leading-relaxed text-white font-medium placeholder:text-gray-600"
-                placeholder="Paste your AI-generated text here..."
+                className="w-full h-[500px] bg-transparent outline-none resize-none text-[15px] leading-relaxed text-[#5C4033] font-medium placeholder:text-[#8A7263]/30"
+                placeholder="Paste original AI draft..."
               />
             </div>
 
-            {/* Output Panel */}
-            <div className="glass-strong border border-white/10 p-6 space-y-4 rounded-2xl relative group">
+            <div className="bg-white p-8 space-y-4 relative group">
               <div className="flex justify-between items-center">
-                <span className="text-xs font-bold uppercase tracking-wider text-white">Humanized Output</span>
-                <span className="text-xs font-bold uppercase tracking-wider text-gray-500">{outputWords} words</span>
+                <span className="text-[10px] font-black uppercase tracking-widest text-[#5C4033]">Humanized Output</span>
+                <span className="text-[10px] font-black uppercase tracking-widest text-[#8A7263]">{outputWords} words</span>
               </div>
-              <div className="w-full h-[550px] overflow-y-auto text-sm leading-relaxed text-white font-medium">
+              <div className="w-full h-[500px] overflow-y-auto text-[15px] leading-relaxed text-[#5C4033] font-bold">
                 {loading ? (
-                  <div className="flex flex-col items-center justify-center h-full gap-4">
-                    <div className="w-12 h-12 border-4 border-white/10 border-t-indigo-500 rounded-full animate-spin" />
-                    <span className="text-xs font-bold uppercase tracking-wider text-gray-500">Processing with neural engine...</span>
+                  <div className="flex flex-col items-center justify-center h-full gap-4 opacity-40">
+                    <div className="w-8 h-8 border-4 border-[#EADDCF] border-t-[#D97757] rounded-full animate-spin" />
+                    <span className="text-[10px] font-black uppercase tracking-widest text-[#8A7263]">Reconstructing Neural Map...</span>
                   </div>
                 ) : result ? (
                   <p className="whitespace-pre-wrap">{result}</p>
                 ) : (
-                  <div className="flex flex-col items-center justify-center h-full text-gray-700 gap-6">
-                    <Zap className="w-16 h-16" />
-                    <span className="text-xs font-bold uppercase tracking-wider">Awaiting input</span>
+                  <div className="flex flex-col items-center justify-center h-full text-[#EADDCF]/50 gap-6">
+                    <Zap className="w-12 h-12" />
+                    <span className="text-[10px] font-black uppercase tracking-widest">Awaiting Command</span>
                   </div>
                 )}
               </div>
               {result && !loading && (
                 <button
                   onClick={handleCopy}
-                  className="absolute bottom-6 right-6 bg-gradient-to-r from-indigo-600 to-indigo-500 text-white p-4 rounded-lg shadow-2xl hover:from-indigo-500 hover:to-teal-500 transition-all active:scale-90 glow"
+                  className="absolute bottom-8 right-8 bg-[#5C4033] text-white p-4 shadow-2xl hover:bg-[#D97757] transition-all active:scale-90"
                 >
                   {copied ? <Check className="w-5 h-5" /> : <Copy className="w-5 h-5" />}
                 </button>
@@ -308,45 +284,28 @@ export default function EditorPage() {
             </div>
           </div>
 
-          {/* Error Display */}
           {error && (
-            <div className="p-5 bg-red-500/10 border border-red-500/30 rounded-2xl text-sm font-bold text-red-400">
+            <div className="p-5 bg-red-50 border border-red-100 text-[11px] font-black uppercase tracking-widest text-red-600">
               Error: {error}
             </div>
           )}
 
-          {/* Detector Scores */}
           {(inputScores || outputScores) && (
             <div className="space-y-6">
-              <h3 className="text-xs font-bold uppercase tracking-wider text-white flex items-center gap-2">
-                <ShieldCheck className="w-4 h-4 text-teal-400" /> Detector Analysis
-              </h3>
+              <h3 className="text-[11px] font-black uppercase tracking-[0.2em] text-[#5C4033]">Detector Diagnostic Scores</h3>
               <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
                 {TOP_DETECTORS.map((name) => {
                   const inputD = inputScores?.detectors.find((d) => d.detector === name);
                   const outputD = outputScores?.detectors.find((d) => d.detector === name);
                   const afterAI = outputD?.ai_score ?? 0;
-                  const beforeAI = inputD?.ai_score ?? 0;
-                  const improvement = beforeAI - afterAI;
 
                   return (
-                    <div key={name} className="glass-strong border border-white/10 p-5 rounded-xl hover:border-indigo-500/30 transition-all">
-                      <div className="text-xs font-bold text-white mb-3">{name}</div>
-                      <div className="space-y-2">
-                        <div className="flex justify-between text-[10px]">
-                          <span className="text-gray-500">Before</span>
-                          <span className="text-red-400 font-bold">{Math.round(beforeAI * 100)}%</span>
-                        </div>
-                        <div className="flex justify-between text-[10px]">
-                          <span className="text-gray-500">After</span>
-                          <span className="text-teal-400 font-bold">{Math.round(afterAI * 100)}%</span>
-                        </div>
-                        {improvement > 0 && (
-                          <div className="pt-2 border-t border-white/5">
-                            <span className="text-[10px] text-indigo-400 font-bold">-{Math.round(improvement * 100)}% AI</span>
-                          </div>
-                        )}
+                    <div key={name} className="bg-white border border-[#EADDCF] p-6 shadow-sm">
+                      <div className="text-[9px] font-black uppercase tracking-widest text-[#8A7263] mb-4 truncate">{name}</div>
+                      <div className={`text-2xl font-black font-sora ${afterAI <= 15 ? 'text-[#7A8F6A]' : 'text-[#D97757]'}`}>
+                        {Math.round(afterAI)}%
                       </div>
+                      <div className="text-[9px] font-black uppercase tracking-widest text-[#8A7263]/40 mt-1">AI Signature</div>
                     </div>
                   );
                 })}
