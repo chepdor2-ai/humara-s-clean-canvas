@@ -79,19 +79,19 @@ export default function RootLayout({
               <p>AI humanizer and detector workflows designed for cleaner publishing, stronger routing, and production-ready deployment.</p>
             </div>
             <div className="space-y-2">
-              <p className="footer-title">Platform</p>
+              <p className="field-label">Platform</p>
               <Link href="/">Humanizer</Link><br />
               <Link href="/detector">Detector</Link><br />
               <Link href="/pricing">Pricing</Link>
             </div>
             <div className="space-y-2">
-              <p className="footer-title">Company</p>
+              <p className="field-label">Company</p>
               <Link href="/about">About</Link><br />
               <Link href="/contact">Contact</Link><br />
               <Link href="/how-it-works">How it works</Link>
             </div>
             <div className="space-y-2">
-              <p className="footer-title">Legal</p>
+              <p className="field-label">Legal</p>
               <Link href="/terms">Terms</Link><br />
               <Link href="/privacy">Privacy</Link><br />
               <span>© 2026 Humara</span>
