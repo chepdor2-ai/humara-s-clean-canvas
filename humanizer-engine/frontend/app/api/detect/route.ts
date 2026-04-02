@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getDetector } from "@/lib/engine/multi-detector.js";
+import { getDetector } from "@/lib/engine/multi-detector";
 
 export async function POST(req: NextRequest) {
   const body = await req.json();

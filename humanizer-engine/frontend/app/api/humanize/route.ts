@@ -1,23 +1,23 @@
 import { NextRequest, NextResponse } from "next/server";
-import { humanize } from "@/lib/engine/humanizer.js";
-import { getDetector } from "@/lib/engine/multi-detector.js";
-import { runPipelineAsync } from "@/lib/engine/llm-pipeline.js";
+import { humanize } from "@/lib/engine/humanizer";
+import { getDetector } from "@/lib/engine/multi-detector";
+import { runPipelineAsync } from "@/lib/engine/llm-pipeline";
 
 // ── Lazy LLM humanizer import ──
 
-let llmHumanize: typeof import("@/lib/engine/llm-humanizer.js").llmHumanize | null = null;
+let llmHumanize: typeof import("@/lib/engine/llm-humanizer").llmHumanize | null = null;
 let hasPipeline = false;
 
 async function initModules() {
   if (llmHumanize === null) {
     try {
-      const mod = await import("@/lib/engine/llm-humanizer.js");
+      const mod = await import("@/lib/engine/llm-humanizer");
       llmHumanize = mod.llmHumanize;
     } catch { /* LLM humanizer not available */ }
   }
   if (!hasPipeline) {
     try {
-      await import("@/lib/engine/llm-pipeline.js");
+      await import("@/lib/engine/llm-pipeline");
       hasPipeline = true;
     } catch { /* pipeline not available */ }
   }
