@@ -4,9 +4,22 @@
  */
 
 import { readFileSync, existsSync } from "fs";
-import { join } from "path";
+import { join, resolve } from "path";
 
-const DICT_DIR = join(process.cwd(), "..", "dictionaries");
+// Resolve dictionary directory: try multiple possible locations
+function findDictDir(): string {
+  const candidates = [
+    join(process.cwd(), "..", "dictionaries"),       // frontend/ as cwd
+    join(process.cwd(), "dictionaries"),               // humanizer-engine/ as cwd
+    resolve(__dirname, "..", "..", "..", "..", "dictionaries"), // relative to this file
+  ];
+  for (const dir of candidates) {
+    if (existsSync(dir)) return dir;
+  }
+  return candidates[0]; // fallback
+}
+
+const DICT_DIR = findDictDir();
 
 interface ThesaurusEntry {
   word: string;

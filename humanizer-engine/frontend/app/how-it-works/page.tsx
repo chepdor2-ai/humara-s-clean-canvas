@@ -1,37 +1,14 @@
-import type { Metadata } from 'next';
-
-export const metadata: Metadata = {
-  title: 'How Humara Works',
-  description: 'See how Humara rewrites text, scores outputs, and supports publishing workflows.',
-  alternates: { canonical: '/how-it-works' },
-};
-
-const steps = [
-  'Paste original text into the workspace.',
-  'Select a rewrite engine and transformation strength.',
-  'Run the humanizer route through the Next.js API.',
-  'Review the generated output and detector score cards.',
-  'Move to the detector page for a full analysis table when needed.',
-];
-
-export default function HowItWorksPage() {
+﻿import { Sparkles } from 'lucide-react';
+export default function Page() {
   return (
-    <main className="pb-12 pt-8 md:pt-12">
-      <div className="app-frame space-y-6">
-        <section className="panel hero-panel p-6 md:p-8 lg:p-10">
-          <div className="eyebrow">How it works</div>
-          <h1 className="hero-title">A direct workflow from draft to scored output.</h1>
-          <p className="hero-copy">Humara uses dedicated API routes for rewrite, health, and detector analysis inside the app router.</p>
-        </section>
-        <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-          {steps.map((step, index) => (
-            <article key={step} className="metric-card">
-              <p className="metric-label">Step {index + 1}</p>
-              <p className="mt-2 text-sm leading-7 text-[hsl(var(--foreground))]">{step}</p>
-            </article>
-          ))}
-        </section>
+    <div className="max-w-4xl mx-auto px-6 py-32 text-center">
+      <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 mb-8 shadow-lg shadow-purple-500/30">
+        <Sparkles className="text-white w-8 h-8" />
       </div>
-    </main>
+      <h1 className="text-4xl md:text-6xl font-bold mb-6 text-slate-900">Coming Soon</h1>
+      <p className="text-xl text-slate-600 leading-relaxed max-w-2xl mx-auto">
+        We are building the world's most premium AI text humanization platform. This page is currently being polished for our multi-million dollar launch.
+      </p>
+    </div>
   );
 }

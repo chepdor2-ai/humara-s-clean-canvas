@@ -1,22 +1,14 @@
-import type { Metadata } from 'next';
-
-export const metadata: Metadata = {
-  title: 'Humara Privacy Policy',
-  description: 'Read the Humara privacy policy.',
-  alternates: { canonical: '/privacy' },
-};
-
-export default function PrivacyPage() {
+﻿import { Sparkles } from 'lucide-react';
+export default function Page() {
   return (
-    <main className="pb-12 pt-8 md:pt-12">
-      <div className="app-frame space-y-6">
-        <section className="panel hero-panel p-6 md:p-8 lg:p-10">
-          <div className="eyebrow">Privacy</div>
-          <h1 className="hero-title">Humara privacy policy.</h1>
-          <p className="hero-copy">This page explains how platform usage and submitted content are handled in the product experience.</p>
-        </section>
-        <section className="panel p-6"><p className="hero-copy">Humara is designed around a minimal, transparent product surface. Operational data should only be used to support platform delivery, quality, and troubleshooting.</p></section>
+    <div className="max-w-4xl mx-auto px-6 py-32 text-center">
+      <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 mb-8 shadow-lg shadow-purple-500/30">
+        <Sparkles className="text-white w-8 h-8" />
       </div>
-    </main>
+      <h1 className="text-4xl md:text-6xl font-bold mb-6 text-slate-900">Coming Soon</h1>
+      <p className="text-xl text-slate-600 leading-relaxed max-w-2xl mx-auto">
+        We are building the world's most premium AI text humanization platform. This page is currently being polished for our multi-million dollar launch.
+      </p>
+    </div>
   );
 }

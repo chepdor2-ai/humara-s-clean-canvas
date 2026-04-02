@@ -1,104 +1,62 @@
-import type { Metadata } from 'next';
-import Image from 'next/image';
+﻿'use client';
 import Link from 'next/link';
-import './globals.css';
+import { usePathname } from 'next/navigation';
+import { LayoutDashboard, Edit3, FileText, BrainCircuit, ShieldAlert, Settings, LogOut } from 'lucide-react';
 
-export const metadata: Metadata = {
-  metadataBase: new URL('https://humara-blank-canvas.lovable.app'),
-  title: 'Humara AI Humanizer & Detector Platform',
-  description: 'Humara is an AI humanizer and detector platform with live scoring, cleaner rewrites, SEO-ready pages, and a modern workflow for content teams.',
-  manifest: '/manifest.webmanifest',
-  applicationName: 'Humara',
-  keywords: ['Humara', 'AI humanizer', 'AI detector', 'humanize text', 'AI rewrite tool', 'content detection'],
-  alternates: {
-    canonical: '/',
-  },
-  openGraph: {
-    title: 'Humara AI Humanizer & Detector Platform',
-    description: 'Humanize AI text, measure detector scores, and manage cleaner publishing workflows with Humara.',
-    url: 'https://humara-blank-canvas.lovable.app',
-    siteName: 'Humara',
-    type: 'website',
-    images: [
-      {
-        url: '/humara-mark.svg',
-        width: 1200,
-        height: 630,
-        alt: 'Humara brand mark',
-      },
-    ],
-  },
-  twitter: {
-    card: 'summary_large_image',
-    title: 'Humara AI Humanizer & Detector Platform',
-    description: 'Rewrite AI text with a more human flow and compare detector scores in one workspace.',
-    images: ['/humara-mark.svg'],
-  },
-  icons: {
-    icon: [
-      { url: '/favicon.ico', sizes: 'any' },
-      { url: '/favicon.png', type: 'image/png', sizes: '96x96' },
-    ],
-    apple: '/apple-touch-icon.png',
-  },
-};
+const Logo = () => (
+  <Link href="/" className="flex items-end text-2xl font-bold font-sora tracking-tight leading-none group mb-10 px-4">
+    <span className="text-[#5C4033]">Huma</span>
+    <span className="text-[#D97757]">ra</span>
+    <div className="w-1.5 h-1.5 rounded-full bg-[#7A8F6A] ml-1 mb-1 group-hover:scale-150 transition-transform"></div>
+  </Link>
+);
 
-export default function RootLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+export default function DashboardLayout({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname();
+
+  const links = [
+    { name: 'Dashboard', href: '/app/dashboard', icon: LayoutDashboard },
+    { name: 'Editor', href: '/app', icon: Edit3 },
+    { name: 'My Documents', href: '/app/docs', icon: FileText },
+    { name: 'Style Memory', href: '/app/style', icon: BrainCircuit },
+    { name: 'Settings', href: '/app/settings', icon: Settings },
+  ];
+
   return (
-    <html lang="en">
-      <body className="app-shell">
-        <nav className="site-nav">
-          <div className="app-frame flex min-h-16 items-center justify-between gap-6 py-3">
-            <Link href="/" className="brand-mark">
-              <Image src="/humara-wordmark.svg" alt="Humara logo" width={210} height={56} className="brand-logo" priority />
-              <div className="hidden sm:block">
-                <p className="brand-kicker">Humanizer + Detector + Studio</p>
-              </div>
-            </Link>
-
-            <div className="flex flex-wrap items-center justify-end gap-5">
-              <Link href="/" className="nav-link">Home</Link>
-              <Link href="/detector" className="nav-link">Detector</Link>
-              <Link href="/pricing" className="nav-link">Pricing</Link>
-              <Link href="/about" className="nav-link">About</Link>
-              <Link href="/contact" className="nav-link">Contact</Link>
-            </div>
-          </div>
+    <div className="flex h-screen bg-[#FFF8F0] overflow-hidden">
+      <aside className="w-64 bg-white border-r border-[#EADDCF] flex flex-col pt-8 pb-6">
+        <Logo />
+        <nav className="flex-1 px-4 space-y-1">
+          {links.map((link) => {
+            const isActive = pathname === link.href;
+            const Icon = link.icon;
+            return (
+              <Link 
+                key={link.name} 
+                href={link.href}
+                className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors ${
+                  isActive 
+                    ? 'bg-[#F5EBE1] text-[#D97757]' 
+                    : 'text-[#8A7263] hover:bg-[#F5EBE1]/50 hover:text-[#5C4033]'
+                }`}
+              >
+                <Icon className={`w-5 h-5 ${isActive ? 'text-[#D97757]' : 'text-[#8A7263]'} `} />
+                {link.name}
+              </Link>
+            );
+          })}
         </nav>
+        <div className="px-4 border-t border-[#EADDCF] pt-4 mx-4">
+          <button className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-[#8A7263] hover:bg-[#F5EBE1]/50 hover:text-[#D97757] w-full transition-colors">
+            <LogOut className="w-5 h-5" />
+            Log Out
+          </button>
+        </div>
+      </aside>
 
+      <main className="flex-1 overflow-y-auto bg-[#FFF8F0] p-6">
         {children}
-
-        <footer className="mt-12 border-t border-[hsl(var(--border))] bg-[hsl(var(--card)/0.72)]">
-          <div className="app-frame grid gap-6 py-8 text-xs footer-copy md:grid-cols-[1.4fr_repeat(3,minmax(0,1fr))]">
-            <div className="space-y-2">
-              <p className="text-sm font-extrabold tracking-[0.22em] text-[hsl(var(--foreground))]">Humara</p>
-              <p>AI humanizer and detector workflows designed for cleaner publishing, stronger routing, and production-ready deployment.</p>
-            </div>
-            <div className="space-y-2">
-              <p className="field-label">Platform</p>
-              <Link href="/">Humanizer</Link><br />
-              <Link href="/detector">Detector</Link><br />
-              <Link href="/pricing">Pricing</Link>
-            </div>
-            <div className="space-y-2">
-              <p className="field-label">Company</p>
-              <Link href="/about">About</Link><br />
-              <Link href="/contact">Contact</Link><br />
-              <Link href="/how-it-works">How it works</Link>
-            </div>
-            <div className="space-y-2">
-              <p className="field-label">Legal</p>
-              <Link href="/terms">Terms</Link><br />
-              <Link href="/privacy">Privacy</Link><br />
-              <span>© 2026 Humara</span>
-            </div>
-          </div>
-        </footer>
-      </body>
-    </html>
+      </main>
+    </div>
   );
 }
