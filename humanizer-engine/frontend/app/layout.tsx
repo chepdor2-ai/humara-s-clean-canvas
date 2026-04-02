@@ -6,8 +6,8 @@ import './globals.css';
 export const metadata: Metadata = {
   title: 'Humara | AI Humanizer & Detector',
   description: 'Humara combines AI humanization and AI detection in one working interface powered by the existing engine stack.',
+  manifest: '/manifest.webmanifest',
   icons: {
-    icon: '/icon.png',
     apple: '/apple-touch-icon.png',
   },
 };
