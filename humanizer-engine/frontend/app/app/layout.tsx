@@ -1,7 +1,7 @@
 ﻿import AuthGuard from './AuthGuard';
 
 export const metadata = {
-  title: "Humara App - Best AI Text Converter",
+  title: "HumaraGPT App - Best AI Text Converter",
   description: 'Make AI text look natural and bypass detectors easily.',
 };
 

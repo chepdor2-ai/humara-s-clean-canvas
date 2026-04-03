@@ -1,13 +1,13 @@
-﻿import type { Metadata } from 'next';
+import type { Metadata } from 'next';
 import Link from 'next/link';
 import { ArrowRight, CheckCircle2, ShieldCheck, Zap, Sparkles, Brain, FileText, Wand2, BarChart3, Globe, Lock, Users } from 'lucide-react';
 import HeroAnimation from './HeroAnimation';
 import FreeTrial from './FreeTrial';
 
 export const metadata: Metadata = {
-  title: 'Humara — #1 AI Humanizer | Make AI Text Undetectable',
-  description: 'Humara rewrites AI-generated text to bypass Turnitin, GPTZero, Originality.AI and Copyleaks. Get 100% human scores while preserving meaning.',
-  alternates: { canonical: 'https://humara.ai' },
+  title: 'HumaraGPT â€” #1 AI Humanizer | Make AI Text Undetectable',
+  description: 'HumaraGPT rewrites AI-generated text to bypass Turnitin, GPTZero, Originality.AI and Copyleaks. Get 100% human scores while preserving meaning.',
+  alternates: { canonical: 'https://humaragpt.com' },
 };
 
 export default function Home() {
@@ -17,14 +17,14 @@ export default function Home() {
       <section className="w-full pt-20 pb-24 bg-white">
         <div className="max-w-4xl mx-auto px-6 text-center">
           <div className="inline-flex items-center gap-2 py-1.5 px-3 rounded-full bg-brand-50 text-brand-700 text-xs font-medium mb-8 border border-brand-200">
-            <Sparkles className="w-3.5 h-3.5" /> V3 Engine — Now Available
+            <Sparkles className="w-3.5 h-3.5" /> V3 Engine â€” Now Available
           </div>
           <h1 className="text-4xl md:text-6xl font-semibold text-slate-900 tracking-tight leading-[1.1] mb-6">
             Make AI-generated text<br />
             <span className="text-brand-600">undetectable</span>
           </h1>
           <p className="max-w-2xl mx-auto text-lg text-slate-500 mb-10 leading-relaxed">
-            Humara structurally rewrites your content to bypass Turnitin, Originality.AI, and GPTZero while preserving your original meaning.
+            HumaraGPT structurally rewrites your content to bypass Turnitin, Originality.AI, and GPTZero while preserving your original meaning.
           </p>
           <div className="flex flex-col sm:flex-row justify-center items-center gap-3">
             <Link href="/app" className="bg-brand-600 hover:bg-brand-700 text-white px-7 py-3 rounded-lg text-sm font-medium transition-colors flex items-center gap-2">
@@ -60,7 +60,7 @@ export default function Home() {
       <section className="py-20 bg-white w-full">
         <div className="max-w-5xl mx-auto px-6">
           <div className="text-center mb-10">
-            <h2 className="text-3xl font-semibold text-slate-900 mb-3">Try it now — free</h2>
+            <h2 className="text-3xl font-semibold text-slate-900 mb-3">Try it now â€” free</h2>
             <p className="text-slate-500 max-w-xl mx-auto">Paste up to 250 words and see the magic. 2 free attempts, no account needed.</p>
           </div>
           <FreeTrial />
@@ -77,7 +77,7 @@ export default function Home() {
           <div className="grid md:grid-cols-3 gap-8">
             {[
               { icon: Wand2, title: 'AI Text Humanization', desc: 'Structurally rewrite AI-generated text with burstiness, natural rhythm, and idiomatic phrasing that bypasses every major detector.' },
-              { icon: ShieldCheck, title: 'Multi-Detector Scanning', desc: 'Run your text against 7+ AI detectors simultaneously — Turnitin, GPTZero, Originality.AI, Copyleaks, Winston AI, and more.' },
+              { icon: ShieldCheck, title: 'Multi-Detector Scanning', desc: 'Run your text against 7+ AI detectors simultaneously â€” Turnitin, GPTZero, Originality.AI, Copyleaks, Winston AI, and more.' },
               { icon: BarChart3, title: 'Before & After Analysis', desc: 'See AI vs. human scores side by side before and after humanization with per-detector breakdowns and meaning preservation metrics.' },
             ].map((svc) => (
               <div key={svc.title} className="p-6 bg-slate-50 rounded-xl border border-slate-100 hover:border-brand-200 hover:shadow-md transition-all">
@@ -94,7 +94,7 @@ export default function Home() {
           <div className="grid md:grid-cols-4 gap-6 mt-8">
             {[
               { icon: Brain, title: 'Context Preservation', desc: 'Maps entities, arguments, and key concepts so technical meaning stays intact during rewrites.' },
-              { icon: FileText, title: 'Style Profiles', desc: 'Academic, professional, casual, or direct — match any writing style automatically.' },
+              { icon: FileText, title: 'Style Profiles', desc: 'Academic, professional, casual, or direct â€” match any writing style automatically.' },
               { icon: Globe, title: 'Synonym Engine', desc: 'Click any word in the output for context-aware synonym suggestions from curated dictionaries.' },
               { icon: Lock, title: 'Privacy First', desc: 'Text is processed in memory and discarded. We never store your content permanently.' },
             ].map((svc) => (
@@ -113,13 +113,13 @@ export default function Home() {
         <div className="max-w-5xl mx-auto px-6">
           <div className="text-center mb-14">
             <h2 className="text-3xl font-semibold text-slate-900 mb-3">How it works</h2>
-            <p className="text-slate-500 max-w-xl mx-auto">Our contextual pipeline goes beyond synonym swapping — it structurally rewrites your text like a professional editor.</p>
+            <p className="text-slate-500 max-w-xl mx-auto">Our contextual pipeline goes beyond synonym swapping â€” it structurally rewrites your text like a professional editor.</p>
           </div>
           <div className="grid md:grid-cols-3 gap-8">
             {[
-              { step: '1', title: 'Pattern Analysis', desc: 'We identify and remove common AI markers — predictable phrasing, uniform sentence lengths, and overused transitions.' },
-              { step: '2', title: 'Structural Rewrite', desc: 'Sentences are restructured with natural burstiness — varying lengths and complexity that match genuine human writing.' },
-              { step: '3', title: 'Tone Calibration', desc: 'The final output is adjusted to match your target voice — academic, professional, conversational, or direct.' },
+              { step: '1', title: 'Pattern Analysis', desc: 'We identify and remove common AI markers â€” predictable phrasing, uniform sentence lengths, and overused transitions.' },
+              { step: '2', title: 'Structural Rewrite', desc: 'Sentences are restructured with natural burstiness â€” varying lengths and complexity that match genuine human writing.' },
+              { step: '3', title: 'Tone Calibration', desc: 'The final output is adjusted to match your target voice â€” academic, professional, conversational, or direct.' },
             ].map((item) => (
               <div key={item.step} className="p-6 bg-white rounded-xl border border-slate-200">
                 <div className="w-10 h-10 bg-brand-100 rounded-lg flex items-center justify-center mb-4">
@@ -142,7 +142,7 @@ export default function Home() {
           </div>
           <div className="grid md:grid-cols-4 gap-6">
             {[
-              { name: 'Ghost Mini', tag: 'Fast', desc: 'Quick rewrites for everyday content — emails, blog posts, casual writing.' },
+              { name: 'Ghost Mini', tag: 'Fast', desc: 'Quick rewrites for everyday content â€” emails, blog posts, casual writing.' },
               { name: 'Ghost Pro', tag: 'Balanced', desc: 'Deep structural rewriting with style preservation. Ideal for professional use.' },
               { name: 'Ninja Stealth', tag: 'Maximum', desc: 'Multi-pass LLM pipeline for critical academic submissions.' },
               { name: 'Undetectable', tag: 'Extreme', desc: 'Our most aggressive mode. Passes the strictest detectors consistently.' },
@@ -187,10 +187,10 @@ export default function Home() {
           </div>
           <div className="grid md:grid-cols-2 gap-6">
             {[
-              { icon: ShieldCheck, title: 'Built-in Detection Scanning', desc: 'Scan your text against Turnitin, Originality.AI, GPTZero, Copyleaks, and more — before and after humanizing.' },
+              { icon: ShieldCheck, title: 'Built-in Detection Scanning', desc: 'Scan your text against Turnitin, Originality.AI, GPTZero, Copyleaks, and more â€” before and after humanizing.' },
               { icon: Zap, title: 'Multiple Engine Modes', desc: 'Choose Ghost Mini for speed, Ghost Pro for balance, or Ninja Stealth for maximum evasion on critical content.' },
               { icon: Sparkles, title: 'Meaning Preservation', desc: 'Our context analyzer maps entities and key concepts, ensuring technical accuracy is maintained throughout the rewrite.' },
-              { icon: CheckCircle2, title: 'Granular Controls', desc: 'Adjust strength, tone, and style profiles to match your specific needs — from academic papers to SEO blog posts.' },
+              { icon: CheckCircle2, title: 'Granular Controls', desc: 'Adjust strength, tone, and style profiles to match your specific needs â€” from academic papers to SEO blog posts.' },
             ].map((f) => (
               <div key={f.title} className="flex gap-4 p-6 bg-slate-50 rounded-xl border border-slate-100">
                 <div className="w-10 h-10 bg-brand-50 rounded-lg flex items-center justify-center shrink-0">
@@ -210,7 +210,7 @@ export default function Home() {
       <section className="py-20 bg-slate-50 border-y border-slate-100 w-full">
         <div className="max-w-5xl mx-auto px-6">
           <div className="text-center mb-14">
-            <h2 className="text-3xl font-semibold text-slate-900 mb-3">Who uses Humara</h2>
+            <h2 className="text-3xl font-semibold text-slate-900 mb-3">Who uses HumaraGPT</h2>
             <p className="text-slate-500 max-w-xl mx-auto">Trusted by professionals across education, content, and enterprise.</p>
           </div>
           <div className="grid md:grid-cols-3 gap-8">
@@ -287,7 +287,7 @@ export default function Home() {
               <Link href="/contact" className="block w-full text-center text-sm text-slate-700 font-medium border border-slate-200 rounded-lg py-2.5 hover:bg-slate-50 transition-colors">Contact Sales</Link>
             </div>
           </div>
-          <p className="text-xs text-slate-400 mt-6">Save 15% with yearly billing. <Link href="/pricing" className="text-brand-600 hover:underline">View full pricing →</Link></p>
+          <p className="text-xs text-slate-400 mt-6">Save 15% with yearly billing. <Link href="/pricing" className="text-brand-600 hover:underline">View full pricing â†’</Link></p>
         </div>
       </section>
 
@@ -295,7 +295,7 @@ export default function Home() {
       <section className="py-20 bg-slate-50 border-t border-slate-100 w-full">
         <div className="max-w-2xl mx-auto px-6 text-center">
           <h2 className="text-3xl font-semibold text-slate-900 mb-4">Ready to humanize your content?</h2>
-          <p className="text-slate-500 mb-8">Join thousands of writers who trust Humara for natural, undetectable AI text.</p>
+          <p className="text-slate-500 mb-8">Join thousands of writers who trust HumaraGPT for natural, undetectable AI text.</p>
           <Link href="/app" className="inline-flex items-center gap-2 bg-brand-600 hover:bg-brand-700 text-white px-7 py-3 rounded-lg text-sm font-medium transition-colors">
             Start Writing <ArrowRight className="w-4 h-4" />
           </Link>

@@ -2,9 +2,9 @@ import type { MetadataRoute } from 'next';
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: 'Humara',
-    short_name: 'Humara',
-    description: 'Humara AI humanizer and detector workspace.',
+    name: 'HumaraGPT',
+    short_name: 'HumaraGPT',
+    description: 'HumaraGPT AI humanizer and detector workspace.',
     start_url: '/',
     display: 'standalone',
     background_color: '#f8f4ef',

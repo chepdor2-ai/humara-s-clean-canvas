@@ -1,11 +1,11 @@
-﻿import type { Metadata } from 'next';
+import type { Metadata } from 'next';
 import { Shield, AlertCircle, Lock, Server, Users, FileText } from 'lucide-react';
 import Link from 'next/link';
 
 export const metadata: Metadata = {
   title: 'Terms of Service',
-  description: 'Humara terms of service — acceptable use, content policies, liability, and user responsibilities.',
-  alternates: { canonical: 'https://humara.ai/terms' },
+  description: 'HumaraGPT terms of service � acceptable use, content policies, liability, and user responsibilities.',
+  alternates: { canonical: 'https://humaragpt.com/terms' },
 };
 
 export default function TermsPage() {
@@ -23,7 +23,7 @@ export default function TermsPage() {
             Terms of Service
           </h1>
           <p className="text-xl text-gray-600 max-w-3xl mx-auto font-medium leading-relaxed mt-8">
-            Please read these terms carefully before using Humara.
+            Please read these terms carefully before using HumaraGPT.
           </p>
         </div>
       </section>
@@ -43,7 +43,7 @@ export default function TermsPage() {
               </p>
               <div className="bg-brand-50 border-l-4 border-brand-500 p-6 rounded-r-lg">
                 <p className="text-sm text-gray-700 font-medium leading-relaxed">
-                  By using Humara, you acknowledge and agree that you are responsible for the content you submit and ensure compliance with all applicable laws and institutional policies.
+                  By using HumaraGPT, you acknowledge and agree that you are responsible for the content you submit and ensure compliance with all applicable laws and institutional policies.
                 </p>
               </div>
             </div>
@@ -84,7 +84,7 @@ export default function TermsPage() {
                 <h2 className="text-2xl font-bold text-gray-900">Data & Privacy</h2>
               </div>
               <p className="text-gray-700 text-lg leading-relaxed font-medium">
-                Your privacy is important to us. Text submitted through Humara is processed securely and is not stored without explicit consent for model training purposes.
+                Your privacy is important to us. Text submitted through HumaraGPT is processed securely and is not stored without explicit consent for model training purposes.
               </p>
             </div>
 
@@ -106,7 +106,7 @@ export default function TermsPage() {
                 <h2 className="text-2xl font-bold text-gray-900">Limitation of Liability</h2>
               </div>
               <p className="text-gray-700 text-lg leading-relaxed font-medium">
-                Humara is provided "as is" without warranties of any kind. While we strive to maintain high service quality, we cannot guarantee uninterrupted service or error-free operations.
+                HumaraGPT is provided "as is" without warranties of any kind. While we strive to maintain high service quality, we cannot guarantee uninterrupted service or error-free operations.
               </p>
             </div>
 

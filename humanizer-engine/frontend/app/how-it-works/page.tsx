@@ -4,8 +4,8 @@ import { ArrowRight, FileText, Brain, Wand2, ShieldCheck, BarChart3, Sparkles, S
 
 export const metadata: Metadata = {
   title: 'How It Works — Humanization & AI Detection',
-  description: 'See exactly how Humara humanizes AI-generated text and detects AI content — from the moment you paste your text to the final human-scored output.',
-  alternates: { canonical: 'https://humara.ai/how-it-works' },
+  description: 'See exactly how HumaraGPT humanizes AI-generated text and detects AI content — from the moment you paste your text to the final human-scored output.',
+  alternates: { canonical: 'https://humaragpt.com/how-it-works' },
 };
 
 export default function HowItWorksPage() {
@@ -18,7 +18,7 @@ export default function HowItWorksPage() {
             <Sparkles className="w-3.5 h-3.5" /> End-to-End Pipeline
           </div>
           <h1 className="text-4xl md:text-6xl font-semibold text-slate-900 tracking-tight leading-[1.1] mb-6">
-            How Humara works
+            How HumaraGPT works
           </h1>
           <p className="max-w-2xl mx-auto text-lg text-slate-500 leading-relaxed">
             From the moment you paste your text to the final detection-proof output — here is exactly what happens at every step.

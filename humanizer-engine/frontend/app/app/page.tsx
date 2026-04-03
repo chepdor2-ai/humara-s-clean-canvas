@@ -133,24 +133,6 @@ const splitSentences = (text: string): { text: string; start: number; end: numbe
   return result;
 };
 
-/* ── Dual AI/Human Score Bar ─────────────────────────────────────────── */
-const DetectorBar = ({ name, aiScore }: { name: string; aiScore: number }) => {
-  const humanScore = 100 - aiScore;
-  return (
-    <div className="flex items-center gap-2">
-      <span className="text-[11px] font-medium text-slate-600 dark:text-slate-400 w-[90px] truncate">{name}</span>
-      <div className="flex-1 h-1.5 bg-emerald-400/80 dark:bg-emerald-500/60 rounded-full overflow-hidden flex">
-        <div className="h-full bg-red-400 dark:bg-red-500 transition-all duration-700" style={{ width: `${aiScore}%` }} />
-      </div>
-      <div className="flex items-center gap-1 w-[90px] justify-end">
-        <span className="text-[10px] font-bold text-red-500 tabular-nums">{Math.round(aiScore)}%</span>
-        <span className="text-[10px] text-slate-300 dark:text-slate-600">/</span>
-        <span className="text-[10px] font-bold text-emerald-600 tabular-nums">{Math.round(humanScore)}%</span>
-      </div>
-    </div>
-  );
-};
-
 /* ── Constants ──────────────────────────────────────────────────────────── */
 const ENGINES = [
   { id: 'ghost_mini', label: 'Fast', note: 'Bypasses most detectors quickly — best for speed.' },
@@ -169,7 +151,6 @@ const TONES = [
   { id: 'professional', label: 'Business' },
   { id: 'simple', label: 'Direct' },
 ];
-const _TOP_DETECTORS = ['GPTZero', 'Turnitin', 'Originality.AI', 'Winston AI', 'Copyleaks'];
 
 /* ── Page ───────────────────────────────────────────────────────────────── */
 export default function EditorPage() {
@@ -634,16 +615,6 @@ export default function EditorPage() {
 
       </div>
 
-      {/* Score Disclaimer */}
-      {(inputDetection || outputDetection) && (
-        <div className="flex items-start gap-1.5 px-3 py-2 bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-700 rounded-lg">
-          <Info className="w-3 h-3 text-slate-400 mt-0.5 shrink-0" />
-          <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">
-            Scores shown are calculated ~3% stricter than actual detectors. Our internal scanner is intentionally aggressive so your text comfortably passes real-world AI detectors like GPTZero, Turnitin, and Originality.AI.
-          </p>
-        </div>
-      )}
-
       {/* Editor Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {/* Input Panel */}
@@ -651,16 +622,6 @@ export default function EditorPage() {
           <div className="flex items-center justify-between px-4 py-2.5 border-b border-slate-100 dark:border-zinc-800 bg-slate-50/50 dark:bg-zinc-800/50">
             <div className="flex items-center gap-2">
               <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">Input</span>
-              {autoDetecting && (
-                <span className="flex items-center gap-1 text-[10px] text-brand-600 font-medium">
-                  <RotateCcw className="w-2.5 h-2.5 animate-spin" /> Scanning…
-                </span>
-              )}
-              {inputDetection && !autoDetecting && (
-                <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
-                  inputDetection.overallAi <= 15 ? 'text-emerald-700 bg-emerald-50 dark:text-emerald-400 dark:bg-emerald-950' : inputDetection.overallAi <= 60 ? 'text-amber-700 bg-amber-50 dark:text-amber-400 dark:bg-amber-950' : 'text-red-700 bg-red-50 dark:text-red-400 dark:bg-red-950'
-                }`}>{Math.round(inputDetection.overallAi)}% AI</span>
-              )}
             </div>
             <div className="flex items-center gap-2">
               <span className="text-[11px] text-slate-400 tabular-nums">{inputWords} words</span>
@@ -678,26 +639,6 @@ export default function EditorPage() {
               placeholder="Paste your AI-generated text here…" />
           </div>
 
-          {/* Input Detector Scores */}
-          {inputDetection && (
-            <div className="border-t border-slate-100 dark:border-zinc-800 px-4 py-3 space-y-1.5 bg-slate-50/30 dark:bg-zinc-800/30">
-              <div className="flex items-center justify-between mb-1">
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Input Scan</span>
-                <span className={`text-[10px] font-bold ${inputDetection.overallAi <= 20 ? 'text-emerald-600' : 'text-red-500'}`}>
-                  {Math.round(inputDetection.overallAi)}% AI detected
-                </span>
-              </div>
-              {[...inputDetection.detectors].sort((a, b) => b.ai_score - a.ai_score).slice(0, 5).map(d => (
-                <DetectorBar key={d.detector} name={d.detector} aiScore={d.ai_score} />
-              ))}
-              <div className="flex items-center justify-between pt-1.5 mt-1 border-t border-slate-100 dark:border-zinc-700">
-                <span className="text-[10px] font-bold text-slate-500 dark:text-zinc-400">Overall</span>
-                <span className={`text-[10px] font-bold ${inputAvgAi <= 20 ? 'text-emerald-600' : 'text-red-500'}`}>
-                  {Math.round(inputAvgAi)}% AI / {Math.round(100 - inputAvgAi)}% Human
-                </span>
-              </div>
-            </div>
-          )}
         </div>
 
         {/* Output Panel */}
@@ -708,24 +649,11 @@ export default function EditorPage() {
               {result && !loading && !rephrasing && (
                 <span className="text-[10px] text-emerald-600/70 dark:text-emerald-400/60 font-medium italic">proofread &amp; edit here</span>
               )}
-              {outputDetection && (
-                <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
-                  outputDetection.overallAi <= 15 ? 'text-emerald-700 bg-emerald-50 dark:text-emerald-400 dark:bg-emerald-950' : outputDetection.overallAi <= 60 ? 'text-amber-700 bg-amber-50 dark:text-amber-400 dark:bg-amber-950' : 'text-red-700 bg-red-50 dark:text-red-400 dark:bg-red-950'
-                }`}>{Math.round(outputDetection.overallAi)}% AI</span>
-              )}
             </div>
             <div className="flex items-center gap-2">
               <span className="text-[11px] text-slate-400 tabular-nums">{outputWords} words</span>
               {result && (
                 <>
-                  {outputDetection && outputDetection.overallAi > 20 && (
-                    <button onClick={handleRehumanizeFlagged} disabled={rehumanizing || loading || rephrasing}
-                      className="text-[11px] font-semibold text-red-500 hover:text-red-600 dark:text-red-400 px-2 py-1 rounded-md hover:bg-red-50 dark:hover:bg-red-950 transition-colors flex items-center gap-1 disabled:opacity-50"
-                      title="Rehumanize flagged sentences">
-                      {rehumanizing ? <RotateCcw className="w-3 h-3 animate-spin" /> : <AlertTriangle className="w-3 h-3" />}
-                      {rehumanizing ? 'Fixing…' : 'Fix Flagged'}
-                    </button>
-                  )}
                   <button onClick={handleRephrase} disabled={rephrasing || loading}
                     className="text-[11px] font-semibold text-brand-600 hover:text-brand-700 dark:text-brand-400 px-2 py-1 rounded-md hover:bg-brand-50 dark:hover:bg-brand-950 transition-colors flex items-center gap-1 disabled:opacity-50"
                     title="Rephrase output">
@@ -756,27 +684,6 @@ export default function EditorPage() {
               <Zap className="w-6 h-6" />
               <span className="text-xs text-slate-300 dark:text-slate-600">Output appears here</span>
               <span className="text-[11px] text-slate-400 dark:text-slate-500 max-w-xs leading-relaxed">Bring text from Stealth or any humanizer — kill all AI in one beat</span>
-            </div>
-          )}
-
-          {/* Output Detector Scores */}
-          {outputDetection && (
-            <div className="border-t border-slate-100 dark:border-zinc-800 px-4 py-3 space-y-1.5 bg-slate-50/30 dark:bg-zinc-800/30">
-              <div className="flex items-center justify-between mb-1">
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Output Scan</span>
-                <span className={`text-[10px] font-bold ${outputDetection.overallAi <= 20 ? 'text-emerald-600' : 'text-red-500'}`}>
-                  {Math.round(outputDetection.overallAi)}% AI detected
-                </span>
-              </div>
-              {[...outputDetection.detectors].sort((a, b) => b.ai_score - a.ai_score).slice(0, 5).map(d => (
-                <DetectorBar key={d.detector} name={d.detector} aiScore={d.ai_score} />
-              ))}
-              <div className="flex items-center justify-between pt-1.5 mt-1 border-t border-slate-100 dark:border-zinc-700">
-                <span className="text-[10px] font-bold text-slate-500 dark:text-zinc-400">Overall</span>
-                <span className={`text-[10px] font-bold ${outputAvgAi <= 20 ? 'text-emerald-600' : 'text-red-500'}`}>
-                  {Math.round(outputAvgAi)}% AI / {Math.round(100 - outputAvgAi)}% Human
-                </span>
-              </div>
             </div>
           )}
 

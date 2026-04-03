@@ -2,15 +2,15 @@
 import Link from 'next/link';
 import Image from 'next/image';
 import { usePathname } from 'next/navigation';
-import { LayoutDashboard, Edit3, FileText, BrainCircuit, Settings, LogOut, Menu, X, ArrowRight, ShieldCheck, Sun, Moon, Shield } from 'lucide-react';
+import { LayoutDashboard, Edit3, FileText, BrainCircuit, Settings, LogOut, Menu, X, ArrowRight, ShieldCheck, Sun, Moon } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useTheme } from './ThemeProvider';
 import { useAuth } from './AuthProvider';
 
 const Logo = () => (
   <Link href="/" className="flex items-center space-x-2.5">
-      <Image src="/logo.png" alt="Humara" width={32} height={32} className="w-8 h-8" />
-      <span className="text-xl font-semibold text-slate-900 dark:text-white tracking-tight">Humara</span>
+      <Image src="/logo.png" alt="HumaraGPT" width={32} height={32} className="w-8 h-8" />
+      <span className="text-xl font-semibold text-slate-900 dark:text-white tracking-tight">HumaraGPT</span>
   </Link>
 );
 
@@ -37,7 +37,6 @@ export default function RootLayoutClient({ children }: { children: React.ReactNo
     { name: 'AI Detector', href: '/app/detector', icon: ShieldCheck },
     { name: 'Style Profiles', href: '/app/style', icon: BrainCircuit },
     { name: 'Settings', href: '/app/settings', icon: Settings },
-    { name: 'Admin', href: '/app/admin', icon: Shield },
   ];
 
   if (!isAppRoute) {
@@ -124,7 +123,7 @@ export default function RootLayoutClient({ children }: { children: React.ReactNo
             </div>
             <div className="pt-6 border-t border-slate-200 flex flex-col md:flex-row justify-between items-center gap-3">
               <div className="text-xs text-slate-400">
-                © {new Date().getFullYear()} Humara. All rights reserved.
+                © {new Date().getFullYear()} HumaraGPT. All rights reserved.
               </div>
             </div>
           </div>

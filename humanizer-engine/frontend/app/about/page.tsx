@@ -1,11 +1,11 @@
-﻿import type { Metadata } from 'next';
+import type { Metadata } from 'next';
 import { Quote, Brain, Shield, Target, BookOpen } from 'lucide-react';
 import Link from 'next/link';
 
 export const metadata: Metadata = {
-  title: 'About Humara',
-  description: 'Learn how Humara uses advanced NLP to make AI-generated text indistinguishable from human writing. Our mission, values, and approach.',
-  alternates: { canonical: 'https://humara.ai/about' },
+  title: 'About HumaraGPT',
+  description: 'Learn how HumaraGPT uses advanced NLP to make AI-generated text indistinguishable from human writing. Our mission, values, and approach.',
+  alternates: { canonical: 'https://humaragpt.com/about' },
 };
 
 export default function AboutPage() {
@@ -15,7 +15,7 @@ export default function AboutPage() {
         <div className="max-w-5xl mx-auto px-6 text-center mt-12">
           <span className="inline-block py-1 px-3 rounded-full bg-brand-100 text-brand-800 font-semibold uppercase text-xs mb-6 border border-brand-300">Philosophy</span>
           <h1 className="text-4xl md:text-6xl font-bold text-gray-900 mb-8">
-            About Humara
+            About HumaraGPT
           </h1>
           <p className="text-xl text-gray-600 max-w-3xl mx-auto font-medium leading-relaxed">
             High-end AI text humanizer. We believe AI should be a tool for refining, not replacing human thought. Our mission is to bypass detection while preserving meaning.
@@ -34,7 +34,7 @@ export default function AboutPage() {
                 We provide tools strictly designed to refine text structure and readability (burstiness, perplexity adjustment). Our advanced AI rewriting engine deconstructs machine-generated content and rebuilds it to sound authentically human.
               </p>
               <p>
-                Unlike rudimentary synonym-spinners, Humara analyzes linguistic patterns, sentence rhythm, and vocabulary distribution to create undetectable prose that preserves semantic integrity.
+                Unlike rudimentary synonym-spinners, HumaraGPT analyzes linguistic patterns, sentence rhythm, and vocabulary distribution to create undetectable prose that preserves semantic integrity.
               </p>
               <p>
                 Ensure you follow institutional guidelines when using AI-modified text. Our tools are built for professionals and creators who need to bypass detection without sacrificing quality.
@@ -95,7 +95,7 @@ export default function AboutPage() {
             Start humanizing today
           </h2>
           <p className="text-gray-300 text-lg mb-10 leading-relaxed">
-            Ready to humanize your AI-generated content? Try Humara free today with no credit card required.
+            Ready to humanize your AI-generated content? Try HumaraGPT free today with no credit card required.
           </p>
           <Link href="/app" className="inline-block bg-brand-600 hover:bg-brand-700 text-white px-8 py-4 text-lg font-semibold rounded-lg transition">
             Try the Humanizer Free &rarr;

@@ -13,7 +13,7 @@ interface FeedbackRow { id: string; user_id: string; rating: number; comment: st
 
 type Tab = 'overview' | 'users' | 'subscriptions' | 'documents' | 'feedback';
 
-const ADMIN_EMAILS = ['admin@humara.ai']; // Add admin emails here
+const ADMIN_EMAILS = ['admin@humaragpt.com']; // Add admin emails here
 
 export default function AdminDashboard() {
   const { user } = useAuth();

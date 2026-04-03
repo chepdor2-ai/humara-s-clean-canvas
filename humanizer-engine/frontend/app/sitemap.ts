@@ -1,7 +1,7 @@
 import type { MetadataRoute } from 'next';
 
 export default function sitemap(): MetadataRoute.Sitemap {
-  const base = 'https://humara-blank-canvas.lovable.app';
+  const base = 'https://humaragpt.com';
   const routes = ['', '/detector', '/pricing', '/about', '/contact', '/how-it-works', '/privacy', '/terms'];
   return routes.map((route) => ({
     url: `${base}${route || '/'}`,

@@ -6,6 +6,6 @@ export default function robots(): MetadataRoute.Robots {
       userAgent: '*',
       allow: '/',
     },
-    sitemap: 'https://humara-blank-canvas.lovable.app/sitemap.xml',
+    sitemap: 'https://humaragpt.com/sitemap.xml',
   };
 }

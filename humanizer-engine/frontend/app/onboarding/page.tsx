@@ -1,10 +1,10 @@
-﻿import type { Metadata } from 'next';
+import type { Metadata } from 'next';
 import { BookOpen, Briefcase, Zap, ArrowRight } from 'lucide-react';
 import Link from 'next/link';
 
 export const metadata: Metadata = {
-  title: 'Get Started — Choose Your Use Case',
-  description: 'Set up your Humara workspace. Choose between academic, content & SEO, or general writing modes.',
+  title: 'Get Started - Choose Your Use Case',
+  description: 'Set up your HumaraGPT workspace. Choose between academic, content & SEO, or general writing modes.',
   robots: { index: false },
 };
 
@@ -18,7 +18,7 @@ export default function Onboarding() {
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-6">
       <div className="w-full max-w-4xl text-center mb-12">
-        <h1 className="text-4xl font-semibold text-slate-900 mb-4">Welcome to Humara</h1>
+        <h1 className="text-4xl font-semibold text-slate-900 mb-4">Welcome to HumaraGPT</h1>
         <p className="text-lg text-slate-500">How will you be using our humanization engine?</p>
       </div>
 

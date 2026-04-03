@@ -106,7 +106,7 @@ export default function HeroAnimation() {
         <div className="w-2.5 h-2.5 bg-slate-200 rounded-full" />
         <div className="w-2.5 h-2.5 bg-slate-200 rounded-full" />
         <div className="w-2.5 h-2.5 bg-slate-200 rounded-full" />
-        <span className="text-xs text-slate-400 ml-2">Humara Humanizer</span>
+        <span className="text-xs text-slate-400 ml-2">HumaraGPT Humanizer</span>
         {isScanning && (
           <span className="ml-auto text-[10px] font-medium text-brand-600 flex items-center gap-1">
             <div className="w-2 h-2 border border-brand-600 border-t-transparent rounded-full animate-spin" />

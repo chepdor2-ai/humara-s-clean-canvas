@@ -7,6 +7,6 @@
   <rect x="52" y="96" width="44" height="8" rx="4" fill="rgb(223, 169, 156)"/>
   <rect x="52" y="110" width="64" height="8" rx="4" fill="rgb(252, 247, 244)"/>
   <circle cx="104" cy="86" r="10" stroke="rgb(252, 247, 244)" stroke-width="4"/>
-  <text x="166" y="82" fill="rgb(56, 55, 84)" font-family="Manrope, Arial, sans-serif" font-size="56" font-weight="800" letter-spacing="5">HUMARA</text>
+  <text x="166" y="82" fill="rgb(56, 55, 84)" font-family="Manrope, Arial, sans-serif" font-size="56" font-weight="800" letter-spacing="5">HUMARAGPT</text>
   <text x="168" y="114" fill="rgb(116, 123, 143)" font-family="Manrope, Arial, sans-serif" font-size="16" font-weight="700" letter-spacing="4">HUMANIZER · DETECTOR · WORKSPACE</text>
 </svg>

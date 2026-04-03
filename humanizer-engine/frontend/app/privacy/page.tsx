@@ -1,11 +1,11 @@
-﻿import type { Metadata } from 'next';
+import type { Metadata } from 'next';
 import { Lock, Eye, Database, Mail, Shield, Zap } from 'lucide-react';
 import Link from 'next/link';
 
 export const metadata: Metadata = {
   title: 'Privacy Policy',
-  description: 'Humara privacy policy — how we collect, use, and protect your data. Your text is never stored or used for training.',
-  alternates: { canonical: 'https://humara.ai/privacy' },
+  description: 'HumaraGPT privacy policy � how we collect, use, and protect your data. Your text is never stored or used for training.',
+  alternates: { canonical: 'https://humaragpt.com/privacy' },
 };
 
 export default function PrivacyPage() {
@@ -106,7 +106,7 @@ export default function PrivacyPage() {
                 <h2 className="text-2xl font-bold text-gray-900">Security Measures</h2>
               </div>
               <p className="text-gray-700 text-lg leading-relaxed font-medium">
-                Humara implements comprehensive security protocols including encrypted data transmission, secure authentication, and regular security audits to protect your information.
+                HumaraGPT implements comprehensive security protocols including encrypted data transmission, secure authentication, and regular security audits to protect your information.
               </p>
             </div>
 
@@ -140,7 +140,7 @@ export default function PrivacyPage() {
           </p>
           <div className="flex flex-col sm:flex-row justify-center gap-4">
             <Link href="/app" className="bg-brand-600 hover:bg-brand-700 text-white px-8 py-3 font-medium rounded-lg transition-colors">
-              Start Using Humara
+              Start Using HumaraGPT
             </Link>
             <Link href="/" className="bg-white text-gray-900 px-8 py-3 font-medium rounded-lg border border-slate-200 hover:bg-slate-50 transition-colors">
               Back to Home
