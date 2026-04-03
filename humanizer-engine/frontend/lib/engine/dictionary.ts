@@ -189,6 +189,20 @@ export class HumanizerDictionary {
       "obfuscate", "prognosticate", "remunerate", "conflagration",
       "perambulate", "masticate", "regurgitate", "cogitate",
       "veritably", "assuredly", "indubitably", "irrefutably",
+      // Wrong-sense synonyms that cause nonsensical academic output
+      "rotation", "coiffure", "torah", "blow", "exact", "connector",
+      "grade", "translation", "target", "quest", "ordinance",
+      "surfaced", "yielded", "upgraded", "generated", "resettled",
+      "moveded", "leded", "dumpeded", "create",
+      "manpower", "context", "emphasis", "worries", "ecological",
+      "commodities", "substituted", "fabrication", "manufacture",
+      "congregate", "procure", "commence", "terminate", "disseminate",
+      "enumerate", "elucidate", "delineate", "perpetuate", "exacerbate",
+      // Round 2: more wrong-sense synonyms from test output
+      "gyration", "pentateuch", "barren", "connecter", "followers",
+      "volunteer", "invite", "site", "scene", "domain", "devoid",
+      "agitate", "bettor", "onetime", "diverge", "grooming",
+      "coiffure", "focussed", "sizable", "overpopulated", "poll",
     ]);
 
     // Filter out avoided words, multi-word synonyms, blocked words, and validate

@@ -195,17 +195,17 @@ export const CONTRACTION_REGEX = new RegExp(
 // ══════════════════════════════════════════════════════════════════════════
 
 export const FORMAL_CONNECTORS: Record<string, string[]> = {
-  "Furthermore, ": ["Also, ", "And ", "Plus, "],
-  "Moreover, ": ["On top of that, ", "And ", "Beyond that, "],
-  "Additionally, ": ["Also, ", "And ", "Plus, "],
+  "Furthermore, ": ["Also, ", "In addition, ", "Plus, "],
+  "Moreover, ": ["On top of that, ", "In addition, ", "Beyond that, "],
+  "Additionally, ": ["Also, ", "In addition, ", "Plus, "],
   "Consequently, ": ["So ", "Because of that, ", "That meant "],
-  "Nevertheless, ": ["Still, ", "Even so, ", "But "],
-  "Nonetheless, ": ["Still, ", "Yet ", "But "],
-  "In contrast, ": ["But ", "Then again, ", "On the flip side, "],
+  "Nevertheless, ": ["Still, ", "Even so, ", "All the same, "],
+  "Nonetheless, ": ["Still, ", "Even so, ", "All the same, "],
+  "In contrast, ": ["On the other hand, ", "Then again, ", "On the flip side, "],
   "Subsequently, ": ["After that, ", "Then ", "Later, "],
   "In conclusion, ": ["All in all, ", "When you put it together, ", "Looking at the whole picture, "],
   "Therefore, ": ["So ", "That is why ", "This is why "],
-  "However, ": ["But ", "That said, ", "Still, "],
+  "However, ": ["Still, ", "Even so, ", "All the same, "],
   "Thus, ": ["So ", "That way, ", "This meant "],
   "Hence, ": ["So ", "That is why ", "Because of that, "],
   "Indeed, ": ["In fact, ", "Sure enough, ", "As it turned out, "],
@@ -1119,6 +1119,24 @@ export function fixPunctuation(text: string): string {
     r = r[0].toUpperCase() + r.slice(1);
   }
 
+  // ── Fix mid-sentence capitalization after introductory comma-phrases ──
+  {
+    const PROPER_NOUN_RE = /^(?:I|[A-Z]{2,}|Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday|January|February|March|April|May|June|July|August|September|October|November|December|America|Europe|Asia|Africa|Australia|England|Britain|China|India|Japan|France|Germany|Russia|Canada|Mexico|Brazil|Spanish|French|German|English|Chinese|Japanese|Indian|American|European|African|Asian|British|Canadian|Australian|Latin|Greek|Roman|Christian|Muslim|Jewish|Hindu|Buddhist|Catholic|Protestant|Islamic|Biblical|God|Jesus|Christ|Allah|Buddha|Earth|Mars|Venus|Jupiter|Saturn|Mercury|Neptune|Uranus|Pluto|DNA|RNA|HIV|AIDS|NASA|UN|EU|US|UK|WHO|GDP|CEO|CFO|PhD|MBA|MIT|Harvard|Oxford|Cambridge|Stanford|Yale|Princeton|UNESCO|UNICEF|NATO|FBI|CIA|NSA|NFL|NBA|MLB|NHL)$/;
+    const INTRO_PHRASE_RE = /^(Also|Still|Plus|In addition|In fact|On top of that|Beyond that|In practice|Even so|That said|Of course|In real terms|As a result|For this reason|Over time|In contrast|On the other hand|At the same time|For example|In particular|To be fair|Not surprisingly|Interestingly|Similarly|In general|Notably|Meanwhile|As expected|In brief|To some extent|Granted|True|At its core|In many ways|Put simply|As it turns out|In the end|All in all|On a related note|To elaborate|By comparison|Alternatively|Looking at it this way|From that angle|In other words|To put it another way)(,\s+)([A-Z])([a-z]+)/;
+    r = r.split(/([.!?]["'\u201D\u2019]?\s+)/).map(segment => {
+      const m = segment.match(INTRO_PHRASE_RE);
+      if (m) {
+        const word = m[3] + m[4];
+        if (!PROPER_NOUN_RE.test(word)) {
+          return segment.replace(INTRO_PHRASE_RE, (_: string, phrase: string, comma: string, firstChar: string, rest: string) =>
+            phrase + comma + firstChar.toLowerCase() + rest
+          );
+        }
+      }
+      return segment;
+    }).join("");
+  }
+
   // ── Orphan punctuation at start of sentence ──
   r = r.replace(/(^|\.\s+)[,;:]\s*/gm, "$1");          // remove leading comma/semicolon/colon after period
   r = r.replace(/^\s*[,;:]\s*/gm, "");                 // remove leading comma/semicolon/colon at line start
@@ -1832,12 +1850,15 @@ export function deepCleaningPass(sentences: string[]): string[] {
 const BAD_STARTER_FIXES: [RegExp, string][] = [
   // "By [gerund]" — AI hallmark, strip the whole prepositional phrase if short
   [/^By \w+ing\b[^,]{0,30},\s*/i, "strip"],
-  // Bare "And" at start — replace with "Also" or strip
-  [/^And\s+(?=[a-z])/i, "Also "],
+  // "By [noun]," — strip the whole prepositional phrase (e.g. "By employment, workers…")
+  [/^By \w+[^,]{0,30},\s*/i, "strip"],
+  // Bare "And" at start — strip it
+  [/^And\s+/i, "strip"],
   // Bare "And," at start
-  [/^And,\s*/i, "Also, "],
-  // "But" at sentence start — keep only when it's a genuine contrast, replace others
+  [/^And,\s*/i, "strip"],
+  // "But" at sentence start — strip conjunction starters
   [/^But\s+(?:also|then|yet|still)\s*/i, "strip"],
+  [/^But\s+/i, "strip"],
   // "So" as a bare starter (AI filler) — only when followed by comma or lowercase
   [/^So,\s*/i, "strip"],
   [/^So\s+(?=[a-z])/i, "strip"],

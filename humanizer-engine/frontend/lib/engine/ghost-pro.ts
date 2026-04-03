@@ -17,7 +17,7 @@
 import OpenAI from "openai";
 import { sentTokenize } from "./utils";
 import { expandContractions } from "./advanced-transforms";
-import { protectSpecialContent, restoreSpecialContent, protectContentTerms, restoreContentTerms, cleanOutputRepetitions, robustSentenceSplit, placeholdersToLLMFormat, llmFormatToPlaceholders, countSentences, enforceSentenceCountStrict } from "./content-protection";
+import { protectSpecialContent, restoreSpecialContent, protectContentTerms, restoreContentTerms, cleanOutputRepetitions, robustSentenceSplit, placeholdersToLLMFormat, llmFormatToPlaceholders, countSentences, enforceSentenceCountStrict, enforcePerParagraphSentenceCounts, rephraseCitations } from "./content-protection";
 import { semanticSimilaritySync } from "./semantic-guard";
 import { TextSignals } from "./multi-detector";
 import {
@@ -115,7 +115,7 @@ SHORT TEXT — EXTRA RULES (this text is under 300 words, so every sentence matt
 - You MUST include at least 2 very short sentences (4-8 words) to break the rhythm
 - You MUST include at least 1 long complex sentence (30+ words) with subordinate clauses
 - NEVER let the text read as a single uniform block — vary sentence openings aggressively
-- Start at least one sentence with "And" or "But" — real humans do this
+- Do NOT start any sentence with a conjunction like "And", "But", "Or", "So", "Yet"
 - Use comma-based hedging asides naturally (e.g. ", admittedly," or ", to some extent,")
 - Rearrange sentence order within paragraphs for unpredictability
 - Do NOT add any content, sentences, or conclusions not in the original
@@ -171,7 +171,7 @@ ${burstinessRule}
 3. SENTENCE STARTERS — vary them dramatically:
    - Start some sentences with the subject directly ("The economy grew...")
    - Start some with a short clause ("After the reforms took hold, ...")
-   - Start 1-2 with "And" or "But" (like real humans do)
+   - Do NOT start any sentence with a conjunction like And, But, Or, So, Yet
    - Start some with gerunds ("Looking at the data...")
    - NEVER use the same starting word for consecutive sentences
    - NEVER start with: "Furthermore," "Moreover," "Additionally," "However," "Nevertheless," "Consequently," "It is" 
@@ -487,8 +487,8 @@ const NATURAL_REROUTES: string[] = [
   "At its core,", "As things stood,",
   "In real terms,", "With that shift,",
   "Looking at it this way,", "What this meant was",
-  "The upshot:", "And so,",
-  "But then,", "Still,",
+  "The upshot:", "As a result,",
+  "Even so,", "Still,",
 ];
 
 function diversifyStarters(text: string): string {
@@ -501,17 +501,17 @@ function diversifyStarters(text: string): string {
 // Targets: ai_pattern_score (connector sub-signal)
 
 const FORMAL_CONNECTORS: Record<string, string[]> = {
-  "Furthermore, ": ["Also, ", "And ", "Plus, "],
-  "Moreover, ": ["On top of that, ", "And ", "Beyond that, "],
-  "Additionally, ": ["Also, ", "And ", "Plus, "],
+  "Furthermore, ": ["Also, ", "In addition, ", "Plus, "],
+  "Moreover, ": ["On top of that, ", "In addition, ", "Beyond that, "],
+  "Additionally, ": ["Also, ", "In addition, ", "Plus, "],
   "Consequently, ": ["So ", "Because of that, ", "That meant "],
-  "Nevertheless, ": ["Still, ", "Even so, ", "But "],
-  "Nonetheless, ": ["Still, ", "Yet ", "But "],
-  "In contrast, ": ["But ", "Then again, ", "On the flip side, "],
+  "Nevertheless, ": ["Still, ", "Even so, ", "All the same, "],
+  "Nonetheless, ": ["Still, ", "Even so, ", "All the same, "],
+  "In contrast, ": ["On the other hand, ", "Then again, ", "On the flip side, "],
   "Subsequently, ": ["After that, ", "Then ", "Later, "],
   "In conclusion, ": ["All in all, ", "When you put it together, ", "Looking at the whole picture, "],
   "Therefore, ": ["So ", "That is why ", "This is why "],
-  "However, ": ["But ", "That said, ", "Still, "],
+  "However, ": ["Still, ", "Even so, ", "All the same, "],
   "Thus, ": ["So ", "That way, ", "This meant "],
   "Hence, ": ["So ", "That is why ", "Because of that, "],
   "Indeed, ": ["In fact, ", "Sure enough, ", "As it turned out, "],
@@ -521,7 +521,7 @@ const FORMAL_CONNECTORS: Record<string, string[]> = {
   "As a result, ": ["So ", "Because of this, ", "That meant "],
   "For example, ": ["Take ", "Like ", "Consider "],
   "For instance, ": ["Take ", "Like ", "Say "],
-  "On the other hand, ": ["Then again, ", "But ", "At the same time, "],
+  "On the other hand, ": ["Then again, ", "At the same time, ", "Conversely, "],
   "In other words, ": ["Put simply, ", "Basically, ", "What that means is "],
 };
 
@@ -1363,8 +1363,8 @@ function postProcessSingleSentence(sent: string, features: InputFeatures, streng
     }
   }
 
-  // 11. Dictionary-enhanced synonym swap (per-sentence) — rate scales with strength
-  const synonymRate = strength === "strong" ? 0.15 : strength === "medium" ? 0.10 : 0.05;
+  // 11. Dictionary-enhanced synonym swap (per-sentence) — aggressive rate for deep AI killing
+  const synonymRate = strength === "strong" ? 0.16 : strength === "medium" ? 0.12 : 0.08;
   const dict = getDictionary();
   const currentWords = result.split(/\s+/);
   if (currentWords.length >= 5) {
@@ -1400,13 +1400,17 @@ function postProcessSingleSentence(sent: string, features: InputFeatures, streng
     result = newWords.join(" ");
   }
 
-  // 12. Syntactic template — probability scales with strength
-  const templateProb = strength === "strong" ? 0.45 : strength === "medium" ? 0.30 : 0.20;
-  const updatedWords = result.split(/\s+/);
-  if (updatedWords.length >= 12 && Math.random() < templateProb) {
-    const transformed = applySyntacticTemplate(result);
-    if (transformed !== result) result = transformed;
+  // 12. Syntactic template — moderate application for structural variation
+  {
+    const templateProb = strength === "strong" ? 0.35 : strength === "medium" ? 0.25 : 0.15;
+    const rWords = result.split(/\s+/);
+    if (rWords.length >= 12 && Math.random() < templateProb) {
+      result = applySyntacticTemplate(result);
+    }
   }
+
+  // 12b. Second-pass AI word kill — catch any AI words reintroduced by synonym/template steps
+  result = applyAIWordKill(result);
 
   // 13. Constraint enforcement per sentence
   if (!features.hasContractions) {
@@ -1538,11 +1542,9 @@ function sentenceIndependentPostProcess(text: string, features: InputFeatures, s
       return postProcessSingleSentence(trimmed, features, strength);
     }).filter(Boolean);
 
-    // Remove fragment sentences (under 4 real words) that result from phrase stripping
-    const cleaned = processed.filter(sent => {
-      const words = sent.replace(/[^a-zA-Z\s]/g, "").trim().split(/\s+/).filter(w => w.length > 0);
-      return words.length >= 4;
-    });
+    // Fragment removal DISABLED — would alter sentence count (1-in=1-out)
+    // Sentences must be preserved regardless of length
+    const cleaned = processed;
 
     return (cleaned.length > 0 ? cleaned : processed).join(" ");
   }).filter(Boolean).join("\n\n");
@@ -1789,66 +1791,19 @@ async function processChunk(
   // ═══════════════════════════════════════════
   console.log("  [GhostPro]   Pass 2: Sentence-independent post-processing...");
 
-  // Sentence-independent processing — rounds scale with strength
-  const postProcessRounds = strength === "strong" ? 3 : strength === "medium" ? 2 : 1;
-  for (let pp = 0; pp < postProcessRounds; pp++) {
-    result = sentenceIndependentPostProcess(result, features, strength);
-  }
-  console.log(`  [GhostPro]   Post-processing: ${postProcessRounds} round(s) at strength=${strength}`);
+  // Single deep post-processing pass (speed: removed extra rounds)
+  result = sentenceIndependentPostProcess(result, features, strength);
+  console.log(`  [GhostPro]   Post-processing: 1 round at strength=${strength}`);
 
-  // PASS 2B: Deep Cleaning — DISABLED
-  // Group-level operations removed to preserve sentence independence.
-  // AI residue is already handled per-sentence in sentenceIndependentPostProcess.
-  console.log("  [GhostPro]   Deep cleaning pass skipped (sentence independence)");
-
-  // PASS 2C: Per-Sentence Anti-Detection — DISABLED
-  // Group-level anti-detection removed to preserve sentence independence.
-  // Each sentence is already fully processed in sentenceIndependentPostProcess.
-  console.log("  [GhostPro]   Per-sentence anti-detection sweep skipped (sentence independence)");
-
-  // ═══════════════════════════════════════════
-  // PASS 2D: REMOVED — was running sentenceIndependentPostProcess a 3rd time
-  // after LLM validation, causing recursive synonym drift and nonsensical output.
-  // The LLM validation already produces clean output; re-killing AI words
-  // was destroying it.
-  // ═══════════════════════════════════════════
+  // De-repeat n-grams across full text after post-processing
+  result = deRepeatNgrams(result);
 
   // Light global polish (punctuation artifact cleanup only)
   result = finalPolish(result);
 
-  // Constraint enforcement per-sentence
-  if (!features.hasFirstPerson) result = removeFirstPerson(result);
-  if (!features.hasRhetoricalQuestions) result = removeRhetoricalQuestions(result);
-
-  // ═══════════════════════════════════════════
-  // PASS 3: Signal-Aware Refinement — rounds scale with strength
-  // ═══════════════════════════════════════════
-  const maxRounds = strength === "strong" ? 4 : strength === "medium" ? 2 : 1;
-  const aiPatThreshold = strength === "strong" ? 3 : strength === "medium" ? 4 : 5;
-  const aiRatioThreshold = strength === "strong" ? 10 : strength === "medium" ? 12 : 15;
-  const burstThreshold = strength === "strong" ? 60 : strength === "medium" ? 58 : 55;
-  const starterThreshold = strength === "strong" ? 60 : strength === "medium" ? 58 : 55;
-  for (let round = 1; round <= maxRounds; round++) {
-    const signals = analyzeSignals(result);
-    let changed = false;
-
-    if (signals.ai_pattern_score > aiPatThreshold || signals.per_sentence_ai_ratio > aiRatioThreshold) {
-      // Per-sentence AI kill — only once per round to avoid meaning drift
-      result = sentenceIndependentPostProcess(result, features, strength);
-      changed = true;
-    }
-    if (signals.burstiness < burstThreshold) {
-      result = enforceBurstiness(result);
-      changed = true;
-    }
-    if (signals.starter_diversity < starterThreshold) {
-      result = diversifyStarters(result);
-      changed = true;
-    }
-
-    if (!changed) break;
-    result = finalPolish(result);
-  }
+  // PASS 3: REMOVED — signal-aware refinement was calling NO-OP functions
+  // (enforceBurstiness, diversifyStarters, forceExtremeVariation, breakSentenceUniformity
+  //  all return text unchanged). Removing saves 1-2 full text scans + analyzeSignals calls.
 
   // Final constraint pass
   if (!features.hasContractions) result = removeContractions(result);
@@ -1913,14 +1868,21 @@ export async function ghostProHumanize(
   console.log(`  [GhostPro] Input: ${features.wordCount} words, ${features.paragraphCount} paras`);
   console.log(`  [GhostPro] Features: contractions=${features.hasContractions}, firstPerson=${features.hasFirstPerson}, rhetoricalQs=${features.hasRhetoricalQuestions}`);
 
+  // Rephrase ~30% of end-of-sentence citations for natural variation
+  const citationText = rephraseCitations(original);
+
   // Protect special content
-  const { text: protectedText0, map: protectionMap } = protectSpecialContent(original);
+  const { text: protectedText0, map: protectionMap } = protectSpecialContent(citationText);
 
   // Protect content terms (proper nouns, domain phrases) from synonym swaps
   const { text: protectedText, map: termMap } = protectContentTerms(protectedText0);
 
   // Capture input paragraph count for enforcement at end
-  const inputParagraphCount = original.split(/\n\s*\n/).filter(p => p.trim()).length;
+  const inputParas = original.split(/\n\s*\n/).filter(p => p.trim());
+  const inputParagraphCount = inputParas.length;
+
+  // Capture per-paragraph sentence counts for strict 1:1 enforcement
+  const inputSentenceCountsPerPara = inputParas.map(p => robustSentenceSplit(p.trim()).length);
 
   // Capture input sentence count for strict enforcement (input = output)
   const inputSentenceCount = countSentences(protectedText);
@@ -1945,14 +1907,11 @@ export async function ghostProHumanize(
   } else {
     // Multi-chunk path
     console.log(`  [GhostPro] Splitting into ${chunks.length} chunks for processing...`);
-    const processedChunks: string[] = [];
-
-    for (let i = 0; i < chunks.length; i++) {
-      const chunkWords = chunks[i].trim().split(/\s+/).length;
+    const processedChunks = await Promise.all(chunks.map(async (chunk, i) => {
+      const chunkWords = chunk.trim().split(/\s+/).length;
       console.log(`  [GhostPro] Processing chunk ${i + 1}/${chunks.length} (${chunkWords} words)...`);
-      const processed = await processChunk(chunks[i], features, { strength, tone, temperature });
-      processedChunks.push(processed);
-    }
+      return processChunk(chunk, features, { strength, tone, temperature });
+    }));
 
     result = processedChunks.join("\n\n");
     console.log(`  [GhostPro] All ${chunks.length} chunks processed, merged.`);
@@ -1971,9 +1930,9 @@ export async function ghostProHumanize(
 
   // Merge/split DISABLED — strict sentence count enforcement: input = output
 
-  // ── Strict sentence count enforcement ──
-  result = enforceSentenceCountStrict(result, inputSentenceCount);
-  console.log(`  [GhostPro] Sentence enforcement: target=${inputSentenceCount}, actual=${countSentences(result)}`);
+  // ── Strict sentence count enforcement ── DISABLED: 1-in=1-out enforced per-sentence
+  // result = enforceSentenceCountStrict(result, inputSentenceCount);
+  console.log(`  [GhostPro] Sentence count: target=${inputSentenceCount}, actual=${countSentences(result)}`);
 
   // ── Restore protected content terms ──
   result = restoreContentTerms(result.trim(), termMap);
@@ -1985,8 +1944,20 @@ export async function ghostProHumanize(
   result = enforceParagraphCount(result, inputParagraphCount);
   console.log(`  [GhostPro] Paragraph enforcement: target=${inputParagraphCount}, actual=${result.split(/\n\s*\n/).filter(p => p.trim()).length}`);
 
-  // ── Final repetition cleanup — remove duplicate clauses, near-dupe sentences, inject phrasal verbs ──
-  result = cleanOutputRepetitions(result);
+  // ── Final repetition cleanup — DISABLED: would alter sentence count ──
+  // result = cleanOutputRepetitions(result);
+
+  // ── STRICT 1:1 per-paragraph sentence count enforcement ──
+  result = enforcePerParagraphSentenceCounts(result, inputSentenceCountsPerPara, "GhostPro");
+
+  // ── Clean bad sentence starters (And, By, But, etc.) per paragraph ──
+  {
+    const paras = result.split(/\n\s*\n/).filter(p => p.trim());
+    result = paras.map(p => {
+      const sents = robustSentenceSplit(p.trim());
+      return cleanSentenceStarters(sents).join(" ");
+    }).join("\n\n");
+  }
 
   // ── Final diagnostic ──
   const outputWordCount = result.split(/\s+/).length;
@@ -2016,6 +1987,9 @@ export async function ghostProHumanize(
       console.warn(`  [GhostPro] Missing keywords: ${verification.missingKeywords.join(", ")}`);
     }
   }
+
+  // Strip unicode replacement characters (U+FFFD)
+  result = result.replace(/\ufffd/g, "");
 
   return result;
 }

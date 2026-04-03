@@ -1394,8 +1394,8 @@ function postProcessSingleSentence(sent: string, features: InputFeatures, streng
     }
   }
 
-  // 11. Dictionary-enhanced synonym swap (per-sentence) — rate scales with strength
-  const synonymRate = strength === "strong" ? 0.15 : strength === "medium" ? 0.10 : 0.05;
+  // 11. Dictionary-enhanced synonym swap (per-sentence) — aggressive rate for deep AI killing
+  const synonymRate = strength === "strong" ? 0.16 : strength === "medium" ? 0.12 : 0.08;
   const dict = getDictionary();
   const currentWords = result.split(/\s+/);
   if (currentWords.length >= 5) {
@@ -1431,13 +1431,17 @@ function postProcessSingleSentence(sent: string, features: InputFeatures, streng
     result = newWords.join(" ");
   }
 
-  // 12. Syntactic template — probability scales with strength
-  const templateProb = strength === "strong" ? 0.45 : strength === "medium" ? 0.30 : 0.20;
-  const updatedWords = result.split(/\s+/);
-  if (updatedWords.length >= 12 && Math.random() < templateProb) {
-    const transformed = applySyntacticTemplate(result);
-    if (transformed !== result) result = transformed;
+  // 12. Syntactic template — moderate application for structural variation
+  {
+    const templateProb = strength === "strong" ? 0.35 : strength === "medium" ? 0.25 : 0.15;
+    const rWords = result.split(/\s+/);
+    if (rWords.length >= 12 && Math.random() < templateProb) {
+      result = applySyntacticTemplate(result);
+    }
   }
+
+  // 12b. Second-pass AI word kill — catch any AI words reintroduced by synonym/template steps
+  result = applyAIWordKill(result);
 
   // 13. Constraint enforcement per sentence
   if (!features.hasContractions) {
@@ -1820,98 +1824,19 @@ async function processChunk(
   // ═══════════════════════════════════════════
   console.log("  [GhostPro]   Pass 2: Sentence-independent post-processing...");
 
-  // Sentence-independent processing — rounds scale with strength
-  const postProcessRounds = strength === "strong" ? 3 : strength === "medium" ? 2 : 1;
-  for (let pp = 0; pp < postProcessRounds; pp++) {
-    result = sentenceIndependentPostProcess(result, features, strength);
-  }
-  console.log(`  [GhostPro]   Post-processing: ${postProcessRounds} round(s) at strength=${strength}`);
+  // Single deep post-processing pass (speed: removed extra rounds)
+  result = sentenceIndependentPostProcess(result, features, strength);
+  console.log(`  [GhostPro]   Post-processing: 1 round at strength=${strength}`);
 
-  // ═══════════════════════════════════════════
-  // PASS 2B: Deep Cleaning — AI residue, hedging, coherence, structure
-  // ═══════════════════════════════════════════
-  {
-    const paragraphs = result.split(/\n\s*\n/);
-    const deepCleaned = paragraphs.map(para => {
-      const p = para.trim();
-      if (!p) return "";
-      const sentences = robustSentenceSplit(p);
-      const cleaned = deepCleaningPass(sentences);
-      return cleaned.join(" ");
-    }).filter(Boolean);
-    result = deepCleaned.join("\n\n");
-  }
-  console.log("  [GhostPro]   Deep cleaning pass complete");
-
-  // ═══════════════════════════════════════════
-  // PASS 2C: Per-Sentence Anti-Detection Sweep
-  // Scores each sentence against the detector's 9 micro-signals.
-  // Fixes any sentence that would individually flag as AI.
-  // ═══════════════════════════════════════════
-  {
-    const paragraphs = result.split(/\n\s*\n/);
-    const antiDetected = paragraphs.map(para => {
-      const p = para.trim();
-      if (!p) return "";
-      const sentences = robustSentenceSplit(p);
-      const cleaned = perSentenceAntiDetection(sentences, features.hasContractions);
-      return cleaned.join(" ");
-    }).filter(Boolean);
-    result = antiDetected.join("\n\n");
-  }
-  console.log("  [GhostPro]   Per-sentence anti-detection sweep complete");
-
-  // ═══════════════════════════════════════════
-  // PASS 2D: REMOVED — was running sentenceIndependentPostProcess a 3rd time
-  // after LLM validation, causing recursive synonym drift and nonsensical output.
-  // The LLM validation already produces clean output; re-killing AI words
-  // was destroying it.
-  // ═══════════════════════════════════════════
+  // De-repeat n-grams across full text after post-processing
+  result = deRepeatNgrams(result);
 
   // Light global polish (punctuation artifact cleanup only)
   result = finalPolish(result);
 
-  // Constraint enforcement per-sentence
-  if (!features.hasFirstPerson) result = removeFirstPerson(result);
-  if (!features.hasRhetoricalQuestions) result = removeRhetoricalQuestions(result);
-
-  // ═══════════════════════════════════════════
-  // PASS 3: Signal-Aware Refinement — rounds scale with strength
-  // ═══════════════════════════════════════════
-  const maxRounds = strength === "strong" ? 4 : strength === "medium" ? 2 : 1;
-  const aiPatThreshold = strength === "strong" ? 3 : strength === "medium" ? 4 : 5;
-  const aiRatioThreshold = strength === "strong" ? 10 : strength === "medium" ? 12 : 15;
-  const burstThreshold = strength === "strong" ? 60 : strength === "medium" ? 58 : 55;
-  const starterThreshold = strength === "strong" ? 60 : strength === "medium" ? 58 : 55;
-  for (let round = 1; round <= maxRounds; round++) {
-    const signals = analyzeSignals(result);
-    let changed = false;
-
-    if (signals.ai_pattern_score > aiPatThreshold || signals.per_sentence_ai_ratio > aiRatioThreshold) {
-      // Per-sentence AI kill — only once per round to avoid meaning drift
-      result = sentenceIndependentPostProcess(result, features, strength);
-      changed = true;
-    }
-    if (signals.burstiness < burstThreshold) {
-      result = enforceBurstiness(result);
-      changed = true;
-    }
-    if (signals.starter_diversity < starterThreshold) {
-      result = diversifyStarters(result);
-      changed = true;
-    }
-
-    if (!changed) break;
-    result = finalPolish(result);
-    // Per-sentence anti-detection after each refinement round
-    {
-      const paras = result.split(/\n\s*\n/);
-      result = paras.map(p => {
-        const sents = robustSentenceSplit(p.trim());
-        return perSentenceAntiDetection(sents, features.hasContractions).join(" ");
-      }).filter(Boolean).join("\n\n");
-    }
-  }
+  // PASS 3: REMOVED — signal-aware refinement was calling NO-OP functions
+  // (enforceBurstiness, diversifyStarters, forceExtremeVariation, breakSentenceUniformity
+  //  all return text unchanged). Removing saves 1-2 full text scans + analyzeSignals calls.
 
   // Final constraint pass
   if (!features.hasContractions) result = removeContractions(result);
@@ -2008,14 +1933,11 @@ export async function ghostProHumanize(
   } else {
     // Multi-chunk path
     console.log(`  [GhostPro] Splitting into ${chunks.length} chunks for processing...`);
-    const processedChunks: string[] = [];
-
-    for (let i = 0; i < chunks.length; i++) {
-      const chunkWords = chunks[i].trim().split(/\s+/).length;
+    const processedChunks = await Promise.all(chunks.map(async (chunk, i) => {
+      const chunkWords = chunk.trim().split(/\s+/).length;
       console.log(`  [GhostPro] Processing chunk ${i + 1}/${chunks.length} (${chunkWords} words)...`);
-      const processed = await processChunk(chunks[i], features, { strength, tone, temperature });
-      processedChunks.push(processed);
-    }
+      return processChunk(chunk, features, { strength, tone, temperature });
+    }));
 
     result = processedChunks.join("\n\n");
     console.log(`  [GhostPro] All ${chunks.length} chunks processed, merged.`);

@@ -52,7 +52,7 @@ import { getDictionary } from "./dictionary";
 // ── Config ──
 
 const LLM_MODEL = process.env.LLM_MODEL ?? "gpt-4o-mini";
-const MAX_FEEDBACK_ITERATIONS_MAP: Record<string, number> = { light: 3, medium: 4, strong: 6 };
+const MAX_FEEDBACK_ITERATIONS_MAP: Record<string, number> = { light: 1, medium: 1, strong: 2 };
 const TARGET_AI_SCORE = 5.0;
 
 // ── OpenAI client singleton ──
@@ -1741,21 +1741,18 @@ export async function llmHumanize(
   console.log("  [Ninja] Sentence-by-sentence LLM rewrite (combined 3-phase)...");
   const sentenceSystem = getNinjaSentenceSystemPrompt(features);
   const paragraphs = protectedText.split(/\n\s*\n/).filter(p => p.trim());
-  const rewrittenParagraphs: string[] = [];
   let totalSentencesProcessed = 0;
 
-  for (const para of paragraphs) {
+  const rewrittenParagraphs = await Promise.all(paragraphs.map(async (para) => {
     const trimmedPara = para.trim();
     // Skip headings/titles — pass through unchanged
     if (isTitleOrHeading(trimmedPara)) {
-      rewrittenParagraphs.push(trimmedPara);
-      continue;
+      return trimmedPara;
     }
 
     const sentences = robustSentenceSplit(trimmedPara);
     if (sentences.length === 0) {
-      rewrittenParagraphs.push(trimmedPara);
-      continue;
+      return trimmedPara;
     }
 
     // Process each sentence independently via LLM (parallel for speed)
@@ -1810,8 +1807,8 @@ export async function llmHumanize(
       console.warn(`  [Ninja] Sentence count mismatch in paragraph: input=${sentences.length}, output=${rewrittenSentences.length}`);
     }
     totalSentencesProcessed += rewrittenSentences.length;
-    rewrittenParagraphs.push(rewrittenSentences.join(" "));
-  }
+    return rewrittenSentences.join(" ");
+  }));
 
   let result = rewrittenParagraphs.join("\n\n");
   console.log(`  [Ninja] LLM done: ${result.split(/\s+/).length} words (${totalSentencesProcessed} sentences processed independently)`);
@@ -1821,45 +1818,19 @@ export async function llmHumanize(
   if (!features.hasFirstPerson) result = removeFirstPerson(result);
   if (!features.hasRhetoricalQuestions) result = removeRhetoricalQuestions(result);
 
-  // ── LLM Validation + Auto-fix ──
-  const validation = validateAll(original, result);
-  console.log(`  [Ninja] Validation: ${validation.all_passed ? "PASSED" : "ISSUES FOUND"}`);
-
-  if (!validation.all_passed) {
-    const checks = validation.checks;
-    const fixIssues: string[] = [];
-    if (!features.hasContractions && !checks.contractions.passed) {
-      fixIssues.push(`Expand contractions: ${(checks.contractions.contractions_found as string[]).join(", ")}`);
-    }
-    if (!checks.structure.passed) {
-      fixIssues.push(`Restore sentence count near ${checks.structure.original_sentences} (currently ${checks.structure.result_sentences}).`);
-    }
-    if (!checks.length.passed) {
-      fixIssues.push(`Adjust word count near ${checks.length.original_words} (currently ${checks.length.result_words}).`);
-    }
-    if (!checks.lists.passed) {
-      fixIssues.push("Remove introduced list formatting and keep prose.");
-    }
-    if (!checks.meaning.passed) {
-      const missing = (checks.meaning.missing_keywords as string[]) ?? [];
-      if (missing.length > 0) fixIssues.push("Reintroduce missing key terms: " + missing.slice(0, 8).join(", "));
-    }
-    if (fixIssues.length > 0) {
-      console.log(`  [Ninja] Auto-fixing ${fixIssues.length} issues...`);
-      const fixSystem = "You are a precise text editor. Fix only the listed issues and nothing else.";
-      const fixRules: string[] = ["- Do NOT change paragraph structure.", "- Do NOT add or remove ideas.", "- Return only the fixed text."];
-      if (!features.hasContractions) fixRules.push("- Do NOT use contractions.");
-      if (!features.hasFirstPerson) fixRules.push("- Do NOT use first-person pronouns (I, we, me, us, my, our).");
-      if (!features.hasRhetoricalQuestions) fixRules.push("- Do NOT use rhetorical questions or sentences ending with question marks.");
-      const fixPrompt = `Fix only these issues:\n${fixIssues.map(i => `- ${i}`).join("\n")}\n\nRules:\n${fixRules.join("\n")}\n- CRITICAL: Preserve all placeholder tokens like [[PROT_0]], [[TRM_0]] exactly as-is.\n\nText:\n${placeholdersToLLMFormat(result)}`;
-      result = llmFormatToPlaceholders(await llmCall(fixSystem, fixPrompt, 0.15) ?? '');
+  // ── LLM Validation removed — was adding extra LLM round trip and re-introducing AI words ──
+  // Rule-based constraint enforcement only:
+  {
+    const validation = validateAll(original, result);
+    console.log(`  [Ninja] Validation: ${validation.all_passed ? "PASSED" : "ISSUES FOUND"}`);
+    if (!validation.all_passed) {
       if (!features.hasContractions) result = removeContractions(result);
       if (!features.hasFirstPerson) result = removeFirstPerson(result);
       if (!features.hasRhetoricalQuestions) result = removeRhetoricalQuestions(result);
     }
   }
 
-  const llmPhaseCount = validation.all_passed ? totalSentencesProcessed : totalSentencesProcessed + 1;
+  const llmPhaseCount = totalSentencesProcessed;
   console.log(`  [Ninja] LLM pipeline complete (${llmPhaseCount} sentence calls)`);
 
   // ── Word count enforcement — trim excess words added by LLM ──
@@ -1893,32 +1864,26 @@ export async function llmHumanize(
   // ═══════════════════════════════════════════
   console.log("  [Ninja] Starting non-LLM stealth processing...");
 
-  // Feedback iterations scale with strength
-  const maxFeedbackIterations = MAX_FEEDBACK_ITERATIONS_MAP[strength] ?? 3;
+  // Always run one stealth pass first (fast, rule-based) before expensive detector
+  let bestResult = runStealthPass(result, features, 0, strength);
 
-  // Initial analysis
-  let perDetector = getPerDetectorScores(result);
+  // Feedback iterations scale with strength (reduced for speed)
+  const maxFeedbackIterations = MAX_FEEDBACK_ITERATIONS_MAP[strength] ?? 1;
+
+  // Check detector AFTER stealth pass (save 1 call if already passing)
+  let perDetector = getPerDetectorScores(bestResult);
   let worst = worstScore(perDetector);
-  console.log(`  [Ninja] Post-LLM worst detector: ${worst.toFixed(1)}% (target: all <${TARGET_AI_SCORE}%)`);
+  console.log(`  [Ninja] Post-stealth worst detector: ${worst.toFixed(1)}% (target: all <${TARGET_AI_SCORE}%)`);
 
-  let bestResult = result;
   let bestScore = worst;
 
-  if (allBelowTarget(perDetector)) {
-    console.log(`  [Ninja] Already below ${TARGET_AI_SCORE}% — skipping stealth phases`);
-  } else {
+  if (!allBelowTarget(perDetector) && maxFeedbackIterations > 0) {
     // ═══════════════════════════════════════════
-    // LAYER 4: Feedback Loop — iteratively refine
+    // LAYER 4: Feedback Loop — targeted refinement only
     // ═══════════════════════════════════════════
 
     for (let iteration = 0; iteration < maxFeedbackIterations; iteration++) {
-      // Run full stealth pass on first iteration, then signal-targeted on subsequent
-      let processed: string;
-      if (iteration === 0) {
-        processed = runStealthPass(bestResult, features, iteration, strength);
-      } else {
-        processed = signalAwareRefinement(bestResult, features, iteration, strength);
-      }
+      const processed = signalAwareRefinement(bestResult, features, iteration, strength);
 
       perDetector = getPerDetectorScores(processed);
       worst = worstScore(perDetector);

@@ -33,7 +33,7 @@
 import OpenAI from "openai";
 import { sentTokenize } from "./utils";
 import { expandContractions } from "./advanced-transforms";
-import { protectSpecialContent, restoreSpecialContent, protectContentTerms, restoreContentTerms, cleanOutputRepetitions, robustSentenceSplit, placeholdersToLLMFormat, llmFormatToPlaceholders, countSentences, enforceSentenceCountStrict } from "./content-protection";
+import { protectSpecialContent, restoreSpecialContent, protectContentTerms, restoreContentTerms, cleanOutputRepetitions, robustSentenceSplit, placeholdersToLLMFormat, llmFormatToPlaceholders, countSentences, enforceSentenceCountStrict, enforcePerParagraphSentenceCounts, rephraseCitations } from "./content-protection";
 import { semanticSimilaritySync } from "./semantic-guard";
 import { TextSignals, getDetector } from "./multi-detector";
 import { getStyleMemory, profileSummaryText } from "./style-memory";
@@ -52,7 +52,7 @@ import { getDictionary } from "./dictionary";
 // ── Config ──
 
 const LLM_MODEL = process.env.LLM_MODEL ?? "gpt-4o-mini";
-const MAX_FEEDBACK_ITERATIONS_MAP: Record<string, number> = { light: 3, medium: 4, strong: 6 };
+const MAX_FEEDBACK_ITERATIONS_MAP: Record<string, number> = { light: 1, medium: 1, strong: 2 };
 const TARGET_AI_SCORE = 5.0;
 
 // ── OpenAI client singleton ──
@@ -139,7 +139,7 @@ ABSOLUTE REQUIREMENTS:
 
 3. SENTENCE STARTERS — vary dramatically:
    - Start some with subject directly, some with short clauses
-   - Start 1-2 with "And" or "But"
+   - Do NOT start any sentence with a conjunction like "And", "But", "Or", "So", "Yet"
    - NEVER use the same starting word consecutively
    - NEVER start with: "Furthermore," "Moreover," "Additionally," "However," "Nevertheless," "It is"
 
@@ -381,6 +381,8 @@ function buildNinjaSentenceUserPrompt(
 
   return `${variationGuide}
 
+CRITICAL: Rewrite ONLY the [TARGET] sentence. Do NOT borrow, merge, or incorporate ANY content from [BEFORE] or [AFTER]. They are read-only context for tone continuity only. Your output must contain ONLY the meaning from [TARGET].
+
 ${contextBefore}[TARGET]: ${sentence}${contextAfter}`;
 }
 
@@ -511,17 +513,17 @@ function killAIVocabulary(text: string): string {
 // ── Connector Naturalization ──
 
 const FORMAL_CONNECTORS: Record<string, string[]> = {
-  "Furthermore, ": ["Also, ", "And ", "Plus, "],
-  "Moreover, ": ["On top of that, ", "And ", "Beyond that, "],
-  "Additionally, ": ["Also, ", "And ", "Plus, "],
+  "Furthermore, ": ["Also, ", "In addition, ", "Plus, "],
+  "Moreover, ": ["On top of that, ", "In addition, ", "Beyond that, "],
+  "Additionally, ": ["Also, ", "In addition, ", "Plus, "],
   "Consequently, ": ["So ", "Because of that, ", "That meant "],
-  "Nevertheless, ": ["Still, ", "Even so, ", "But "],
-  "Nonetheless, ": ["Still, ", "Yet ", "But "],
-  "In contrast, ": ["But ", "Then again, ", "On the flip side, "],
+  "Nevertheless, ": ["Still, ", "Even so, ", "All the same, "],
+  "Nonetheless, ": ["Still, ", "Even so, ", "All the same, "],
+  "In contrast, ": ["On the other hand, ", "Then again, ", "On the flip side, "],
   "Subsequently, ": ["After that, ", "Then ", "Later, "],
   "In conclusion, ": ["All in all, ", "When you put it together, "],
   "Therefore, ": ["So ", "That is why ", "This is why "],
-  "However, ": ["But ", "That said, ", "Still, "],
+  "However, ": ["Still, ", "Even so, ", "All the same, "],
   "Thus, ": ["So ", "That way, ", "This meant "],
   "Hence, ": ["So ", "That is why "],
   "Indeed, ": ["In fact, ", "Sure enough, "],
@@ -531,7 +533,7 @@ const FORMAL_CONNECTORS: Record<string, string[]> = {
   "As a result, ": ["So ", "Because of this, "],
   "For example, ": ["Take ", "Like ", "Consider "],
   "For instance, ": ["Take ", "Like ", "Say "],
-  "On the other hand, ": ["Then again, ", "But "],
+  "On the other hand, ": ["Then again, ", "At the same time, "],
   "In other words, ": ["Put simply, ", "Basically, "],
 };
 
@@ -624,10 +626,6 @@ function enforceBurstiness(text: string): string {
   // Sentence order and count must be preserved — no splitting or reordering allowed.
   // Burstiness is achieved through per-sentence LLM processing, not post-hoc splitting.
   return text;
-}
-
-    return result.join(" ");
-  }).filter(Boolean).join("\n\n");
 }
 
 // ── Punctuation Humanization ──
@@ -1400,11 +1398,9 @@ function sentenceIndependentStealthPass(text: string, features: InputFeatures, s
       return stealthProcessSingleSentence(trimmed, features, strength);
     }).filter(Boolean);
 
-    // Remove fragment sentences (under 4 real words) that result from phrase stripping
-    const cleaned = processed.filter(sent => {
-      const words = sent.replace(/[^a-zA-Z\s]/g, "").trim().split(/\s+/).filter(w => w.length > 0);
-      return words.length >= 4;
-    });
+    // Fragment removal DISABLED — would alter sentence count (1-in=1-out)
+    // Sentences must be preserved regardless of length
+    const cleaned = processed;
 
     return (cleaned.length > 0 ? cleaned : processed).join(" ");
   }).filter(Boolean).join("\n\n");
@@ -1573,14 +1569,21 @@ export async function llmHumanize(
   console.log(`  [Ninja] Starting Ninja v2 pipeline...`);
   console.log(`  [Ninja] Input: ${features.wordCount} words, ${features.sentenceCount} sents, ${features.paragraphCount} paras`);
 
+  // Rephrase ~30% of end-of-sentence citations for natural variation
+  const citationText = rephraseCitations(original);
+
   // Protect special content (brackets, figures, citations)
-  const { text: protectedText0, map: protectionMap } = protectSpecialContent(original);
+  const { text: protectedText0, map: protectionMap } = protectSpecialContent(citationText);
 
   // Protect content terms (proper nouns, domain phrases) from synonym swaps
   const { text: protectedText, map: termMap } = protectContentTerms(protectedText0);
 
   // Capture input paragraph count for enforcement at end
-  const inputParagraphCount = original.split(/\n\s*\n/).filter(p => p.trim()).length;
+  const inputParas = original.split(/\n\s*\n/).filter(p => p.trim());
+  const inputParagraphCount = inputParas.length;
+
+  // Capture per-paragraph sentence counts for strict 1:1 enforcement
+  const inputSentenceCountsPerPara = inputParas.map(p => robustSentenceSplit(p.trim()).length);
 
   // Capture input sentence count for strict enforcement (input = output)
   const inputSentenceCount = countSentences(protectedText);
@@ -1597,21 +1600,19 @@ export async function llmHumanize(
   console.log("  [Ninja] Sentence-by-sentence LLM rewrite (combined 3-phase)...");
   const sentenceSystem = getNinjaSentenceSystemPrompt(features);
   const paragraphs = protectedText.split(/\n\s*\n/).filter(p => p.trim());
-  const rewrittenParagraphs: string[] = [];
   let totalSentencesProcessed = 0;
 
-  for (const para of paragraphs) {
+  // Process ALL paragraphs in parallel for maximum speed
+  const rewrittenParagraphs = await Promise.all(paragraphs.map(async (para) => {
     const trimmedPara = para.trim();
     // Skip headings/titles — pass through unchanged
     if (isTitleOrHeading(trimmedPara)) {
-      rewrittenParagraphs.push(trimmedPara);
-      continue;
+      return trimmedPara;
     }
 
     const sentences = robustSentenceSplit(trimmedPara);
     if (sentences.length === 0) {
-      rewrittenParagraphs.push(trimmedPara);
-      continue;
+      return trimmedPara;
     }
 
     // Process each sentence independently via LLM (parallel for speed)
@@ -1666,82 +1667,25 @@ export async function llmHumanize(
       console.warn(`  [Ninja] Sentence count mismatch in paragraph: input=${sentences.length}, output=${rewrittenSentences.length}`);
     }
     totalSentencesProcessed += rewrittenSentences.length;
-    rewrittenParagraphs.push(rewrittenSentences.join(" "));
-  }
+    return rewrittenSentences.join(" ");
+  }));
 
   let result = rewrittenParagraphs.join("\n\n");
   console.log(`  [Ninja] LLM done: ${result.split(/\s+/).length} words (${totalSentencesProcessed} sentences processed independently)`);
 
-  // ── Constraint enforcement after LLM ──
+  // ── Constraint enforcement after LLM (rule-based only, no extra LLM calls) ──
   if (!features.hasContractions) result = removeContractions(result);
   if (!features.hasFirstPerson) result = removeFirstPerson(result);
   if (!features.hasRhetoricalQuestions) result = removeRhetoricalQuestions(result);
 
-  // ── LLM Validation + Auto-fix ──
-  const validation = validateAll(original, result);
-  console.log(`  [Ninja] Validation: ${validation.all_passed ? "PASSED" : "ISSUES FOUND"}`);
+  console.log(`  [Ninja] LLM pipeline complete (${totalSentencesProcessed} sentence calls)`);
 
-  if (!validation.all_passed) {
-    const checks = validation.checks;
-    const fixIssues: string[] = [];
-    if (!features.hasContractions && !checks.contractions.passed) {
-      fixIssues.push(`Expand contractions: ${(checks.contractions.contractions_found as string[]).join(", ")}`);
-    }
-    if (!checks.structure.passed) {
-      fixIssues.push(`Restore sentence count near ${checks.structure.original_sentences} (currently ${checks.structure.result_sentences}).`);
-    }
-    if (!checks.length.passed) {
-      fixIssues.push(`Adjust word count near ${checks.length.original_words} (currently ${checks.length.result_words}).`);
-    }
-    if (!checks.lists.passed) {
-      fixIssues.push("Remove introduced list formatting and keep prose.");
-    }
-    if (!checks.meaning.passed) {
-      const missing = (checks.meaning.missing_keywords as string[]) ?? [];
-      if (missing.length > 0) fixIssues.push("Reintroduce missing key terms: " + missing.slice(0, 8).join(", "));
-    }
-    if (fixIssues.length > 0) {
-      console.log(`  [Ninja] Auto-fixing ${fixIssues.length} issues...`);
-      const fixSystem = "You are a precise text editor. Fix only the listed issues and nothing else.";
-      const fixRules: string[] = ["- Do NOT change paragraph structure.", "- Do NOT add or remove ideas.", "- Return only the fixed text."];
-      if (!features.hasContractions) fixRules.push("- Do NOT use contractions.");
-      if (!features.hasFirstPerson) fixRules.push("- Do NOT use first-person pronouns (I, we, me, us, my, our).");
-      if (!features.hasRhetoricalQuestions) fixRules.push("- Do NOT use rhetorical questions or sentences ending with question marks.");
-      const fixPrompt = `Fix only these issues:\n${fixIssues.map(i => `- ${i}`).join("\n")}\n\nRules:\n${fixRules.join("\n")}\n- CRITICAL: Preserve all placeholder tokens like [[PROT_0]], [[TRM_0]] exactly as-is.\n\nText:\n${placeholdersToLLMFormat(result)}`;
-      result = llmFormatToPlaceholders(await llmCall(fixSystem, fixPrompt, 0.15) ?? '');
-      if (!features.hasContractions) result = removeContractions(result);
-      if (!features.hasFirstPerson) result = removeFirstPerson(result);
-      if (!features.hasRhetoricalQuestions) result = removeRhetoricalQuestions(result);
-    }
-  }
-
-  const llmPhaseCount = validation.all_passed ? totalSentencesProcessed : totalSentencesProcessed + 1;
-  console.log(`  [Ninja] LLM pipeline complete (${llmPhaseCount} sentence calls)`);
-
-  // ── Word count enforcement — trim excess words added by LLM ──
+  // ── Word count enforcement — DISABLED: would drop sentences, breaking 1-in=1-out ──
+  // Instead, log the word count so we can monitor it
   const maxAllowedWords = Math.round(features.wordCount * 1.10);
   let currentWords = result.trim().split(/\s+/).length;
   if (currentWords > maxAllowedWords) {
-    console.log(`  [Ninja] Word count enforcement: ${currentWords} > ${maxAllowedWords} (input=${features.wordCount})`);
-    const wcParas = result.split(/\n\s*\n/).filter(p => p.trim());
-    let totalWc = wcParas.reduce((sum, p) => sum + p.trim().split(/\s+/).length, 0);
-    while (totalWc > maxAllowedWords) {
-      let longestIdx = -1;
-      let longestLen = 0;
-      for (let i = 0; i < wcParas.length; i++) {
-        if (isTitleOrHeading(wcParas[i])) continue;
-        const wc = wcParas[i].split(/\s+/).length;
-        if (wc > longestLen) { longestLen = wc; longestIdx = i; }
-      }
-      if (longestIdx < 0) break;
-      const sents = robustSentenceSplit(wcParas[longestIdx]);
-      if (sents.length <= 1) break;
-      const removed = sents.pop()!;
-      wcParas[longestIdx] = sents.join(" ");
-      totalWc -= removed.split(/\s+/).length;
-    }
-    result = wcParas.join("\n\n");
-    console.log(`  [Ninja] Word count after trim: ${result.trim().split(/\s+/).length}`);
+    console.log(`  [Ninja] Word count over budget: ${currentWords} > ${maxAllowedWords} (input=${features.wordCount}) — skipping trim to preserve sentence mapping`);
   }
 
   // ═══════════════════════════════════════════
@@ -1749,32 +1693,26 @@ export async function llmHumanize(
   // ═══════════════════════════════════════════
   console.log("  [Ninja] Starting non-LLM stealth processing...");
 
-  // Feedback iterations scale with strength
-  const maxFeedbackIterations = MAX_FEEDBACK_ITERATIONS_MAP[strength] ?? 3;
+  // Always run one stealth pass first (fast, rule-based) before expensive detector
+  let bestResult = runStealthPass(result, features, 0, strength);
 
-  // Initial analysis
-  let perDetector = getPerDetectorScores(result);
+  // Feedback iterations scale with strength (reduced for speed)
+  const maxFeedbackIterations = MAX_FEEDBACK_ITERATIONS_MAP[strength] ?? 1;
+
+  // Check detector AFTER stealth pass (save 1 call if already passing)
+  let perDetector = getPerDetectorScores(bestResult);
   let worst = worstScore(perDetector);
-  console.log(`  [Ninja] Post-LLM worst detector: ${worst.toFixed(1)}% (target: all <${TARGET_AI_SCORE}%)`);
+  console.log(`  [Ninja] Post-stealth worst detector: ${worst.toFixed(1)}% (target: all <${TARGET_AI_SCORE}%)`);
 
-  let bestResult = result;
   let bestScore = worst;
 
-  if (allBelowTarget(perDetector)) {
-    console.log(`  [Ninja] Already below ${TARGET_AI_SCORE}% — skipping stealth phases`);
-  } else {
+  if (!allBelowTarget(perDetector) && maxFeedbackIterations > 0) {
     // ═══════════════════════════════════════════
-    // LAYER 4: Feedback Loop — iteratively refine
+    // LAYER 4: Feedback Loop — targeted refinement only
     // ═══════════════════════════════════════════
 
     for (let iteration = 0; iteration < maxFeedbackIterations; iteration++) {
-      // Run full stealth pass on first iteration, then signal-targeted on subsequent
-      let processed: string;
-      if (iteration === 0) {
-        processed = runStealthPass(bestResult, features, iteration, strength);
-      } else {
-        processed = signalAwareRefinement(bestResult, features, iteration, strength);
-      }
+      const processed = signalAwareRefinement(bestResult, features, iteration, strength);
 
       perDetector = getPerDetectorScores(processed);
       worst = worstScore(perDetector);
@@ -1816,9 +1754,9 @@ export async function llmHumanize(
 
   // Merge/split DISABLED — strict sentence count enforcement: input = output
 
-  // ── Strict sentence count enforcement ──
-  bestResult = enforceSentenceCountStrict(bestResult, inputSentenceCount);
-  console.log(`  [Ninja] Sentence enforcement: target=${inputSentenceCount}, actual=${countSentences(bestResult)}`);
+  // ── Strict sentence count enforcement ── DISABLED: 1-in=1-out enforced per-sentence
+  // bestResult = enforceSentenceCountStrict(bestResult, inputSentenceCount);
+  console.log(`  [Ninja] Sentence count: target=${inputSentenceCount}, actual=${countSentences(bestResult)}`);
 
   // ── Restore protected content terms ──
   bestResult = restoreContentTerms(bestResult.trim(), termMap);
@@ -1830,8 +1768,20 @@ export async function llmHumanize(
   bestResult = enforceParagraphCount(bestResult, inputParagraphCount);
   console.log(`  [Ninja] Paragraph enforcement: target=${inputParagraphCount}, actual=${bestResult.split(/\n\s*\n/).filter(p => p.trim()).length}`);
 
-  // ── Final repetition cleanup — remove duplicate clauses, near-dupe sentences, inject phrasal verbs ──
-  bestResult = cleanOutputRepetitions(bestResult);
+  // ── Final repetition cleanup — DISABLED: would alter sentence count ──
+  // bestResult = cleanOutputRepetitions(bestResult);
+
+  // ── STRICT 1:1 per-paragraph sentence count enforcement ──
+  bestResult = enforcePerParagraphSentenceCounts(bestResult, inputSentenceCountsPerPara, "Ninja");
+
+  // ── Clean bad sentence starters (And, By, But, etc.) per paragraph ──
+  {
+    const paras = bestResult.split(/\n\s*\n/).filter(p => p.trim());
+    bestResult = paras.map(p => {
+      const sents = robustSentenceSplit(p.trim());
+      return cleanSentenceStarters(sents).join(" ");
+    }).join("\n\n");
+  }
 
   // ── Final diagnostics ──
   const outputWords = bestResult.split(/\s+/).length;
@@ -1845,7 +1795,7 @@ export async function llmHumanize(
   console.log(`  [Ninja] Final signals: burst=${finalSignals.burstiness.toFixed(1)}, ai_pat=${finalSignals.ai_pattern_score.toFixed(1)}, uniform=${finalSignals.sentence_uniformity.toFixed(1)}, perplex=${finalSignals.perplexity.toFixed(1)}`);
   console.log(`  [Ninja] Final worst: ${worstScore(finalScores).toFixed(1)}%, overall: ${finalScores.overall?.toFixed(1) ?? "?"}%`);
   console.log(`  [Ninja] Meaning similarity: ${meaningScore.toFixed(2)}`);
-  console.log(`  [Ninja] Complete in ${elapsed.toFixed(1)}s (${llmPhaseCount} LLM + ${maxFeedbackIterations} max iterations)`);
+  console.log(`  [Ninja] Complete in ${elapsed.toFixed(1)}s (${totalSentencesProcessed} LLM + ${maxFeedbackIterations} max iterations)`);
 
   // ── Post-humanize sentence verification ──
   const verification = verifySentencePresence(original, bestResult, robustSentenceSplit);

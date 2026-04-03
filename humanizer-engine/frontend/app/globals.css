@@ -1,38 +1,33 @@
 @import "../node_modules/tailwindcss/index.css";
 
 @theme {
-  --color-brand-50: #fff3e0;
-  --color-brand-100: #ffe0b2;
-  --color-brand-200: #ffcc80;
-  --color-brand-300: #ffb74d;
-  --color-brand-400: #ffa726;
-  --color-brand-500: #ff9800;
-  --color-brand-600: #fb8c00;
-  --color-brand-700: #f57c00;
-  --color-brand-800: #ef6c00;
-  --color-brand-900: #e65100;
-  --color-brand-950: #fff1f1;
+  --color-brand-50: #eef2ff;
+  --color-brand-100: #e0e7ff;
+  --color-brand-200: #c7d2fe;
+  --color-brand-300: #a5b4fc;
+  --color-brand-400: #818cf8;
+  --color-brand-500: #6366f1;
+  --color-brand-600: #4f46e5;
+  --color-brand-700: #4338ca;
+  --color-brand-800: #3730a3;
+  --color-brand-900: #312e81;
+  --color-brand-950: #f8fafc;
 
-  --animate-fade-in-up: fadeInUp 0.8s ease-out forwards;
-  --animate-float: float 6s ease-in-out infinite;
+  --animate-fade-in-up: fadeInUp 0.6s ease-out forwards;
 
   @keyframes fadeInUp {
-    0% { opacity: 0; transform: translateY(20px); }
+    0% { opacity: 0; transform: translateY(12px); }
     100% { opacity: 1; transform: translateY(0); }
-  }
-  @keyframes float {
-    0%, 100% { transform: translateY(0); }
-    50% { transform: translateY(-15px); }
   }
 }
 
 @layer base {
   :root {
-    --font-sans: var(--font-inter), sans-serif;
+    --font-sans: var(--font-inter), -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   }
   body {
-    background-color: var(--color-brand-950);
-    color: #111827; /* text-gray-900 */
+    background-color: #ffffff;
+    color: #0f172a;
     font-family: var(--font-sans);
     -webkit-font-smoothing: antialiased;
     scroll-behavior: smooth;
@@ -41,31 +36,9 @@
 
 @layer components {
   .glass-nav {
-      background: rgba(255, 255, 255, 0.9);
-      backdrop-filter: blur(10px);
-      -webkit-backdrop-filter: blur(10px);
-      border-bottom: 1px solid rgba(0,0,0,0.05);
-  }
-  .sketch-card {
-      border: 2px solid var(--color-brand-600);
-      box-shadow: 4px 4px 0px var(--color-brand-600);
-      transition: all 0.2s ease;
-  }
-  .sketch-card:hover {
-      transform: translate(-2px, -2px);
-      box-shadow: 6px 6px 0px var(--color-brand-600);
-  }
-  .sketch-btn {
-      border: 2px solid #1f2937;
-      box-shadow: 3px 3px 0px #1f2937;
-      transition: all 0.2s ease;
-  }
-  .sketch-btn:hover {
-      transform: translate(-2px, -2px);
-      box-shadow: 5px 5px 0px #1f2937;
-  }
-  .sketch-btn:active {
-      transform: translate(1px, 1px);
-      box-shadow: 1px 1px 0px #1f2937;
+      background: rgba(255, 255, 255, 0.95);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border-bottom: 1px solid #e2e8f0;
   }
 }

@@ -130,6 +130,8 @@ export function activeToPassive(sentence: string): string {
   if (NOT_VERBS.has(verbLower)) return sentence;
   // Never passivize gerunds/present participles (-ing words)
   if (verbLower.endsWith("ing")) return sentence;
+  // Never passivize already-past-tense verbs — appending -ed produces "moveded", "leded", etc.
+  if (verbLower.endsWith("ed") && verbLower.length > 3) return sentence;
 
   // Strip 3rd-person singular "s" to get base verb form
   let verbBase = verbLower;

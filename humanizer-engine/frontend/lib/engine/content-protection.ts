@@ -45,6 +45,45 @@ const PROTECTION_PATTERNS: RegExp[] = [
 ];
 
 /**
+ * Rephrase ~30% of end-of-sentence academic citations for natural variation.
+ * Detects patterns like "sentence text (Author, Year)." and randomly rephrases
+ * as "According to Author (Year), sentence text." or similar.
+ * Should be called BEFORE protectSpecialContent().
+ */
+export function rephraseCitations(text: string): string {
+  // Match sentences ending with (Author, Year) or (Author & Author, Year) or (Author et al., Year)
+  const CITATION_RE = /([^.!?\n][^.!?\n]{15,}?)\s+\(([A-Z][a-zA-Z]+(?:\s+(?:&|and)\s+[A-Z][a-zA-Z]+)?(?:\s+et\s+al\.)?),\s*(\d{4})\)\s*([.!?])/g;
+
+  const REPHRASE_TEMPLATES = [
+    (author: string, year: string, sentence: string, punct: string) =>
+      `According to ${author} (${year}), ${sentence[0].toLowerCase()}${sentence.slice(1)}${punct}`,
+    (author: string, year: string, sentence: string, punct: string) =>
+      `${author} (${year}) argues that ${sentence[0].toLowerCase()}${sentence.slice(1)}${punct}`,
+    (author: string, year: string, sentence: string, punct: string) =>
+      `As ${author} (${year}) notes, ${sentence[0].toLowerCase()}${sentence.slice(1)}${punct}`,
+    (author: string, year: string, sentence: string, punct: string) =>
+      `${author} (${year}) suggests that ${sentence[0].toLowerCase()}${sentence.slice(1)}${punct}`,
+    (author: string, year: string, sentence: string, punct: string) =>
+      `${author} (${year}) asserts that ${sentence[0].toLowerCase()}${sentence.slice(1)}${punct}`,
+  ];
+
+  return text.replace(CITATION_RE, (full, sentence, author, year, punct) => {
+    // Only rephrase ~30% of citations
+    if (Math.random() > 0.30) return full;
+    // Don't rephrase if sentence already starts with the author name or "According"
+    let trimmed = sentence.trim();
+    if (/^(?:According to|As\s)/i.test(trimmed) || trimmed.startsWith(author)) return full;
+    // Strip leading formal connectors that would be awkward mid-sentence
+    trimmed = trimmed.replace(/^(?:Furthermore|Moreover|Additionally|Consequently|Nevertheless|Nonetheless|Subsequently|However|In addition|In contrast|Conversely|Accordingly),?\s*/i, "");
+    if (!trimmed || trimmed.length < 10) return full;
+    // Re-capitalize after stripping
+    trimmed = trimmed[0].toUpperCase() + trimmed.slice(1);
+    const template = REPHRASE_TEMPLATES[Math.floor(Math.random() * REPHRASE_TEMPLATES.length)];
+    return template(author, year, trimmed, punct);
+  });
+}
+
+/**
  * Replace special content with unique placeholders before processing.
  * Returns the sanitized text and a map to restore originals.
  */
@@ -589,6 +628,151 @@ export function robustSentenceSplit(text: string): string[] {
   return parts
     .map(s => unshield(s).trim())
     .filter(s => s.length > 0);
+}
+
+/**
+ * Enforce per-paragraph sentence counts to match the input.
+ * Merges shortest sentences if too many, splits longest if too few.
+ * Uses multiple fallback strategies: clause patterns → comma → space split.
+ * Includes re-verification loop to handle edge cases.
+ */
+export function enforcePerParagraphSentenceCounts(
+  text: string,
+  inputSentenceCountsPerPara: number[],
+  logPrefix: string = ""
+): string {
+  const outParas = text.split(/\n\s*\n/).filter(p => p.trim());
+  const enforced: string[] = [];
+  if (logPrefix) console.log(`  [${logPrefix}-Enforce] inputSentenceCountsPerPara=${JSON.stringify(inputSentenceCountsPerPara)}, outParas=${outParas.length}`);
+
+  for (let pi = 0; pi < outParas.length; pi++) {
+    const targetCount = pi < inputSentenceCountsPerPara.length ? inputSentenceCountsPerPara[pi] : 0;
+    if (targetCount === 0) { enforced.push(outParas[pi]); continue; }
+
+    let outSentences = robustSentenceSplit(outParas[pi].trim());
+    if (logPrefix) console.log(`  [${logPrefix}-Enforce] Para ${pi}: target=${targetCount}, actual=${outSentences.length}`);
+
+    // ── Merge if too many ──
+    while (outSentences.length > targetCount && outSentences.length > 1) {
+      let minIdx = 0;
+      let minLen = outSentences[0].split(/\s+/).length;
+      for (let i = 1; i < outSentences.length; i++) {
+        const len = outSentences[i].split(/\s+/).length;
+        if (len < minLen) { minLen = len; minIdx = i; }
+      }
+      const mergeWith = minIdx > 0 ? minIdx - 1 : 0;
+      const mergeTarget = mergeWith === minIdx ? minIdx + 1 : minIdx;
+      const s1 = outSentences[mergeWith].replace(/[.!?]\s*$/, "");
+      const s2 = outSentences[mergeTarget];
+      const s2Lower = s2[0]?.toLowerCase() + s2.slice(1);
+      outSentences[mergeWith] = s1 + ", " + s2Lower;
+      outSentences.splice(mergeTarget, 1);
+    }
+
+    // ── Split if too few ──
+    _splitToTarget(outSentences, targetCount);
+
+    // ── Re-verify: joining and re-splitting might give different count ──
+    let joined = outSentences.join(" ");
+    let reSplit = robustSentenceSplit(joined);
+    let attempts = 0;
+    while (reSplit.length !== targetCount && attempts < 10) {
+      if (reSplit.length > targetCount) {
+        let minIdx = 0;
+        let minLen = reSplit[0].split(/\s+/).length;
+        for (let i = 1; i < reSplit.length; i++) {
+          const len = reSplit[i].split(/\s+/).length;
+          if (len < minLen) { minLen = len; minIdx = i; }
+        }
+        const mi = minIdx > 0 ? minIdx - 1 : 0;
+        const mt = mi === minIdx ? minIdx + 1 : minIdx;
+        const s1 = reSplit[mi].replace(/[.!?]\s*$/, "");
+        const s2lower = reSplit[mt][0]?.toLowerCase() + reSplit[mt].slice(1);
+        reSplit[mi] = s1 + ", " + s2lower;
+        reSplit.splice(mt, 1);
+      } else {
+        _splitToTarget(reSplit, targetCount);
+        if (reSplit.length < targetCount) break; // Can't split further
+      }
+      joined = reSplit.join(" ");
+      reSplit = robustSentenceSplit(joined);
+      attempts++;
+    }
+    outSentences = reSplit;
+
+    if (logPrefix) console.log(`  [${logPrefix}-Enforce] Para ${pi} AFTER: count=${outSentences.length}`);
+    enforced.push(outSentences.join(" "));
+  }
+  return enforced.join("\n\n");
+}
+
+/** Internal helper: split longest sentences until target count is reached */
+function _splitToTarget(sentences: string[], targetCount: number): void {
+  const clausePatterns = [/,\s+and\s+/i, /,\s+but\s+/i, /;\s+/, /,\s+which\s+/i, /,\s+while\s+/i, /,\s+as\s+/i, /,\s+where\s+/i, /,\s+when\s+/i, /,\s+since\s+/i, /,\s+although\s+/i, /,\s+leading\s+to\s+/i, /,\s+resulting\s+in\s+/i, /,\s+causing\s+/i, /,\s+making\s+/i];
+
+  while (sentences.length < targetCount) {
+    let maxIdx = 0;
+    let maxLen = 0;
+    for (let i = 0; i < sentences.length; i++) {
+      const len = sentences[i].split(/\s+/).length;
+      if (len > maxLen) { maxLen = len; maxIdx = i; }
+    }
+    const sent = sentences[maxIdx];
+    let didSplit = false;
+
+    // Try clause patterns
+    for (const pattern of clausePatterns) {
+      const match = sent.match(pattern);
+      if (match && match.index !== undefined) {
+        const part1 = sent.slice(0, match.index).trim();
+        const part2 = sent.slice(match.index + match[0].length).trim();
+        if (part1.split(/\s+/).length >= 3 && part2.split(/\s+/).length >= 3) {
+          const p1 = part1.endsWith(".") ? part1 : part1 + ".";
+          const p2 = part2[0]?.toUpperCase() + part2.slice(1);
+          sentences.splice(maxIdx, 1, p1, p2);
+          didSplit = true;
+          break;
+        }
+      }
+    }
+
+    // Fallback: split at comma nearest to middle
+    if (!didSplit) {
+      const mid = Math.floor(sent.length / 2);
+      const commaMatches: number[] = [];
+      for (let ci = 0; ci < sent.length; ci++) {
+        if (sent[ci] === ',') commaMatches.push(ci);
+      }
+      if (commaMatches.length > 0) {
+        const bestComma = commaMatches.reduce((best, idx) =>
+          Math.abs(idx - mid) < Math.abs(best - mid) ? idx : best, commaMatches[0]);
+        const part1 = sent.slice(0, bestComma).trim();
+        const part2 = sent.slice(bestComma + 1).trim();
+        if (part1.split(/\s+/).length >= 3 && part2.split(/\s+/).length >= 3) {
+          const p1 = part1.endsWith(".") ? part1 : part1 + ".";
+          const p2 = part2[0]?.toUpperCase() + part2.slice(1);
+          sentences.splice(maxIdx, 1, p1, p2);
+          didSplit = true;
+        }
+      }
+    }
+
+    // Last resort: split at space nearest to middle
+    if (!didSplit && sent.split(/\s+/).length >= 6) {
+      const words = sent.split(/\s+/);
+      const midWord = Math.floor(words.length / 2);
+      const part1 = words.slice(0, midWord).join(" ").replace(/[,;]\s*$/, "").trim();
+      const part2 = words.slice(midWord).join(" ").trim();
+      if (part1.length > 0 && part2.length > 0) {
+        const p1 = part1.endsWith(".") ? part1 : part1 + ".";
+        const p2 = part2[0]?.toUpperCase() + part2.slice(1);
+        sentences.splice(maxIdx, 1, p1, p2);
+        didSplit = true;
+      }
+    }
+
+    if (!didSplit) break;
+  }
 }
 
 // ══════════════════════════════════════════════════════════════════════════

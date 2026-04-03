@@ -7,7 +7,7 @@
 
 import { sentTokenize } from "./utils";
 import { robustSentenceSplit } from "./content-protection";
-import { applyAIWordKill, applyPhrasePatterns, applyConnectorNaturalization } from "./shared-dictionaries";
+import { applyAIWordKill } from "./shared-dictionaries";
 
 // ── Phase 1: Filler removal ──
 
@@ -79,15 +79,8 @@ function cleanFillers(text: string): string {
     // Capitalize sentence starts after removal
     result = result.replace(/(?<=[.!?])\s+([a-z])/g, (_, c) => " " + c.toUpperCase());
 
-    // Remove fragment sentences (under 4 real words) that result from filler stripping
-    const sentences = robustSentenceSplit(result);
-    if (sentences.length > 1) {
-      const cleaned = sentences.filter(sent => {
-        const words = sent.replace(/[^a-zA-Z\s]/g, "").trim().split(/\s+/).filter(w => w.length > 0);
-        return words.length >= 4;
-      });
-      if (cleaned.length > 0) result = cleaned.join(" ");
-    }
+    // Fragment removal DISABLED — would alter sentence count (1-in=1-out)
+    // Sentences must be preserved regardless of length
 
     return result;
   }).join("\n\n");
@@ -447,8 +440,6 @@ export function postProcess(text: string): string {
       const sents = robustSentenceSplit(para.trim());
       const cleanedSents = sents.map(s => {
         let c = applyAIWordKill(s);
-        c = applyPhrasePatterns(c);
-        c = applyConnectorNaturalization(c);
         c = c.replace(/ {2,}/g, " ").trim();
         if (c && /^[a-z]/.test(c)) c = c[0].toUpperCase() + c.slice(1);
         return c;
