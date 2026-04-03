@@ -2089,7 +2089,6 @@ export function humanize(
           si++;
         }
       }
-      }
     }
 
     // Process each sentence independently through the full pipeline

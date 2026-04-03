@@ -24,6 +24,17 @@ try {
   console.log(`[*] LLM humanizer not available: ${e}`);
 }
 
+// ── Lazy Premium humanizer import ──
+
+let premiumHumanize: typeof import("./premium-humanizer.js").premiumHumanize | null = null;
+try {
+  const premMod = await import("./premium-humanizer.js");
+  premiumHumanize = premMod.premiumHumanize;
+  console.log("[OK] Premium humanizer module loaded");
+} catch (e) {
+  console.log(`[*] Premium humanizer not available: ${e}`);
+}
+
 let hasPipeline = false;
 try {
   // Verify pipeline can be imported
@@ -56,6 +67,7 @@ interface HumanizeRequest {
   no_contractions?: boolean;
   tone?: string;
   enable_post_processing?: boolean;
+  premium?: boolean;     // Premium mode: purely AI-driven pipeline
 }
 
 interface DetectRequest {
@@ -97,7 +109,28 @@ app.post("/api/humanize", async (c) => {
   let engineUsed = body.engine ?? "ghost_mini";
   let result: string;
 
-  if (body.engine === "ninja" && llmHumanize) {
+  // ── Premium Mode: Purely AI-driven pipeline ──
+  if (body.premium && premiumHumanize) {
+    try {
+      result = await premiumHumanize(
+        body.text,
+        body.engine ?? "ghost_pro",
+        engineStrength,
+        body.tone ?? "neutral",
+        body.strict_meaning ?? true,
+      );
+      engineUsed = `premium_${body.engine ?? "ghost_pro"}`;
+    } catch (e) {
+      console.log(`[!] Premium engine failed, falling back to standard: ${e}`);
+      // Fall through to standard pipeline
+      result = humanize(body.text, {
+        strength: engineStrength, preserveSentences: body.preserve_sentences,
+        strictMeaning: body.strict_meaning, tone: body.tone,
+        mode: "ghost_pro", enablePostProcessing: body.enable_post_processing,
+      });
+      engineUsed = "premium_fallback";
+    }
+  } else if (body.engine === "ninja" && llmHumanize) {
     // Ninja: LLM multi-pass pipeline
     try {
       result = await llmHumanize(
@@ -135,8 +168,8 @@ app.post("/api/humanize", async (c) => {
     engineUsed = "ghost_mini";
   }
 
-  // 8-Phase LLM Pipeline: anti-detection refinement
-  if (hasPipeline) {
+  // 8-Phase LLM Pipeline: anti-detection refinement (skip for premium — already fully AI)
+  if (hasPipeline && !body.premium) {
     try {
       result = await runPipelineAsync(result, body.no_contractions ?? true);
       console.log(`[OK] LLM pipeline refinement complete (${engineUsed})`);

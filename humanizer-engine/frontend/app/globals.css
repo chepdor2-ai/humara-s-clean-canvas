@@ -44,7 +44,25 @@
       border-bottom: 1px solid #e2e8f0;
   }
   .dark .glass-nav {
-      background: rgba(15, 23, 42, 0.95);
-      border-bottom-color: #334155;
+      background: rgba(9, 9, 11, 0.95);
+      border-bottom-color: #27272a;
+  }
+
+  @keyframes borderPulse {
+    0%, 100% { opacity: 0.5; }
+    50% { opacity: 1; }
+  }
+  .plan-glow {
+    position: relative;
+  }
+  .plan-glow::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    pointer-events: none;
+    border: 1.5px solid var(--plan-color, transparent);
+    animation: borderPulse 2.5s ease-in-out infinite;
+    z-index: 1;
   }
 }

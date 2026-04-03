@@ -12,6 +12,7 @@ const TIERS = [
     features: ['20,000 words/day (Fast & Standard)', '10,000 words/day (Stealth)', 'Basic AI Detection', '30 Day Access', 'Email Support'],
     cta: 'Get Started',
     featured: false,
+    color: '#64748b', // slate
   },
   {
     name: 'Creator',
@@ -21,6 +22,7 @@ const TIERS = [
     features: ['40,000 words/day (Fast & Standard)', '20,000 words/day (Stealth)', 'Full Detector Suite', 'Style Memory (3 slots)', 'Priority Support'],
     cta: 'Get Started',
     featured: true,
+    color: '#6366f1', // brand indigo
   },
   {
     name: 'Professional',
@@ -30,6 +32,7 @@ const TIERS = [
     features: ['80,000 words/day (Fast & Standard)', '40,000 words/day (Stealth)', 'All Engine Modes', 'Style Memory (5 slots)', 'API Access', 'Priority Support'],
     cta: 'Get Started',
     featured: false,
+    color: '#10b981', // emerald
   },
   {
     name: 'Business',
@@ -39,6 +42,7 @@ const TIERS = [
     features: ['150,000 words/day (Fast & Standard)', '75,000 words/day (Stealth)', 'All Engine Modes', 'Unlimited Style Profiles', 'Full API Access', 'Dedicated Manager'],
     cta: 'Get Started',
     featured: false,
+    color: '#f59e0b', // amber
   },
 ];
 
@@ -46,7 +50,7 @@ export default function PricingCards() {
   const [yearly, setYearly] = useState(false);
 
   return (
-    <section className="w-full py-16 bg-white dark:bg-slate-950">
+    <section className="w-full py-16 bg-white dark:bg-zinc-950">
       <div className="max-w-6xl mx-auto px-6">
         {/* Billing toggle */}
         <div className="flex items-center justify-center gap-3 mb-12">
@@ -63,11 +67,13 @@ export default function PricingCards() {
           {TIERS.map((tier, i) => {
             const price = yearly ? tier.yearly : tier.monthly;
             return (
-              <div key={i} className={`rounded-xl border p-7 flex flex-col transition-all duration-300 ${
+              <div key={i} className={`rounded-xl border p-7 flex flex-col transition-all duration-300 relative overflow-hidden ${
                 tier.featured
-                  ? 'bg-slate-900 dark:bg-slate-800 text-white border-slate-800 dark:border-slate-700 relative shadow-xl scale-[1.02]'
-                  : 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white border-slate-200 dark:border-slate-700 hover:border-brand-200 hover:shadow-md'
+                  ? 'bg-slate-900 dark:bg-zinc-800 text-white border-slate-800 dark:border-zinc-700 shadow-xl scale-[1.02]'
+                  : 'bg-white dark:bg-zinc-900 text-slate-900 dark:text-white border-slate-200 dark:border-zinc-700 hover:border-brand-200 hover:shadow-md'
               }`}>
+                {/* Color line on top */}
+                <div className="absolute top-0 left-0 right-0 h-1 rounded-t-xl" style={{ backgroundColor: tier.color }} />
                 {tier.featured && (
                   <span className="absolute -top-2.5 left-6 bg-brand-600 text-white text-[10px] font-semibold uppercase tracking-wider py-1 px-2.5 rounded-full">Popular</span>
                 )}
@@ -94,7 +100,7 @@ export default function PricingCards() {
                   className={`w-full py-3 rounded-lg text-sm font-medium text-center transition-colors ${
                     tier.featured
                       ? 'bg-brand-600 text-white hover:bg-brand-700'
-                      : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-white border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700'
+                      : 'bg-white dark:bg-zinc-800 text-slate-700 dark:text-white border border-slate-200 dark:border-zinc-700 hover:bg-slate-50 dark:hover:bg-zinc-700'
                   }`}
                 >
                   {tier.cta}
@@ -105,7 +111,7 @@ export default function PricingCards() {
         </div>
 
         {/* Custom plan */}
-        <div className="mt-8 p-6 bg-slate-50 dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 flex flex-col md:flex-row items-center justify-between gap-4">
+        <div className="mt-8 p-6 bg-slate-50 dark:bg-zinc-900 rounded-xl border border-slate-200 dark:border-zinc-700 flex flex-col md:flex-row items-center justify-between gap-4">
           <div>
             <h3 className="text-lg font-semibold text-slate-900 dark:text-white mb-1">Need a custom package?</h3>
             <p className="text-sm text-slate-500 dark:text-slate-400">Custom word limits, SLA, dedicated support, and tailored integrations.</p>

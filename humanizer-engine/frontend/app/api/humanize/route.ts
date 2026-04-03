@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { humanize } from '@/lib/engine/humanizer';
 import { ghostProHumanize } from '@/lib/engine/ghost-pro';
 import { llmHumanize } from '@/lib/engine/llm-humanizer';
+import { premiumHumanize } from '@/lib/engine/premium-humanizer';
 import { getDetector } from '@/lib/engine/multi-detector';
 import { isMeaningPreserved } from '@/lib/engine/semantic-guard';
 import { fixCapitalization } from '@/lib/engine/shared-dictionaries';
@@ -11,7 +12,7 @@ export const maxDuration = 120; // LLM engines need more time
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const { text, engine, strength, tone, strict_meaning, no_contractions, enable_post_processing } = body;
+    const { text, engine, strength, tone, strict_meaning, no_contractions, enable_post_processing, premium } = body;
 
     if (!text || typeof text !== 'string' || text.trim().length === 0) {
       return NextResponse.json({ error: 'Text is required' }, { status: 400 });
@@ -27,7 +28,16 @@ export async function POST(req: Request) {
 
     let humanized: string;
 
-    if (engine === 'undetectable') {
+    if (premium) {
+      // Premium: Purely AI-driven per-sentence pipeline
+      humanized = await premiumHumanize(
+        text,
+        engine ?? 'ghost_pro',
+        strength ?? 'medium',
+        tone ?? 'neutral',
+        strict_meaning ?? true,
+      );
+    } else if (engine === 'undetectable') {
       // Undetectable: Ninja (Stealth) first, then Ghost Mini (Fast) for double pass
       const stealthPass = await llmHumanize(
         text,

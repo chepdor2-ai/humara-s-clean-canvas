@@ -43,44 +43,44 @@ export default function RootLayoutClient({ children }: { children: React.ReactNo
   if (!isAppRoute) {
     return (
       <div className="min-h-screen flex flex-col bg-white">
-        <header className={`fixed w-full z-50 transition-all duration-300 ${scrolled ? 'glass-nav shadow-sm' : 'bg-white/80 dark:bg-slate-950/80 backdrop-blur-sm border-b border-slate-100 dark:border-slate-800'}`}>
+        <header className={`fixed w-full z-50 transition-all duration-300 ${scrolled ? 'glass-nav shadow-sm' : 'bg-white/80 dark:bg-zinc-950/80 backdrop-blur-sm border-b border-slate-100 dark:border-zinc-800'}`}>
           <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="flex justify-between items-center h-16">
               <Logo />
 
               <nav className="hidden md:flex items-center space-x-8">
-                <Link href="/how-it-works" className="text-sm text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white font-medium transition-colors">How it Works</Link>
-                <Link href="/pricing" className="text-sm text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white font-medium transition-colors">Pricing</Link>
-                <Link href="/about" className="text-sm text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white font-medium transition-colors">About</Link>
-                <Link href="/detector" className="text-sm text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white font-medium transition-colors">AI Detector</Link>
+                <Link href="/how-it-works" className="text-sm text-slate-600 dark:text-zinc-300 hover:text-slate-900 dark:hover:text-white font-medium transition-colors">How it Works</Link>
+                <Link href="/pricing" className="text-sm text-slate-600 dark:text-zinc-300 hover:text-slate-900 dark:hover:text-white font-medium transition-colors">Pricing</Link>
+                <Link href="/about" className="text-sm text-slate-600 dark:text-zinc-300 hover:text-slate-900 dark:hover:text-white font-medium transition-colors">About</Link>
+                <Link href="/detector" className="text-sm text-slate-600 dark:text-zinc-300 hover:text-slate-900 dark:hover:text-white font-medium transition-colors">AI Detector</Link>
               </nav>
 
               <div className="hidden md:flex items-center space-x-3">
-                <button onClick={toggleTheme} className="p-2 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors" title="Toggle theme">
+                <button onClick={toggleTheme} className="p-2 text-slate-500 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white rounded-lg hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors" title="Toggle theme">
                   {theme === 'dark' ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
                 </button>
-                <Link href="/login" className="text-sm text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white font-medium transition-colors px-4 py-2">Log In</Link>
+                <Link href="/login" className="text-sm text-slate-600 dark:text-zinc-300 hover:text-slate-900 dark:hover:text-white font-medium transition-colors px-4 py-2">Log In</Link>
                 <Link href="/signup" className="bg-brand-600 hover:bg-brand-700 text-white px-5 py-2 rounded-lg text-sm font-medium transition-colors">Get Started</Link>
               </div>
 
-              <button className="md:hidden p-2 text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white" onClick={() => setMobileMenuOpen(!mobileMenuOpen)}>
+              <button className="md:hidden p-2 text-slate-700 dark:text-zinc-300 hover:text-slate-900 dark:hover:text-white" onClick={() => setMobileMenuOpen(!mobileMenuOpen)}>
                 {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
               </button>
             </div>
           </div>
 
           {mobileMenuOpen && (
-            <div className="md:hidden bg-white dark:bg-slate-900 border-b border-slate-100 dark:border-slate-800 px-6 py-6 flex flex-col gap-4 absolute top-full left-0 w-full shadow-lg">
-              <Link href="/how-it-works" onClick={() => setMobileMenuOpen(false)} className="text-sm font-medium text-slate-700 dark:text-slate-200 py-1">How it Works</Link>
-              <Link href="/pricing" onClick={() => setMobileMenuOpen(false)} className="text-sm font-medium text-slate-700 dark:text-slate-200 py-1">Pricing</Link>
-              <Link href="/about" onClick={() => setMobileMenuOpen(false)} className="text-sm font-medium text-slate-700 dark:text-slate-200 py-1">About</Link>
-              <Link href="/detector" onClick={() => setMobileMenuOpen(false)} className="text-sm font-medium text-slate-700 dark:text-slate-200 py-1">AI Detector</Link>
-              <div className="h-px bg-slate-100 dark:bg-slate-800 my-1"></div>
-              <button onClick={() => { toggleTheme(); setMobileMenuOpen(false); }} className="text-sm font-medium text-slate-700 dark:text-slate-200 py-1 text-left flex items-center gap-2">
+            <div className="md:hidden bg-white dark:bg-zinc-900 border-b border-slate-100 dark:border-zinc-800 px-6 py-6 flex flex-col gap-4 absolute top-full left-0 w-full shadow-lg">
+              <Link href="/how-it-works" onClick={() => setMobileMenuOpen(false)} className="text-sm font-medium text-slate-700 dark:text-zinc-200 py-1">How it Works</Link>
+              <Link href="/pricing" onClick={() => setMobileMenuOpen(false)} className="text-sm font-medium text-slate-700 dark:text-zinc-200 py-1">Pricing</Link>
+              <Link href="/about" onClick={() => setMobileMenuOpen(false)} className="text-sm font-medium text-slate-700 dark:text-zinc-200 py-1">About</Link>
+              <Link href="/detector" onClick={() => setMobileMenuOpen(false)} className="text-sm font-medium text-slate-700 dark:text-zinc-200 py-1">AI Detector</Link>
+              <div className="h-px bg-slate-100 dark:bg-zinc-800 my-1"></div>
+              <button onClick={() => { toggleTheme(); setMobileMenuOpen(false); }} className="text-sm font-medium text-slate-700 dark:text-zinc-200 py-1 text-left flex items-center gap-2">
                 {theme === 'dark' ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
                 {theme === 'dark' ? 'Light Mode' : 'Dark Mode'}
               </button>
-              <Link href="/login" onClick={() => setMobileMenuOpen(false)} className="text-sm font-medium text-slate-700 dark:text-slate-200 py-1">Log In</Link>
+              <Link href="/login" onClick={() => setMobileMenuOpen(false)} className="text-sm font-medium text-slate-700 dark:text-zinc-200 py-1">Log In</Link>
               <Link href="/signup" onClick={() => setMobileMenuOpen(false)} className="text-sm font-medium text-brand-600 py-1">Get Started</Link>
             </div>
           )}
@@ -90,7 +90,7 @@ export default function RootLayoutClient({ children }: { children: React.ReactNo
           {children}
         </main>
 
-        <footer className="bg-slate-50 dark:bg-slate-950 border-t border-slate-200 dark:border-slate-800 pt-12 pb-8">
+        <footer className="bg-slate-50 dark:bg-zinc-950 border-t border-slate-200 dark:border-zinc-800 pt-12 pb-8">
           <div className="max-w-6xl mx-auto px-6">
             <div className="grid grid-cols-1 md:grid-cols-12 gap-10 mb-12">
               <div className="md:col-span-4">
@@ -134,8 +134,8 @@ export default function RootLayoutClient({ children }: { children: React.ReactNo
   }
 
   return (
-    <div className="flex h-screen bg-slate-50 dark:bg-slate-950 overflow-hidden">
-      <aside className="w-60 bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 flex flex-col py-5 shrink-0">
+    <div className="flex h-screen bg-slate-50 dark:bg-zinc-950 overflow-hidden">
+      <aside className="w-60 bg-white dark:bg-zinc-900 border-r border-slate-200 dark:border-zinc-800 flex flex-col py-5 shrink-0">
         <div className="px-5 mb-6">
           <Logo />
         </div>
@@ -150,7 +150,7 @@ export default function RootLayoutClient({ children }: { children: React.ReactNo
                 className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
                   isActive
                     ? 'bg-brand-50 dark:bg-brand-950 text-brand-700 dark:text-brand-300'
-                    : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
+                    : 'text-slate-600 dark:text-zinc-400 hover:bg-slate-50 dark:hover:bg-zinc-800 hover:text-slate-900 dark:hover:text-white'
                 }`}
               >
                 <Icon className={`w-[18px] h-[18px] ${isActive ? 'text-brand-600' : ''}`} />
@@ -159,22 +159,22 @@ export default function RootLayoutClient({ children }: { children: React.ReactNo
             );
           })}
         </nav>
-        <div className="px-3 pt-4 mt-4 border-t border-slate-100 dark:border-slate-800 space-y-0.5">
-          <button onClick={toggleTheme} className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white w-full transition-colors">
+        <div className="px-3 pt-4 mt-4 border-t border-slate-100 dark:border-zinc-800 space-y-0.5">
+          <button onClick={toggleTheme} className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-slate-600 dark:text-zinc-400 hover:bg-slate-50 dark:hover:bg-zinc-800 hover:text-slate-900 dark:hover:text-white w-full transition-colors">
             {theme === 'dark' ? <Sun className="w-[18px] h-[18px]" /> : <Moon className="w-[18px] h-[18px]" />}
             {theme === 'dark' ? 'Light Mode' : 'Dark Mode'}
           </button>
-          <Link href="/" className="flex items-center justify-between px-3 py-2.5 rounded-lg text-sm font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white transition-colors group">
+          <Link href="/" className="flex items-center justify-between px-3 py-2.5 rounded-lg text-sm font-medium text-slate-600 dark:text-zinc-400 hover:bg-slate-50 dark:hover:bg-zinc-800 hover:text-slate-900 dark:hover:text-white transition-colors group">
             Back to Home <ArrowRight className="w-4 h-4 opacity-0 group-hover:opacity-100 group-hover:translate-x-0.5 transition-all" />
           </Link>
-          <button onClick={signOut} className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-slate-600 dark:text-slate-400 hover:bg-red-50 dark:hover:bg-red-950 hover:text-red-600 w-full transition-colors">
+          <button onClick={signOut} className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-slate-600 dark:text-zinc-400 hover:bg-red-50 dark:hover:bg-red-950 hover:text-red-600 w-full transition-colors">
             <LogOut className="w-[18px] h-[18px]" />
             Sign Out
           </button>
         </div>
       </aside>
 
-      <main className="flex-1 overflow-y-auto bg-slate-50 dark:bg-slate-950">
+      <main className="flex-1 overflow-y-auto bg-slate-50 dark:bg-zinc-950">
         <div className="max-w-7xl mx-auto p-6">
           {children}
         </div>

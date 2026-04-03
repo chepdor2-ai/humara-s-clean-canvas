@@ -1,8 +1,8 @@
 'use client';
 import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import dynamic from 'next/dynamic';
-import { Copy, Check, Zap, Eraser, RotateCcw, Type, AlignLeft, RefreshCw, AlertTriangle, Info } from 'lucide-react';
-import UsageBar from './UsageBar';
+import { Copy, Check, Zap, Eraser, RotateCcw, Type, AlignLeft, RefreshCw, AlertTriangle, Info, Clock, ChevronDown, ChevronUp } from 'lucide-react';
+import UsageBar, { useUsage } from './UsageBar';
 
 const ProcessingAnimation = dynamic(() => import('../ProcessingAnimation'), { ssr: false });
 
@@ -20,6 +20,22 @@ interface SynonymOption { word: string; isOriginal: boolean; }
 interface SentenceAlternative { text: string; score: number; }
 interface SelectionInfo { text: string; start: number; end: number; rect: { x: number; y: number }; type: 'word' | 'sentence'; }
 interface ScoredSentence { text: string; start: number; end: number; score: number; }
+
+/* ── Temporary History (auto-expires after 4 minutes) ──────────────────── */
+interface HistoryEntry {
+  id: string;
+  inputSnippet: string;
+  outputSnippet: string;
+  fullInput: string;
+  fullOutput: string;
+  engine: string;
+  aiScoreBefore: number;
+  aiScoreAfter: number;
+  wordCount: number;
+  timestamp: number; // Date.now()
+}
+
+const HISTORY_TTL_MS = 4 * 60 * 1000; // 4 minutes
 
 /* ── Per-sentence AI scoring — same micro-signals as backend multi-detector ── */
 const AI_MARKER_WORDS = new Set([
@@ -153,7 +169,7 @@ const TONES = [
   { id: 'professional', label: 'Business' },
   { id: 'simple', label: 'Direct' },
 ];
-const TOP_DETECTORS = ['GPTZero', 'Turnitin', 'Originality.AI', 'Winston AI', 'Copyleaks'];
+const _TOP_DETECTORS = ['GPTZero', 'Turnitin', 'Originality.AI', 'Winston AI', 'Copyleaks'];
 
 /* ── Page ───────────────────────────────────────────────────────────────── */
 export default function EditorPage() {
@@ -168,12 +184,17 @@ export default function EditorPage() {
   const [strength, setStrength] = useState('medium');
   const [tone, setTone] = useState('academic');
   const [strictMeaning, setStrictMeaning] = useState(true);
+  const [premium, setPremium] = useState(false);
 
   const [inputDetection, setInputDetection] = useState<DetectionResult | null>(null);
   const [outputDetection, setOutputDetection] = useState<DetectionResult | null>(null);
   const [autoDetecting, setAutoDetecting] = useState(false);
-  const [sentenceScores, setSentenceScores] = useState<ScoredSentence[]>([]);
-  const [meaningScore, setMeaningScore] = useState<number | null>(null);
+  const [_sentenceScores, setSentenceScores] = useState<ScoredSentence[]>([]);
+  const [_meaningScore, setMeaningScore] = useState<number | null>(null);
+
+  const { usage } = useUsage();
+  const PLAN_COLORS: Record<string, string> = { Starter: '#64748b', Creator: '#6366f1', Professional: '#10b981', Business: '#f59e0b' };
+  const planColor = usage ? PLAN_COLORS[usage.planName] || '' : '';
 
   const [selectionInfo, setSelectionInfo] = useState<SelectionInfo | null>(null);
   const [synonyms, setSynonyms] = useState<SynonymOption[]>([]);
@@ -182,6 +203,10 @@ export default function EditorPage() {
   const [loadingPopup, setLoadingPopup] = useState(false);
   const [rehumanizing, setRehumanizing] = useState(false);
   const [iterationCount, setIterationCount] = useState(0);
+
+  // Temporary history (auto-expires)
+  const [history, setHistory] = useState<HistoryEntry[]>([]);
+  const [historyOpen, setHistoryOpen] = useState(false);
 
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const outputRef = useRef<HTMLTextAreaElement>(null);
@@ -202,6 +227,32 @@ export default function EditorPage() {
     // Use same formula as AI Detection page: overall score from all detectors (weighted by backend)
     return outputDetection.overallAi;
   }, [outputDetection]);
+
+  // Auto-expire history entries after TTL
+  useEffect(() => {
+    if (history.length === 0) return;
+    const interval = setInterval(() => {
+      const now = Date.now();
+      setHistory(prev => prev.filter(h => now - h.timestamp < HISTORY_TTL_MS));
+    }, 15000); // check every 15s
+    return () => clearInterval(interval);
+  }, [history.length]);
+
+  const addToHistory = useCallback((input: string, output: string, eng: string, aiBefore: number, aiAfter: number, wc: number) => {
+    const entry: HistoryEntry = {
+      id: crypto.randomUUID(),
+      inputSnippet: input.slice(0, 80) + (input.length > 80 ? '…' : ''),
+      outputSnippet: output.slice(0, 80) + (output.length > 80 ? '…' : ''),
+      fullInput: input,
+      fullOutput: output,
+      engine: eng,
+      aiScoreBefore: aiBefore,
+      aiScoreAfter: aiAfter,
+      wordCount: wc,
+      timestamp: Date.now(),
+    };
+    setHistory(prev => [entry, ...prev].slice(0, 20)); // keep max 20
+  }, []);
 
   /* ── Auto-detect input (debounced 1.5s) ─────────────────────────────── */
   useEffect(() => {
@@ -249,7 +300,7 @@ export default function EditorPage() {
     try {
       const res = await fetch('/api/humanize', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text, engine, strength, tone, strict_meaning: strictMeaning, enable_post_processing: true }),
+        body: JSON.stringify({ text, engine, strength, tone, strict_meaning: strictMeaning, enable_post_processing: true, premium }),
       });
       const data: HumanizeResponse = await res.json();
       if (!res.ok || data.error) throw new Error(data.error || 'Humanization failed');
@@ -276,7 +327,7 @@ export default function EditorPage() {
           setIterationCount(i + 1);
           const reRes = await fetch('/api/humanize', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ text: currentResult, engine, strength: 'strong', tone, strict_meaning: strictMeaning, enable_post_processing: true }),
+            body: JSON.stringify({ text: currentResult, engine, strength: 'strong', tone, strict_meaning: strictMeaning, enable_post_processing: true, premium }),
           });
           const reData: HumanizeResponse = await reRes.json();
           if (!reRes.ok || reData.error || !reData.humanized) break;
@@ -289,6 +340,10 @@ export default function EditorPage() {
           if (currentAi < 20) break;
         }
       }
+
+      // Add to temporary history
+      const finalAiAfter = outputDetection ? outputDetection.overallAi : (data.output_detector_results?.overall ?? 0);
+      addToHistory(text, currentResult, data.engine_used || engine, data.input_detector_results?.overall ?? 0, finalAiAfter, data.word_count || outputWords);
     } catch (err) { setError(err instanceof Error ? err.message : 'Processing failed'); }
     finally { setLoading(false); setIterationCount(0); }
   };
@@ -300,7 +355,7 @@ export default function EditorPage() {
     try {
       const res = await fetch('/api/humanize', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: result, engine, strength, tone, strict_meaning: strictMeaning, enable_post_processing: true }),
+        body: JSON.stringify({ text: result, engine, strength, tone, strict_meaning: strictMeaning, enable_post_processing: true, premium }),
       });
       const data: HumanizeResponse = await res.json();
       if (!res.ok || data.error) throw new Error(data.error || 'Rephrase failed');
@@ -370,6 +425,7 @@ export default function EditorPage() {
                 tone,
                 strict_meaning: strictMeaning,
                 enable_post_processing: true,
+                premium,
               }),
             }).then(r => r.json()).then((d: HumanizeResponse) => ({
               original: s.text,
@@ -448,6 +504,7 @@ export default function EditorPage() {
       setSelectionInfo({ text: sel, start, end, rect: { x: rect.left + rect.width / 2, y: rect.top + window.scrollY + Math.min(la * 22 + 40, rect.height - 40) }, type: isWord ? 'word' : 'sentence' });
       if (isWord) fetchSynonyms(sel); else fetchSentenceAlternatives(sel);
     }, 120);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [result]);
 
   const fetchSynonyms = async (word: string) => {
@@ -491,29 +548,23 @@ export default function EditorPage() {
           <h1 className="text-xl font-bold text-slate-900 dark:text-white tracking-tight">AI Humanizer</h1>
           <p className="text-[13px] text-slate-500 dark:text-slate-400">Make AI text undetectable</p>
         </div>
-        <div className="flex items-center gap-2">
-          {meaningScore !== null && (
-            <span className="text-xs font-semibold text-emerald-700 bg-emerald-50 dark:text-emerald-400 dark:bg-emerald-950 border border-emerald-200 dark:border-emerald-800 px-2.5 py-1.5 rounded-lg tabular-nums">
-              Meaning kept: {Math.round(meaningScore * 100)}%
-            </span>
-          )}
-          <button onClick={handleClear} className="text-xs font-medium text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 px-2.5 py-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors flex items-center gap-1">
-            <Eraser className="w-3 h-3" /> Clear
-          </button>
-        </div>
+
       </header>
 
       {/* Daily Usage */}
       <UsageBar />
 
       {/* Settings Bar */}
-      <div className="flex flex-wrap items-center gap-x-5 gap-y-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2.5">
+      <div
+        className={`flex flex-wrap items-center gap-x-5 gap-y-2 bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-700 rounded-xl px-4 py-2.5 ${planColor ? 'plan-glow' : ''}`}
+        style={planColor ? { '--plan-color': planColor } as React.CSSProperties : undefined}
+      >
         <div className="flex items-center gap-2">
           <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Mode</span>
-          <div className="flex bg-slate-100 dark:bg-slate-800 rounded-lg p-0.5">
+          <div className="flex bg-slate-100 dark:bg-zinc-800 rounded-lg p-0.5">
             {ENGINES.map(e => (
               <button key={e.id} onClick={() => setEngine(e.id)}
-                className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-all ${engine === e.id ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-white'}`}>
+                className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-all ${engine === e.id ? 'bg-white dark:bg-zinc-700 text-slate-900 dark:text-white shadow-sm' : 'text-slate-500 dark:text-zinc-400 hover:text-slate-700 dark:hover:text-white'}`}>
                 {e.label}
               </button>
             ))}
@@ -522,32 +573,40 @@ export default function EditorPage() {
         <div className="w-px h-5 bg-slate-200 dark:bg-slate-700 hidden sm:block" />
         <div className="flex items-center gap-2">
           <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Depth</span>
-          <div className="flex bg-slate-100 dark:bg-slate-800 rounded-lg p-0.5">
+          <div className="flex bg-slate-100 dark:bg-zinc-800 rounded-lg p-0.5">
             {STRENGTHS.map(s => (
               <button key={s.id} onClick={() => setStrength(s.id)}
-                className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-all ${strength === s.id ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-white'}`}>
+                className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-all ${strength === s.id ? 'bg-white dark:bg-zinc-700 text-slate-900 dark:text-white shadow-sm' : 'text-slate-500 dark:text-zinc-400 hover:text-slate-700 dark:hover:text-white'}`}>
                 {s.label}
               </button>
             ))}
           </div>
         </div>
-        <div className="w-px h-5 bg-slate-200 dark:bg-slate-700 hidden sm:block" />
+        <div className="w-px h-5 bg-slate-200 dark:bg-zinc-700 hidden sm:block" />
         <div className="flex items-center gap-2">
           <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Tone</span>
           <select value={tone} onChange={(e) => setTone(e.target.value)} title="Tone"
-            className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-slate-700 dark:text-slate-300 outline-none focus:border-brand-400">
+            className="bg-white dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-slate-700 dark:text-zinc-300 outline-none focus:border-brand-400">
             {TONES.map(t => <option key={t.id} value={t.id}>{t.label}</option>)}
           </select>
         </div>
-        <div className="w-px h-5 bg-slate-200 dark:bg-slate-700 hidden sm:block" />
+        <div className="w-px h-5 bg-slate-200 dark:bg-zinc-700 hidden sm:block" />
         <label className="flex items-center gap-2 cursor-pointer select-none">
           <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Keep Meaning</span>
           <button onClick={() => setStrictMeaning(!strictMeaning)} title={strictMeaning ? 'On' : 'Off'}
-            className={`w-8 h-[18px] rounded-full transition-all relative ${strictMeaning ? 'bg-brand-600' : 'bg-slate-200 dark:bg-slate-600'}`}>
+            className={`w-8 h-[18px] rounded-full transition-all relative ${strictMeaning ? 'bg-brand-600' : 'bg-slate-200 dark:bg-zinc-600'}`}>
             <div className={`w-3 h-3 bg-white rounded-full absolute top-[3px] transition-all shadow-sm ${strictMeaning ? 'left-[15px]' : 'left-[3px]'}`} />
           </button>
         </label>
-        <div className="w-px h-5 bg-slate-200 dark:bg-slate-700 hidden sm:block" />
+        <div className="w-px h-5 bg-slate-200 dark:bg-zinc-700 hidden sm:block" />
+        <label className="flex items-center gap-2 cursor-pointer select-none">
+          <span className="text-[11px] font-semibold text-amber-500 dark:text-amber-400 uppercase tracking-wider">Premium</span>
+          <button onClick={() => setPremium(!premium)} title={premium ? 'Premium ON — all stages via AI' : 'Premium OFF — standard pipeline'}
+            className={`w-8 h-[18px] rounded-full transition-all relative ${premium ? 'bg-amber-500' : 'bg-slate-200 dark:bg-zinc-600'}`}>
+            <div className={`w-3 h-3 bg-white rounded-full absolute top-[3px] transition-all shadow-sm ${premium ? 'left-[15px]' : 'left-[3px]'}`} />
+          </button>
+        </label>
+        <div className="w-px h-5 bg-slate-200 dark:bg-zinc-700 hidden sm:block" />
         <button onClick={handleHumanize} disabled={!text.trim() || loading || rephrasing}
           className="ml-auto bg-brand-600 hover:bg-brand-700 text-white text-xs font-bold rounded-lg px-5 py-2 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center gap-1.5 shadow-sm hover:shadow-md active:scale-[0.98]">
           {loading ? <RotateCcw className="w-3.5 h-3.5 animate-spin" /> : <Zap className="w-3.5 h-3.5" />}
@@ -572,11 +631,12 @@ export default function EditorPage() {
             </p>
           </div>
         )}
+
       </div>
 
       {/* Score Disclaimer */}
       {(inputDetection || outputDetection) && (
-        <div className="flex items-start gap-1.5 px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg">
+        <div className="flex items-start gap-1.5 px-3 py-2 bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-700 rounded-lg">
           <Info className="w-3 h-3 text-slate-400 mt-0.5 shrink-0" />
           <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">
             Scores shown are calculated ~3% stricter than actual detectors. Our internal scanner is intentionally aggressive so your text comfortably passes real-world AI detectors like GPTZero, Turnitin, and Originality.AI.
@@ -587,8 +647,8 @@ export default function EditorPage() {
       {/* Editor Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {/* Input Panel */}
-        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden flex flex-col">
-          <div className="flex items-center justify-between px-4 py-2.5 border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/50">
+        <div className="bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-700 rounded-xl overflow-hidden flex flex-col">
+          <div className="flex items-center justify-between px-4 py-2.5 border-b border-slate-100 dark:border-zinc-800 bg-slate-50/50 dark:bg-zinc-800/50">
             <div className="flex items-center gap-2">
               <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">Input</span>
               {autoDetecting && (
@@ -602,7 +662,12 @@ export default function EditorPage() {
                 }`}>{Math.round(inputDetection.overallAi)}% AI</span>
               )}
             </div>
-            <span className="text-[11px] text-slate-400 tabular-nums">{inputWords} words</span>
+            <div className="flex items-center gap-2">
+              <span className="text-[11px] text-slate-400 tabular-nums">{inputWords} words</span>
+              <button onClick={handleClear} className="text-xs font-medium text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 px-1.5 py-0.5 rounded-md hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors flex items-center gap-1">
+                <Eraser className="w-3 h-3" /> Clear
+              </button>
+            </div>
           </div>
 
           {/* Input textarea */}
@@ -615,7 +680,7 @@ export default function EditorPage() {
 
           {/* Input Detector Scores */}
           {inputDetection && (
-            <div className="border-t border-slate-100 dark:border-slate-800 px-4 py-3 space-y-1.5 bg-slate-50/30 dark:bg-slate-800/30">
+            <div className="border-t border-slate-100 dark:border-zinc-800 px-4 py-3 space-y-1.5 bg-slate-50/30 dark:bg-zinc-800/30">
               <div className="flex items-center justify-between mb-1">
                 <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Input Scan</span>
                 <span className={`text-[10px] font-bold ${inputDetection.overallAi <= 20 ? 'text-emerald-600' : 'text-red-500'}`}>
@@ -625,8 +690,8 @@ export default function EditorPage() {
               {[...inputDetection.detectors].sort((a, b) => b.ai_score - a.ai_score).slice(0, 5).map(d => (
                 <DetectorBar key={d.detector} name={d.detector} aiScore={d.ai_score} />
               ))}
-              <div className="flex items-center justify-between pt-1.5 mt-1 border-t border-slate-100 dark:border-slate-700">
-                <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400">Overall</span>
+              <div className="flex items-center justify-between pt-1.5 mt-1 border-t border-slate-100 dark:border-zinc-700">
+                <span className="text-[10px] font-bold text-slate-500 dark:text-zinc-400">Overall</span>
                 <span className={`text-[10px] font-bold ${inputAvgAi <= 20 ? 'text-emerald-600' : 'text-red-500'}`}>
                   {Math.round(inputAvgAi)}% AI / {Math.round(100 - inputAvgAi)}% Human
                 </span>
@@ -636,8 +701,8 @@ export default function EditorPage() {
         </div>
 
         {/* Output Panel */}
-        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden flex flex-col relative">
-          <div className="flex items-center justify-between px-4 py-2.5 border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/50">
+        <div className="bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-700 rounded-xl overflow-hidden flex flex-col relative">
+          <div className="flex items-center justify-between px-4 py-2.5 border-b border-slate-100 dark:border-zinc-800 bg-slate-50/50 dark:bg-zinc-800/50">
             <div className="flex items-center gap-2">
               <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">Output</span>
               {outputDetection && (
@@ -696,7 +761,7 @@ export default function EditorPage() {
 
           {/* Output Detector Scores */}
           {outputDetection && (
-            <div className="border-t border-slate-100 dark:border-slate-800 px-4 py-3 space-y-1.5 bg-slate-50/30 dark:bg-slate-800/30">
+            <div className="border-t border-slate-100 dark:border-zinc-800 px-4 py-3 space-y-1.5 bg-slate-50/30 dark:bg-zinc-800/30">
               <div className="flex items-center justify-between mb-1">
                 <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Output Scan</span>
                 <span className={`text-[10px] font-bold ${outputDetection.overallAi <= 20 ? 'text-emerald-600' : 'text-red-500'}`}>
@@ -706,8 +771,8 @@ export default function EditorPage() {
               {[...outputDetection.detectors].sort((a, b) => b.ai_score - a.ai_score).slice(0, 5).map(d => (
                 <DetectorBar key={d.detector} name={d.detector} aiScore={d.ai_score} />
               ))}
-              <div className="flex items-center justify-between pt-1.5 mt-1 border-t border-slate-100 dark:border-slate-700">
-                <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400">Overall</span>
+              <div className="flex items-center justify-between pt-1.5 mt-1 border-t border-slate-100 dark:border-zinc-700">
+                <span className="text-[10px] font-bold text-slate-500 dark:text-zinc-400">Overall</span>
                 <span className={`text-[10px] font-bold ${outputAvgAi <= 20 ? 'text-emerald-600' : 'text-red-500'}`}>
                   {Math.round(outputAvgAi)}% AI / {Math.round(100 - outputAvgAi)}% Human
                 </span>
@@ -776,6 +841,59 @@ export default function EditorPage() {
       {error && (
         <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-600 flex items-center gap-2">
           <div className="w-1.5 h-1.5 bg-red-500 rounded-full" /> {error}
+        </div>
+      )}
+
+      {/* Temporary History (auto-expires after 4 min) */}
+      {history.length > 0 && (
+        <div className="bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-700 rounded-xl overflow-hidden">
+          <button
+            onClick={() => setHistoryOpen(!historyOpen)}
+            className="w-full flex items-center justify-between px-4 py-3 hover:bg-slate-50 dark:hover:bg-zinc-800 transition-colors"
+          >
+            <div className="flex items-center gap-2">
+              <Clock className="w-3.5 h-3.5 text-slate-400" />
+              <span className="text-xs font-semibold text-slate-700 dark:text-zinc-300">Recent ({history.length})</span>
+              <span className="text-[10px] text-slate-400 dark:text-zinc-500">auto-clears in a few minutes</span>
+            </div>
+            {historyOpen ? <ChevronUp className="w-3.5 h-3.5 text-slate-400" /> : <ChevronDown className="w-3.5 h-3.5 text-slate-400" />}
+          </button>
+          {historyOpen && (
+            <div className="border-t border-slate-100 dark:border-zinc-800 divide-y divide-slate-50 dark:divide-zinc-800 max-h-[300px] overflow-y-auto">
+              {history.map(h => {
+                const ago = Math.round((Date.now() - h.timestamp) / 1000);
+                const agoStr = ago < 60 ? `${ago}s ago` : `${Math.round(ago / 60)}m ago`;
+                const remaining = Math.max(0, Math.round((HISTORY_TTL_MS - (Date.now() - h.timestamp)) / 1000));
+                const remainStr = remaining < 60 ? `${remaining}s left` : `${Math.round(remaining / 60)}m left`;
+                return (
+                  <button
+                    key={h.id}
+                    onClick={() => { setText(h.fullInput); setResult(h.fullOutput); }}
+                    className="w-full text-left px-4 py-2.5 hover:bg-slate-50 dark:hover:bg-zinc-800 transition-colors group"
+                  >
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{h.engine}</span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] text-slate-400">{agoStr}</span>
+                        <span className="text-[10px] text-amber-500 font-medium">{remainStr}</span>
+                      </div>
+                    </div>
+                    <p className="text-xs text-slate-600 dark:text-zinc-400 truncate">{h.inputSnippet}</p>
+                    <div className="flex items-center gap-3 mt-1">
+                      <span className={`text-[10px] font-bold ${h.aiScoreBefore > 50 ? 'text-red-500' : 'text-amber-500'}`}>
+                        {Math.round(h.aiScoreBefore)}% AI
+                      </span>
+                      <span className="text-[10px] text-slate-300 dark:text-zinc-600">→</span>
+                      <span className={`text-[10px] font-bold ${h.aiScoreAfter <= 20 ? 'text-emerald-600' : 'text-amber-500'}`}>
+                        {Math.round(h.aiScoreAfter)}% AI
+                      </span>
+                      <span className="text-[10px] text-slate-400">{h.wordCount} words</span>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          )}
         </div>
       )}
 
