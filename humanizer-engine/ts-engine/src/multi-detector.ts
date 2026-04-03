@@ -3,7 +3,8 @@
  * 20 statistical signals + 22 detector profiles with logistic scoring.
  */
 
-import { sentTokenize, wordTokenize } from "./utils.js";
+import { sentTokenize, wordTokenize } from "./utils";
+import { robustSentenceSplit } from "./content-protection";
 
 // ── Math helpers ──
 
@@ -210,7 +211,7 @@ export class TextSignals {
   constructor(text: string) {
     this.text = text;
     this.words = text.toLowerCase().match(/[a-z']+/g) ?? [];
-    this.sentences = sentTokenize(text);
+    this.sentences = robustSentenceSplit(text);
     this.sentWords = this.sentences.map((s) => s.toLowerCase().match(/[a-z']+/g) ?? []);
     this.wordCount = this.words.length;
     this.sentenceCount = Math.max(this.sentences.length, 1);
@@ -385,8 +386,8 @@ export class TextSignals {
 
     const mean_sim = pair_count > 0 ? total_sim / pair_count : 0.5;
 
-    // AI: mean_sim ≈ 0.92-0.99, Human: 0.80-0.94, center: 0.93
-    const uniformity = sigNorm(mean_sim, 0.93, 25.0);
+    // AI: mean_sim ≈ 0.92-0.99, Human: 0.80-0.94, center: 0.95
+    const uniformity = sigNorm(mean_sim, 0.95, 25.0);
     return clamp(uniformity);
   }
 
@@ -428,11 +429,11 @@ export class TextSignals {
 
     // Sigmoid-based component scoring:
     // marker_density: AI ≈ 0.02-0.06, Human ≈ 0.00-0.01, center: 0.012
-    const markerS = sigNorm(markerDensity, 0.012, 120.0);
+    const markerS = sigNorm(markerDensity, 0.012, 250.0);
     // phrase_density: AI ≈ 0.3-1.5, Human ≈ 0.0-0.2, center: 0.15
-    const phraseS = sigNorm(phraseDensity, 0.15, 5.0);
+    const phraseS = sigNorm(phraseDensity, 0.15, 10.0);
     // starter_ratio: AI ≈ 0.15-0.60, Human ≈ 0.0-0.10, center: 0.10
-    const starterS = sigNorm(starterRatio, 0.10, 10.0);
+    const starterS = sigNorm(starterRatio, 0.10, 20.0);
     // consecutive bonus
     const consecS = Math.min(consecutiveBonus * 15, 30);
 
@@ -471,8 +472,8 @@ export class TextSignals {
       }
     }
 
-    // AI: H ≈ 2.8-3.5, Human: H ≈ 3.4-4.5, center: 3.4
-    return clamp(sigNorm(hCond, 3.4, 2.5));
+    // AI: H ≈ 2.8-3.5, Human: H ≈ 3.2-4.5, center: 3.10
+    return clamp(sigNorm(hCond, 3.10, 2.5));
   }
 
   readabilityConsistency(): number {
@@ -545,7 +546,7 @@ export class TextSignals {
     }
     const repeated = [...trigrams.values()].filter((c) => c >= 2).reduce((s, c) => s + c - 1, 0);
     const density = repeated / Math.max(this.wordCount - 2, 1);
-    return clamp(sigNorm(density, 0.02, 60));
+    return clamp(sigNorm(density, 0.02, 150));
   }
 
   starterDiversity(): number {
@@ -612,9 +613,9 @@ export class TextSignals {
     const uniqueBi = biFreq.size;
     if (uniqueBi < 5) return 50;
     const biTTR = uniqueBi / nBi;
-    const ttrScore = 100.0 - sigNorm(biTTR, 0.92, 20.0);
+    const ttrScore = 100.0 - sigNorm(biTTR, 0.92, 40.0);
     const repeated = [...biFreq.values()].filter((c) => c >= 2).reduce((s, c) => s + c - 1, 0);
-    const rdScore = sigNorm(repeated / nBi, 0.04, 25.0);
+    const rdScore = sigNorm(repeated / nBi, 0.04, 60.0);
     const raw = ttrScore * 0.5 + rdScore * 0.5;
     if (this.wordCount < 100) {
       const factor = (this.wordCount - 30) / 70.0;
@@ -643,9 +644,9 @@ export class TextSignals {
       const fwR = ws.filter((w) => FUNCTION_WORDS.has(w)).length / ws.length;
       if (fwR >= 0.35 && fwR <= 0.55) miniScore += 0.10;
       if (AI_PHRASE_PATTERNS.slice(0, 15).some((p) => p.test(sentText))) miniScore += 0.12;
-      if (!ws.some((w) => w.includes("'"))) miniScore += 0.08;
+      if (!ws.some((w) => w.includes("'"))) miniScore += 0.03;
       if (ws.some((w) => formalLinks.has(w))) miniScore += 0.10;
-      if (!ws.some((w) => personal.has(w))) miniScore += 0.06;
+      if (!ws.some((w) => personal.has(w))) miniScore += 0.02;
       if (miniScore >= 0.28) aiCount++;
     }
     return scored === 0 ? 50 : clamp((aiCount / scored) * 100);
@@ -700,7 +701,7 @@ export class TextSignals {
     const aiDist = aiRaw.map((x) => x / aiSum);
     const mDist = textDist.map((p, i) => (p + aiDist[i]) / 2.0);
     const jsd = (klDivergence(textDist, mDist) + klDivergence(aiDist, mDist)) / 2.0;
-    return clamp(sigNorm(jsd, 0.20, -15.0));
+    return clamp(sigNorm(jsd, 0.13, -15.0));
   }
 
   dependencyDepth(): number {
@@ -790,7 +791,7 @@ class DetectorProfile {
   }
 
   score(signals: Record<string, number>, calibration?: Record<string, { a: number; b: number }>): Record<string, any> {
-    const GLOBAL_BIAS = 0.10;
+    const GLOBAL_BIAS = 0.03;
     const GLOBAL_TEMP_MULT = 2.0;
 
     const normalized: Record<string, number> = {};
@@ -832,28 +833,28 @@ class DetectorProfile {
 // ── Calibration ──
 
 const DETECTOR_CALIBRATION: Record<string, { a: number; b: number }> = {
-  gptzero: { a: 0.05906, b: -1.18861 },
-  turnitin: { a: 0.05541, b: -1.28797 },
-  originality_ai: { a: 0.07509, b: -1.15330 },
-  winston_ai: { a: 0.03678, b: -1.36134 },
-  copyleaks: { a: 0.02940, b: -1.16593 },
-  sapling: { a: 0.04632, b: -1.11145 },
-  content_at_scale: { a: 0.02707, b: -0.82579 },
-  crossplag: { a: 0.04373, b: -1.19365 },
-  writer_ai: { a: 0.03502, b: -1.19645 },
-  smodin: { a: 0.04998, b: -1.23648 },
-  hive_ai: { a: 0.03224, b: -1.19164 },
-  surfer_seo: { a: 0.03128, b: -1.03867 },
-  zerogpt: { a: 0.05848, b: -1.12507 },
-  quillbot: { a: 0.08918, b: -1.32742 },
-  grammarly: { a: 0.03479, b: -1.14614 },
-  scribbr: { a: 0.03938, b: -1.16957 },
-  pangram: { a: 0.04367, b: -1.33418 },
-  roberta: { a: 0.04624, b: -1.09860 },
-  openai_classifier: { a: 0.02006, b: -0.51888 },
-  content_detector_ai: { a: 0.04889, b: -1.19108 },
-  gpt2_detector: { a: 0.02016, b: -0.50459 },
-  stealth_detector: { a: 0.08647, b: -1.16601 },
+  gptzero: { a: 0.070, b: -1.70 },
+  turnitin: { a: 0.065, b: -1.75 },
+  originality_ai: { a: 0.085, b: -1.65 },
+  winston_ai: { a: 0.050, b: -1.80 },
+  copyleaks: { a: 0.045, b: -1.70 },
+  sapling: { a: 0.080, b: -2.10 },
+  content_at_scale: { a: 0.065, b: -1.80 },
+  crossplag: { a: 0.055, b: -1.70 },
+  writer_ai: { a: 0.12, b: -3.80 },
+  smodin: { a: 0.060, b: -1.75 },
+  hive_ai: { a: 0.045, b: -1.70 },
+  surfer_seo: { a: 0.065, b: -1.80 },
+  zerogpt: { a: 0.10, b: -2.30 },
+  quillbot: { a: 0.15, b: -3.50 },
+  grammarly: { a: 0.070, b: -2.20 },
+  scribbr: { a: 0.050, b: -1.70 },
+  pangram: { a: 0.055, b: -1.80 },
+  roberta: { a: 0.09, b: -2.30 },
+  openai_classifier: { a: 0.10, b: -3.00 },
+  content_detector_ai: { a: 0.060, b: -1.70 },
+  gpt2_detector: { a: 0.10, b: -3.00 },
+  stealth_detector: { a: 0.095, b: -1.70 },
 };
 
 // ── 22 Detector Profiles ──
@@ -869,7 +870,7 @@ const DETECTOR_PROFILES: DetectorProfile[] = [
   new DetectorProfile({ name: "sapling", displayName: "Sapling AI", category: "mid-tier", bias: 0.08, temperature: 1.15, weights: { perplexity: 1.2, token_predictability: 0.7, vocabulary_richness: 0.5, burstiness: 0.4, ai_pattern_score: 0.4, shannon_entropy: 0.3 }, interactions: [["perplexity", "token_predictability", 0.3]] }),
   new DetectorProfile({ name: "content_at_scale", displayName: "Content at Scale", category: "mid-tier", bias: 0.0, temperature: 1.10, weights: { readability_consistency: 0.8, perplexity: 0.6, ai_pattern_score: 0.5, sentence_uniformity: 0.5, avg_word_commonality: 0.4, ngram_repetition: 0.3, lexical_density_var: 0.3 } }),
   new DetectorProfile({ name: "crossplag", displayName: "Crossplag", category: "mid-tier", bias: 0.05, temperature: 1.08, weights: { perplexity: 0.8, ai_pattern_score: 0.7, sentence_uniformity: 0.6, vocabulary_richness: 0.5, ngram_repetition: 0.4, paragraph_uniformity: 0.3 } }),
-  new DetectorProfile({ name: "writer_ai", displayName: "Writer.com", category: "mid-tier", bias: 0.05, temperature: 1.10, weights: { perplexity: 0.9, burstiness: 0.6, vocabulary_richness: 0.5, stylometric_score: 0.5, shannon_entropy: 0.4, function_word_freq: 0.3 } }),
+  new DetectorProfile({ name: "writer_ai", displayName: "Writer.com", category: "mid-tier", bias: -0.15, temperature: 1.10, weights: { perplexity: 0.9, burstiness: 0.6, vocabulary_richness: 0.5, stylometric_score: 0.5, shannon_entropy: 0.3, function_word_freq: 0.2 } }),
   new DetectorProfile({ name: "smodin", displayName: "Smodin AI", category: "mid-tier", bias: 0.10, temperature: 1.15, weights: { perplexity: 0.8, ai_pattern_score: 0.7, burstiness: 0.6, sentence_uniformity: 0.5, vocabulary_richness: 0.4, ngram_repetition: 0.3, per_sentence_ai_ratio: 0.3 } }),
   new DetectorProfile({ name: "hive_ai", displayName: "Hive AI", category: "mid-tier", bias: 0.08, temperature: 1.20, weights: { perplexity: 0.7, burstiness: 0.5, sentence_uniformity: 0.6, ai_pattern_score: 0.5, vocabulary_richness: 0.4, readability_consistency: 0.4, word_length_variance: 0.3, spectral_flatness: 0.2 }, interactions: [["perplexity", "sentence_uniformity", 0.2]] }),
   new DetectorProfile({ name: "surfer_seo", displayName: "Surfer SEO", category: "mid-tier", bias: 0.10, temperature: 1.18, weights: { perplexity: 0.8, readability_consistency: 0.7, sentence_uniformity: 0.6, ai_pattern_score: 0.6, vocabulary_richness: 0.5, paragraph_uniformity: 0.4, avg_word_commonality: 0.3, word_length_variance: 0.3, function_word_freq: 0.2 }, interactions: [["readability_consistency", "sentence_uniformity", 0.25]] }),
@@ -881,9 +882,9 @@ const DETECTOR_PROFILES: DetectorProfile[] = [
   // TIER 4: RESEARCH
   new DetectorProfile({ name: "pangram", displayName: "Pangram", category: "research", bias: 0.20, temperature: 1.35, weights: { perplexity: 0.6, burstiness: 0.5, vocabulary_richness: 0.4, sentence_uniformity: 0.4, ai_pattern_score: 0.4, shannon_entropy: 0.4, readability_consistency: 0.3, ngram_repetition: 0.3, zipf_deviation: 0.3, token_predictability: 0.3, spectral_flatness: 0.3, function_word_freq: 0.2, dependency_depth: 0.2, lexical_density_var: 0.2 }, interactions: [["perplexity", "zipf_deviation", 0.3], ["burstiness", "spectral_flatness", 0.2], ["sentence_uniformity", "paragraph_uniformity", 0.2]] }),
   new DetectorProfile({ name: "roberta", displayName: "RoBERTa Detector", category: "research", bias: 0.0, temperature: 1.05, weights: { perplexity: 1.0, vocabulary_richness: 0.7, burstiness: 0.5, ai_pattern_score: 0.4, shannon_entropy: 0.3, token_predictability: 0.3 } }),
-  new DetectorProfile({ name: "openai_classifier", displayName: "OpenAI Classifier", category: "research", bias: -0.30, temperature: 0.80, weights: { perplexity: 1.2, burstiness: 0.6, vocabulary_richness: 0.4, shannon_entropy: 0.3 } }),
+  new DetectorProfile({ name: "openai_classifier", displayName: "OpenAI Classifier", category: "research", bias: -0.40, temperature: 0.80, weights: { perplexity: 1.2, burstiness: 0.6, vocabulary_richness: 0.4, shannon_entropy: 0.3 } }),
   new DetectorProfile({ name: "content_detector_ai", displayName: "Content Detector AI", category: "research", bias: -0.05, temperature: 1.00, weights: { perplexity: 0.8, ai_pattern_score: 0.7, sentence_uniformity: 0.5, vocabulary_richness: 0.4, ngram_repetition: 0.3, per_sentence_ai_ratio: 0.3 } }),
-  new DetectorProfile({ name: "gpt2_detector", displayName: "GPT-2 Output Detector", category: "research", bias: -0.35, temperature: 0.75, weights: { perplexity: 1.3, burstiness: 0.6, vocabulary_richness: 0.4, shannon_entropy: 0.3 } }),
+  new DetectorProfile({ name: "gpt2_detector", displayName: "GPT-2 Output Detector", category: "research", bias: -0.45, temperature: 0.75, weights: { perplexity: 1.3, burstiness: 0.6, vocabulary_richness: 0.4, shannon_entropy: 0.3 } }),
   new DetectorProfile({ name: "stealth_detector", displayName: "StealthDetector (Ours)", category: "custom", description: "Ultra-aggressive: all 20 signals + interactions, max temperature", bias: 0.35, temperature: 1.50, weights: { perplexity: 0.7, burstiness: 0.6, vocabulary_richness: 0.5, sentence_uniformity: 0.5, ai_pattern_score: 0.6, shannon_entropy: 0.4, readability_consistency: 0.4, stylometric_score: 0.3, ngram_repetition: 0.3, starter_diversity: 0.3, word_length_variance: 0.2, paragraph_uniformity: 0.3, avg_word_commonality: 0.2, zipf_deviation: 0.3, token_predictability: 0.4, per_sentence_ai_ratio: 0.5, spectral_flatness: 0.3, lexical_density_var: 0.2, function_word_freq: 0.2, dependency_depth: 0.2 }, interactions: [["perplexity", "burstiness", 0.35], ["perplexity", "ai_pattern_score", 0.30], ["sentence_uniformity", "paragraph_uniformity", 0.25], ["token_predictability", "zipf_deviation", 0.25], ["per_sentence_ai_ratio", "ai_pattern_score", 0.20], ["burstiness", "spectral_flatness", 0.15]] }),
 ];
 
@@ -942,7 +943,7 @@ export class MultiDetector {
     );
 
     // Length-reliability damping
-    const lengthFactor = Math.max(0.05, Math.min(1.0, (sigObj.wordCount - 20) / 120.0));
+    const lengthFactor = Math.max(0.05, Math.min(1.0, (sigObj.wordCount - 20) / 100.0));
     if (lengthFactor < 1.0) {
       for (const d of detectorResults) {
         d.ai_score = Math.round(clamp(d.ai_score * lengthFactor + 50.0 * (1.0 - lengthFactor)) * 10) / 10;

@@ -60,11 +60,41 @@ const IRREGULAR_PP: Record<string, string> = {
 const NO_PASSIVE = new Set([
   "is", "are", "was", "were", "be", "been", "being",
   "have", "has", "had", "having",
+  // Modal verbs — never passivize
+  "will", "would", "shall", "should", "can", "could", "may", "might", "must",
   "seem", "appear", "become", "remain", "exist", "occur",
   "happen", "belong", "consist", "depend", "matter",
   "arrive", "come", "go", "die", "live", "sleep", "stay",
   "emerge", "arise", "fall", "rise", "sit", "stand",
   "agree", "disagree", "laugh", "cry", "smile",
+]);
+
+// Nouns commonly misidentified as verbs by compromise.js — never passivize
+const NOT_VERBS = new Set([
+  "reduction", "indication", "awareness", "performance", "importance",
+  "influence", "experience", "evidence", "resistance", "intelligence",
+  "competence", "confidence", "preference", "reference", "difference",
+  "significance", "consequence", "presence", "absence", "existence",
+  "occurrence", "appearance", "maintenance", "guidance", "reliance",
+  "compliance", "assistance", "insurance", "endurance", "tolerance",
+  "excellence", "dependence", "independence", "correspondence",
+  "instance", "substance", "distance", "circumstance", "governance",
+  "acceptance", "attendance", "relevance", "dominance", "abundance",
+  "observance", "allegiance", "perseverance", "temperance",
+  "foundation", "motivation", "organization", "communication",
+  "information", "education", "situation", "population", "generation",
+  "evaluation", "administration", "application", "investigation",
+  "interpretation", "implementation", "transformation", "participation",
+  "interaction", "collaboration", "association", "conversation",
+  "leadership", "relationship", "partnership", "membership", "ownership",
+  "scholarship", "citizenship", "championship", "fellowship",
+  "environment", "management", "development", "assessment", "achievement",
+  "engagement", "requirement", "improvement", "involvement", "statement",
+  "treatment", "adjustment", "commitment", "department", "employment",
+  "framework", "network", "feedback", "outcome", "overview", "approach",
+  // Gerunds/present participles — never passivize
+  "dealing", "dealing", "building", "working", "making", "taking",
+  "getting", "having", "using", "leading", "providing",
 ]);
 
 // Generic agent nouns to omit in passive
@@ -96,9 +126,23 @@ export function activeToPassive(sentence: string): string {
   // Check if verb is passivizable
   const verbLower = verbText.toLowerCase().split(/\s+/)[0];
   if (NO_PASSIVE.has(verbLower)) return sentence;
+  // Reject nouns misidentified as verbs by compromise.js
+  if (NOT_VERBS.has(verbLower)) return sentence;
+  // Never passivize gerunds/present participles (-ing words)
+  if (verbLower.endsWith("ing")) return sentence;
+
+  // Strip 3rd-person singular "s" to get base verb form
+  let verbBase = verbLower;
+  if (verbBase.endsWith("ies")) verbBase = verbBase.slice(0, -3) + "y";
+  else if (verbBase.endsWith("ses") || verbBase.endsWith("zes") || verbBase.endsWith("xes") || verbBase.endsWith("ches") || verbBase.endsWith("shes")) verbBase = verbBase.slice(0, -2);
+  else if (verbBase.endsWith("s") && !verbBase.endsWith("ss")) verbBase = verbBase.slice(0, -1);
 
   // Get past participle
-  const pp = IRREGULAR_PP[verbLower] ?? (verbLower.endsWith("e") ? verbLower + "d" : verbLower + "ed");
+  const pp = IRREGULAR_PP[verbBase] ?? IRREGULAR_PP[verbLower] ?? (verbBase.endsWith("e") ? verbBase + "d" : verbBase + "ed");
+
+  // Validate past participle — reject nonsense forms:
+  // Words ending in -tioned, -nced + ed, -mented etc. are likely misidentified nouns
+  if (/(?:tion|sion|ment|ness|ance|ence|ship|ment)ed$/i.test(pp)) return sentence;
 
   // Find the object (text after the verb)
   const verbIdx = sentence.toLowerCase().indexOf(verbText.toLowerCase());
@@ -116,7 +160,13 @@ export function activeToPassive(sentence: string): string {
 
   // Build passive: Object + aux + PP + by + Subject
   const objectText = afterVerb.replace(/\.$/, "");
-  const agent = GENERIC_AGENTS.has(subjectLower) ? "" : ` by ${subjectText.toLowerCase()}`;
+  // Convert subject pronouns to object form for "by" clause
+  const SUBJ_TO_OBJ: Record<string, string> = {
+    "she": "her", "he": "him", "i": "me", "they": "them",
+    "we": "us", "who": "whom", "it": "it",
+  };
+  const agentText = SUBJ_TO_OBJ[subjectLower] ?? subjectText.toLowerCase();
+  const agent = GENERIC_AGENTS.has(subjectLower) ? "" : ` by ${agentText}`;
 
   let passive = `${objectText} ${aux} ${pp}${agent}`;
   // Capitalize first word
@@ -161,7 +211,8 @@ export function voiceShift(sentence: string, probability: number = 0.30): string
 
 function frontAdverbial(sentence: string): string {
   // Move a trailing prepositional phrase to the front
-  const match = sentence.match(/^(.+?)(,?\s*(?:in|at|by|with|through|during|after|before)\s+.+?)([.!?])$/i);
+  // Require whitespace before preposition to prevent splitting words (e.g. "somewhat" → "somewh, at")
+  const match = sentence.match(/^(.+?)(,?\s+\b(?:in|at|by|with|through|during|after|before)\b\s+.+?)([.!?])$/i);
   if (!match) return sentence;
   const [, main, pp, punct] = match;
   // Make sure the PP is substantial
@@ -175,13 +226,20 @@ function frontAdverbial(sentence: string): string {
 function clauseSwap(sentence: string, intensity: number): string {
   if (Math.random() > rules.CLAUSE_SWAP_RATE * intensity) return sentence;
 
+  // Don't swap in sentences with 3+ commas (likely lists)
+  const commaCount = (sentence.match(/,/g) || []).length;
+  if (commaCount >= 3) return sentence;
+
+  const CLAUSE_VERBS = /\b(?:is|are|was|were|has|have|had|does|do|did|will|would|can|could|should|may|might|must|seems?|appears?|involves?|requires?|suggests?|shows?|provides?|leads?|plays?|helps?|makes?)\b/i;
+
   const conjunctions = [", and ", ", but ", ", yet ", ", so "];
   for (const conj of conjunctions) {
     const idx = sentence.indexOf(conj);
     if (idx > 0 && idx < sentence.length - conj.length - 5) {
       const part1 = sentence.slice(0, idx);
       const part2 = sentence.slice(idx + conj.length);
-      if (part1.split(/\s+/).length >= 4 && part2.split(/\s+/).length >= 4) {
+      if (part1.split(/\s+/).length >= 4 && part2.split(/\s+/).length >= 4
+        && CLAUSE_VERBS.test(part1) && CLAUSE_VERBS.test(part2)) {
         const cap2 = part2[0].toUpperCase() + part2.slice(1);
         const lower1 = part1[0].toLowerCase() + part1.slice(1);
         return cap2.replace(/\.$/, "") + conj + lower1 + (sentence.endsWith(".") ? "." : "");
@@ -194,13 +252,13 @@ function clauseSwap(sentence: string, intensity: number): string {
 export function deepRestructure(sentence: string, intensity: number = 1.0): string {
   let result = sentence;
 
-  // Try fronting an adverbial
-  if (Math.random() < 0.3 * intensity) {
+  // More aggressive fronting of adverbials
+  if (Math.random() < 0.5 * intensity) {
     result = frontAdverbial(result);
   }
 
-  // Try clause swap
-  result = clauseSwap(result, intensity);
+  // Try clause swap with boosted intensity
+  result = clauseSwap(result, intensity * 1.3);
 
   return result;
 }
@@ -208,7 +266,7 @@ export function deepRestructure(sentence: string, intensity: number = 1.0): stri
 // ── Merge short sentences ──
 
 const MERGE_CONNECTORS = [
-  ", and ", ", which ", " — ", ", particularly ", ", especially ",
+  ", and ", ", which ", ", notably ", ", particularly ", ", especially ",
   ", although ", ", while ", ", since ", ", as ",
 ];
 

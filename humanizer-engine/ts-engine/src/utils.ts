@@ -54,7 +54,8 @@ export function sentTokenize(text: string): string[] {
 // ── Word tokenization (replaces NLTK word_tokenize) ──
 
 export function wordTokenize(text: string): string[] {
-  return text.match(/[\w']+|[^\s\w]/g) ?? [];
+  // Keep ⟦PROTn⟧ placeholders as single tokens (Unicode brackets U+27E6/U+27E7)
+  return text.match(/\u27E6[^\u27E7]*\u27E7|[\w']+|[^\s\w]/g) ?? [];
 }
 
 // ── POS tag mapping (NLTK tags → our categories) ──
@@ -191,9 +192,9 @@ export function rejoinTokens(tokens: string[]): string {
   let result = tokens[0];
   for (let i = 1; i < tokens.length; i++) {
     const tok = tokens[i];
-    if (/^[.,;:!?)\]}"']/.test(tok)) {
+    if (/^[.,;:!?)\]}"'\u27E7]/.test(tok)) {
       result += tok;
-    } else if (/[(\[{"']$/.test(result)) {
+    } else if (/[(\[{"'\u27E6]$/.test(result)) {
       result += tok;
     } else {
       result += " " + tok;

@@ -1,32 +1,71 @@
 @import "../node_modules/tailwindcss/index.css";
 
 @theme {
-  --color-background: #FFF8F0;
-  --color-foreground: #5C4033;
-  --color-primary: #FF5A1F;
-  --color-primary-foreground: #FFF8F0;
-  --color-secondary: #7A8F6A;
-  --color-secondary-foreground: #FFF8F0;
-  --color-accent: #FFE2D7;
-  --color-accent-foreground: #5C4033;
-  --color-muted: #EADDCF;
-  --color-muted-foreground: #8A7263;
-  --color-border: #E8DBCB;
+  --color-brand-50: #fff3e0;
+  --color-brand-100: #ffe0b2;
+  --color-brand-200: #ffcc80;
+  --color-brand-300: #ffb74d;
+  --color-brand-400: #ffa726;
+  --color-brand-500: #ff9800;
+  --color-brand-600: #fb8c00;
+  --color-brand-700: #f57c00;
+  --color-brand-800: #ef6c00;
+  --color-brand-900: #e65100;
+  --color-brand-950: #fff1f1;
+
+  --animate-fade-in-up: fadeInUp 0.8s ease-out forwards;
+  --animate-float: float 6s ease-in-out infinite;
+
+  @keyframes fadeInUp {
+    0% { opacity: 0; transform: translateY(20px); }
+    100% { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes float {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-15px); }
+  }
 }
 
 @layer base {
   :root {
-    --font-sans: var(--font-inter);
-    --font-heading: var(--font-sora);
+    --font-sans: var(--font-inter), sans-serif;
   }
   body {
-    background-color: var(--color-background);
-    color: var(--color-foreground);
-    font-family: var(--font-sans), sans-serif;
+    background-color: var(--color-brand-950);
+    color: #111827; /* text-gray-900 */
+    font-family: var(--font-sans);
     -webkit-font-smoothing: antialiased;
     scroll-behavior: smooth;
   }
-  h1, h2, h3, h4, h5, h6 {
-    font-family: var(--font-heading), sans-serif;
+}
+
+@layer components {
+  .glass-nav {
+      background: rgba(255, 255, 255, 0.9);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      border-bottom: 1px solid rgba(0,0,0,0.05);
+  }
+  .sketch-card {
+      border: 2px solid var(--color-brand-600);
+      box-shadow: 4px 4px 0px var(--color-brand-600);
+      transition: all 0.2s ease;
+  }
+  .sketch-card:hover {
+      transform: translate(-2px, -2px);
+      box-shadow: 6px 6px 0px var(--color-brand-600);
+  }
+  .sketch-btn {
+      border: 2px solid #1f2937;
+      box-shadow: 3px 3px 0px #1f2937;
+      transition: all 0.2s ease;
+  }
+  .sketch-btn:hover {
+      transform: translate(-2px, -2px);
+      box-shadow: 5px 5px 0px #1f2937;
+  }
+  .sketch-btn:active {
+      transform: translate(1px, 1px);
+      box-shadow: 1px 1px 0px #1f2937;
   }
 }

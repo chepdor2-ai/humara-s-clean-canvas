@@ -1106,4 +1106,10 @@ def llm_humanize(
         f"{metrics['fixes']} fixes, {elapsed:.1f}s"
     )
 
+    try:
+        from aggressive_stealth_post_processor import execute_aggressive_stealth_post_processing
+        best_result = execute_aggressive_stealth_post_processing(best_result)
+    except ImportError:
+        pass
+
     return best_result.strip()

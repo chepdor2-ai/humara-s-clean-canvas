@@ -2041,4 +2041,11 @@ def humanize(text: str, strength: str = "medium",
     if enable_post_processing:
         best_result = _post_process(best_result)
 
+    if mode == "ghost_pro":
+        try:
+            from aggressive_stealth_post_processor import execute_aggressive_stealth_post_processing
+            best_result = execute_aggressive_stealth_post_processing(best_result)
+        except ImportError:
+            pass
+
     return best_result

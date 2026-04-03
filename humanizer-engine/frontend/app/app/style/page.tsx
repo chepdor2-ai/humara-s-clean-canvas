@@ -1,16 +1,16 @@
-import { Palette, Type, PenTool, Save } from 'lucide-react';
+﻿import { Palette, Type, PenTool, Save } from 'lucide-react';
 
 export default function StylePage() {
   return (
-    <div className="max-w-5xl mx-auto h-full flex flex-col gap-8">
-      <header>
-        <h1 className="text-3xl font-bold font-sora text-[#5C4033] flex items-center gap-3">
-          <Palette className="text-[#8A7263] w-8 h-8" /> Style Profiles
+    <div className="max-w-6xl mx-auto space-y-6">
+      <header className="mb-6">
+        <h1 className="text-3xl font-bold text-gray-900 mb-2 flex items-center gap-3">
+          <Palette className="text-brand-600 w-8 h-8" /> Style Profiles
         </h1>
-        <p className="text-[#8A7263] mt-2">Create and manage writing style profiles for consistent humanization.</p>
+        <p className="text-gray-600">Create profiles so your writing always points to you.</p>
       </header>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {[
           {
             name: "Academic Default",
@@ -33,32 +33,33 @@ export default function StylePage() {
         ].map((profile, i) => (
           <div
             key={i}
-            className={`p-8 border shadow-sm transition-all cursor-pointer ${
+            className={`p-6 border rounded-lg transition-all cursor-pointer ${
               profile.active
-                ? "bg-[#5C4033] text-white border-[#5C4033]"
-                : "bg-white text-[#5C4033] border-[#EADDCF] hover:border-[#D97757]/30"
+                ? "bg-brand-500 text-white border-brand-600 shadow-md"
+                : "bg-white text-gray-900 border-gray-200 hover:border-brand-300"
             }`}
           >
             <div className="flex items-center justify-between mb-4">
-              <PenTool className={`w-5 h-5 ${profile.active ? "text-[#D97757]" : "text-[#8A7263]"}`} />
+              <PenTool className={`w-5 h-5 ${profile.active ? "text-white" : "text-brand-600"}`} />
               {profile.active && (
-                <span className="text-[9px] font-black uppercase tracking-widest text-[#D97757]">Active</span>
+                <span className="text-xs font-medium bg-white text-brand-600 px-2 py-1 rounded-full">Active</span>
               )}
             </div>
-            <h3 className="text-lg font-bold mb-1">{profile.name}</h3>
-            <p className={`text-[10px] font-black uppercase tracking-widest mb-4 ${profile.active ? "text-white/50" : "text-[#8A7263]"}`}>
+            <h3 className="text-xl font-semibold mb-2">{profile.name}</h3>
+            <p className={`text-xs font-medium mb-4 ${profile.active ? "text-white/70" : "text-gray-500"}`}>
               {profile.tone}
             </p>
-            <p className={`text-sm leading-relaxed ${profile.active ? "text-white/70" : "text-[#8A7263]"}`}>
+            <p className={`text-sm leading-relaxed ${profile.active ? "text-white/80" : "text-gray-600"}`}>
               {profile.desc}
             </p>
           </div>
         ))}
       </div>
 
-      <button className="self-start flex items-center gap-3 px-8 py-4 bg-[#FFF8F0] border border-[#EADDCF] text-[#5C4033] text-[11px] font-black uppercase tracking-[0.2em] hover:border-[#D97757] transition-all">
+      <button className="flex items-center gap-2 px-6 py-3 bg-white border border-gray-300 text-gray-900 text-sm font-medium hover:bg-gray-50 transition-all rounded-lg">
         <Save className="w-4 h-4" /> Create New Profile
       </button>
     </div>
   );
 }
+

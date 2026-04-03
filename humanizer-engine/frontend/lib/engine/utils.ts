@@ -13,6 +13,35 @@ const realWordCache = new Map<string, boolean>();
 
 function isRealWord(word: string): boolean {
   if (realWordCache.has(word)) return realWordCache.get(word)!;
+  // Quick reject: words with obviously broken suffix patterns
+  // e.g., "reductioning", "indicationed", "awarenesses", "managementing", "dataed"
+  const lower = word.toLowerCase();
+  if (/(?:tion|sion|ment|ness|ance|ence|ship)(?:ing|ed|s|tion|ment|ize)$/i.test(lower) &&
+      !['mentioned', 'mentioned', 'sentenced', 'commenced', 'experienced', 'evidenced',
+        'referenced', 'influenced', 'silenced', 'fenced', 'balanced', 'financed',
+        'advancing', 'announcing', 'bouncing', 'dancing', 'enhancing', 'financing',
+        'shipping', 'mentioning', 'sentencing', 'commencing'].includes(lower)) {
+    realWordCache.set(word, false);
+    return false;
+  }
+  // Reject doubled suffixes
+  if (/(?:tioned|tioning|sioned|sioning|mented|menting|nessed|nessing|shiped)$/i.test(lower) &&
+      !['mentioned', 'mentioning', 'augmented', 'augmenting', 'commented', 'commenting',
+        'documented', 'documenting', 'experimented', 'experimenting', 'implemented', 'implementing',
+        'supplemented', 'supplementing', 'complimented', 'complimenting', 'cemented', 'cementing',
+        'lamented', 'lamenting', 'fermented', 'fermenting', 'tormented', 'tormenting',
+        'segmented', 'segmenting', 'fragmented', 'fragmenting',
+        'ornamented', 'complemented', 'complementing'].includes(lower)) {
+    realWordCache.set(word, false);
+    return false;
+  }
+  // Reject words ending in -aed, -ued + ed patterns (dataed, issuesd, etc.)
+  if (/(?:ata|ue|ia)(?:ed|ing)$/.test(lower) && !['continued', 'continuing', 'valued', 'valuing',
+    'argued', 'arguing', 'issued', 'issuing', 'pursued', 'pursuing', 'rescued', 'rescuing',
+    'created', 'creating', 'dated', 'dating', 'updated', 'updating'].includes(lower)) {
+    realWordCache.set(word, false);
+    return false;
+  }
   try {
     const d = getDictionary();
     const result = d.isValidWord(word);
@@ -54,7 +83,8 @@ export function sentTokenize(text: string): string[] {
 // ── Word tokenization (replaces NLTK word_tokenize) ──
 
 export function wordTokenize(text: string): string[] {
-  return text.match(/[\w']+|[^\s\w]/g) ?? [];
+  // Keep ⟦PROTn⟧ placeholders as single tokens (Unicode brackets U+27E6/U+27E7)
+  return text.match(/\u27E6[^\u27E7]*\u27E7|[\w']+|[^\s\w]/g) ?? [];
 }
 
 // ── POS tag mapping (NLTK tags → our categories) ──
@@ -191,9 +221,9 @@ export function rejoinTokens(tokens: string[]): string {
   let result = tokens[0];
   for (let i = 1; i < tokens.length; i++) {
     const tok = tokens[i];
-    if (/^[.,;:!?)\]}"']/.test(tok)) {
+    if (/^[.,;:!?)\]}"'\u27E7]/.test(tok)) {
       result += tok;
-    } else if (/[(\[{"']$/.test(result)) {
+    } else if (/[(\[{"'\u27E6]$/.test(result)) {
       result += tok;
     } else {
       result += " " + tok;
@@ -238,6 +268,16 @@ export function synonymReplace(
       continue;
     }
 
+    // Skip words in multi-word capitalized titles (e.g., "Chief Marketing Officer")
+    if (/^[A-Z]/.test(stripped) && stripped.length > 2) {
+      const prevTok = i > 0 ? tokens[i - 1].replace(/[^a-zA-Z]/g, "") : "";
+      const nextTok = i < tokens.length - 1 ? tokens[i + 1].replace(/[^a-zA-Z]/g, "") : "";
+      if ((prevTok && /^[A-Z]/.test(prevTok)) || (nextTok && /^[A-Z]/.test(nextTok))) {
+        newTokens.push(tok);
+        continue;
+      }
+    }
+
     // Skip protected spans
     const tokStart = sentence.indexOf(tok);
     if (tokStart >= 0 && isInProtectedSpan(tokStart, protectedSpans)) {
@@ -280,12 +320,42 @@ export function synonymReplace(
       continue;
     }
 
-    // Filter candidates: no multi-word, not already used, not same sentence collision
+    // Blacklist: synonyms that are real words but terrible replacements
+    // These come from thesaurus entries that are technically related but produce garbled text
+    const SYNONYM_BLACKLIST = new Set([
+      "caller", "calling", "selling", "flunk", "lesson", "handler",
+      "societal", "communal", "assort", "principally", "checker",
+      "pleader", "roomer", "settler", "capper", "shaker", "sayer",
+      "boss", "wearable", "covering", "tactical", "falling",
+      "public", "amend", "planned", "calculated", "construction",
+      "substance", "direction", "understandings",
+      "quartet", "pity", "associate", "topics", "interplays",
+      "advance", "hurdles", "dropping", "dealings",
+      "vesture", "coating", "specially", "understanding",
+      "interplay", "appraising", "dialogues",
+      "earn", "quatern", "concluded", "wearable",
+      "transfers", "main",
+      "center", "eve", "tactics",
+      "lotion", "prosody", "primer", "ticker", "cosmos",
+      "formation", "winner", "clean", "maker", "backer",
+      "tract", "genesis", "heed", "craft", "deed",
+      "lodge", "patch", "file", "register", "post",
+      "terminal", "cabinet", "chamber", "trunk", "cell",
+      "organ", "press", "plant", "stock", "draft",
+      "bark", "pool", "court", "match", "spring",
+      "seal", "mold", "cast", "strain", "plot",
+      "master", "hindrances", "principally",
+      "mentation", "cogitation", "bettor",
+      "rivet", "centre", "link",
+    ]);
+
+    // Filter candidates: no multi-word, not already used, not same sentence collision, not blacklisted
     const sentWords = new Set(
       sentence.toLowerCase().split(/\s+/).map((w) => w.replace(/[^a-z']/g, "")),
     );
     const valid = candidates.filter(
-      (c) => !c.includes(" ") && !usedWords.has(c.toLowerCase()) && !sentWords.has(c.toLowerCase()),
+      (c) => !c.includes(" ") && !usedWords.has(c.toLowerCase()) && !sentWords.has(c.toLowerCase())
+             && !SYNONYM_BLACKLIST.has(c.toLowerCase()),
     );
     if (valid.length === 0) {
       newTokens.push(tok);
@@ -386,13 +456,20 @@ export function replaceAiStarters(sentence: string): string {
 export function restructureSentence(sentence: string, intensity: number = 1.0): string {
   if (Math.random() > rules.RESTRUCTURE_RATE * intensity) return sentence;
 
+  // Don't restructure sentences with 3+ commas (likely lists)
+  const commaCount = (sentence.match(/,/g) || []).length;
+  if (commaCount >= 3) return sentence;
+
+  const CLAUSE_VERBS = /\b(?:is|are|was|were|has|have|had|does|do|did|will|would|can|could|should|may|might|must|seems?|appears?|involves?|requires?|suggests?|shows?|provides?|leads?|plays?|helps?|makes?)\b/i;
+
   const conjunctions = [", and ", ", but ", ", yet ", ", so "];
   for (const conj of conjunctions) {
     const idx = sentence.indexOf(conj);
     if (idx > 0 && idx < sentence.length - conj.length - 5) {
       const part1 = sentence.slice(0, idx);
       const part2 = sentence.slice(idx + conj.length);
-      if (part1.split(" ").length >= 4 && part2.split(" ").length >= 4) {
+      if (part1.split(" ").length >= 4 && part2.split(" ").length >= 4
+        && CLAUSE_VERBS.test(part1) && CLAUSE_VERBS.test(part2)) {
         // Capitalize part2, lowercase part1 end
         const newPart2 = part2[0].toUpperCase() + part2.slice(1);
         const newPart1 = part1[0].toLowerCase() + part1.slice(1);
@@ -447,21 +524,35 @@ export function makeBurstier(
   // Need more variance — try splitting long sentences or merging short ones
   const result = [...sentences];
 
+  // Helper: check if text looks like a clause (contains a verb)
+  const CLAUSE_VERBS = /\b(?:is|are|was|were|has|have|had|does|do|did|will|would|can|could|should|may|might|must|shall|seems?|appears?|becomes?|remains?|involves?|requires?|suggests?|shows?|demonstrates?|provides?|leads?|plays?|helps?|makes?|takes?|gives?)\b/i;
+
   for (let i = 0; i < result.length; i++) {
     const words = result[i].split(/\s+/);
     if (words.length > 25 && Math.random() < 0.4) {
+      // Don't split sentences with 3+ commas (likely lists)
+      const commaCount = (result[i].match(/,/g) || []).length;
+      if (commaCount >= 3) continue;
+
       // Split at a comma
       const mid = Math.floor(words.length / 2);
       for (let offset = 0; offset < Math.min(5, mid); offset++) {
+        let didSplit = false;
         for (const pos of [mid + offset, mid - offset]) {
           if (pos > 0 && pos < words.length && words[pos - 1].endsWith(",")) {
             const part1 = words.slice(0, pos).join(" ");
             const part2 = words.slice(pos).join(" ");
+            // Verify both parts look like clauses (contain a verb)
+            if (!CLAUSE_VERBS.test(part1) || !CLAUSE_VERBS.test(part2)) continue;
+            // Skip if part2 starts with a conjunction (list continuation)
+            if (/^(?:and|or|but|nor|yet)\b/i.test(part2.trim())) continue;
             const cap2 = part2[0].toUpperCase() + part2.slice(1);
             result.splice(i, 1, part1, cap2);
+            didSplit = true;
             break;
           }
         }
+        if (didSplit) break;
       }
     }
   }

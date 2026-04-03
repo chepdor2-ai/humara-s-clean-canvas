@@ -174,19 +174,37 @@ export class HumanizerDictionary {
     const synonyms = this.getContextualSynonyms(lower, context, 5);
     if (synonyms.length === 0) return word;
 
-    // Filter out avoided words, multi-word synonyms, and validate
+    // Words that produce nonsensical output when used as replacements
+    const REPLACEMENT_BLOCKLIST = new Set([
+      "chassis", "unitedly", "limitless", "lonely", "reply", "retrieve",
+      "apparatus", "contrivance", "contraption", "gizmo", "gadget", "doohickey",
+      "thingamajig", "whatchamacallit", "doodad", "bric-a-brac", "knickknack",
+      "habitation", "domicile", "abode", "dwellings", "lodgings", "berth",
+      "vessel", "conduit", "receptacle", "repository", "depository",
+      "chiefly", "principally", "predominantly", "preponderantly",
+      "hitherto", "heretofore", "henceforth", "therein", "thereof", "hereby",
+      "whilst", "amongst", "betwixt", "ere", "whence", "forthwith",
+      "corporeal", "ethereal", "ephemeral", "nascent", "cognizant",
+      "ameliorate", "expunge", "promulgate", "adjudicate", "pontificate",
+      "obfuscate", "prognosticate", "remunerate", "conflagration",
+      "perambulate", "masticate", "regurgitate", "cogitate",
+      "veritably", "assuredly", "indubitably", "irrefutably",
+    ]);
+
+    // Filter out avoided words, multi-word synonyms, blocked words, and validate
     const candidates = synonyms.filter(
       (s) =>
         !s.includes(" ") &&
         s.toLowerCase() !== lower &&
         !avoid.has(s.toLowerCase()) &&
+        !REPLACEMENT_BLOCKLIST.has(s.toLowerCase()) &&
         this.isValidWord(s),
     );
 
     if (candidates.length === 0) return word;
 
-    // Prefer shorter synonyms, pick from top 3
-    candidates.sort((a, b) => a.length - b.length);
+    // Prefer synonyms with similar length to original word, pick from top 3
+    candidates.sort((a, b) => Math.abs(a.length - lower.length) - Math.abs(b.length - lower.length));
     const topN = candidates.slice(0, Math.min(3, candidates.length));
     return topN[Math.floor(Math.random() * topN.length)];
   }
@@ -228,9 +246,11 @@ export class HumanizerDictionary {
         for (const ss of synSynonyms) {
           if (contextWords.has(ss.toLowerCase())) score += 2;
         }
-        // Prefer shorter, more common words
-        if (syn.length <= 6) score += 1;
-        if (syn.length <= 4) score += 1;
+        // Prefer synonyms with similar length to original word
+        const lenDiff = Math.abs(syn.length - word.length);
+        if (lenDiff <= 1) score += 2;
+        else if (lenDiff <= 3) score += 1;
+        else if (lenDiff > 5) score -= 2;
         // Penalize very long words
         if (syn.length > 10) score -= 1;
         return [syn, score] as [string, number];

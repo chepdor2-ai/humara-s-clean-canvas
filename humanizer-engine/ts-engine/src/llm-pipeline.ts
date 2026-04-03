@@ -9,14 +9,14 @@
  */
 
 import { readFileSync } from "fs";
-import { join, dirname } from "path";
-import { fileURLToPath } from "url";
-// @ts-ignore — OpenAI types may not be resolved in bun-types mode; works at runtime
+import { join } from "path";
+// @ts-ignore — OpenAI types
 import OpenAI from "openai";
-import { sentTokenize } from "./utils.js";
-import { PROTECTED_WORDS } from "./rules.js";
-import { expandContractions } from "./advanced-transforms.js";
-import { protectSpecialContent, restoreSpecialContent } from "./content-protection.js";
+import { sentTokenize } from "./utils";
+import { robustSentenceSplit } from "./content-protection";
+import { PROTECTED_WORDS } from "./rules";
+import { expandContractions } from "./advanced-transforms";
+import { protectSpecialContent, restoreSpecialContent } from "./content-protection";
 
 // ── Config ──
 
@@ -32,7 +32,7 @@ const LLM_TIMEOUT = parseInt(process.env.PIPELINE_TIMEOUT ?? "8000", 10);
 
 let CURATED_SYNONYMS: Record<string, string[]> = {};
 try {
-  const dictDir = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "dictionaries");
+  const dictDir = join(process.cwd(), "..", "dictionaries");
   CURATED_SYNONYMS = JSON.parse(readFileSync(join(dictDir, "curated_synonyms.json"), "utf-8"));
 } catch { /* skip */ }
 
@@ -195,7 +195,7 @@ function phase1ParseAndChunk(text: string): ChunkItem[][] {
   for (let i = 0; i < paragraphs.length; i++) {
     const para = paragraphs[i].trim();
     if (!para) continue;
-    for (const s of sentTokenize(para)) {
+    for (const s of robustSentenceSplit(para)) {
       const st = s.trim();
       if (st) items.push({ type: "SENT", text: st });
     }
@@ -302,7 +302,7 @@ function phase2VocabularyPurge(chunks: ChunkItem[][]): ChunkItem[][] {
 // ── Phases 3-6: LLM combined prompt ──
 
 function buildCombinedPrompt(chunkText: string): string {
-  const sentences = sentTokenize(chunkText);
+  const sentences = robustSentenceSplit(chunkText);
   const annotated = sentences.map((s) => `[${wordCount(s)}w] ${s}`).join("\n");
 
   return `Edit each sentence. [Nw] = current word count.
@@ -401,7 +401,7 @@ function phase7EnforceBoundaries(text: string): string {
   for (const para of paragraphs) {
     const tp = para.trim();
     if (!tp) continue;
-    let sentences = sentTokenize(tp);
+    let sentences = robustSentenceSplit(tp);
     if (sentences.length < 1) { enforced.push(tp); continue; }
 
     const totalCount = sentences.length;
@@ -551,7 +551,7 @@ function phase8FormatScrub(text: string, noContractions = true): string {
 
     if (noContractions) p = pipelineExpandContractions(p);
 
-    const sents = sentTokenize(p);
+    const sents = robustSentenceSplit(p);
     const cs = sents.map((s) => {
       s = s.trim();
       if (!s) return "";

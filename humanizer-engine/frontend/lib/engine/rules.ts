@@ -1,10 +1,10 @@
 // Auto-generated from rules.py — DO NOT EDIT MANUALLY
 
 export const BURSTINESS_TARGET = 0.7;
-export const SYNONYM_RATE = 0.45;
-export const PHRASE_RATE = 0.9;
-export const RESTRUCTURE_RATE = 0.35;
-export const CLAUSE_SWAP_RATE = 0.3;
+export const SYNONYM_RATE = 0.65;
+export const PHRASE_RATE = 0.95;
+export const RESTRUCTURE_RATE = 0.55;
+export const CLAUSE_SWAP_RATE = 0.50;
 
 export const AI_STARTER_REPLACEMENTS: Record<string, string[]> = {
   "furthermore, ": ["In addition, ", "Beyond this, ", "Building on this, ", "Alongside this, "],
@@ -696,13 +696,13 @@ export const SYNONYM_BANK: Record<string, string[]> = {
   "concept": ["idea", "notion", "principle"],
   "consequence": ["outcome", "result", "effect"],
   "debate": ["discussion", "discourse", "argument"],
-  "decline": ["drop", "reduction", "decrease"],
+  "decline": ["decrease", "dip", "slide", "weaken"],
   "dimension": ["aspect", "facet", "scope"],
   "emphasis": ["focus", "stress", "weight"],
   "environment": ["setting", "surroundings", "context"],
   "era": ["period", "epoch", "age"],
   "estimate": ["assessment", "projection", "calculation"],
-  "evidence": ["proof", "indication", "data"],
+  "evidence": ["demonstration", "confirmation", "support"],
   "example": ["instance", "illustration", "case"],
   "feature": ["characteristic", "attribute", "quality"],
   "incentive": ["motivation", "stimulus", "driver"],
@@ -710,7 +710,7 @@ export const SYNONYM_BANK: Record<string, string[]> = {
   "insight": ["understanding", "perception", "awareness"],
   "instance": ["example", "case", "occurrence"],
   "institution": ["organization", "body", "establishment"],
-  "interaction": ["exchange", "engagement", "interplay"],
+  "interaction": ["exchange", "engagement", "dialogue"],
   "intervention": ["action", "measure", "step"],
   "investigation": ["study", "inquiry", "examination"],
   "link": ["connection", "tie", "association"],
@@ -850,7 +850,7 @@ export const SYNONYM_BANK: Record<string, string[]> = {
   "virtually": ["nearly", "almost", "practically"],
 };
 
-export const PROTECTED_WORDS: ReadonlySet<string> = new Set(["a", "about", "above", "accordingly", "additionally", "after", "all", "also", "alternatively", "although", "am", "among", "an", "and", "are", "as", "at", "be", "been", "before", "being", "below", "between", "both", "but", "by", "can", "concurrently", "consequently", "could", "course", "despite", "did", "do", "does", "during", "each", "fair", "for", "from", "furthermore", "granted", "had", "has", "have", "having", "he", "helps", "her", "hers", "herself", "him", "himself", "his", "how", "however", "i", "if", "importantly", "in", "interestingly", "into", "is", "issue", "it", "its", "itself", "least", "less", "matters", "may", "me", "meanwhile", "might", "mine", "more", "moreover", "most", "must", "my", "myself", "nevertheless", "no", "nonetheless", "nor", "not", "oddly", "of", "on", "only", "or", "other", "our", "ours", "ourselves", "own", "plus", "practice", "related", "remember", "same", "shall", "she", "should", "simply", "simultaneously", "since", "so", "still", "subsequently", "such", "surprisingly", "than", "that", "the", "their", "theirs", "them", "themselves", "then", "therefore", "these", "they", "this", "those", "though", "through", "to", "too", "under", "unless", "unnoticed", "upon", "us", "very", "was", "we", "were", "what", "when", "where", "whereas", "whether", "which", "while", "who", "whom", "whose", "why", "will", "with", "within", "without", "would", "yes", "yet", "you", "your", "yours", "yourself"]);
+export const PROTECTED_WORDS: ReadonlySet<string> = new Set(["a", "about", "above", "accordingly", "additionally", "after", "all", "also", "alternatively", "although", "am", "among", "an", "and", "are", "as", "at", "be", "been", "before", "being", "below", "between", "both", "but", "by", "can", "chief", "concurrently", "consequently", "could", "course", "despite", "did", "do", "does", "during", "each", "fair", "for", "from", "furthermore", "granted", "had", "has", "have", "having", "he", "helps", "her", "hers", "herself", "him", "himself", "his", "how", "however", "i", "if", "importantly", "in", "interestingly", "into", "is", "issue", "it", "its", "itself", "least", "less", "matters", "may", "me", "meanwhile", "might", "mine", "more", "moreover", "most", "must", "my", "myself", "nevertheless", "no", "nonetheless", "nor", "not", "oddly", "of", "on", "only", "or", "other", "our", "ours", "ourselves", "own", "plus", "practice", "related", "remember", "same", "shall", "she", "should", "simply", "simultaneously", "since", "so", "still", "subsequently", "such", "surprisingly", "than", "that", "the", "their", "theirs", "them", "themselves", "then", "therefore", "these", "they", "this", "those", "though", "through", "to", "too", "under", "unless", "unnoticed", "upon", "us", "very", "was", "we", "were", "what", "when", "where", "whereas", "whether", "which", "while", "who", "whom", "whose", "why", "will", "with", "within", "without", "would", "yes", "yet", "you", "your", "yours", "yourself"]);
 
 export const PROTECTED_PATTERNS: RegExp[] = [
   new RegExp("\\([A-Z][a-z]+.*?,\\s*\\d{4}\\)"),

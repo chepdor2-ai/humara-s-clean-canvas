@@ -1,8 +1,9 @@
-export const metadata = {
-  title: "Humara App - World's Best AI Text Humanizer",
-  description: 'Bypass AI detectors with standard-setting humanization.',
+﻿export const metadata = {
+  title: "Humara App - Best AI Text Converter",
+  description: 'Make AI text look natural and bypass detectors easily.',
 };
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
+

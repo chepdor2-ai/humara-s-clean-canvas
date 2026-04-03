@@ -1,66 +1,140 @@
-'use client';
+﻿'use client';
 
+import { useState } from 'react';
 import Link from 'next/link';
-import { ArrowRight, Globe, Mail } from 'lucide-react';
+import { Mail, Lock, User, Eye, EyeOff, Shield, CheckCircle2 } from 'lucide-react';
 
-export default function Signup() {
+export default function SignupPage() {
+  const [fullName, setFullName] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [agreedToTerms, setAgreedToTerms] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!agreedToTerms) {
+      alert('Please agree to the terms and privacy policy');
+      return;
+    }
+    setIsLoading(true);
+    try {
+      // API call here
+      console.log('Signing up:', { fullName, email, password });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   return (
-    <div className="min-h-screen flex items-center justify-center bg-[#FFF8F0] px-6 py-20 selection:bg-[#D97757]/10">
-      <div className="w-full max-w-[480px] bg-white p-12 shadow-[0_40px_100px_-20px_rgba(92,64,51,0.15)] border border-[#EADDCF] animate-in fade-in zoom-in-95 duration-700">
-        <div className="text-center mb-12">
-           <Link href="/" className="inline-flex items-center text-2xl font-bold font-sora tracking-tight mb-8 group">
-             <span className="text-[#5C4033]">Huma</span>
-             <span className="text-[#D97757]">ra</span>
-             <div className="w-1.5 h-1.5 rounded-full bg-[#7A8F6A] ml-1 group-hover:scale-150 transition-transform"></div>
-           </Link>
-           <h1 className="text-3xl font-bold text-[#5C4033] mb-3 font-sora">Create an account</h1>
-           <p className="text-[#8A7263] text-sm font-medium">Precision-tuned humanization awaits.</p>
-        </div>
+    <div className="bg-brand-950 text-gray-900 font-sans antialiased flex flex-col min-h-screen">
+      <main className="flex-grow pt-20">
+        <section className="min-h-[80vh] flex items-center justify-center p-6 bg-brand-50">
+          <div className="max-w-md w-full bg-white border-2 border-brand-600 shadow-[6px_6px_0px_#fb8c00] p-8 transition-all hover:shadow-[9px_9px_0px_#fb8c00] hover:-translate-x-1 hover:-translate-y-1">
+            <div className="flex justify-center mb-6">
+              <div className="p-3 bg-brand-100 rounded-lg">
+                <CheckCircle2 className="h-8 w-8 text-brand-600" strokeWidth={2} />
+              </div>
+            </div>
+            <h2 className="text-3xl font-black text-center mb-8 text-gray-900">Get Started</h2>
 
-        <div className="grid grid-cols-2 gap-4 mb-10">
-           <button className="flex items-center justify-center gap-3 py-4 border border-[#EADDCF] hover:bg-[#FFF8F0] transition-all text-[11px] font-black uppercase tracking-widest text-[#5C4033]">
-               <Globe className="w-4 h-4" /> SSO
-           </button>
-           <button className="flex items-center justify-center gap-3 py-4 border border-[#EADDCF] hover:bg-[#FFF8F0] transition-all text-[11px] font-black uppercase tracking-widest text-[#5C4033]">
-              <Mail className="w-4 h-4" /> Google
-           </button>
-        </div>
+            <form onSubmit={handleSubmit} className="space-y-6">
+              <div>
+                <label className="block text-sm font-bold text-gray-700 mb-2">Full Name</label>
+                <div className="relative">
+                  <User className="absolute left-3 top-3.5 h-5 w-5 text-brand-600 pointer-events-none" strokeWidth={2} />
+                  <input
+                    type="text"
+                    value={fullName}
+                    onChange={(e) => setFullName(e.target.value)}
+                    className="w-full pl-10 pr-4 py-3 border-2 border-gray-200 focus:border-brand-500 focus:outline-none transition-colors font-medium"
+                    placeholder="J. Doe"
+                    required
+                  />
+                </div>
+              </div>
 
-        <div className="relative mb-10">
-           <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-[#EADDCF]"></div></div>
-           <div className="relative flex justify-center text-[10px] uppercase font-black tracking-[0.3em]"><span className="px-4 bg-white text-[#8A7263]/40">Or continue with</span></div>
-        </div>
-        
-        <form className="space-y-6" onSubmit={(e) => e.preventDefault()}>
-          <div className="space-y-2">
-            <label className="text-[10px] font-black uppercase tracking-[0.2em] text-[#8A7263] block">Full Name</label>
-            <input type="text" className="w-full px-5 py-4 bg-[#FFF8F0] border border-[#EADDCF] focus:border-[#D97757] outline-none text-[#5C4033] text-sm font-bold placeholder:text-[#8A7263]/40 transition-colors" placeholder="Alex Sterling" />
-          </div>
-          <div className="space-y-2">
-            <label className="text-[10px] font-black uppercase tracking-[0.2em] text-[#8A7263] block">Email Address</label>
-            <input type="email" className="w-full px-5 py-4 bg-[#FFF8F0] border border-[#EADDCF] focus:border-[#D97757] outline-none text-[#5C4033] text-sm font-bold placeholder:text-[#8A7263]/40 transition-colors" placeholder="alex@sterling.com" />
-          </div>
-          <div className="space-y-2 pb-4">
-            <label className="text-[10px] font-black uppercase tracking-[0.2em] text-[#8A7263] block">Password</label>
-            <input type="password" className="w-full px-5 py-4 bg-[#FFF8F0] border border-[#EADDCF] focus:border-[#D97757] outline-none text-[#5C4033] text-sm font-bold transition-colors" />
-          </div>
-          <Link href="/app/dashboard" className="w-full flex items-center justify-center gap-3 py-5 bg-[#5C4033] hover:bg-[#D97757] text-white text-[12px] font-black uppercase tracking-[0.2em] shadow-xl shadow-[#5C4033]/20 transition-all active:scale-95">
-            Create Account <ArrowRight className="w-4 h-4"/>
-          </Link>
-        </form>
+              <div>
+                <label className="block text-sm font-bold text-gray-700 mb-2">Email Address</label>
+                <div className="relative">
+                  <Mail className="absolute left-3 top-3.5 h-5 w-5 text-brand-600 pointer-events-none" strokeWidth={2} />
+                  <input
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    className="w-full pl-10 pr-4 py-3 border-2 border-gray-200 focus:border-brand-500 focus:outline-none transition-colors font-medium"
+                    placeholder="user@example.com"
+                    required
+                  />
+                </div>
+              </div>
 
-        <div className="mt-12 text-center">
-           <p className="text-[11px] font-bold text-[#8A7263] uppercase tracking-widest">
-             Already have an account? <Link href="/login" className="text-[#D97757] hover:underline">Sign in</Link>
-           </p>
-        </div>
-        
-        <div className="mt-12 pt-8 border-t border-[#EADDCF] text-center">
-           <p className="text-[9px] font-black uppercase tracking-[0.2em] text-[#8A7263]/40 leading-relaxed">
-             By joining, you agree to our <Link href="/terms" className="underline hover:text-[#5C4033]">Terms of Service</Link> and <Link href="/privacy" className="underline hover:text-[#5C4033]">Privacy Policy</Link>.
-           </p>
-        </div>
-      </div>
+              <div>
+                <label className="block text-sm font-bold text-gray-700 mb-2">Password</label>
+                <div className="relative">
+                  <Lock className="absolute left-3 top-3.5 h-5 w-5 text-brand-600 pointer-events-none" strokeWidth={2} />
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className="w-full pl-10 pr-12 py-3 border-2 border-gray-200 focus:border-brand-500 focus:outline-none transition-colors font-medium"
+                    placeholder=""
+                    required
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-3.5 text-gray-400 hover:text-brand-600 transition-colors"
+                  >
+                    {showPassword ? (
+                      <EyeOff className="h-5 w-5" strokeWidth={2} />
+                    ) : (
+                      <Eye className="h-5 w-5" strokeWidth={2} />
+                    )}
+                  </button>
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                disabled={isLoading || !agreedToTerms}
+                className="w-full bg-brand-500 text-white font-bold py-4 border-2 border-brand-600 shadow-[4px_4px_0px_#1f2937] hover:shadow-[6px_6px_0px_#1f2937] hover:-translate-x-1 hover:-translate-y-1 active:translate-x-0.5 active:translate-y-0.5 transition-all disabled:opacity-50 disabled:cursor-not-allowed mt-4"
+              >
+                {isLoading ? 'Creating Account...' : 'Create Free Account'}
+              </button>
+
+              <div className="flex items-start space-x-2 mt-4">
+                <input
+                  type="checkbox"
+                  id="terms"
+                  checked={agreedToTerms}
+                  onChange={(e) => setAgreedToTerms(e.target.checked)}
+                  className="mt-1 h-4 w-4 cursor-pointer accent-brand-600"
+                />
+                <label htmlFor="terms" className="text-xs text-gray-500 cursor-pointer">
+                  By signing up, you agree to our{' '}
+                  <Link href="/terms" className="underline text-gray-600 hover:text-brand-600">
+                    Terms
+                  </Link>{' '}
+                  and{' '}
+                  <Link href="/privacy" className="underline text-gray-600 hover:text-brand-600">
+                    Privacy Policy
+                  </Link>
+                </label>
+              </div>
+            </form>
+
+            <p className="text-center text-sm font-medium text-gray-500 mt-6">
+              Already registered?{' '}
+              <Link href="/login" className="text-brand-600 font-bold hover:underline">
+                Log in
+              </Link>
+            </p>
+          </div>
+        </section>
+      </main>
     </div>
   );
 }
+

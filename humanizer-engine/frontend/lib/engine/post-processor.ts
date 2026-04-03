@@ -6,6 +6,8 @@
  */
 
 import { sentTokenize } from "./utils";
+import { robustSentenceSplit } from "./content-protection";
+import { applyAIWordKill, applyPhrasePatterns, applyConnectorNaturalization } from "./shared-dictionaries";
 
 // ── Phase 1: Filler removal ──
 
@@ -46,8 +48,9 @@ const FILLER_REPLACEMENTS: [RegExp, string][] = [
   [/\bcan be attributed to the fact that\b/gi, "is because"],
   [/\bis linked to the fact that\b/gi, "means that"],
   [/\bDue to the fact that\b/gi, "Because"],
-  [/\bIn spite of the fact that\b/gi, "Although"],
-  [/\bRegardless of the fact that\b/gi, "Although"],
+  [/\bIn spite of the (?:fact|condition|circumstance|situation|reality) that\b/gi, "Although"],
+  [/\bRegardless of the (?:fact|condition|circumstance|situation|reality) that\b/gi, "Although"],
+  [/\bNotwithstanding the (?:fact|condition|circumstance|situation|reality) that\b/gi, "Although"],
   [/\bThere is no doubt that\b/gi, "Undoubtedly,"],
   [/\ba person can\b/gi, "one can"],
   [/\ba person to\b/gi, "one to"],
@@ -75,6 +78,17 @@ function cleanFillers(text: string): string {
     }
     // Capitalize sentence starts after removal
     result = result.replace(/(?<=[.!?])\s+([a-z])/g, (_, c) => " " + c.toUpperCase());
+
+    // Remove fragment sentences (under 4 real words) that result from filler stripping
+    const sentences = robustSentenceSplit(result);
+    if (sentences.length > 1) {
+      const cleaned = sentences.filter(sent => {
+        const words = sent.replace(/[^a-zA-Z\s]/g, "").trim().split(/\s+/).filter(w => w.length > 0);
+        return words.length >= 4;
+      });
+      if (cleaned.length > 0) result = cleaned.join(" ");
+    }
+
     return result;
   }).join("\n\n");
 }
@@ -86,7 +100,7 @@ function reducePhraseRepetition(text: string): string {
   const result: string[] = [];
 
   for (const para of paragraphs) {
-    const sentences = sentTokenize(para);
+    const sentences = robustSentenceSplit(para);
     if (sentences.length < 5) { result.push(para); continue; }
 
     // Count 3-5 word phrases
@@ -128,7 +142,7 @@ function reducePhraseRepetition(text: string): string {
       }
     }
 
-    result.push(sentences.filter((_, i) => !toRemove.has(i)).join(" "));
+    result.push(sentences.filter((_, i) => !toRemove.has(i)).join(" ") || sentences[0]);
   }
 
   return result.join("\n\n");
@@ -171,7 +185,7 @@ function removeNearDuplicates(text: string): string {
   const globalSentences: string[] = [];
 
   for (const para of paragraphs) {
-    const sentences = sentTokenize(para);
+    const sentences = robustSentenceSplit(para);
     const kept: string[] = [];
 
     for (const sent of sentences) {
@@ -199,6 +213,10 @@ function removeNearDuplicates(text: string): string {
 
     if (kept.length > 0) {
       result.push(kept.join(" "));
+    } else {
+      // Always keep at least the first sentence to preserve paragraph count
+      result.push(sentences[0]);
+      globalSentences.push(sentences[0]);
     }
   }
 
@@ -228,7 +246,7 @@ function dedupConnectors(text: string): string {
   };
 
   return paragraphs.map((para) => {
-    const sentences = sentTokenize(para);
+    const sentences = robustSentenceSplit(para);
     const result: string[] = [];
     for (const sent of sentences) {
       let modified = sent;
@@ -258,7 +276,7 @@ function breakCopulaChains(text: string): string {
   const paragraphs = text.split(/\n\s*\n/).filter(Boolean);
 
   return paragraphs.map((para) => {
-    const sentences = sentTokenize(para);
+    const sentences = robustSentenceSplit(para);
     const copulaPatterns = [
       /\bis important\b/i, /\bis crucial\b/i, /\bis essential\b/i,
       /\bis significant\b/i, /\bis vital\b/i, /\bis critical\b/i,
@@ -309,7 +327,7 @@ function finalSurfaceCleanup(text: string): string {
     // Repeated words (e.g., "the the")
     result = result.replace(/\b(\w+)\s+\1\b/gi, "$1");
     // Capitalize sentence starts
-    const sentences = sentTokenize(result);
+    const sentences = robustSentenceSplit(result);
     const cleaned: string[] = [];
     for (const s of sentences) {
       const trimmed = s.trim();
@@ -332,7 +350,7 @@ function removeOrphanAnaphora(text: string): string {
   for (const para of paragraphs) {
     const trimmed = para.trim();
     if (!trimmed) continue;
-    const sents = sentTokenize(trimmed);
+    const sents = robustSentenceSplit(trimmed);
     const kept: string[] = [];
     for (let i = 0; i < sents.length; i++) {
       const stripped = sents[i].trim();
@@ -372,8 +390,8 @@ function flagCircularConclusion(text: string): string {
   if (sim < 0.50) return text;
 
   // Trim duplicate sentences from conclusion
-  const introSents = sentTokenize(firstPara);
-  const conclSents = sentTokenize(lastPara);
+  const introSents = robustSentenceSplit(firstPara);
+  const conclSents = robustSentenceSplit(lastPara);
   const keptConcl: string[] = [];
   for (const cs of conclSents) {
     let isDup = false;
@@ -403,8 +421,10 @@ export function postProcess(text: string): string {
   // Phase 2: Phrase repetition reduction
   result = reducePhraseRepetition(result);
 
-  // Phase 3: Near-duplicate sentence removal
-  result = removeNearDuplicates(result);
+  // Phase 3: Near-duplicate sentence removal — DISABLED
+  // Removing sentences violates 1-in-1-out rule.
+  // Duplicates are prevented by independent per-sentence processing.
+  // result = removeNearDuplicates(result);
 
   // Phase 4: Connector de-monotony
   result = dedupConnectors(result);
@@ -418,6 +438,25 @@ export function postProcess(text: string): string {
   // Phase 7: Remove orphan anaphora + flag circular conclusions
   result = removeOrphanAnaphora(result);
   result = flagCircularConclusion(result);
+
+  // Phase 8: AI vocabulary killing — catch AI words that survived all prior processing
+  {
+    const paras = result.split(/\n\s*\n/).filter(p => p.trim());
+    const cleaned: string[] = [];
+    for (const para of paras) {
+      const sents = robustSentenceSplit(para.trim());
+      const cleanedSents = sents.map(s => {
+        let c = applyAIWordKill(s);
+        c = applyPhrasePatterns(c);
+        c = applyConnectorNaturalization(c);
+        c = c.replace(/ {2,}/g, " ").trim();
+        if (c && /^[a-z]/.test(c)) c = c[0].toUpperCase() + c.slice(1);
+        return c;
+      });
+      cleaned.push(cleanedSents.join(" "));
+    }
+    result = cleaned.join("\n\n");
+  }
 
   return result;
 }

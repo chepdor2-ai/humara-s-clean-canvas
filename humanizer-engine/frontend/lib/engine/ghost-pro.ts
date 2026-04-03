@@ -17,13 +17,33 @@
 import OpenAI from "openai";
 import { sentTokenize } from "./utils";
 import { expandContractions } from "./advanced-transforms";
-import { protectSpecialContent, restoreSpecialContent } from "./content-protection";
+import { protectSpecialContent, restoreSpecialContent, protectContentTerms, restoreContentTerms, cleanOutputRepetitions, robustSentenceSplit, placeholdersToLLMFormat, llmFormatToPlaceholders, countSentences, enforceSentenceCountStrict } from "./content-protection";
 import { semanticSimilaritySync } from "./semantic-guard";
 import { TextSignals } from "./multi-detector";
+import {
+  applyAIWordKill, applyConnectorNaturalization, applyPhrasePatterns,
+  applySyntacticTemplate,
+  DIVERSITY_SWAPS as SHARED_DIVERSITY_SWAPS,
+  VERB_PHRASE_SWAPS,
+  MODIFIER_SWAPS,
+  CLAUSE_REPHRASINGS,
+  HEDGING_PHRASES,
+  TRANSITION_SWAPS,
+  QUANTIFIER_SWAPS,
+  TEMPORAL_SWAPS,
+  CAUSAL_SWAPS,
+  EMPHASIS_SWAPS,
+  fixPunctuation,
+  cleanSentenceStarters,
+  verifySentencePresence,
+  deepCleaningPass,
+  perSentenceAntiDetection,
+} from "./shared-dictionaries";
+import { getDictionary } from "./dictionary";
 
 // ── Config ──
 
-const LLM_MODEL = process.env.LLM_MODEL ?? "gpt-4o";
+const LLM_MODEL = process.env.LLM_MODEL ?? "gpt-4o-mini";
 
 // ── OpenAI client singleton ──
 
@@ -37,7 +57,7 @@ function getClient(): OpenAI {
   return _client;
 }
 
-async function llmCall(system: string, user: string, temperature: number): Promise<string> {
+async function llmCall(system: string, user: string, temperature: number, maxTokens?: number): Promise<string> {
   const client = getClient();
   const r = await client.chat.completions.create({
     model: LLM_MODEL,
@@ -46,7 +66,7 @@ async function llmCall(system: string, user: string, temperature: number): Promi
       { role: "user", content: user },
     ],
     temperature,
-    max_tokens: 4096,
+    max_tokens: maxTokens ?? 4096,
   });
   return r.choices[0]?.message?.content?.trim() ?? "";
 }
@@ -56,6 +76,7 @@ async function llmCall(system: string, user: string, temperature: number): Promi
 interface InputFeatures {
   hasContractions: boolean;
   hasFirstPerson: boolean;
+  hasRhetoricalQuestions: boolean;
   avgSentenceLength: number;
   paragraphCount: number;
   wordCount: number;
@@ -64,12 +85,13 @@ interface InputFeatures {
 function detectInputFeatures(text: string): InputFeatures {
   const contractionRe = /\b(can't|won't|don't|doesn't|didn't|isn't|aren't|wasn't|weren't|hasn't|haven't|hadn't|wouldn't|shouldn't|couldn't|mustn't|it's|that's|there's|here's|he's|she's|they're|we're|you're|I'm|they've|we've|you've|I've|they'll|we'll|you'll|I'll|he'll|she'll|it'll|let's|who's|what's)\b/gi;
   const firstPersonRe = /\b(I|me|my|mine|myself|we|us|our|ours|ourselves)\b/;
-  const sentences = sentTokenize(text);
+  const sentences = robustSentenceSplit(text);
   const totalWords = sentences.reduce((sum, s) => sum + s.split(/\s+/).length, 0);
 
   return {
     hasContractions: contractionRe.test(text),
     hasFirstPerson: firstPersonRe.test(text),
+    hasRhetoricalQuestions: /[A-Za-z][^.!?]*\?/.test(text),
     avgSentenceLength: sentences.length > 0 ? totalWords / sentences.length : 15,
     paragraphCount: text.split(/\n\s*\n/).filter(p => p.trim()).length,
     wordCount: totalWords,
@@ -80,11 +102,36 @@ function detectInputFeatures(text: string): InputFeatures {
 // PASS 1: LLM DEEP REWRITE — Tuned to produce pre-2000 human-style prose
 // ══════════════════════════════════════════════════════════════════════════
 
-const GHOST_PRO_SYSTEM = `You are ghostwriting as a real human author. Your job: rewrite text so it reads exactly like a person wrote it by hand — messy rhythm, personal quirks, uneven pacing. Think of how columnists from the 1990s or early-2000s bloggers wrote: direct, sometimes clumsy, never polished to a robotic sheen.
+function getSystemPrompt(tone: string, wordCount?: number): string {
+  const isAcademic = tone === "academic";
+  const isShort = (wordCount ?? 999) < 300;
 
-ABSOLUTE REQUIREMENTS — these are non-negotiable:
+  const voiceInstruction = isAcademic
+    ? `You are ghostwriting as a real graduate student. Your job: rewrite text so it reads like a sharp human scholar wrote it — thoughtful rhythm, natural flow, not robotic. Think of how a strong graduate thesis or journal article reads when written by someone who actually cares about clarity: direct, precise, occasionally personal in style, but never stiff or formulaic.`
+    : `You are ghostwriting as a real human author. Your job: rewrite text so it reads exactly like a person wrote it by hand — messy rhythm, personal quirks, uneven pacing. Think of how columnists from the 1990s or early-2000s bloggers wrote: direct, sometimes clumsy, never polished to a robotic sheen.`;
 
-1. EXTREME SENTENCE LENGTH VARIATION (the single most important rule):
+  const shortTextRule = isShort ? `
+SHORT TEXT — EXTRA RULES (this text is under 300 words, so every sentence matters):
+- You MUST include at least 2 very short sentences (4-8 words) to break the rhythm
+- You MUST include at least 1 long complex sentence (30+ words) with subordinate clauses
+- NEVER let the text read as a single uniform block — vary sentence openings aggressively
+- Start at least one sentence with "And" or "But" — real humans do this
+- Use comma-based hedging asides naturally (e.g. ", admittedly," or ", to some extent,")
+- Rearrange sentence order within paragraphs for unpredictability
+- Do NOT add any content, sentences, or conclusions not in the original
+- Use UNEXPECTED word choices — avoid the first word that comes to mind. Instead of "important", try "central" or "the crux of". Instead of "led to", try "brought about" or "sparked"
+- Break typical collocations — instead of "played a role", say "shaped" or "fed into"
+- Vary your word lengths — mix short punchy words with longer ones
+` : ``;
+
+  const burstinessRule = isAcademic
+    ? `1. SENTENCE LENGTH VARIATION (the single most important rule):
+   You MUST create genuine variation in sentence lengths in EVERY paragraph.
+   - Include some shorter sentences (6-12 words) for emphasis or clarity
+   - Include longer analytical sentences (30-50 words) with subordinate clauses
+   - NEVER write 3 sentences in a row that are within 8 words of each other in length
+   - Target coefficient of variation > 0.40 for sentence lengths`
+    : `1. EXTREME SENTENCE LENGTH VARIATION (the single most important rule):
    You MUST create a wild mix of sentence lengths in EVERY paragraph. This is what separates human from AI writing.
    - Include at least 2 very short sentences per paragraph (4-9 words). Examples:
      "That changed everything."
@@ -94,10 +141,30 @@ ABSOLUTE REQUIREMENTS — these are non-negotiable:
      "It did not last."
    - Include at least 1 very long sentence per paragraph (35-55 words) with multiple clauses joined by commas, dashes, or subordinate clauses
    - NEVER write 3 sentences in a row that are within 8 words of each other in length
-   - Target coefficient of variation > 0.50 for sentence lengths
+   - Target coefficient of variation > 0.50 for sentence lengths`;
+
+  const wordChoiceRule = isAcademic
+    ? `5. WORD CHOICE — sound like a real scholar, not an AI:
+   - Keep appropriate academic vocabulary (analysis, framework, implications) — these are expected
+   - Avoid the OBVIOUSLY robotic AI words listed above (utilize, leverage, facilitate, etc.)
+   - Use precise language: "the data suggest" not "the data clearly demonstrates"
+   - Prefer active voice where natural; passive voice is acceptable in academic writing
+   - Use hedging where appropriate: "this suggests", "the evidence indicates", "it appears that"
+   - Do NOT use slang, colloquialisms, or overly casual language`
+    : `5. WORD CHOICE — sound like a real person, not a textbook:
+   - Prefer everyday words: "use" not "utilize", "help" not "facilitate", "big" not "significant"
+   - Use some slightly informal but smart words that humans naturally use: "tricky", "messy", "pretty much", "a lot of", "sort of", "turned out", "kicked off", "fell apart", "ramped up", "took off"
+   - Sprinkle in occasional hedging: "probably", "seems like", "to some extent", "more or less"
+   - Use concrete language over abstract: "factories closed" not "economic decline occurred"`;
+
+  return `${voiceInstruction}
+
+ABSOLUTE REQUIREMENTS — these are non-negotiable:
+
+${burstinessRule}
 
 2. ABSOLUTELY BANNED VOCABULARY — if you use ANY of these words, the output fails:
-   utilize, facilitate, leverage, comprehensive, multifaceted, paramount, furthermore, moreover, additionally, consequently, subsequently, nevertheless, notwithstanding, aforementioned, paradigm, trajectory, discourse, dichotomy, conundrum, ramification, underpinning, synergy, robust, nuanced, salient, ubiquitous, pivotal, intricate, meticulous, profound, inherent, overarching, substantive, efficacious, holistic, transformative, innovative, groundbreaking, noteworthy, proliferate, exacerbate, ameliorate, engender, delineate, elucidate, illuminate, necessitate, perpetuate, underscore, exemplify, encompass, bolster, catalyze, streamline, optimize, mitigate, navigate, prioritize, articulate, substantiate, corroborate, disseminate, cultivate, ascertain, endeavor, delve, embark, foster, harness, spearhead, unravel, unveil, tapestry, cornerstone, bedrock, linchpin, nexus, spectrum, myriad, plethora, multitude, landscape, realm, culminate, enhance, crucial, vital, imperative, notable, significant, substantial, remarkable, considerable, unprecedented, methodology, framework, implication, implications
+   utilize, facilitate, leverage, comprehensive, multifaceted, paramount, furthermore, moreover, additionally, consequently, subsequently, nevertheless, notwithstanding, aforementioned, paradigm, trajectory, discourse, dichotomy, conundrum, ramification, underpinning, synergy, robust, nuanced, salient, ubiquitous, pivotal, intricate, meticulous, profound, inherent, overarching, substantive, efficacious, holistic, transformative, innovative, groundbreaking, noteworthy, proliferate, exacerbate, ameliorate, engender, delineate, elucidate, illuminate, necessitate, perpetuate, underscore, exemplify, encompass, bolster, catalyze, streamline, optimize, mitigate, navigate, prioritize, articulate, substantiate, corroborate, disseminate, cultivate, ascertain, endeavor, delve, embark, foster, harness, spearhead, unravel, unveil, tapestry, cornerstone, bedrock, linchpin, nexus, spectrum, myriad, plethora, multitude, landscape, realm, culminate
 
    Also BANNED phrases: "it is important to note", "it should be noted", "plays a crucial role", "in today's world", "in today's society", "a wide range of", "due to the fact that", "first and foremost", "each and every", "not only...but also", "serves as a testament", "in light of", "with that in mind", "having said that", "that being said", "it is worth noting", "on the other hand", "in conclusion", "in summary", "as a result", "for example,", "for instance,", "there are several", "there are many", "it is clear that", "when it comes to", "given that", "moving forward"
 
@@ -110,36 +177,36 @@ ABSOLUTE REQUIREMENTS — these are non-negotiable:
    - NEVER start with: "Furthermore," "Moreover," "Additionally," "However," "Nevertheless," "Consequently," "It is" 
 
 4. NATURAL HUMAN TEXTURE:
-   - Use phrasal verbs heavily: look into, carry out, bring about, come up with, break down, set up, point out, figure out, run into, deal with, end up, turn out, pick up, build on, fall short, stand out, play out, account for, boil down to, keep up with, come across, go through, put together, take apart, spell out, lay out
+   - Use phrasal verbs where natural: look into, carry out, bring about, come up with, break down, set up, point out, figure out, deal with, end up, turn out, stand out, account for, spell out
    - Use semicolons 2-3 times to join related thoughts
-   - Use em dashes (—) 2-4 times for asides or emphasis
-   - Use parenthetical remarks 1-2 times: "(which few expected)" or "(at least in theory)"
+   - Use comma-based hedging asides 2-4 times (e.g. ", admittedly," or ", in most cases,")
+   - Do NOT use em dashes (—) or parenthetical brackets
    - Mix simple and complex sentence structures unpredictably
 
-5. WORD CHOICE — sound like a real person, not a textbook:
-   - Prefer everyday words: "use" not "utilize", "help" not "facilitate", "big" not "significant"
-   - Use some slightly informal but smart words that humans naturally use: "tricky", "messy", "pretty much", "a lot of", "sort of", "turned out", "kicked off", "fell apart", "ramped up", "took off"
-   - Sprinkle in occasional hedging: "probably", "seems like", "to some extent", "more or less"
-   - Use concrete language over abstract: "factories closed" not "economic decline occurred"
+${wordChoiceRule}
 
 6. PARAGRAPH VARIATION:
    - Make paragraphs different lengths (some 2-3 sentences, some 5-7)
    - Do not make every paragraph follow the same structure
 
+${shortTextRule}
 STRICT PRESERVATION RULES:
 - Keep ALL factual content, data, statistics, citations, technical terms, and proper nouns exactly
-- Keep the same number of paragraphs
-- Do NOT add information not in the original
+- Keep the same number of paragraphs — preserve all paragraph breaks (double newlines) and headings/titles exactly as they appear
+- NEVER merge paragraphs together or remove blank lines between them
+- NEVER add information, examples, conclusions, or commentary not in the original text
+- NEVER add a final sentence that summarizes or reflects on the passage — the last sentence must correspond to content in the original
+- CRITICAL: The text contains placeholder tokens like [[PROT_0]], [[PROT_1]], [[TRM_0]], etc. These represent protected values. Copy them EXACTLY as-is in your output. Do not remove, modify, or explain them.
 - Do NOT create lists unless the original has them
-- Do NOT add conclusions or summaries not in the original
 - Stay within ±15% of original word count
 - Return ONLY the rewritten text — no commentary, no labels, no meta-text`;
+}
 
 function buildUserPrompt(text: string, features: InputFeatures, tone: string): string {
   let toneGuide = "";
   switch (tone) {
     case "academic":
-      toneGuide = "Write like a sharp grad student — intellectual but not pompous. Use semicolons and dashes. Avoid sounding like a textbook.";
+      toneGuide = "Write like a sharp grad student — intellectual but grounded. Maintain academic register. Keep key terms (e.g., emotional intelligence, leadership foundations, empowerment) intact. Use semicolons and dashes for natural rhythm. Do NOT use slang or overly casual phrasing.";
       break;
     case "professional":
       toneGuide = "Write like a senior analyst writing an internal memo — clear, direct, no fluff.";
@@ -157,19 +224,104 @@ function buildUserPrompt(text: string, features: InputFeatures, tone: string): s
 
   const firstPersonRule = features.hasFirstPerson
     ? "You may use first-person pronouns where appropriate."
-    : "Do NOT use first-person pronouns (I, we, me, us, my, our).";
+    : "Do NOT use first-person pronouns (I, we, me, us, my, our). Use impersonal constructions instead.";
+
+  const rhetoricalRule = features.hasRhetoricalQuestions
+    ? "You may use rhetorical questions sparingly."
+    : "Do NOT use rhetorical questions. Do NOT add any sentences ending with a question mark. Use declarative statements only.";
+
+  const shortExtra = features.wordCount < 300 ? `
+SHORT TEXT CRITICAL RULES:
+- This is a short passage. Every sentence must feel different from the others.
+- Include at least 3 sentences under 12 words. Example: "This shaped everything." or "The effects ran deep." or "That mattered."
+- Include at least 1 sentence over 30 words with multiple clauses joined by commas or dashes
+- Use concrete, specific language — not abstract generalizations
+- Vary your sentence openings: subject-first, prepositional phrase, gerund, conjunction ("And", "But")
+- Do NOT add new information, conclusions, or summaries not in the original
+- Do NOT start multiple sentences with the same word
+- KEEP the key terms and subject-specific vocabulary from the original (names, dates, concepts) — rephrase the surrounding words instead
+- Mix common short words (3-4 letters) with uncommon longer ones (8+ letters) within the same sentence
+- Break longer ideas into shorter sentences and expand compressed ideas — do NOT summarize or condense
+` : '';
+
+  const minWords = features.wordCount < 300
+    ? Math.round(features.wordCount * 1.02)   // short text: aim slightly above
+    : Math.round(features.wordCount * 0.85);
+  const maxWords = features.wordCount < 300
+    ? Math.round(features.wordCount * 1.15)
+    : Math.round(features.wordCount * 1.15);
+  const wordCountInstruction = features.wordCount < 300
+    ? `WORD COUNT REQUIREMENT: Output MUST be ${minWords}-${maxWords} words (original is ${features.wordCount}). Do NOT condense below ${minWords}. Do NOT pad or add new content to exceed ${maxWords}. Break sentences apart or add detail within existing points — never add new conclusions.`
+    : `Word count target: ${features.wordCount} words (±15%, so ${Math.round(features.wordCount * 0.85)}-${maxWords}).`;
 
   return `Rewrite this text completely. ${toneGuide}
 
 ${contractionRule}
 ${firstPersonRule}
+${rhetoricalRule}
+
+CRITICAL STRUCTURE RULE: Preserve ALL paragraph breaks (blank lines). The output MUST have exactly ${features.paragraphCount} paragraphs, matching the input. Do NOT merge paragraphs together. Keep headings/titles on their own lines.
 
 CRITICAL: Create EXTREME sentence length variation. Include very short sentences (4-9 words) AND very long ones (35-55 words) in every paragraph. Never let 3 consecutive sentences be similar length.
-
-Word count target: ${features.wordCount} words (±15%, so ${Math.round(features.wordCount * 0.85)}-${Math.round(features.wordCount * 1.15)}).
+PROTECT: Copy ALL content inside brackets [like this] exactly as-is. Do not modify citations, references, or bracketed content.
+STYLE: Write like a real person from the mid-1990s — no modern corporate or tech buzzwords, no AI-era language.
+${shortExtra}
+${wordCountInstruction}
 
 TEXT TO REWRITE:
 ${text}`;
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// SENTENCE-LEVEL LLM REWRITE
+// Each sentence is sent independently to the LLM with neighboring context.
+// This prevents cross-sentence uniformity that detectors catch.
+// ══════════════════════════════════════════════════════════════════════════
+
+function getSentenceSystemPrompt(tone: string): string {
+  const isAcademic = tone === "academic";
+
+  const voiceInstruction = isAcademic
+    ? `You are rewriting a SINGLE sentence as a real graduate student would write it — thoughtful, natural, not robotic. Direct and precise but never formulaic.`
+    : `You are rewriting a SINGLE sentence as a real human author would write it — natural quirks, personal style. Think how a 1990s columnist or early-2000s blogger would phrase this.`;
+
+  return `${voiceInstruction}
+
+RULES:
+1. Rewrite ONLY the sentence marked [TARGET]. The [BEFORE] and [AFTER] lines are read-only context.
+2. Return ONLY the rewritten sentence — no labels, no commentary, no quotation marks around it.
+3. OUTPUT EXACTLY ONE SENTENCE. Do NOT split the input into multiple sentences. Do NOT merge with context. One sentence in = one sentence out. NEVER add periods that would create additional sentences.
+4. BANNED WORDS: utilize, facilitate, leverage, comprehensive, multifaceted, paramount, furthermore, moreover, additionally, consequently, subsequently, nevertheless, notwithstanding, aforementioned, paradigm, trajectory, discourse, robust, nuanced, pivotal, intricate, transformative, innovative, groundbreaking, mitigate, streamline, optimize, bolster, catalyze, delve, embark, foster, harness, spearhead, unravel, unveil, tapestry, cornerstone, nexus, myriad, plethora, realm, landscape, methodology, framework, holistic, substantive, salient, ubiquitous, meticulous, profound
+5. BANNED STARTERS: Do NOT start with "Furthermore," "Moreover," "Additionally," "However," "Nevertheless," "Consequently," "It is"
+6. Use everyday words: "use" not "utilize", "help" not "facilitate", "big" not "significant"
+7. CRITICAL: Preserve all placeholder tokens like [[PROT_0]], [[TRM_0]] exactly as-is. Do not remove or modify them.
+8. Keep the same meaning and all factual content, data, citations. Do NOT hallucinate or invent information not present in the original.
+9. Stay within ±20% of the original sentence word count.
+10. Use phrasal verbs where natural: look into, carry out, bring about, figure out, deal with, end up.`;
+}
+
+function buildSentenceUserPrompt(
+  sentence: string,
+  prevSentence: string | null,
+  nextSentence: string | null,
+  features: InputFeatures,
+): string {
+  const contractionRule = features.hasContractions
+    ? "You MAY use contractions."
+    : "Do NOT use contractions.";
+  const firstPersonRule = features.hasFirstPerson
+    ? "First-person pronouns OK."
+    : "No first-person pronouns (I, we, me, us, my, our).";
+  const rhetoricalRule = features.hasRhetoricalQuestions
+    ? ""
+    : "No rhetorical questions.";
+
+  const contextBefore = prevSentence ? `[BEFORE]: ${prevSentence}\n` : "";
+  const contextAfter = nextSentence ? `\n[AFTER]: ${nextSentence}` : "";
+
+  return `${contractionRule} ${firstPersonRule} ${rhetoricalRule}
+
+${contextBefore}[TARGET]: ${sentence}${contextAfter}`;
 }
 
 // ══════════════════════════════════════════════════════════════════════════
@@ -241,11 +393,12 @@ const AI_WORD_KILL: Record<string, string[]> = {
 };
 
 const AI_PHRASE_KILL: [RegExp, string][] = [
-  [/\bit is (?:important|crucial|essential|vital|imperative|worth noting|notable|noteworthy) (?:to note |to mention |to emphasize |to stress |to recognize |to acknowledge |to highlight |to consider )?that\b/gi, ""],
-  [/\bit (?:should|must|can|cannot|could|may) be (?:noted|argued|said|emphasized|stressed|acknowledged|recognized|observed|mentioned|highlighted|pointed out) that\b/gi, ""],
+  [/\bit is (?:important|crucial|essential|vital|imperative|worth noting|notable|noteworthy) (?:to note |to mention |to emphasize |to stress |to recognize |to acknowledge |to highlight |to consider )?that\b/gi, "notably,"],
+  [/\bit (?:should|must|can|cannot|could|may) be (?:noted|argued|said|emphasized|stressed|acknowledged|recognized|observed|mentioned|highlighted|pointed out) that\b/gi, "one sees that"],
   [/\bin today'?s (?:world|society|landscape|era|age|environment|climate|context)\b/gi, "right now"],
   [/\bin the (?:modern|current|contemporary|present-day|digital) (?:era|age|world|landscape|context|environment)\b/gi, "today"],
-  [/\bplays? a (?:crucial|vital|key|significant|important|pivotal|critical|fundamental|instrumental|central|essential|major) role(?: in)?\b/gi, "matters"],
+  [/\bplay(?:s|ed|ing)? a (?:crucial|vital|key|significant|important|pivotal|critical|fundamental|instrumental|central|essential|major) role in\b/gi, "was key to"],
+  [/\bplay(?:s|ed|ing)? a (?:crucial|vital|key|significant|important|pivotal|critical|fundamental|instrumental|central|essential|major) role\b/gi, "mattered"],
   [/\ba (?:wide|broad|vast|diverse|rich|extensive) (?:range|array|spectrum|variety|selection) of\b/gi, "many"],
   [/\ba (?:plethora|myriad|multitude|wealth|abundance|profusion) of\b/gi, "many"],
   [/\b(?:due to|owing to) the fact that\b/gi, "because"],
@@ -258,7 +411,8 @@ const AI_PHRASE_KILL: [RegExp, string][] = [
   [/\bnot only (.{5,80}?) but also\b/gi, "$1 and also"],
   [/\b(?:that being said|having said that|with that in mind|with this in mind)\b/gi, "still"],
   [/\b(?:in light of|in view of) (?:the above|this|these|the foregoing)\b/gi, "given this"],
-  [/\bthe (?:importance|significance|impact|relevance|value) of\b/gi, "how much ... matters"],
+  [/\bthe (?:importance|significance|impact|relevance|value) of\b/gi, "the weight of"],
+  [/\bcontributed to\b/gi, "fed into"],
   [/\bmoving forward\b/gi, "going ahead"],
   [/\bin (?:order )?to\b/gi, "to"],
   [/\b(?:it is|it remains) (?:clear|evident|apparent|obvious) that\b/gi, "clearly"],
@@ -279,7 +433,7 @@ const AI_PHRASE_KILL: [RegExp, string][] = [
   [/\bon a global scale\b/gi, "worldwide"],
   [/\bcannot be overstated\b/gi, "is huge"],
   [/\ba comprehensive approach\b/gi, "a thorough plan"],
-  [/\bthere is a (?:growing |increasing )?need (?:for|to)\b/gi, "we need"],
+  [/\bthere is a (?:growing |increasing )?need (?:for|to)\b/gi, "the need is"],
   [/\bsheds? light on\b/gi, "clears up"],
   [/\bpaves? the way for\b/gi, "opens the door to"],
   [/\braises? important questions?\b/gi, "brings up questions"],
@@ -287,34 +441,21 @@ const AI_PHRASE_KILL: [RegExp, string][] = [
 
 function killAIVocabulary(text: string): string {
   let result = text;
-
-  // Kill AI phrases first (longer patterns before shorter)
+  // Apply local phrase kill patterns FIRST (before word-level, so phrases like "contributed to" are caught intact)
   for (const [pattern, replacement] of AI_PHRASE_KILL) {
-    result = result.replace(pattern, (match) => {
-      if (replacement === "") return "";
-      if (match[0] === match[0].toUpperCase() && replacement[0] === replacement[0].toLowerCase()) {
-        return replacement[0].toUpperCase() + replacement.slice(1);
-      }
-      return replacement;
-    });
+    result = result.replace(pattern, replacement);
   }
-
-  // Kill AI words
-  result = result.replace(/\b[a-zA-Z]+\b/g, (word) => {
-    const lower = word.toLowerCase();
-    const replacements = AI_WORD_KILL[lower];
-    if (!replacements) return word;
-    const replacement = replacements[Math.floor(Math.random() * replacements.length)];
-    if (word[0] === word[0].toUpperCase() && word[0] !== word[0].toLowerCase()) {
-      return replacement[0].toUpperCase() + replacement.slice(1);
-    }
-    return replacement;
-  });
-
+  // Then word-level replacements from shared dictionaries (120+ AI words)
+  result = applyAIWordKill(result);
+  // Also apply expanded phrase patterns (500K+ variations from 9 categories:
+  // verb phrases, modifiers, clause rephrasings, hedging, transitions,
+  // quantifiers, temporal, causal, emphasis patterns)
+  result = applyPhrasePatterns(result);
   // Cleanup artifacts
   result = result.replace(/ {2,}/g, " ");
-  result = result.replace(/\.\s+([a-z])/g, (_, ch) => ". " + ch.toUpperCase());
-  result = result.replace(/^\s+/gm, "");
+  // Only capitalize after periods within a line — never match across paragraph breaks (\n\n)
+  result = result.replace(/\.[ \t]+([a-z])/g, (_, ch) => ". " + ch.toUpperCase());
+  result = result.replace(/^[ \t]+/gm, "");
   result = result.replace(/,\s*,/g, ",");
 
   return result;
@@ -324,66 +465,9 @@ function killAIVocabulary(text: string): string {
 // Targets: burstiness, sentence_uniformity, readability_consistency, spectral_flatness
 
 function enforceBurstiness(text: string): string {
-  const paragraphs = text.split(/\n\s*\n/);
-
-  return paragraphs.map(para => {
-    const p = para.trim();
-    if (!p) return "";
-
-    const sentences = sentTokenize(p);
-    if (sentences.length < 3) return p;
-
-    const result: string[] = [];
-    const lengths = sentences.map(s => s.split(/\s+/).length);
-
-    for (let i = 0; i < sentences.length; i++) {
-      let sent = sentences[i].trim();
-      if (!sent) continue;
-      const words = sent.split(/\s+/);
-      const len = words.length;
-
-      // Check for 3 consecutive similar lengths
-      if (result.length >= 2) {
-        const prev1Len = result[result.length - 1].split(/\s+/).length;
-        const prev2Len = result[result.length - 2].split(/\s+/).length;
-
-        if (Math.abs(len - prev1Len) < 8 && Math.abs(len - prev2Len) < 8 && Math.abs(prev1Len - prev2Len) < 8) {
-          // Three similar lengths in a row — split or truncate current sentence
-          if (len > 20) {
-            // Split at a natural break point (comma, semicolon, dash, "and", "but", "which")
-            const splitPoints = [/,\s+(?:and|but|which|where|although|while|since|because|so)\s+/i, /;\s+/, /\s+—\s+/, /,\s+/];
-            let split = false;
-            for (const sp of splitPoints) {
-              const match = sent.match(sp);
-              if (match && match.index) {
-                const idx = match.index;
-                const part1Words = sent.slice(0, idx).split(/\s+/).length;
-                const part2Words = sent.slice(idx + match[0].length).split(/\s+/).length;
-                if (part1Words >= 4 && part2Words >= 4 && Math.abs(part1Words - part2Words) > 5) {
-                  let part1 = sent.slice(0, idx).trim();
-                  let part2 = sent.slice(idx + match[0].length).trim();
-                  if (!part1.endsWith(".")) part1 += ".";
-                  part2 = part2[0].toUpperCase() + part2.slice(1);
-                  result.push(part1);
-                  sent = part2;
-                  split = true;
-                  break;
-                }
-              }
-            }
-            if (!split) {
-              result.push(sent);
-              continue;
-            }
-          }
-        }
-      }
-
-      result.push(sent);
-    }
-
-    return result.join(" ");
-  }).filter(Boolean).join("\n\n");
+  // Sentence order must be preserved — no reordering allowed.
+  // Burstiness is achieved through per-sentence processing, not swapping.
+  return text;
 }
 
 // ── 2C: STARTER DIVERSIFIER ──
@@ -398,58 +482,19 @@ const AI_STARTERS = new Set([
 ]);
 
 const NATURAL_REROUTES: string[] = [
-  "On closer inspection,", "In practice,",
+  "In practice,", "Put differently,",
   "By that point,", "From that angle,",
-  "Practically speaking,", "At its core,",
-  "To put it differently,", "As things stood,",
-  "On the ground,", "In real terms,",
-  "Behind the scenes,", "With that shift,",
-  "Looking closer,", "Broadly speaking,",
+  "At its core,", "As things stood,",
+  "In real terms,", "With that shift,",
+  "Looking at it this way,", "What this meant was",
+  "The upshot:", "And so,",
+  "But then,", "Still,",
 ];
 
 function diversifyStarters(text: string): string {
-  const paragraphs = text.split(/\n\s*\n/);
-
-  return paragraphs.map(para => {
-    const p = para.trim();
-    if (!p) return "";
-
-    const sentences = sentTokenize(p);
-    if (sentences.length === 0) return "";
-
-    const result: string[] = [];
-    const usedStarters = new Set<string>();
-    let rerounteIdx = 0;
-
-    for (let i = 0; i < sentences.length; i++) {
-      let sent = sentences[i].trim();
-      if (!sent) continue;
-
-      const firstWord = sent.split(/\s+/)[0]?.toLowerCase().replace(/[^a-z]/g, "") ?? "";
-
-      // Kill AI formal starters
-      if (AI_STARTERS.has(firstWord)) {
-        const comma = sent.indexOf(",");
-        if (comma > 0 && comma < 20) {
-          sent = sent.slice(comma + 1).trim();
-          sent = sent[0].toUpperCase() + sent.slice(1);
-        }
-      }
-
-      // Check for duplicate starter
-      const currentStarter = sent.split(/\s+/)[0]?.toLowerCase().replace(/[^a-z]/g, "") ?? "";
-      if (usedStarters.has(currentStarter) && sent.split(/\s+/).length > 6) {
-        const reroute = NATURAL_REROUTES[rerounteIdx % NATURAL_REROUTES.length];
-        rerounteIdx++;
-        sent = reroute + " " + sent[0].toLowerCase() + sent.slice(1);
-      }
-
-      usedStarters.add(sent.split(/\s+/)[0]?.toLowerCase().replace(/[^a-z]/g, "") ?? "");
-      result.push(sent);
-    }
-
-    return result.join(" ");
-  }).filter(Boolean).join("\n\n");
+  // Sentence starters are handled per-sentence during individual processing.
+  // No cross-sentence starter injection to preserve independent processing.
+  return text;
 }
 
 // ── 2D: CONNECTOR NATURALIZER ──
@@ -481,12 +526,61 @@ const FORMAL_CONNECTORS: Record<string, string[]> = {
 };
 
 function naturalizeConnectors(text: string): string {
+  // Delegate to shared dictionaries (27+ formal connector patterns)
+  return applyConnectorNaturalization(text);
+}
+
+// ── Pre-2000 Era Buzzword Killer ──
+// Eliminate modern (post-2000) corporate/tech/AI buzzwords.
+
+const MODERN_BUZZWORDS: [RegExp, string][] = [
+  [/\bsynergize\b/gi, "combine"],
+  [/\bsynergies\b/gi, "benefits"],
+  [/\bimpactful\b/gi, "effective"],
+  [/\bactionable\b/gi, "practical"],
+  [/\bscalable\b/gi, "expandable"],
+  [/\bstakeholders?\b/gi, "parties involved"],
+  [/\becosystem\b(?!\s+(?:of|in)\s+(?:forest|marine|aquatic|natural|river|lake|ocean))/gi, "setup"],
+  [/\bparadigm shift\b/gi, "major change"],
+  [/\bgranular\b/gi, "detailed"],
+  [/\bbest practices?\b/gi, "sound methods"],
+  [/\bcore competenc(?:y|ies)\b/gi, "main strengths"],
+  [/\bthought leader(?:ship|s)?\b/gi, "expert opinion"],
+  [/\bdisruptive?\b/gi, "radical"],
+  [/\binnovative\b/gi, "fresh"],
+  [/\bdata-driven\b/gi, "evidence-based"],
+  [/\bholistic approach\b/gi, "broad view"],
+  [/\bmoving the needle\b/gi, "making progress"],
+  [/\bvalue-added?\b/gi, "useful"],
+  [/\bbenchmark(?:ing|s)?\b/gi, "measure"],
+  [/\boptics\b(?!\s+(?:fiber|lens|lab))/gi, "appearance"],
+  [/\bpivot(?:ing)?\b(?!\s+(?:point|table|joint))/gi, "shift"],
+  [/\bnarrativ(?:e|es)\b(?!\s+(?:poem|fiction|structure|technique|arc))/gi, "account"],
+  [/\bempower(?:ing|ment|s)?\b/gi, "enable"],
+  [/\bdeep dive\b/gi, "close look"],
+  [/\bhigh-level\b/gi, "broad"],
+  [/\blow-hanging fruit\b/gi, "easy wins"],
+  [/\btake(?:away|aways)\b/gi, "points"],
+  [/\b(?:circle|loop) back\b/gi, "return to"],
+  [/\btouch base\b/gi, "check in"],
+  [/\bdigital transformation\b/gi, "technical change"],
+  [/\brobust solution\b/gi, "solid answer"],
+  [/\brobust\b/gi, "solid"],
+  [/\bseamless(?:ly)?\b/gi, "smooth"],
+  [/\boptimal(?:ly)?\b/gi, "best"],
+  [/\bproactive(?:ly)?\b/gi, "active"],
+  [/\bintersectionality\b/gi, "overlap"],
+  [/\bnuanced\b/gi, "detailed"],
+  [/\bunpack(?:ing)?\b(?!\s+(?:bag|box|suitcase|luggage))/gi, "examine"],
+  [/\bspace\b(?=\s+(?:for|of|around))/gi, "area"],
+  [/\blens\b(?=\s+(?:of|through|for))/gi, "angle"],
+  [/\bkey takeaway\b/gi, "main point"],
+];
+
+function killModernBuzzwords(text: string): string {
   let result = text;
-  for (const [formal, replacements] of Object.entries(FORMAL_CONNECTORS)) {
-    while (result.includes(formal)) {
-      const rep = replacements[Math.floor(Math.random() * replacements.length)];
-      result = result.replace(formal, rep);
-    }
+  for (const [pattern, replacement] of MODERN_BUZZWORDS) {
+    result = result.replace(pattern, replacement);
   }
   return result;
 }
@@ -504,7 +598,7 @@ function humanizePunctuation(text: string, features: InputFeatures): string {
     const p = para.trim();
     if (!p) return "";
 
-    const sentences = sentTokenize(p);
+    const sentences = robustSentenceSplit(p);
     const processed: string[] = [];
 
     for (let i = 0; i < sentences.length; i++) {
@@ -512,57 +606,11 @@ function humanizePunctuation(text: string, features: InputFeatures): string {
       if (!sent) continue;
       const words = sent.split(/\s+/);
 
-      // Add semicolons: merge two medium sentences
-      if (semicolonBudget > 0 && i < sentences.length - 1) {
-        const next = sentences[i + 1]?.trim();
-        if (next && words.length >= 8 && words.length <= 22) {
-          const nextWords = next.split(/\s+/);
-          if (nextWords.length >= 8 && nextWords.length <= 22) {
-            const cleanSent = sent.replace(/\.$/, "");
-            const lowerNext = next[0].toLowerCase() + next.slice(1);
-            processed.push(cleanSent + "; " + lowerNext);
-            semicolonBudget--;
-            i++; // skip next sentence
-            continue;
-          }
-        }
-      }
+      // STRICT: No sentence merging — each sentence stays independent.
+      // Semicolon merging disabled to preserve sentence count.
 
-      // Add em dashes for mid-sentence asides
-      if (dashBudget > 0 && words.length > 15) {
-        const commaIdx = sent.indexOf(", ");
-        if (commaIdx > 10 && commaIdx < sent.length - 20) {
-          const nextComma = sent.indexOf(", ", commaIdx + 2);
-          if (nextComma > commaIdx + 5 && nextComma < commaIdx + 40) {
-            const aside = sent.slice(commaIdx + 2, nextComma);
-            if (aside.split(/\s+/).length >= 3 && aside.split(/\s+/).length <= 10) {
-              sent = sent.slice(0, commaIdx) + " — " + aside + " — " + sent.slice(nextComma + 2);
-              dashBudget--;
-            }
-          }
-        }
-      }
-
-      // Add parenthetical remark
-      if (parenBudget > 0 && words.length > 18 && Math.random() < 0.3) {
-        const asides = [
-          "(at least in theory)",
-          "(which few expected)",
-          "(to some degree)",
-          "(or so it seemed)",
-          "(not without pushback)",
-          "(though not everyone agreed)",
-          "(as many pointed out)",
-        ];
-        // Insert after a comma near the middle
-        const mid = Math.floor(sent.length / 2);
-        const nearComma = sent.indexOf(", ", Math.max(mid - 20, 0));
-        if (nearComma > 0 && nearComma < sent.length - 15) {
-          const aside = asides[Math.floor(Math.random() * asides.length)];
-          sent = sent.slice(0, nearComma + 2) + aside + " " + sent.slice(nearComma + 2);
-          parenBudget--;
-        }
-      }
+      // Em-dash injection DISABLED — produces unnatural patterns
+      // Original code converted comma-separated asides to em-dash format
 
       processed.push(sent);
     }
@@ -610,6 +658,59 @@ function removeContractions(text: string): string {
   return result;
 }
 
+// ── Post-LLM first-person removal ──
+
+const FIRST_PERSON_RE = /\b(I|me|my|mine|myself|we|us|our|ours|ourselves)\b/gi;
+
+function removeFirstPerson(text: string): string {
+  // Replace first-person patterns with NATURAL impersonal alternatives
+  // Avoid passive constructions like "it is believed" — these score as AI
+  let result = text;
+  result = result.replace(/\bwe need\b/gi, "there is a need");
+  result = result.replace(/\bwe must\b/gi, "one must");
+  result = result.replace(/\bwe can\b/gi, "one can");
+  result = result.replace(/\bwe should\b/gi, "one should");
+  result = result.replace(/\bwe find that\b/gi, "the data shows");
+  result = result.replace(/\bwe note that\b/gi, "notably,");
+  result = result.replace(/\bwe see that\b/gi, "clearly,");
+  result = result.replace(/\bwe observe that\b/gi, "as seen,");
+  result = result.replace(/\bwe argue that\b/gi, "the case is that");
+  result = result.replace(/\bwe believe\b/gi, "the view here is");
+  result = result.replace(/\bwe suggest\b/gi, "one option is");
+  result = result.replace(/\bwe propose\b/gi, "the idea is");
+  result = result.replace(/\bin our view\b/gi, "from this angle");
+  result = result.replace(/\bin our opinion\b/gi, "by this reading");
+  result = result.replace(/\bour findings\b/gi, "the findings");
+  result = result.replace(/\bour analysis\b/gi, "the analysis");
+  result = result.replace(/\bour results\b/gi, "the results");
+  result = result.replace(/\bour approach\b/gi, "the approach");
+  result = result.replace(/\bour study\b/gi, "this study");
+  result = result.replace(/\bour research\b/gi, "this research");
+  result = result.replace(/\bI think\b/gi, "the sense is");
+  result = result.replace(/\bI believe\b/gi, "the view here is");
+  result = result.replace(/\bI argue\b/gi, "the case is");
+  result = result.replace(/\bmy view\b/gi, "this angle");
+  result = result.replace(/\bmy opinion\b/gi, "this reading");
+  // Capitalize sentence starts after replacement — only within lines, preserve paragraph breaks
+  result = result.replace(/\.[ \t]+([a-z])/g, (_, ch) => ". " + ch.toUpperCase());
+  return result;
+}
+
+// ── Post-LLM rhetorical question removal ──
+
+function removeRhetoricalQuestions(text: string): string {
+  // Split by paragraph breaks first to preserve them
+  return text.split(/\n\s*\n/).map(para => {
+    const sentences = robustSentenceSplit(para.trim());
+    const filtered = sentences.filter(s => {
+      const trimmed = s.trim();
+      if (trimmed.endsWith("?")) return false;
+      return true;
+    });
+    return filtered.join(" ");
+  }).filter(p => p.trim()).join("\n\n");
+}
+
 // ── 2F: PARAGRAPH VARIANCE ──
 // Targets: paragraph_uniformity
 
@@ -628,7 +729,7 @@ function varyParagraphs(text: string): string {
   const result: string[] = [];
   for (let i = 0; i < paragraphs.length; i++) {
     const para = paragraphs[i];
-    const sentences = sentTokenize(para);
+    const sentences = robustSentenceSplit(para);
 
     if (sentences.length >= 6 && Math.random() < 0.5) {
       // Split into two paragraphs
@@ -637,7 +738,7 @@ function varyParagraphs(text: string): string {
       result.push(sentences.slice(splitPoint).join(" "));
     } else if (sentences.length <= 2 && i < paragraphs.length - 1) {
       // Merge with next paragraph if next is also short
-      const nextSentences = sentTokenize(paragraphs[i + 1]);
+      const nextSentences = robustSentenceSplit(paragraphs[i + 1]);
       if (nextSentences.length <= 3) {
         result.push(sentences.concat(nextSentences).join(" "));
         i++; // skip next
@@ -652,15 +753,123 @@ function varyParagraphs(text: string): string {
   return result.filter(p => p.trim()).join("\n\n");
 }
 
+// ── Paragraph count enforcement ──
+
+function isTitleOrHeading(para: string): boolean {
+  const trimmed = para.trim();
+  if (!trimmed) return false;
+  if (/^#{1,6}\s/.test(trimmed)) return true;
+  if (/^[IVXLCDM]+\.\s/i.test(trimmed)) return true;
+  if (/^(?:Part|Section|Chapter)\s+\d+/i.test(trimmed)) return true;
+  if (/^[\d]+[.):]\s/.test(trimmed) || /^[A-Za-z][.):]\s/.test(trimmed)) return true;
+  if (/^(?:Introduction|Conclusion|Summary|Abstract|Background|Discussion|Results|Methods|References|Acknowledgments|Appendix)\s*$/i.test(trimmed)) return true;
+  const words = trimmed.split(/\s+/);
+  if (words.length <= 10 && !/[.!?]$/.test(trimmed)) return true;
+  if (words.length <= 12 && trimmed === trimmed.toUpperCase() && /[A-Z]/.test(trimmed)) return true;
+  return false;
+}
+
+function enforceParagraphCount(text: string, targetCount: number): string {
+  const paragraphs = text.split(/\n\s*\n/).filter((p) => p.trim());
+  if (paragraphs.length === targetCount || targetCount <= 0) return text;
+
+  // Too many paragraphs: merge shortest adjacent non-heading pairs
+  while (paragraphs.length > targetCount && paragraphs.length > 1) {
+    let minLen = Infinity;
+    let mergeIdx = -1;
+    for (let i = 0; i < paragraphs.length - 1; i++) {
+      const combinedLen = paragraphs[i].split(/\s+/).length + paragraphs[i + 1].split(/\s+/).length;
+      if (isTitleOrHeading(paragraphs[i]) || isTitleOrHeading(paragraphs[i + 1])) continue;
+      if (combinedLen < minLen) {
+        minLen = combinedLen;
+        mergeIdx = i;
+      }
+    }
+    if (mergeIdx < 0) break;
+    paragraphs[mergeIdx] = paragraphs[mergeIdx] + " " + paragraphs[mergeIdx + 1];
+    paragraphs.splice(mergeIdx + 1, 1);
+  }
+
+  // Too few paragraphs: split longest non-title at a sentence boundary
+  while (paragraphs.length < targetCount) {
+    let maxLen = 0;
+    let splitIdx = 0;
+    for (let i = 0; i < paragraphs.length; i++) {
+      if (isTitleOrHeading(paragraphs[i])) continue;
+      const wc = paragraphs[i].split(/\s+/).length;
+      if (wc > maxLen) { maxLen = wc; splitIdx = i; }
+    }
+    if (maxLen < 10) break;
+
+    const sentences = robustSentenceSplit(paragraphs[splitIdx]);
+    if (sentences.length < 2) break;
+
+    const mid = Math.ceil(sentences.length / 2);
+    const part1 = sentences.slice(0, mid).join(" ");
+    const part2 = sentences.slice(mid).join(" ");
+    paragraphs.splice(splitIdx, 1, part1, part2);
+  }
+
+  return paragraphs.join("\n\n");
+}
+
 // ── 2G: FINAL SURFACE POLISH ──
 
 function finalPolish(text: string): string {
   let result = text;
 
+  // Strip markdown formatting (bold, italic) but preserve headings
+  result = result.replace(/\*\*(.+?)\*\*/g, "$1");
+  result = result.replace(/\*(.+?)\*/g, "$1");
+  // NOTE: Do NOT strip heading markers (^#+\s*) — they are needed to preserve titles/headings
+
   // Fix spacing
   result = result.replace(/ {2,}/g, " ");
   result = result.replace(/\s+([.,;:!?])/g, "$1");
   result = result.replace(/([.,;:!?])([A-Za-z])/g, "$1 $2");
+
+  // Strip all em-dashes and en-dashes — replace with commas
+  result = result.replace(/ — /g, ", ").replace(/—/g, ", ");
+  result = result.replace(/ – /g, ", ").replace(/–/g, ", ");
+
+  // Fix doubled prepositions from word kill (e.g., "fed into to" → "fed into")
+  result = result.replace(/\b(into|onto|from|with|for|about) (to|from|with|for|about|into|onto)\b/gi, "$1");
+  // Fix "helped to the" pattern (wrong grammar, should be "helped the")
+  result = result.replace(/\b(helped|spurred) to (the|a|an)\b/gi, "$1 $2");
+
+  // Fix subject-verb agreement: plural noun + "was" → "were"
+  const PLURAL_NOUNS = [
+    "institutions", "colonies", "communities", "systems", "structures", "principles",
+    "settlers", "leaders", "groups", "churches", "beliefs", "religions", "practices",
+    "ideas", "values", "traditions", "movements", "efforts", "factors", "forces",
+    "elements", "relationships", "connections", "networks", "regions", "areas",
+    "societies", "populations", "organizations", "nations", "states", "countries",
+    "people", "children", "men", "women", "individuals", "members", "citizens",
+  ];
+  const pluralPattern = new RegExp(`\\b(${PLURAL_NOUNS.join("|")})\\s+was\\b`, "gi");
+  result = result.replace(pluralPattern, "$1 were");
+
+  // Fix incorrect past participles (LLM sometimes uses past tense instead of participle)
+  const PAST_PARTICIPLE_FIXES: Record<string, string> = {
+    "was saw": "was seen", "was began": "was begun", "was came": "was come",
+    "was did": "was done", "was drank": "was drunk", "was drove": "was driven",
+    "was ate": "was eaten", "was fell": "was fallen", "was flew": "was flown",
+    "was forgot": "was forgotten", "was froze": "was frozen", "was gave": "was given",
+    "was went": "was gone", "was grew": "was grown", "was hid": "was hidden",
+    "was knew": "was known", "was rode": "was ridden", "was rang": "was rung",
+    "was rose": "was risen", "was ran": "was run", "was shook": "was shaken",
+    "was showed": "was shown", "was sang": "was sung", "was spoke": "was spoken",
+    "was stole": "was stolen", "was swam": "was swum", "was took": "was taken",
+    "was threw": "was thrown", "was wore": "was worn", "was wrote": "was written",
+    "were saw": "were seen", "were began": "were begun", "were drove": "were driven",
+    "were gave": "were given", "were knew": "were known", "were took": "were taken",
+    "were wrote": "were written", "were spoke": "were spoken", "were showed": "were shown",
+    "been saw": "been seen", "been drove": "been driven", "been gave": "been given",
+    "been took": "been taken", "been wrote": "been written",
+  };
+  for (const [wrong, right] of Object.entries(PAST_PARTICIPLE_FIXES)) {
+    result = result.replace(new RegExp(`\\b${wrong}\\b`, 'gi'), right);
+  }
 
   // Fix double punctuation
   result = result.replace(/\.{2,}/g, ".");
@@ -684,9 +893,24 @@ function finalPolish(text: string): string {
     return exceptions.includes(letter.toLowerCase()) ? match : "a " + letter;
   });
 
-  // Capitalize sentence starts
-  result = result.replace(/\.\s+([a-z])/g, (_, ch) => ". " + ch.toUpperCase());
-  result = result.replace(/^\s*([a-z])/gm, (_, ch) => ch.toUpperCase());
+  // Fix irregular plurals that the LLM sometimes botches
+  const IRREGULAR_PLURALS: Record<string, string> = {
+    "basises": "bases", "analysises": "analyses", "thesises": "theses",
+    "crisises": "crises", "hypothesises": "hypotheses", "parenthesises": "parentheses",
+    "phenomenons": "phenomena", "criterions": "criteria", "datums": "data",
+    "mediums": "media", "curriculums": "curricula", "appendixs": "appendices",
+    "indexs": "indices", "matrixs": "matrices", "vertebras": "vertebrae",
+    "childs": "children", "mans": "men", "womans": "women", "mouses": "mice",
+    "gooses": "geese", "tooths": "teeth", "foots": "feet", "oxes": "oxen",
+    "persons": "people", "lifes": "lives", "knifes": "knives", "wolfs": "wolves",
+  };
+  for (const [wrong, right] of Object.entries(IRREGULAR_PLURALS)) {
+    result = result.replace(new RegExp(`\\b${wrong}\\b`, 'gi'), right);
+  }
+
+  // Capitalize sentence starts — only within lines, preserve paragraph breaks (\n\n)
+  result = result.replace(/\.[ \t]+([a-z])/g, (_, ch) => ". " + ch.toUpperCase());
+  result = result.replace(/^([a-z])/gm, (_, ch) => ch.toUpperCase());
 
   return result.trim();
 }
@@ -776,13 +1000,13 @@ function deRepeatNgrams(text: string): string {
 
 function enrichDependencyDepth(text: string): string {
   const paragraphs = text.split(/\n\s*\n/);
-  let budget = 4; // Max 4 subordinate clause insertions
+  let budget = 2; // Max 2 subordinate clause insertions
 
   return paragraphs.map(para => {
     const p = para.trim();
     if (!p) return "";
 
-    const sentences = sentTokenize(p);
+    const sentences = robustSentenceSplit(p);
     const result: string[] = [];
 
     for (const sent of sentences) {
@@ -791,7 +1015,7 @@ function enrichDependencyDepth(text: string): string {
       const words = s.split(/\s+/);
 
       // Only enrich medium-length sentences (15-30 words) — don't make short ones complex
-      if (budget > 0 && words.length >= 15 && words.length <= 30 && Math.random() < 0.4) {
+      if (budget > 0 && words.length >= 15 && words.length <= 30 && Math.random() < 0.15) {
         // Try to add a "which" or "where" relative clause after a noun
         const nounPatterns = [
           /\b(the \w+)\b(?=\s+(?:has|have|had|is|are|was|were|can|could|will|would)\b)/i,
@@ -843,14 +1067,14 @@ function injectWordDiversity(text: string): string {
   const textWords = text.toLowerCase().match(/[a-z']+/g) ?? [];
   for (const w of textWords) wordCounts.set(w, (wordCounts.get(w) ?? 0) + 1);
 
-  for (const [common, alternatives] of Object.entries(DIVERSITY_SWAPS)) {
+  // Use shared DIVERSITY_SWAPS (50+ common words with natural alternatives)
+  for (const [common, alternatives] of Object.entries(SHARED_DIVERSITY_SWAPS)) {
     const count = wordCounts.get(common) ?? 0;
     if (count < 2 || usedSwaps.has(common)) continue;
 
-    // Replace ~50% of occurrences (keep some for naturalness)
     let replaced = 0;
     const targetReplacements = Math.ceil(count / 2);
-    let skipFirst = true; // Keep the first occurrence
+    let skipFirst = true;
 
     const regex = new RegExp(`\\b${common}\\b`, "gi");
     result = result.replace(regex, (match) => {
@@ -869,6 +1093,94 @@ function injectWordDiversity(text: string): string {
   }
 
   return result;
+}
+
+// ── Dictionary-Enhanced Contextual Synonym Replacement ──
+// Uses 619K+ word validity dictionary + curated synonyms + mega thesaurus
+
+function dictionaryEnhancedSynonymSwap(text: string, intensity: number = 0.10): string {
+  const dict = getDictionary();
+  const paragraphs = text.split(/\n\s*\n/);
+  const usedReplacements = new Set<string>();
+
+  return paragraphs.map(para => {
+    const p = para.trim();
+    if (!p) return "";
+
+    const sentences = robustSentenceSplit(p);
+    const result: string[] = [];
+
+    for (const sent of sentences) {
+      const words = sent.split(/\s+/);
+      if (words.length < 6) { result.push(sent); continue; }
+
+      const targetSwaps = Math.max(1, Math.floor(words.length * intensity));
+      let swaps = 0;
+
+      const newWords = words.map((word, idx) => {
+        if (swaps >= targetSwaps) return word;
+        const clean = word.replace(/[^a-zA-Z]/g, "");
+        if (clean.length < 5 || idx === 0) return word;
+
+        const lower = clean.toLowerCase();
+        // Skip function words and already-replaced words
+        const skipWords = new Set(["about", "after", "again", "being", "below", "between",
+          "could", "doing", "during", "every", "found", "given", "going", "great",
+          "their", "there", "these", "those", "under", "using", "where", "which",
+          "while", "would", "shall", "should", "other", "still", "never", "often"]);
+        if (skipWords.has(lower) || usedReplacements.has(lower)) return word;
+
+        const replacement = dict.replaceWordSmartly(clean, sent, usedReplacements);
+        if (replacement !== clean && replacement.length > 0) {
+          usedReplacements.add(lower);
+          swaps++;
+          const prefix = word.match(/^[^a-zA-Z]*/)?.[0] ?? "";
+          const suffix = word.match(/[^a-zA-Z]*$/)?.[0] ?? "";
+          const isCapitalized = clean[0] === clean[0].toUpperCase();
+          const final = isCapitalized ? replacement[0].toUpperCase() + replacement.slice(1) : replacement;
+          return prefix + final + suffix;
+        }
+        return word;
+      });
+
+      result.push(newWords.join(" "));
+    }
+
+    return result.join(" ");
+  }).filter(Boolean).join("\n\n");
+}
+
+// ── Syntactic Template Application ──
+// Applies clause reordering, PP repositioning, conjunction swaps (25+ templates)
+
+function applySyntacticTemplatePass(text: string): string {
+  const paragraphs = text.split(/\n\s*\n/);
+  let budget = 6;
+
+  return paragraphs.map(para => {
+    const p = para.trim();
+    if (!p) return "";
+
+    const sentences = robustSentenceSplit(p);
+    const result: string[] = [];
+
+    for (const sent of sentences) {
+      const s = sent.trim();
+      if (!s) continue;
+
+      if (budget > 0 && s.split(/\s+/).length >= 15 && Math.random() < 0.35) {
+        const transformed = applySyntacticTemplate(s);
+        if (transformed !== s) {
+          result.push(transformed);
+          budget--;
+          continue;
+        }
+      }
+      result.push(s);
+    }
+
+    return result.join(" ");
+  }).filter(Boolean).join("\n\n");
 }
 
 // ══════════════════════════════════════════════════════════════════════════
@@ -904,120 +1216,672 @@ function signalAwareRefinement(text: string): string {
     result = breakSentenceUniformity(result);
   }
 
-  // Fix dependency depth
-  if (signals.dependency_depth < 40) {
-    result = enrichDependencyDepth(result);
-  }
+  // Skip enrichDependencyDepth in refinement — already applied in main pipeline
+  // and random clause insertion damages meaning preservation
 
   return result;
 }
 
 function forceExtremeVariation(text: string): string {
-  const paragraphs = text.split(/\n\s*\n/);
-
-  return paragraphs.map(para => {
-    const p = para.trim();
-    if (!p) return "";
-
-    const sentences = sentTokenize(p);
-    if (sentences.length < 3) return p;
-
-    const result: string[] = [];
-
-    for (let i = 0; i < sentences.length; i++) {
-      const sent = sentences[i].trim();
-      if (!sent) continue;
-      const words = sent.split(/\s+/);
-
-      // If sentence is in the "boring middle" (14-24 words) and we have too many of those
-      const middleCount = result.filter(s => {
-        const len = s.split(/\s+/).length;
-        return len >= 14 && len <= 24;
-      }).length;
-
-      if (words.length >= 14 && words.length <= 24 && middleCount >= 2) {
-        // Try to split into a short + remaining
-        const commaIdx = sent.indexOf(", ");
-        if (commaIdx > 0 && commaIdx < sent.length / 2) {
-          const part1Words = sent.slice(0, commaIdx).split(/\s+/).length;
-          if (part1Words >= 3 && part1Words <= 9) {
-            let part1 = sent.slice(0, commaIdx).trim();
-            let part2 = sent.slice(commaIdx + 2).trim();
-            if (!part1.endsWith(".")) part1 += ".";
-            part2 = part2[0].toUpperCase() + part2.slice(1);
-            result.push(part1);
-            result.push(part2);
-            continue;
-          }
-        }
-      }
-
-      result.push(sent);
-    }
-
-    return result.join(" ");
-  }).filter(Boolean).join("\n\n");
+  // STRICT SENTENCE-BY-SENTENCE: No splitting allowed.
+  // Instead, apply internal word-level variation to break monotony.
+  return text;
 }
 
 function breakSentenceUniformity(text: string): string {
-  // Break uniform runs by splitting sentences, not by injecting content
-  const paragraphs = text.split(/\n\s*\n/);
+  // STRICT SENTENCE-BY-SENTENCE: No splitting allowed.
+  // Sentence count must remain identical.
+  return text;
+}
 
+// ══════════════════════════════════════════════════════════════════════════
+// ══════════════════════════════════════════════════════════════════════════
+// CHUNKING — Split long text into processable segments
+// ══════════════════════════════════════════════════════════════════════════
+
+// Target ~800 words per chunk; never exceed ~1200
+const CHUNK_TARGET_WORDS = 800;
+const CHUNK_MAX_WORDS = 1200;
+// Texts shorter than this go through the pipeline as-is (no chunking overhead)
+const CHUNK_THRESHOLD_WORDS = 1000;
+
+/**
+ * Intelligently split text into chunks at section/paragraph boundaries.
+ * Prioritizes splitting at section headers (lines starting with Roman numerals,
+ * "Part", "Chapter", numbered headings, or all-caps lines), then at paragraph
+ * boundaries (double newlines), and finally at sentence boundaries as a last
+ * resort.  Every chunk is guaranteed to be ≤ CHUNK_MAX_WORDS.
+ */
+function splitIntoChunks(text: string): string[] {
+  const totalWords = text.trim().split(/\s+/).length;
+  if (totalWords <= CHUNK_THRESHOLD_WORDS) return [text];
+
+  // Split on double-newlines first (paragraph/section boundaries)
+  const blocks = text.split(/\n\s*\n/).filter(b => b.trim());
+  const chunks: string[] = [];
+  let currentChunk: string[] = [];
+  let currentWords = 0;
+
+  for (const block of blocks) {
+    const blockWords = block.trim().split(/\s+/).length;
+
+    // If a single block exceeds max, split it by sentences
+    if (blockWords > CHUNK_MAX_WORDS) {
+      // Flush current
+      if (currentChunk.length > 0) {
+        chunks.push(currentChunk.join("\n\n"));
+        currentChunk = [];
+        currentWords = 0;
+      }
+      // Split oversized block by sentences
+      const sentences = robustSentenceSplit(block);
+      let sentBuf: string[] = [];
+      let sentWords = 0;
+      for (const sent of sentences) {
+        const sw = sent.split(/\s+/).length;
+        if (sentWords + sw > CHUNK_MAX_WORDS && sentBuf.length > 0) {
+          chunks.push(sentBuf.join(" "));
+          sentBuf = [];
+          sentWords = 0;
+        }
+        sentBuf.push(sent);
+        sentWords += sw;
+      }
+      if (sentBuf.length > 0) chunks.push(sentBuf.join(" "));
+      continue;
+    }
+
+    // Check if adding this block would exceed target
+    if (currentWords + blockWords > CHUNK_TARGET_WORDS && currentChunk.length > 0) {
+      // Check if it's a section header — prefer splitting before headers
+      const isHeader = /^(?:#{1,4}\s|Part\s+\d|Chapter\s+\d|(?:I{1,4}|IV|VI{0,3}|IX|X{0,3})\.?\s|[A-Z][A-Z\s]{3,}$)/m.test(block.trim());
+      if (isHeader || currentWords >= CHUNK_TARGET_WORDS) {
+        chunks.push(currentChunk.join("\n\n"));
+        currentChunk = [];
+        currentWords = 0;
+      }
+    }
+
+    currentChunk.push(block);
+    currentWords += blockWords;
+  }
+
+  if (currentChunk.length > 0) {
+    chunks.push(currentChunk.join("\n\n"));
+  }
+
+  return chunks;
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// SENTENCE-INDEPENDENT POST-PROCESSING
+// Each sentence from the LLM output is processed independently as its own chunk.
+// ══════════════════════════════════════════════════════════════════════════
+
+/**
+ * Post-process a single sentence independently through all transforms.
+ * This is the core unit of work — each sentence is treated as an isolated chunk.
+ */
+function postProcessSingleSentence(sent: string, features: InputFeatures, strength: string = "light"): string {
+  if (!sent.trim()) return sent;
+  let result = sent.trim();
+
+  // 1. Kill AI vocabulary — local PHRASE patterns first
+  for (const [pattern, replacement] of AI_PHRASE_KILL) {
+    result = result.replace(pattern, replacement);
+  }
+
+  // 2. Kill AI vocabulary — local WORD map (word by word through AI_WORD_KILL)
+  result = result.replace(/\b[a-zA-Z]+\b/g, (word) => {
+    const lower = word.toLowerCase();
+    const replacements = AI_WORD_KILL[lower];
+    if (!replacements) return word;
+    const rep = replacements[Math.floor(Math.random() * replacements.length)];
+    if (word[0] === word[0].toUpperCase() && rep[0] === rep[0].toLowerCase()) {
+      return rep[0].toUpperCase() + rep.slice(1);
+    }
+    return rep;
+  });
+
+  // 3. Kill AI vocabulary — shared dictionaries (120+ words + phrase patterns)
+  result = applyAIWordKill(result);
+  result = applyPhrasePatterns(result);
+
+  // 4. Naturalize connectors
+  result = applyConnectorNaturalization(result);
+
+  // Steps 5-9 REMOVED — applyPhrasePatterns in step 3 already covers all 9 swap dictionaries.
+  // Applying them again was causing double/triple replacement that produced nonsensical output.
+
+  // 10. Kill formal starters
+  const firstWord = result.split(/\s+/)[0]?.toLowerCase().replace(/[^a-z]/g, "") ?? "";
+  if (AI_STARTERS.has(firstWord)) {
+    const comma = result.indexOf(",");
+    if (comma > 0 && comma < 25) {
+      result = result.slice(comma + 1).trim();
+      if (result[0]) result = result[0].toUpperCase() + result.slice(1);
+    }
+  }
+
+  // 11. Dictionary-enhanced synonym swap (per-sentence) — rate scales with strength
+  const synonymRate = strength === "strong" ? 0.15 : strength === "medium" ? 0.10 : 0.05;
+  const dict = getDictionary();
+  const currentWords = result.split(/\s+/);
+  if (currentWords.length >= 5) {
+    const usedRep = new Set<string>();
+    const targetSwaps = Math.max(1, Math.floor(currentWords.length * synonymRate));
+    let swaps = 0;
+    const newWords = currentWords.map((word, idx) => {
+      if (swaps >= targetSwaps) return word;
+      const clean = word.replace(/[^a-zA-Z]/g, "");
+      if (clean.length < 4 || idx === 0) return word;
+      const lower = clean.toLowerCase();
+      // Skip function words
+      const skipWords = new Set(["about", "after", "again", "being", "below", "between",
+        "could", "doing", "during", "every", "found", "given", "going", "great",
+        "their", "there", "these", "those", "under", "using", "where", "which",
+        "while", "would", "shall", "should", "other", "still", "never", "often",
+        "have", "been", "were", "with", "from", "that", "this", "they", "will",
+        "also", "just", "only", "into", "some", "more", "most", "such", "when",
+        "than", "what", "each", "does", "then", "both"]);
+      if (skipWords.has(lower) || usedRep.has(lower)) return word;
+      const replacement = dict.replaceWordSmartly(clean, result, usedRep);
+      if (replacement !== clean && replacement.length > 0) {
+        usedRep.add(lower);
+        swaps++;
+        const prefix = word.match(/^[^a-zA-Z]*/)?.[0] ?? "";
+        const suffix = word.match(/[^a-zA-Z]*$/)?.[0] ?? "";
+        const isCapitalized = clean[0] === clean[0].toUpperCase();
+        const final = isCapitalized ? replacement[0].toUpperCase() + replacement.slice(1) : replacement;
+        return prefix + final + suffix;
+      }
+      return word;
+    });
+    result = newWords.join(" ");
+  }
+
+  // 12. Syntactic template — probability scales with strength
+  const templateProb = strength === "strong" ? 0.45 : strength === "medium" ? 0.30 : 0.20;
+  const updatedWords = result.split(/\s+/);
+  if (updatedWords.length >= 12 && Math.random() < templateProb) {
+    const transformed = applySyntacticTemplate(result);
+    if (transformed !== result) result = transformed;
+  }
+
+  // 13. Constraint enforcement per sentence
+  if (!features.hasContractions) {
+    result = result.replace(CONTRACTION_EXPAND_RE, (match) => {
+      const expanded = EXPANSION_MAP[match.toLowerCase()] ?? match;
+      return match[0] === match[0].toUpperCase() && expanded[0] === expanded[0].toLowerCase()
+        ? expanded[0].toUpperCase() + expanded.slice(1) : expanded;
+    });
+    result = expandContractions(result);
+  }
+
+  // 14. Kill modern buzzwords (pre-2000 era naturalness)
+  result = killModernBuzzwords(result);
+  // NOTE: applyAIWordKill removed here — already applied in step 3. Running it again
+  // caused recursive synonym drift that produced nonsensical output.
+
+  // 15. Cleanup artifacts
+  result = result.replace(/ {2,}/g, " ");
+  result = result.replace(/,\s*,/g, ",");
+  result = result.replace(/\.\s*\./g, ".");
+  result = result.trim();
+
+  // 17. Capitalize first letter
+  if (result && /^[a-z]/.test(result)) {
+    result = result[0].toUpperCase() + result.slice(1);
+  }
+
+  return result;
+}
+
+// ── Sentence merge/split for natural variation ──
+// Per ~20 sentences: merge 1-2 short pairs, split 2-3 long sentences
+
+const MERGE_CONNECTORS = [
+  ", and ", ", but ", ", so ", ", yet ",
+  ", which ", ", since ", ", while ", ", as ",
+  ", although ", ", particularly ",
+];
+
+function ghostProMergeSplit(text: string): string {
+  const paragraphs = text.split(/\n\s*\n/);
   return paragraphs.map(para => {
     const p = para.trim();
     if (!p) return "";
-
-    const sentences = sentTokenize(p);
+    const sentences = robustSentenceSplit(p);
     if (sentences.length < 4) return p;
 
-    const result: string[] = [];
-    let uniformRun = 0;
+    const ratio = Math.max(1, Math.floor(sentences.length / 20));
+    const mergeTarget = Math.max(1, Math.min(2, ratio + (Math.random() < 0.5 ? 1 : 0)));
+    const splitTarget = Math.max(2, Math.min(3, ratio + 1 + (Math.random() < 0.5 ? 1 : 0)));
 
-    for (let i = 0; i < sentences.length; i++) {
-      const sent = sentences[i].trim();
-      if (!sent) continue;
-      const words = sent.split(/\s+/);
-      const len = words.length;
-
-      if (result.length > 0) {
-        const prevLen = result[result.length - 1].split(/\s+/).length;
-        if (Math.abs(len - prevLen) < 6) {
-          uniformRun++;
-        } else {
-          uniformRun = 0;
-        }
-      }
-
-      // After 2 uniform sentences, try to split current one to break the pattern
-      if (uniformRun >= 2 && len > 16) {
-        const splitPoints = [/,\s+(?:and|but|which|while|so)\s+/i, /;\s+/, /\s+—\s+/];
-        let split = false;
-        for (const sp of splitPoints) {
-          const match = sent.match(sp);
-          if (match && match.index) {
-            const part1Words = sent.slice(0, match.index).split(/\s+/).length;
-            const part2Words = sent.slice(match.index + match[0].length).split(/\s+/).length;
-            if (part1Words >= 4 && part2Words >= 4) {
-              let part1 = sent.slice(0, match.index).trim();
-              let part2 = sent.slice(match.index + match[0].length).trim();
-              if (!part1.endsWith(".")) part1 += ".";
-              part2 = part2[0].toUpperCase() + part2.slice(1);
-              result.push(part1);
-              result.push(part2);
-              uniformRun = 0;
-              split = true;
+    // Phase 1: Split long sentences (>20 words) at clause boundaries
+    let splitsDone = 0;
+    const afterSplit: string[] = [];
+    for (const sent of sentences) {
+      const wc = sent.split(/\s+/).length;
+      if (splitsDone < splitTarget && wc > 20 && Math.random() < 0.7) {
+        const clausePatterns = [
+          /,\s+and\s+/i, /,\s+but\s+/i, /;\s+/,
+          /,\s+which\s+/i, /,\s+while\s+/i, /,\s+although\s+/i,
+          /,\s+however\s+/i, /,\s+yet\s+/i,
+        ];
+        let didSplit = false;
+        for (const pat of clausePatterns) {
+          const m = sent.match(pat);
+          if (m && m.index !== undefined) {
+            const p1 = sent.slice(0, m.index).trim();
+            const p2 = sent.slice(m.index + m[0].length).trim();
+            if (p1.split(/\s+/).length >= 10 && p2.split(/\s+/).length >= 10) {
+              afterSplit.push(p1.endsWith(".") ? p1 : p1 + ".");
+              afterSplit.push(p2[0]?.toUpperCase() + p2.slice(1));
+              splitsDone++;
+              didSplit = true;
               break;
             }
           }
         }
-        if (!split) result.push(sent);
+        if (!didSplit) afterSplit.push(sent);
       } else {
-        result.push(sent);
+        afterSplit.push(sent);
       }
     }
 
-    return result.join(" ");
+    // Phase 2: Merge short adjacent sentences (both <15 words)
+    let mergesDone = 0;
+    const afterMerge: string[] = [];
+    let skip = false;
+    for (let i = 0; i < afterSplit.length; i++) {
+      if (skip) { skip = false; continue; }
+      const wc1 = afterSplit[i].split(/\s+/).length;
+      const next = afterSplit[i + 1];
+      if (next && mergesDone < mergeTarget && wc1 < 15 && wc1 >= 3) {
+        const wc2 = next.split(/\s+/).length;
+        if (wc2 < 15 && wc2 >= 3 && Math.random() < 0.65) {
+          const clean1 = afterSplit[i].replace(/\.\s*$/, "");
+          const lower2 = next[0]?.toLowerCase() + next.slice(1);
+          const conn = MERGE_CONNECTORS[Math.floor(Math.random() * MERGE_CONNECTORS.length)];
+          afterMerge.push(clean1 + conn + lower2);
+          mergesDone++;
+          skip = true;
+          continue;
+        }
+      }
+      afterMerge.push(afterSplit[i]);
+    }
+
+    return afterMerge.join(" ");
+  }).filter(p => p.trim()).join("\n\n");
+}
+
+/**
+ * Apply sentence-independent post-processing to full text.
+ * Splits into paragraphs → sentences, processes each sentence independently,
+ * then recombines.
+ */
+function sentenceIndependentPostProcess(text: string, features: InputFeatures, strength: string = "light"): string {
+  const paragraphs = text.split(/\n\s*\n/);
+
+  return paragraphs.map(para => {
+    const p = para.trim();
+    if (!p) return "";
+
+    const sentences = robustSentenceSplit(p);
+    if (sentences.length === 0) return "";
+
+    const processed = sentences.map(sent => {
+      const trimmed = sent.trim();
+      if (!trimmed || trimmed.split(/\s+/).length < 3) return trimmed;
+      return postProcessSingleSentence(trimmed, features, strength);
+    }).filter(Boolean);
+
+    // Remove fragment sentences (under 4 real words) that result from phrase stripping
+    const cleaned = processed.filter(sent => {
+      const words = sent.replace(/[^a-zA-Z\s]/g, "").trim().split(/\s+/).filter(w => w.length > 0);
+      return words.length >= 4;
+    });
+
+    return (cleaned.length > 0 ? cleaned : processed).join(" ");
   }).filter(Boolean).join("\n\n");
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// LLM SYNONYM & PHRASING VALIDATION
+// After non-LLM post-processing, the LLM reviews for awkward synonyms
+// and unnatural phrasing introduced by dictionary replacements.
+// ══════════════════════════════════════════════════════════════════════════
+
+function buildValidationSystemPrompt(): string {
+  return `You are a human copy-editor from the 1990s fixing awkward phrasing. Your ONLY job is to fix sentences that sound unnatural due to incorrect synonym choices or awkward word combinations.
+
+RULES:
+1. Fix ONLY sentences where a synonym does not fit the context (e.g., "the conflict commenced" → "the conflict began", "they procured food" → "they got food")
+2. Fix awkward or ungrammatical phrasing (e.g., "proved to be key to shaped the outcome" → "proved key in shaping the outcome")
+3. Fix broken collocations (e.g., "conduct a role" → "play a role")
+4. Do NOT change sentences that already read naturally
+5. Do NOT add new information, conclusions, or commentary
+6. ABSOLUTELY NEVER use these words: utilize, leverage, facilitate, comprehensive, multifaceted, paramount, furthermore, moreover, additionally, consequently, subsequently, nevertheless, underscore, foster, cultivate, pivotal, nuanced, robust, innovative, holistic, transformative, noteworthy, significant, substantial, remarkable, crucial, vital, imperative, encompass, bolster, catalyze, streamline, optimize, mitigate, navigate, prioritize, unprecedented, groundbreaking, delve, embark, harness, spearhead, tapestry, cornerstone, bedrock, linchpin, nexus, realm, landscape, myriad, plethora, enhance, discourse, trajectory, paradigm, framework, methodology, implications, salient, intricate, meticulous, profound, inherent, overarching
+7. NEVER use these phrases: "it is important to note", "plays a crucial role", "in today's world", "a wide range of", "due to the fact that", "it is worth noting", "on the other hand", "as a result", "for example,", "for instance,", "there are several", "it is clear that", "when it comes to", "given that", "moving forward", "in light of", "with that in mind", "having said that", "that being said"
+8. Use SIMPLE everyday words: "use" not "utilize", "help" not "facilitate", "big" not "significant", "about" not "regarding", "show" not "demonstrate", "start" not "initiate", "need" not "require"
+9. Keep the EXACT same number of sentences — do NOT split or merge any sentences
+10. Keep ALL paragraph breaks (double newlines) exactly as they are
+11. Protect ALL content inside brackets [like this] — copy it exactly
+12. CRITICAL: Preserve all placeholder tokens like [[PROT_0]], [[TRM_0]] exactly as-is. Do not remove, modify, or explain them.
+13. Write like a real person from the mid-1990s — no modern corporate or tech buzzwords
+14. Return ONLY the corrected text — no commentary, no labels`;
+}
+
+function buildValidationUserPrompt(text: string): string {
+  return `Fix any awkward synonyms or unnatural phrasing in this text. Only change what sounds wrong — leave natural sentences alone. Keep the same sentence count and paragraph structure exactly.
+
+TEXT:
+${placeholdersToLLMFormat(text)}`;
+}
+
+async function llmValidatePhrasing(text: string, maxTokens: number): Promise<string> {
+  try {
+    const validated = llmFormatToPlaceholders(await llmCall(
+      buildValidationSystemPrompt(),
+      buildValidationUserPrompt(text),
+      0.3, // Low temperature for conservative fixes
+      maxTokens,
+    ) ?? '');
+
+    if (!validated || validated.trim().length < text.length * 0.5) {
+      console.warn("  [GhostPro]   Validation LLM output too short, skipping");
+      return text;
+    }
+
+    // Verify sentence count didn't change
+    const origSentences = robustSentenceSplit(text);
+    const valSentences = robustSentenceSplit(validated.trim());
+    if (Math.abs(origSentences.length - valSentences.length) > 2) {
+      console.warn(`  [GhostPro]   Validation changed sentence count (${origSentences.length} → ${valSentences.length}), skipping`);
+      return text;
+    }
+
+    // Verify paragraph count didn't change
+    const origParas = text.split(/\n\s*\n/).filter(p => p.trim()).length;
+    const valParas = validated.trim().split(/\n\s*\n/).filter(p => p.trim()).length;
+    if (origParas !== valParas) {
+      console.warn(`  [GhostPro]   Validation changed paragraph count (${origParas} → ${valParas}), skipping`);
+      return text;
+    }
+
+    return validated.trim();
+  } catch (err) {
+    console.warn("  [GhostPro]   Validation LLM call failed, skipping:", err);
+    return text;
+  }
+}
+
+// ── LLM Punctuation Cleanup ──
+// The LLM reads the text flow and corrects ONLY punctuation and capitalization.
+// Strictly prohibited from changing any words.
+
+async function llmFixPunctuation(text: string): Promise<string> {
+  const wordCount = text.trim().split(/\s+/).length;
+  const maxTokens = Math.min(16384, Math.max(4096, Math.ceil(wordCount * 2)));
+
+  const systemPrompt = `You are a punctuation proofreader. Your ONLY job is to fix punctuation and capitalization errors.
+
+STRICT RULES — YOU MUST FOLLOW ALL OF THEM:
+1. DO NOT change, add, remove, or replace ANY word. Every single word must remain exactly as it is.
+2. DO NOT reorder words or sentences.
+3. DO NOT add or remove sentences.
+4. DO NOT add or remove paragraphs.
+5. Only fix these punctuation issues:
+   - Commas used where periods should be (run-on sentences that should be separate sentences)
+   - Missing periods at sentence ends
+   - Missing commas where a natural pause exists
+   - Double commas, double periods, or other duplicate punctuation
+   - Incorrect capitalization after periods/question marks/exclamation marks
+   - Missing capitalization at the start of sentences
+   - Semicolons or colons used incorrectly
+6. Keep paragraph breaks exactly as they are.
+7. Return ONLY the corrected text — no commentary, no labels, no explanations.
+
+REMEMBER: You are ONLY allowed to touch punctuation marks (. , ; : ! ? —) and letter capitalization. Do NOT change any word.`;
+
+  const userPrompt = `Fix ONLY the punctuation and capitalization in this text. Do not change any words. Preserve all [[PROT_n]] and [[TRM_n]] tokens exactly.\n\nTEXT:\n${placeholdersToLLMFormat(text)}`;
+
+  try {
+    const result = llmFormatToPlaceholders(await llmCall(systemPrompt, userPrompt, 0.1, maxTokens) ?? '');
+
+    if (!result || result.trim().length < text.length * 0.5) {
+      console.warn("  [GhostPro]   Punctuation LLM output too short, skipping");
+      return text;
+    }
+
+    // Verify no words were changed — compare word arrays (ignoring punctuation)
+    const stripPunct = (s: string) => s.replace(/[^a-zA-Z\s]/g, "").toLowerCase().split(/\s+/).filter(w => w);
+    const origWords = stripPunct(text);
+    const fixedWords = stripPunct(result.trim());
+
+    // Allow up to 2% word drift (LLM may accidentally capitalize/lowercase differently)
+    const maxDrift = Math.max(3, Math.ceil(origWords.length * 0.02));
+    let diffs = 0;
+    const minLen = Math.min(origWords.length, fixedWords.length);
+    for (let i = 0; i < minLen; i++) {
+      if (origWords[i] !== fixedWords[i]) diffs++;
+    }
+    diffs += Math.abs(origWords.length - fixedWords.length);
+
+    if (diffs > maxDrift) {
+      console.warn(`  [GhostPro]   Punctuation LLM changed ${diffs} words (max ${maxDrift}), skipping`);
+      return text;
+    }
+
+    // Verify paragraph count didn't change
+    const origParas = text.split(/\n\s*\n/).filter(p => p.trim()).length;
+    const fixedParas = result.trim().split(/\n\s*\n/).filter(p => p.trim()).length;
+    if (origParas !== fixedParas) {
+      console.warn(`  [GhostPro]   Punctuation LLM changed paragraph count (${origParas} → ${fixedParas}), skipping`);
+      return text;
+    }
+
+    return result.trim();
+  } catch (err) {
+    console.warn("  [GhostPro]   Punctuation LLM call failed, skipping:", err);
+    return text;
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// SINGLE CHUNK PIPELINE — process one chunk through all passes
+// Each sentence is independently sent to the LLM, then reconnected.
+// ══════════════════════════════════════════════════════════════════════════
+
+async function processChunk(
+  chunkText: string,
+  features: InputFeatures,
+  options: { strength: string; tone: string; temperature: number },
+): Promise<string> {
+  const { strength } = options;
+  const chunkWords = chunkText.trim().split(/\s+/).length;
+
+  // ═══════════════════════════════════════════
+  // PASS 1: SENTENCE-BY-SENTENCE LLM Rewrite
+  // Each sentence is independently humanized by the LLM.
+  // Adjacent sentences are provided as read-only context.
+  // ═══════════════════════════════════════════
+  console.log("  [GhostPro]   Pass 1: Sentence-by-sentence LLM rewrite...");
+
+  const sentenceSystem = getSentenceSystemPrompt(options.tone);
+  const paragraphs = chunkText.split(/\n\s*\n/).filter(p => p.trim());
+  const rewrittenParagraphs: string[] = [];
+
+  for (const para of paragraphs) {
+    const trimmedPara = para.trim();
+    // Skip headings/titles — pass through unchanged
+    if (trimmedPara.split(/\s+/).length <= 10 && !/[.!?]$/.test(trimmedPara)) {
+      rewrittenParagraphs.push(trimmedPara);
+      continue;
+    }
+
+    const sentences = robustSentenceSplit(trimmedPara);
+    if (sentences.length === 0) {
+      rewrittenParagraphs.push(trimmedPara);
+      continue;
+    }
+
+    // Process each sentence independently via LLM (parallel for speed)
+    const rewritePromises = sentences.map(async (sent, idx) => {
+      const trimmed = sent.trim();
+      if (!trimmed || trimmed.split(/\s+/).length < 3) return trimmed;
+
+      const prevSent = idx > 0 ? sentences[idx - 1] : null;
+      const nextSent = idx < sentences.length - 1 ? sentences[idx + 1] : null;
+
+      const userPrompt = buildSentenceUserPrompt(
+        placeholdersToLLMFormat(trimmed),
+        prevSent ? placeholdersToLLMFormat(prevSent) : null,
+        nextSent ? placeholdersToLLMFormat(nextSent) : null,
+        features,
+      );
+
+      // Vary temperature per-sentence for maximum unpredictability
+      const sentTemp = options.temperature + (Math.random() * 0.12 - 0.06);
+      const clampedTemp = Math.max(0.3, Math.min(1.0, sentTemp));
+      const sentMaxTokens = Math.max(256, Math.ceil(trimmed.split(/\s+/).length * 3));
+
+      try {
+        let rewritten = llmFormatToPlaceholders(
+          await llmCall(sentenceSystem, userPrompt, clampedTemp, sentMaxTokens) ?? ''
+        );
+        // Validate: if LLM output is too short or empty, keep original
+        if (!rewritten || rewritten.trim().length < trimmed.length * 0.2) {
+          return trimmed;
+        }
+        // Strip any label artifacts the LLM might add
+        rewritten = rewritten.replace(/^\[TARGET\]:\s*/i, "").trim();
+        // Enforce single sentence: if LLM returned multiple sentences, collapse to one
+        const llmSents = robustSentenceSplit(rewritten);
+        if (llmSents.length > 1) {
+          rewritten = llmSents.map((s, i) => {
+            if (i === 0) return s.replace(/\.\s*$/, "");
+            return s[0]?.toLowerCase() + s.slice(1);
+          }).join(", ") + (llmSents[llmSents.length - 1].match(/[.!?]$/) ? "" : ".");
+        }
+        return rewritten;
+      } catch {
+        return trimmed;
+      }
+    });
+
+    const rewrittenSentences = await Promise.all(rewritePromises);
+    // Strict sentence count enforcement: input sentences = output sentences per paragraph
+    if (rewrittenSentences.length !== sentences.length) {
+      console.warn(`  [GhostPro] Sentence count mismatch in paragraph: input=${sentences.length}, output=${rewrittenSentences.length}`);
+    }
+    rewrittenParagraphs.push(rewrittenSentences.join(" "));
+  }
+
+  let result = rewrittenParagraphs.join("\n\n");
+  console.log(`  [GhostPro]   Pass 1 done: ${result.split(/\s+/).length} words (${paragraphs.reduce((sum, p) => sum + robustSentenceSplit(p).length, 0)} sentences processed independently)`);
+
+  // ═══════════════════════════════════════════
+  // PASS 2: SENTENCE-INDEPENDENT Post-processing
+  // Each sentence is processed as its own independent chunk through ALL transforms.
+  // ═══════════════════════════════════════════
+  console.log("  [GhostPro]   Pass 2: Sentence-independent post-processing...");
+
+  // Sentence-independent processing — rounds scale with strength
+  const postProcessRounds = strength === "strong" ? 3 : strength === "medium" ? 2 : 1;
+  for (let pp = 0; pp < postProcessRounds; pp++) {
+    result = sentenceIndependentPostProcess(result, features, strength);
+  }
+  console.log(`  [GhostPro]   Post-processing: ${postProcessRounds} round(s) at strength=${strength}`);
+
+  // PASS 2B: Deep Cleaning — DISABLED
+  // Group-level operations removed to preserve sentence independence.
+  // AI residue is already handled per-sentence in sentenceIndependentPostProcess.
+  console.log("  [GhostPro]   Deep cleaning pass skipped (sentence independence)");
+
+  // PASS 2C: Per-Sentence Anti-Detection — DISABLED
+  // Group-level anti-detection removed to preserve sentence independence.
+  // Each sentence is already fully processed in sentenceIndependentPostProcess.
+  console.log("  [GhostPro]   Per-sentence anti-detection sweep skipped (sentence independence)");
+
+  // ═══════════════════════════════════════════
+  // PASS 2D: REMOVED — was running sentenceIndependentPostProcess a 3rd time
+  // after LLM validation, causing recursive synonym drift and nonsensical output.
+  // The LLM validation already produces clean output; re-killing AI words
+  // was destroying it.
+  // ═══════════════════════════════════════════
+
+  // Light global polish (punctuation artifact cleanup only)
+  result = finalPolish(result);
+
+  // Constraint enforcement per-sentence
+  if (!features.hasFirstPerson) result = removeFirstPerson(result);
+  if (!features.hasRhetoricalQuestions) result = removeRhetoricalQuestions(result);
+
+  // ═══════════════════════════════════════════
+  // PASS 3: Signal-Aware Refinement — rounds scale with strength
+  // ═══════════════════════════════════════════
+  const maxRounds = strength === "strong" ? 4 : strength === "medium" ? 2 : 1;
+  const aiPatThreshold = strength === "strong" ? 3 : strength === "medium" ? 4 : 5;
+  const aiRatioThreshold = strength === "strong" ? 10 : strength === "medium" ? 12 : 15;
+  const burstThreshold = strength === "strong" ? 60 : strength === "medium" ? 58 : 55;
+  const starterThreshold = strength === "strong" ? 60 : strength === "medium" ? 58 : 55;
+  for (let round = 1; round <= maxRounds; round++) {
+    const signals = analyzeSignals(result);
+    let changed = false;
+
+    if (signals.ai_pattern_score > aiPatThreshold || signals.per_sentence_ai_ratio > aiRatioThreshold) {
+      // Per-sentence AI kill — only once per round to avoid meaning drift
+      result = sentenceIndependentPostProcess(result, features, strength);
+      changed = true;
+    }
+    if (signals.burstiness < burstThreshold) {
+      result = enforceBurstiness(result);
+      changed = true;
+    }
+    if (signals.starter_diversity < starterThreshold) {
+      result = diversifyStarters(result);
+      changed = true;
+    }
+
+    if (!changed) break;
+    result = finalPolish(result);
+  }
+
+  // Final constraint pass
+  if (!features.hasContractions) result = removeContractions(result);
+  if (!features.hasFirstPerson) result = removeFirstPerson(result);
+  if (!features.hasRhetoricalQuestions) result = removeRhetoricalQuestions(result);
+
+  // Word count enforcement for short text — trim sentences from the longest paragraph, never drop paragraphs
+  if (chunkWords < 300) {
+    const maxAllowed = Math.round(chunkWords * 1.10);
+    const outputWords = result.trim().split(/\s+/).length;
+    if (outputWords > maxAllowed) {
+      const paragraphs = result.split(/\n\s*\n/).filter(p => p.trim());
+      let totalWords = paragraphs.reduce((sum, p) => sum + p.trim().split(/\s+/).length, 0);
+      // Trim sentences from the longest paragraph until within limit
+      while (totalWords > maxAllowed) {
+        let longestIdx = 0;
+        let longestLen = 0;
+        for (let i = 0; i < paragraphs.length; i++) {
+          const wc = paragraphs[i].split(/\s+/).length;
+          if (wc > longestLen) { longestLen = wc; longestIdx = i; }
+        }
+        const sents = robustSentenceSplit(paragraphs[longestIdx]);
+        if (sents.length <= 1) break;
+        // Remove the last sentence from the longest paragraph
+        const removed = sents.pop()!;
+        paragraphs[longestIdx] = sents.join(" ");
+        totalWords -= removed.split(/\s+/).length;
+      }
+      result = paragraphs.join("\n\n");
+    }
+  }
+
+  return result;
 }
 
 // ══════════════════════════════════════════════════════════════════════════
@@ -1047,97 +1911,86 @@ export async function ghostProHumanize(
   const features = detectInputFeatures(original);
 
   console.log(`  [GhostPro] Input: ${features.wordCount} words, ${features.paragraphCount} paras`);
+  console.log(`  [GhostPro] Features: contractions=${features.hasContractions}, firstPerson=${features.hasFirstPerson}, rhetoricalQs=${features.hasRhetoricalQuestions}`);
 
   // Protect special content
-  const { text: protectedText, map: protectionMap } = protectSpecialContent(original);
+  const { text: protectedText0, map: protectionMap } = protectSpecialContent(original);
 
-  // ═══════════════════════════════════════════
-  // PASS 1: Deep LLM Rewrite
-  // ═══════════════════════════════════════════
-  console.log("  [GhostPro] Pass 1: Deep LLM Rewrite...");
+  // Protect content terms (proper nouns, domain phrases) from synonym swaps
+  const { text: protectedText, map: termMap } = protectContentTerms(protectedText0);
 
-  const tempMap: Record<string, number> = { light: 0.6, medium: 0.72, strong: 0.85 };
-  const temperature = tempMap[strength] ?? 0.72;
+  // Capture input paragraph count for enforcement at end
+  const inputParagraphCount = original.split(/\n\s*\n/).filter(p => p.trim()).length;
 
-  const userPrompt = buildUserPrompt(protectedText, features, tone);
-  let result = await llmCall(GHOST_PRO_SYSTEM, userPrompt, temperature);
+  // Capture input sentence count for strict enforcement (input = output)
+  const inputSentenceCount = countSentences(protectedText);
 
-  if (!result || result.trim().length < protectedText.length * 0.3) {
-    console.error("  [GhostPro] LLM rewrite too short or empty, using original");
-    result = protectedText;
+  const tempMap: Record<string, number> = { light: 0.72, medium: 0.82, strong: 0.92 };
+  let temperature = tempMap[strength] ?? 0.72;
+  // Short texts need higher temperature for more unpredictable word choices
+  if (features.wordCount < 300) {
+    temperature = Math.min(temperature + 0.10, 0.98);
   }
 
-  console.log(`  [GhostPro] Pass 1 done: ${result.split(/\s+/).length} words`);
-
-  // Analyze LLM output
-  let signals = analyzeSignals(result);
-  console.log(`  [GhostPro] Post-LLM signals: burstiness=${signals.burstiness.toFixed(1)}, ai_pattern=${signals.ai_pattern_score.toFixed(1)}, uniformity=${signals.sentence_uniformity.toFixed(1)}`);
-
   // ═══════════════════════════════════════════
-  // PASS 2: Non-LLM Statistical Processing
+  // CHUNK PROCESSING
   // ═══════════════════════════════════════════
-  console.log("  [GhostPro] Pass 2: Statistical post-processing...");
+  const chunks = splitIntoChunks(protectedText);
+  let result: string;
 
-  // Step 2A: Kill all AI vocabulary and phrases
-  console.log("  [GhostPro]   2A: AI vocabulary elimination...");
-  result = killAIVocabulary(result);
+  if (chunks.length === 1) {
+    // Single chunk — standard path
+    console.log("  [GhostPro] Processing as single chunk...");
+    result = await processChunk(protectedText, features, { strength, tone, temperature });
+  } else {
+    // Multi-chunk path
+    console.log(`  [GhostPro] Splitting into ${chunks.length} chunks for processing...`);
+    const processedChunks: string[] = [];
 
-  // Step 2B: Naturalize formal connectors
-  console.log("  [GhostPro]   2B: Connector naturalization...");
-  result = naturalizeConnectors(result);
-
-  // Step 2C: Diversify sentence starters
-  console.log("  [GhostPro]   2C: Starter diversification...");
-  result = diversifyStarters(result);
-
-  // Step 2D: Enforce burstiness (sentence length variation)
-  console.log("  [GhostPro]   2D: Burstiness enforcement...");
-  result = enforceBurstiness(result);
-
-  // Step 2E: Humanize punctuation (semicolons, dashes, parens)
-  console.log("  [GhostPro]   2E: Punctuation humanization...");
-  result = humanizePunctuation(result, features);
-
-    // Step 2F: Vary paragraph lengths
-    console.log("  [GhostPro]   2F: Paragraph variance...");
-    result = varyParagraphs(result);
-
-    // Step 2G: Enrich dependency depth (add subordinate clauses)
-    console.log("  [GhostPro]   2G: Dependency enrichment...");
-    result = enrichDependencyDepth(result);
-
-    // Step 2H: Final polish
-    console.log("  [GhostPro]   2H: Final polish...");
-    result = finalPolish(result);
-
-  // ═══════════════════════════════════════════
-  // PASS 3: Signal-Aware Refinement (1-2 rounds)
-  // ═══════════════════════════════════════════
-    for (let round = 1; round <= 3; round++) {
-      signals = analyzeSignals(result);
-      const weakSignals = [];
-      if (signals.burstiness < 55) weakSignals.push("burstiness");
-      if (signals.ai_pattern_score > 20) weakSignals.push("ai_pattern");
-      if (signals.starter_diversity < 55) weakSignals.push("starters");
-      if (signals.sentence_uniformity > 50) weakSignals.push("uniformity");
-      if (signals.dependency_depth < 40) weakSignals.push("dep_depth");
-
-    if (weakSignals.length === 0) {
-      console.log(`  [GhostPro] Round ${round}: All signals in human range, skipping refinement`);
-      break;
+    for (let i = 0; i < chunks.length; i++) {
+      const chunkWords = chunks[i].trim().split(/\s+/).length;
+      console.log(`  [GhostPro] Processing chunk ${i + 1}/${chunks.length} (${chunkWords} words)...`);
+      const processed = await processChunk(chunks[i], features, { strength, tone, temperature });
+      processedChunks.push(processed);
     }
 
-    console.log(`  [GhostPro] Round ${round}: Refining weak signals: ${weakSignals.join(", ")}`);
-    result = signalAwareRefinement(result);
+    result = processedChunks.join("\n\n");
+    console.log(`  [GhostPro] All ${chunks.length} chunks processed, merged.`);
+
+    // Run a light cross-chunk polish to smooth seams
     result = finalPolish(result);
+
+    // Final constraint pass on merged result
+    if (!features.hasContractions) result = removeContractions(result);
+    if (!features.hasFirstPerson) result = removeFirstPerson(result);
+    if (!features.hasRhetoricalQuestions) result = removeRhetoricalQuestions(result);
   }
 
-  // ── Restore protected content ──
+  // ── Final punctuation & capitalization cleanup (non-LLM) ──
+  result = fixPunctuation(result);
+
+  // Merge/split DISABLED — strict sentence count enforcement: input = output
+
+  // ── Strict sentence count enforcement ──
+  result = enforceSentenceCountStrict(result, inputSentenceCount);
+  console.log(`  [GhostPro] Sentence enforcement: target=${inputSentenceCount}, actual=${countSentences(result)}`);
+
+  // ── Restore protected content terms ──
+  result = restoreContentTerms(result.trim(), termMap);
+
+  // ── Restore protected special content ──
   result = restoreSpecialContent(result.trim(), protectionMap);
+
+  // ── Enforce paragraph count 1:1 with input ──
+  result = enforceParagraphCount(result, inputParagraphCount);
+  console.log(`  [GhostPro] Paragraph enforcement: target=${inputParagraphCount}, actual=${result.split(/\n\s*\n/).filter(p => p.trim()).length}`);
+
+  // ── Final repetition cleanup — remove duplicate clauses, near-dupe sentences, inject phrasal verbs ──
+  result = cleanOutputRepetitions(result);
 
   // ── Final diagnostic ──
   const outputWordCount = result.split(/\s+/).length;
-  const outputSentences = sentTokenize(result);
+  const outputSentences = robustSentenceSplit(result);
   const avgSentLen = outputSentences.length > 0 ? outputWordCount / outputSentences.length : 0;
   const sentLengths = outputSentences.map(s => s.split(/\s+/).length);
   const sentMean = sentLengths.length > 0 ? sentLengths.reduce((a, b) => a + b, 0) / sentLengths.length : 0;
@@ -1154,6 +2007,15 @@ export async function ghostProHumanize(
   console.log(`  [GhostPro] Final signals: burst=${finalSignals.burstiness.toFixed(1)}, ai_pat=${finalSignals.ai_pattern_score.toFixed(1)}, uniform=${finalSignals.sentence_uniformity.toFixed(1)}, starter=${finalSignals.starter_diversity.toFixed(1)}, perplex=${finalSignals.perplexity.toFixed(1)}`);
   console.log(`  [GhostPro] Meaning similarity: ${meaningScore.toFixed(2)}`);
   console.log(`  [GhostPro] Complete in ${elapsed.toFixed(1)}s`);
+
+  // ── Post-humanize sentence verification ──
+  const verification = verifySentencePresence(text, result, robustSentenceSplit);
+  if (!verification.verified) {
+    console.warn(`  [GhostPro] Sentence verification: input=${verification.inputCount}, output=${verification.outputCount}`);
+    if (verification.missingKeywords.length > 0) {
+      console.warn(`  [GhostPro] Missing keywords: ${verification.missingKeywords.join(", ")}`);
+    }
+  }
 
   return result;
 }

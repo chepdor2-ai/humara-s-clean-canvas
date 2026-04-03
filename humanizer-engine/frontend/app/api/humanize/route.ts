@@ -3,7 +3,7 @@ import { humanize } from '@/lib/engine/humanizer';
 import { ghostProHumanize } from '@/lib/engine/ghost-pro';
 import { llmHumanize } from '@/lib/engine/llm-humanizer';
 import { getDetector } from '@/lib/engine/multi-detector';
-import { isMeaningPreservedSync } from '@/lib/engine/semantic-guard';
+import { isMeaningPreserved } from '@/lib/engine/semantic-guard';
 
 export const maxDuration = 120; // LLM engines need more time
 
@@ -61,7 +61,7 @@ export async function POST(req: Request) {
     const outputAnalysis = detector.analyze(humanized);
 
     // Semantic guard check
-    const meaningCheck = isMeaningPreservedSync(text, humanized, 0.88);
+    const meaningCheck = await isMeaningPreserved(text, humanized, 0.88);
 
     // Word counts
     const inputWords = text.trim().split(/\s+/).length;
@@ -86,6 +86,7 @@ export async function POST(req: Request) {
       },
       output_detector_results: {
         overall: Math.round(outputAnalysis.summary.overall_ai_score * 10) / 10,
+        signals: outputAnalysis.signals,
         detectors: outputAnalysis.detectors.map((d) => ({
           detector: d.detector,
           ai_score: Math.round(d.ai_score * 10) / 10,

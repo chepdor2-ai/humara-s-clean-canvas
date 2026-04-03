@@ -1,65 +1,104 @@
-'use client';
+﻿'use client';
 
+import { useState } from 'react';
 import Link from 'next/link';
-import { ArrowRight, Globe, Mail } from 'lucide-react';
+import { Mail, Lock, Eye, EyeOff, Shield } from 'lucide-react';
 
-export default function Login() {
+export default function LoginPage() {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsLoading(true);
+    try {
+      // API call here
+      console.log('Logging in:', { email, password });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   return (
-    <div className="min-h-screen flex items-center justify-center bg-[#FFF8F0] px-6 py-20 selection:bg-[#D97757]/10">
-      <div className="w-full max-w-[480px] bg-white p-12 shadow-[0_40px_100px_-20px_rgba(92,64,51,0.15)] border border-[#EADDCF] animate-in fade-in zoom-in-95 duration-700">
-        <div className="text-center mb-12">
-           <Link href="/" className="inline-flex items-center text-2xl font-bold font-sora tracking-tight mb-8 group">
-             <span className="text-[#5C4033]">Huma</span>
-             <span className="text-[#D97757]">ra</span>
-             <div className="w-1.5 h-1.5 rounded-full bg-[#7A8F6A] ml-1 group-hover:scale-150 transition-transform"></div>
-           </Link>
-           <h1 className="text-3xl font-bold text-[#5C4033] mb-3 font-sora">Sign in</h1>
-           <p className="text-[#8A7263] text-sm font-medium">Welcome back to the lab.</p>
-        </div>
-
-        <div className="grid grid-cols-2 gap-4 mb-10">
-           <button className="flex items-center justify-center gap-3 py-4 border border-[#EADDCF] hover:bg-[#FFF8F0] transition-all text-[11px] font-black uppercase tracking-widest text-[#5C4033]">
-               <Globe className="w-4 h-4" /> SSO
-           </button>
-           <button className="flex items-center justify-center gap-3 py-4 border border-[#EADDCF] hover:bg-[#FFF8F0] transition-all text-[11px] font-black uppercase tracking-widest text-[#5C4033]">
-              <Mail className="w-4 h-4" /> Google
-           </button>
-        </div>
-
-        <div className="relative mb-10">
-           <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-[#EADDCF]"></div></div>
-           <div className="relative flex justify-center text-[10px] uppercase font-black tracking-[0.3em]"><span className="px-4 bg-white text-[#8A7263]/40">Or continue with</span></div>
-        </div>
-        
-        <form className="space-y-6" onSubmit={(e) => e.preventDefault()}>
-          <div className="space-y-2">
-            <label className="text-[10px] font-black uppercase tracking-[0.2em] text-[#8A7263] block">Email Address</label>
-            <input type="email" className="w-full px-5 py-4 bg-[#FFF8F0] border border-[#EADDCF] focus:border-[#D97757] outline-none text-[#5C4033] text-sm font-bold placeholder:text-[#8A7263]/40 transition-colors" placeholder="alex@sterling.com" />
-          </div>
-          <div className="space-y-2 pb-4">
-            <div className="flex justify-between items-center mb-1">
-              <label className="text-[10px] font-black uppercase tracking-[0.2em] text-[#8A7263] block">Password</label>
-              <Link href="/forgot" className="text-[9px] font-black uppercase tracking-[0.2em] text-[#D97757] hover:text-[#5C4033] transition-colors">Forgot Password?</Link>
+    <div className="bg-brand-950 text-gray-900 font-sans antialiased flex flex-col min-h-screen">
+      <main className="flex-grow pt-20">
+        <section className="min-h-[80vh] flex items-center justify-center p-6 bg-brand-50">
+          <div className="max-w-md w-full bg-white border-2 border-brand-600 shadow-[6px_6px_0px_#fb8c00] p-8 transition-all hover:shadow-[9px_9px_0px_#fb8c00] hover:-translate-x-1 hover:-translate-y-1">
+            <div className="flex justify-center mb-6">
+              <div className="p-3 bg-brand-100 rounded-lg">
+                <Lock className="h-8 w-8 text-brand-600" strokeWidth={2} />
+              </div>
             </div>
-            <input type="password" className="w-full px-5 py-4 bg-[#FFF8F0] border border-[#EADDCF] focus:border-[#D97757] outline-none text-[#5C4033] text-sm font-bold transition-colors" />
-          </div>
-          <Link href="/app/dashboard" className="w-full flex items-center justify-center gap-3 py-5 bg-[#5C4033] hover:bg-[#D97757] text-white text-[12px] font-black uppercase tracking-[0.2em] shadow-xl shadow-[#5C4033]/20 transition-all active:scale-95">
-            Sign In <ArrowRight className="w-4 h-4"/>
-          </Link>
-        </form>
+            <h2 className="text-3xl font-black text-center mb-8 text-gray-900">Welcome Back</h2>
+            
+            <form onSubmit={handleSubmit} className="space-y-6">
+              <div>
+                <label className="block text-sm font-bold text-gray-700 mb-2">Email Address</label>
+                <div className="relative">
+                  <Mail className="absolute left-3 top-3.5 h-5 w-5 text-brand-600 pointer-events-none" strokeWidth={2} />
+                  <input
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    className="w-full pl-10 pr-4 py-3 border-2 border-gray-200 focus:border-brand-500 focus:outline-none transition-colors font-medium"
+                    placeholder="user@example.com"
+                    required
+                  />
+                </div>
+              </div>
 
-        <div className="mt-12 text-center">
-           <p className="text-[11px] font-bold text-[#8A7263] uppercase tracking-widest">
-             Don't have an account? <Link href="/signup" className="text-[#D97757] hover:underline">Create one</Link>
-           </p>
-        </div>
-        
-        <div className="mt-12 pt-8 border-t border-[#EADDCF] text-center">
-           <p className="text-[9px] font-black uppercase tracking-[0.2em] text-[#8A7263]/40 leading-relaxed">
-             Secure authentication powered by <span className="text-[#5C4033] font-bold">Humara Security</span>.
-           </p>
-        </div>
-      </div>
+              <div>
+                <div className="flex justify-between items-center mb-2">
+                  <label className="block text-sm font-bold text-gray-700">Password</label>
+                  <Link href="/reset-password" className="text-xs font-bold text-brand-600 hover:underline">
+                    Forgot?
+                  </Link>
+                </div>
+                <div className="relative">
+                  <Lock className="absolute left-3 top-3.5 h-5 w-5 text-brand-600 pointer-events-none" strokeWidth={2} />
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className="w-full pl-10 pr-12 py-3 border-2 border-gray-200 focus:border-brand-500 focus:outline-none transition-colors font-medium"
+                    placeholder=""
+                    required
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-3.5 text-gray-400 hover:text-brand-600 transition-colors"
+                  >
+                    {showPassword ? (
+                      <EyeOff className="h-5 w-5" strokeWidth={2} />
+                    ) : (
+                      <Eye className="h-5 w-5" strokeWidth={2} />
+                    )}
+                  </button>
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                disabled={isLoading}
+                className="w-full bg-gray-900 text-white font-bold py-4 border-2 border-gray-900 shadow-[4px_4px_0px_rgba(31,41,55,1)] hover:shadow-[6px_6px_0px_rgba(31,41,55,1)] hover:-translate-x-1 hover:-translate-y-1 active:translate-x-0.5 active:translate-y-0.5 transition-all disabled:opacity-50 disabled:cursor-not-allowed mt-4"
+              >
+                {isLoading ? 'Logging in...' : 'Log In'}
+              </button>
+            </form>
+
+            <p className="text-center text-sm font-medium text-gray-500 mt-8">
+              Need an account?{' '}
+              <Link href="/signup" className="text-brand-600 font-bold hover:underline">
+                Sign up
+              </Link>
+            </p>
+          </div>
+        </section>
+      </main>
     </div>
   );
 }
+

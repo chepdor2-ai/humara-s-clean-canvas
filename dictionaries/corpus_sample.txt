@@ -1,0 +1,9 @@
+This is a sample corpus for pattern extraction. The full corpus should contain 10M–50M+ words. Example sentences:
+
+The quick brown fox jumps over the lazy dog.
+She went to the market to buy some vegetables.
+In the meantime, he finished his homework.
+As soon as possible, please respond to the email.
+On the other hand, the results were inconclusive.
+
+// ...add millions of sentences for production
