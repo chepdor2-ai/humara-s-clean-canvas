@@ -372,20 +372,20 @@ export default function EditorPage() {
   }, [popupType, closePopup]);
 
   return (
-    <div className="flex flex-col gap-6 animate-in fade-in duration-700">
+    <div className="flex flex-col gap-5 animate-in fade-in duration-500">
       <header className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">AI Humanizer</h1>
-          <p className="text-sm text-gray-600 mt-1">Transform AI text into natural, human-like content</p>
+          <h1 className="text-xl font-semibold text-slate-900">AI Humanizer</h1>
+          <p className="text-sm text-slate-500 mt-0.5">Transform AI text into natural, human-like content</p>
         </div>
-        <div className="flex gap-3">
-           <button onClick={handleClear} className="px-4 py-2 border border-gray-200 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors flex items-center gap-2">
-              <Eraser className="w-4 h-4" /> Clear
+        <div className="flex gap-2">
+           <button onClick={handleClear} className="px-3 py-2 border border-slate-200 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-50 transition-colors flex items-center gap-1.5">
+              <Eraser className="w-3.5 h-3.5" /> Clear
            </button>
            {meaningScore !== null && (
-             <div className="px-4 py-2 bg-green-50 border border-green-200 rounded-lg flex items-center gap-2">
-               <ShieldCheck className="w-4 h-4 text-green-600" />
-               <span className="text-sm font-medium text-green-700">
+             <div className="px-3 py-2 bg-emerald-50 border border-emerald-200 rounded-lg flex items-center gap-1.5">
+               <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+               <span className="text-sm font-medium text-emerald-700">
                  Meaning: {Math.round(meaningScore * 100)}%
                </span>
              </div>
@@ -395,21 +395,21 @@ export default function EditorPage() {
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         <div className="col-span-1 lg:col-span-3 space-y-4">
-          <div className="bg-white border border-gray-200 rounded-lg p-6">
-            <h3 className="text-sm font-semibold text-gray-900 mb-4 pb-3 border-b border-gray-100">Settings</h3>
+          <div className="bg-white border border-slate-200 rounded-xl p-5">
+            <h3 className="text-xs font-semibold text-slate-900 uppercase tracking-wider mb-4 pb-3 border-b border-slate-100">Settings</h3>
             
             <div className="space-y-5">
               <div className="space-y-2">
-                <label className="text-xs font-medium text-gray-700 block">Mode</label>
+                <label className="text-xs font-medium text-slate-500 block">Mode</label>
                 <div className="space-y-1.5">
                   {ENGINES.map((e) => (
                     <button
                       key={e.id}
                       onClick={() => setEngine(e.id)}
-                      className={`w-full text-left px-3 py-2.5 rounded-lg text-sm font-medium transition-all ${
+                      className={`w-full text-left px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
                         engine === e.id
-                          ? 'bg-brand-500 text-white'
-                          : 'bg-gray-50 text-gray-700 border border-gray-200 hover:border-brand-300'
+                          ? 'bg-brand-50 text-brand-700 border border-brand-200'
+                          : 'bg-slate-50 text-slate-600 border border-slate-200 hover:border-slate-300'
                       }`}
                     >
                       {e.label}
@@ -419,16 +419,16 @@ export default function EditorPage() {
               </div>
 
               <div className="space-y-2">
-                <label className="text-xs font-medium text-gray-700 block">Strength</label>
-                <div className="grid grid-cols-3 gap-1 bg-gray-100 rounded-lg p-1">
+                <label className="text-xs font-medium text-slate-500 block">Strength</label>
+                <div className="grid grid-cols-3 gap-1 bg-slate-100 rounded-lg p-1">
                   {STRENGTHS.map((s) => (
                     <button
                       key={s.id}
                       onClick={() => setStrength(s.id)}
-                      className={`py-2 text-xs font-medium rounded-md transition-all ${
+                      className={`py-2 text-xs font-medium rounded-md transition-colors ${
                         strength === s.id
-                          ? 'bg-white text-gray-900 shadow-sm'
-                          : 'text-gray-600 hover:text-gray-900'
+                          ? 'bg-white text-slate-900 shadow-sm'
+                          : 'text-slate-500 hover:text-slate-700'
                       }`}
                     >
                       {s.label}
@@ -438,12 +438,12 @@ export default function EditorPage() {
               </div>
 
               <div className="space-y-2">
-                <label className="text-xs font-medium text-gray-700 block">Tone</label>
+                <label className="text-xs font-medium text-slate-500 block">Tone</label>
                 <select
                   value={tone}
                   onChange={(e) => setTone(e.target.value)}
                   title="Select tone for humanized text"
-                  className="w-full bg-white border border-gray-200 rounded-lg px-3 py-2.5 text-sm font-medium text-gray-900 outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
+                  className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2.5 text-sm font-medium text-slate-700 outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
                 >
                   {TONES.map((t) => (
                     <option key={t.id} value={t.id}>{t.label}</option>
@@ -451,13 +451,13 @@ export default function EditorPage() {
                 </select>
               </div>
 
-              <div className="flex items-center justify-between pt-3 border-t border-gray-100">
-                <label className="text-xs font-medium text-gray-700">Preserve Meaning</label>
+              <div className="flex items-center justify-between pt-3 border-t border-slate-100">
+                <label className="text-xs font-medium text-slate-600">Preserve Meaning</label>
                 <button
                   onClick={() => setStrictMeaning(!strictMeaning)}
                   title={strictMeaning ? 'Meaning preservation enabled' : 'Meaning preservation disabled'}
                   className={`w-11 h-6 rounded-full transition-all relative ${
-                    strictMeaning ? 'bg-brand-500' : 'bg-gray-200'
+                    strictMeaning ? 'bg-brand-600' : 'bg-slate-200'
                   }`}
                 >
                   <div
@@ -472,14 +472,14 @@ export default function EditorPage() {
                 <button
                   onClick={handleCheck}
                   disabled={!text.trim() || checking || loading}
-                  className="py-3 bg-white border-2 border-brand-500 text-brand-500 hover:bg-brand-50 text-sm font-semibold rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2"
+                  className="py-2.5 bg-white border border-brand-200 text-brand-700 hover:bg-brand-50 text-sm font-medium rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-1.5"
                 >
                   {checking ? <RotateCcw className="w-4 h-4 animate-spin" /> : <><ShieldCheck className="w-4 h-4" /> Check</>}
                 </button>
                 <button
                   onClick={handleHumanize}
                   disabled={!text.trim() || loading || checking}
-                  className="py-3 bg-brand-500 hover:bg-brand-600 text-white text-sm font-semibold rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2"
+                  className="py-2.5 bg-brand-600 hover:bg-brand-700 text-white text-sm font-medium rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-1.5"
                 >
                   {loading ? <RotateCcw className="w-4 h-4 animate-spin" /> : <><Zap className="w-4 h-4" /> Humanize</>}
                 </button>
@@ -487,13 +487,12 @@ export default function EditorPage() {
             </div>
           </div>
           
-          <div className="p-4 bg-blue-50 border border-blue-100 rounded-lg">
-             <div className="flex gap-2 mb-2"><Info className="w-4 h-4 text-blue-500" /> <span className="text-xs font-semibold text-blue-900">Editing Tips</span></div>
-             <ul className="text-xs text-blue-700 leading-relaxed space-y-1">
-               <li>• Select any word to see synonyms</li>
-               <li>• Click a sentence for 4 alternative rewrites</li>
-               <li>• Click the output to edit directly</li>
-               <li>• Higher strength = better AI bypass</li>
+          <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl">
+             <div className="flex gap-1.5 mb-2"><Info className="w-3.5 h-3.5 text-slate-400" /> <span className="text-xs font-medium text-slate-700">Tips</span></div>
+             <ul className="text-xs text-slate-500 leading-relaxed space-y-1">
+               <li>• Select a word for synonyms</li>
+               <li>• Click a sentence for alternatives</li>
+               <li>• Edit the output directly</li>
              </ul>
           </div>
         </div>
