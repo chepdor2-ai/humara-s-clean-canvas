@@ -1,0 +1,120 @@
+'use client';
+import { useState } from 'react';
+import Link from 'next/link';
+import { CheckCircle2 } from 'lucide-react';
+
+const TIERS = [
+  {
+    name: 'Starter',
+    monthly: 5,
+    yearly: 4.25,
+    description: 'For casual users and light writing.',
+    features: ['20,000 words/day (Fast & Standard)', '10,000 words/day (Stealth)', 'Basic AI Detection', '30 Day Access', 'Email Support'],
+    cta: 'Get Started',
+    featured: false,
+  },
+  {
+    name: 'Creator',
+    monthly: 10,
+    yearly: 8.50,
+    description: 'For students and content creators.',
+    features: ['40,000 words/day (Fast & Standard)', '20,000 words/day (Stealth)', 'Full Detector Suite', 'Style Memory (3 slots)', 'Priority Support'],
+    cta: 'Get Started',
+    featured: true,
+  },
+  {
+    name: 'Professional',
+    monthly: 20,
+    yearly: 17,
+    description: 'For power users and agencies.',
+    features: ['80,000 words/day (Fast & Standard)', '40,000 words/day (Stealth)', 'All Engine Modes', 'Style Memory (5 slots)', 'API Access', 'Priority Support'],
+    cta: 'Get Started',
+    featured: false,
+  },
+  {
+    name: 'Business',
+    monthly: 35,
+    yearly: 29.75,
+    description: 'For teams and enterprise.',
+    features: ['150,000 words/day (Fast & Standard)', '75,000 words/day (Stealth)', 'All Engine Modes', 'Unlimited Style Profiles', 'Full API Access', 'Dedicated Manager'],
+    cta: 'Get Started',
+    featured: false,
+  },
+];
+
+export default function PricingCards() {
+  const [yearly, setYearly] = useState(false);
+
+  return (
+    <section className="w-full py-16 bg-white dark:bg-slate-950">
+      <div className="max-w-6xl mx-auto px-6">
+        {/* Billing toggle */}
+        <div className="flex items-center justify-center gap-3 mb-12">
+          <span className={`text-sm font-medium ${!yearly ? 'text-slate-900 dark:text-white' : 'text-slate-400'}`}>Monthly</span>
+          <button onClick={() => setYearly(!yearly)}
+            className={`relative w-12 h-6 rounded-full transition-colors ${yearly ? 'bg-brand-600' : 'bg-slate-200 dark:bg-slate-700'}`}>
+            <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all shadow-sm ${yearly ? 'left-7' : 'left-1'}`} />
+          </button>
+          <span className={`text-sm font-medium ${yearly ? 'text-slate-900 dark:text-white' : 'text-slate-400'}`}>Yearly</span>
+          {yearly && <span className="text-xs font-bold text-emerald-600 bg-emerald-50 dark:bg-emerald-950 px-2 py-0.5 rounded-full">Save 15%</span>}
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          {TIERS.map((tier, i) => {
+            const price = yearly ? tier.yearly : tier.monthly;
+            return (
+              <div key={i} className={`rounded-xl border p-7 flex flex-col transition-all duration-300 ${
+                tier.featured
+                  ? 'bg-slate-900 dark:bg-slate-800 text-white border-slate-800 dark:border-slate-700 relative shadow-xl scale-[1.02]'
+                  : 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white border-slate-200 dark:border-slate-700 hover:border-brand-200 hover:shadow-md'
+              }`}>
+                {tier.featured && (
+                  <span className="absolute -top-2.5 left-6 bg-brand-600 text-white text-[10px] font-semibold uppercase tracking-wider py-1 px-2.5 rounded-full">Popular</span>
+                )}
+                <h3 className={`text-xs font-semibold uppercase tracking-wider mb-2 ${tier.featured ? 'text-brand-400' : 'text-slate-400'}`}>{tier.name}</h3>
+                <p className={`text-sm mb-5 ${tier.featured ? 'text-slate-400' : 'text-slate-500 dark:text-slate-400'}`}>{tier.description}</p>
+
+                <div className="mb-6">
+                  <span className="text-4xl font-semibold tracking-tight">${price.toFixed(price % 1 === 0 ? 0 : 2)}</span>
+                  <span className={`text-sm ml-1 ${tier.featured ? 'text-slate-500' : 'text-slate-400'}`}>/mo</span>
+                  {yearly && <span className="block text-[11px] text-slate-400 mt-0.5">billed ${(price * 12).toFixed(0)}/year</span>}
+                </div>
+
+                <div className="space-y-3 mb-7 flex-1">
+                  {tier.features.map((feature, j) => (
+                    <div key={j} className="flex items-center gap-2.5">
+                      <CheckCircle2 className={`w-4 h-4 shrink-0 ${tier.featured ? 'text-brand-400' : 'text-emerald-500'}`} />
+                      <span className="text-sm font-medium">{feature}</span>
+                    </div>
+                  ))}
+                </div>
+
+                <Link
+                  href="/signup"
+                  className={`w-full py-3 rounded-lg text-sm font-medium text-center transition-colors ${
+                    tier.featured
+                      ? 'bg-brand-600 text-white hover:bg-brand-700'
+                      : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-white border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700'
+                  }`}
+                >
+                  {tier.cta}
+                </Link>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Custom plan */}
+        <div className="mt-8 p-6 bg-slate-50 dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 flex flex-col md:flex-row items-center justify-between gap-4">
+          <div>
+            <h3 className="text-lg font-semibold text-slate-900 dark:text-white mb-1">Need a custom package?</h3>
+            <p className="text-sm text-slate-500 dark:text-slate-400">Custom word limits, SLA, dedicated support, and tailored integrations.</p>
+          </div>
+          <Link href="/contact" className="bg-slate-900 dark:bg-white text-white dark:text-slate-900 px-6 py-2.5 rounded-lg text-sm font-medium hover:bg-slate-800 dark:hover:bg-slate-100 transition-colors whitespace-nowrap">
+            Contact Sales
+          </Link>
+        </div>
+      </div>
+    </section>
+  );
+}

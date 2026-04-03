@@ -3,6 +3,7 @@ import { Inter } from 'next/font/google';
 import './globals.css';
 import RootLayoutClient from './RootLayoutClient';
 import ThemeProvider from './ThemeProvider';
+import { AuthProvider } from './AuthProvider';
 
 const inter = Inter({
   subsets: ['latin'],
@@ -55,7 +56,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en" className={inter.variable} suppressHydrationWarning>
       <body className="bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100 antialiased font-sans transition-colors duration-300">
         <ThemeProvider>
-          <RootLayoutClient>{children}</RootLayoutClient>
+          <AuthProvider>
+            <RootLayoutClient>{children}</RootLayoutClient>
+          </AuthProvider>
         </ThemeProvider>
       </body>
     </html>

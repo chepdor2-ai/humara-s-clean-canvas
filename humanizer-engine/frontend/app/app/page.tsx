@@ -1,7 +1,10 @@
 'use client';
 import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
-import { Copy, Check, Zap, Eraser, RotateCcw, Type, AlignLeft, RefreshCw, AlertTriangle } from 'lucide-react';
-import ProcessingAnimation from '../ProcessingAnimation';
+import dynamic from 'next/dynamic';
+import { Copy, Check, Zap, Eraser, RotateCcw, Type, AlignLeft, RefreshCw, AlertTriangle, Info } from 'lucide-react';
+import UsageBar from './UsageBar';
+
+const ProcessingAnimation = dynamic(() => import('../ProcessingAnimation'), { ssr: false });
 
 /* ── Types ──────────────────────────────────────────────────────────────── */
 interface DetectorScore { detector: string; ai_score: number; human_score: number; }
@@ -134,10 +137,10 @@ const DetectorBar = ({ name, aiScore }: { name: string; aiScore: number }) => {
 
 /* ── Constants ──────────────────────────────────────────────────────────── */
 const ENGINES = [
-  { id: 'ghost_mini', label: 'Fast' },
-  { id: 'ghost_pro', label: 'Standard' },
-  { id: 'ninja', label: 'Stealth' },
-  { id: 'undetectable', label: 'Undetectable' },
+  { id: 'ghost_mini', label: 'Fast', note: 'Bypasses most detectors quickly — best for speed.' },
+  { id: 'ghost_pro', label: 'Standard', note: 'Most reliable across many detectors — balanced.' },
+  { id: 'ninja', label: 'Stealth', note: 'Best balance between quality and beating detectors.' },
+  { id: 'undetectable', label: 'Undetectable', note: 'Comprehensive deep process — may not work for every topic.' },
 ];
 const STRENGTHS = [
   { id: 'light', label: 'Light' },
@@ -178,20 +181,15 @@ export default function EditorPage() {
   const [popupType, setPopupType] = useState<'synonym' | 'sentence' | null>(null);
   const [loadingPopup, setLoadingPopup] = useState(false);
   const [rehumanizing, setRehumanizing] = useState(false);
+  const [iterationCount, setIterationCount] = useState(0);
 
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const outputRef = useRef<HTMLTextAreaElement>(null);
-  const outputBackdropRef = useRef<HTMLDivElement>(null);
   const popupRef = useRef<HTMLDivElement>(null);
   const detectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const inputWords = useMemo(() => (text.trim() ? text.trim().split(/\s+/).length : 0), [text]);
   const outputWords = useMemo(() => (result.trim() ? result.trim().split(/\s+/).length : 0), [result]);
-
-  const outputSentenceScores = useMemo<ScoredSentence[]>(() => {
-    if (!result || !outputDetection) return [];
-    return splitSentences(result).map(s => ({ ...s, score: scoreSentence(s.text, outputDetection.overallAi) }));
-  }, [result, outputDetection]);
 
   const inputAvgAi = useMemo(() => {
     if (!inputDetection) return 0;
@@ -243,19 +241,11 @@ export default function EditorPage() {
     return () => { if (detectTimerRef.current) clearTimeout(detectTimerRef.current); controller.abort(); };
   }, [text, inputWords]);
 
-  /* ── Scroll sync for highlight overlay ──────────────────────────────── */
-  const syncOutputScroll = useCallback(() => {
-    if (outputRef.current && outputBackdropRef.current) {
-      outputBackdropRef.current.scrollTop = outputRef.current.scrollTop;
-      outputBackdropRef.current.scrollLeft = outputRef.current.scrollLeft;
-    }
-  }, []);
-
   /* ── Handlers ───────────────────────────────────────────────────────── */
   const handleHumanize = async () => {
     if (!text.trim()) return;
     if (inputWords < 10) { setError('Please enter at least 10 words.'); return; }
-    setLoading(true); setError(''); setResult(''); setOutputDetection(null); setMeaningScore(null);
+    setLoading(true); setError(''); setResult(''); setOutputDetection(null); setMeaningScore(null); setIterationCount(0);
     try {
       const res = await fetch('/api/humanize', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -263,7 +253,8 @@ export default function EditorPage() {
       });
       const data: HumanizeResponse = await res.json();
       if (!res.ok || data.error) throw new Error(data.error || 'Humanization failed');
-      setResult(data.humanized);
+      let currentResult = data.humanized;
+      setResult(currentResult);
       setMeaningScore(data.meaning_similarity);
       if (data.input_detector_results) {
         const d = data.input_detector_results;
@@ -271,12 +262,35 @@ export default function EditorPage() {
         const sentences = splitSentences(text);
         setSentenceScores(sentences.map(s => ({ ...s, score: scoreSentence(s.text, d.overall) })));
       }
+      let currentAi = 100;
       if (data.output_detector_results) {
         const d = data.output_detector_results;
+        currentAi = d.overall;
         setOutputDetection({ overallAi: d.overall, overallHuman: 100 - d.overall, detectors: d.detectors });
       }
+
+      // Auto-iterate on "strong" depth until AI score < 20%
+      if (strength === 'strong' && currentAi >= 20) {
+        const MAX_AUTO = 4;
+        for (let i = 0; i < MAX_AUTO && currentAi >= 20; i++) {
+          setIterationCount(i + 1);
+          const reRes = await fetch('/api/humanize', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ text: currentResult, engine, strength: 'strong', tone, strict_meaning: strictMeaning, enable_post_processing: true }),
+          });
+          const reData: HumanizeResponse = await reRes.json();
+          if (!reRes.ok || reData.error || !reData.humanized) break;
+          currentResult = reData.humanized;
+          setResult(currentResult);
+          if (reData.output_detector_results) {
+            currentAi = reData.output_detector_results.overall;
+            setOutputDetection({ overallAi: currentAi, overallHuman: 100 - currentAi, detectors: reData.output_detector_results.detectors });
+          }
+          if (currentAi < 20) break;
+        }
+      }
     } catch (err) { setError(err instanceof Error ? err.message : 'Processing failed'); }
-    finally { setLoading(false); }
+    finally { setLoading(false); setIterationCount(0); }
   };
 
   const handleRephrase = async () => {
@@ -468,14 +482,6 @@ export default function EditorPage() {
     if (popupType) { document.addEventListener('mousedown', h); return () => document.removeEventListener('mousedown', h); }
   }, [popupType, closePopup]);
 
-  /* ── Highlighted output overlay ────────────────────────────────────── */
-  const renderOutputHighlighted = () => {
-    if (outputSentenceScores.length === 0) return <span className="text-transparent">{result || ' '}</span>;
-    return outputSentenceScores.map((s, i) => (
-      <span key={i} className={`${s.score > 35 ? 'bg-red-100/80 dark:bg-red-900/30' : 'bg-emerald-100/60 dark:bg-emerald-900/20'} rounded-sm transition-colors duration-300`}>{s.text}</span>
-    ));
-  };
-
   /* ── Render ───────────────────────────────────────────────────────────── */
   return (
     <div className="flex flex-col gap-4 animate-in fade-in duration-500">
@@ -496,6 +502,9 @@ export default function EditorPage() {
           </button>
         </div>
       </header>
+
+      {/* Daily Usage */}
+      <UsageBar />
 
       {/* Settings Bar */}
       <div className="flex flex-wrap items-center gap-x-5 gap-y-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2.5">
@@ -545,6 +554,35 @@ export default function EditorPage() {
           {loading ? 'Humanizing…' : 'Humanize'}
         </button>
       </div>
+
+      {/* Engine & Depth Notes */}
+      <div className="flex flex-wrap gap-3">
+        <div className="flex items-start gap-1.5 px-3 py-2 bg-brand-50/60 dark:bg-brand-950/40 border border-brand-100 dark:border-brand-900 rounded-lg max-w-md">
+          <Info className="w-3 h-3 text-brand-500 mt-0.5 shrink-0" />
+          <p className="text-[11px] text-brand-700 dark:text-brand-300 leading-relaxed">
+            <span className="font-bold">{ENGINES.find(e => e.id === engine)?.label}:</span>{' '}
+            {ENGINES.find(e => e.id === engine)?.note}
+          </p>
+        </div>
+        {strength === 'strong' && (
+          <div className="flex items-start gap-1.5 px-3 py-2 bg-amber-50/60 dark:bg-amber-950/40 border border-amber-100 dark:border-amber-900 rounded-lg max-w-md">
+            <AlertTriangle className="w-3 h-3 text-amber-500 mt-0.5 shrink-0" />
+            <p className="text-[11px] text-amber-700 dark:text-amber-300 leading-relaxed">
+              <span className="font-bold">Strong depth</span> focuses on beating AI detectors rather than preserving meaning. For best meaning retention, use Light or Medium.
+            </p>
+          </div>
+        )}
+      </div>
+
+      {/* Score Disclaimer */}
+      {(inputDetection || outputDetection) && (
+        <div className="flex items-start gap-1.5 px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg">
+          <Info className="w-3 h-3 text-slate-400 mt-0.5 shrink-0" />
+          <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">
+            Scores shown are calculated ~3% stricter than actual detectors. Our internal scanner is intentionally aggressive so your text comfortably passes real-world AI detectors like GPTZero, Turnitin, and Originality.AI.
+          </p>
+        </div>
+      )}
 
       {/* Editor Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -612,7 +650,7 @@ export default function EditorPage() {
               <span className="text-[11px] text-slate-400 tabular-nums">{outputWords} words</span>
               {result && (
                 <>
-                  {outputSentenceScores.some(s => s.score > 35) && (
+                  {outputDetection && outputDetection.overallAi > 20 && (
                     <button onClick={handleRehumanizeFlagged} disabled={rehumanizing || loading || rephrasing}
                       className="text-[11px] font-semibold text-red-500 hover:text-red-600 dark:text-red-400 px-2 py-1 rounded-md hover:bg-red-50 dark:hover:bg-red-950 transition-colors flex items-center gap-1 disabled:opacity-50"
                       title="Rehumanize flagged sentences">
@@ -635,28 +673,24 @@ export default function EditorPage() {
           </div>
 
           {loading || rephrasing ? (
-            <ProcessingAnimation isRephrasing={rephrasing} />
+            <ProcessingAnimation isRephrasing={rephrasing} iteration={iterationCount} />
           ) : result ? (
             <div className="relative flex-1">
-              {outputSentenceScores.length > 0 && (
-                <div ref={outputBackdropRef} aria-hidden="true"
-                  className="absolute inset-0 p-4 text-[14px] leading-relaxed whitespace-pre-wrap break-words overflow-hidden pointer-events-none"
-                  style={{ fontFamily: 'inherit', wordBreak: 'break-word' }}>
-                  {renderOutputHighlighted()}
-                </div>
-              )}
+              <div className="absolute inset-0 bg-emerald-50/40 dark:bg-emerald-950/20 pointer-events-none rounded-b-xl" />
               <textarea ref={outputRef} value={result}
-                onChange={(e) => setResult(e.target.value)} onSelect={handleOutputSelect} onScroll={syncOutputScroll}
-                className={`relative z-10 flex-1 w-full min-h-[380px] bg-transparent outline-none resize-none text-[14px] leading-relaxed p-4 ${
-                  outputSentenceScores.length > 0 ? 'text-transparent caret-slate-800 dark:caret-slate-200 selection:bg-brand-200/40' : 'text-slate-800 dark:text-slate-200'
-                }`}
+                onChange={(e) => setResult(e.target.value)} onSelect={handleOutputSelect}
+                className="relative z-10 flex-1 w-full min-h-[380px] bg-transparent outline-none resize-none text-[14px] leading-relaxed text-slate-800 dark:text-slate-200 p-4"
                 style={{ fontFamily: 'inherit' }}
                 placeholder="Output appears here…" />
+              <div className="absolute bottom-2 left-4 right-4 flex items-center gap-1.5 z-10">
+                <span className="text-[10px] text-emerald-600/70 dark:text-emerald-400/60 font-medium">You can proofread &amp; edit directly here</span>
+              </div>
             </div>
           ) : (
-            <div className="flex flex-col items-center justify-center min-h-[380px] text-slate-200 dark:text-slate-700 gap-2">
+            <div className="flex flex-col items-center justify-center min-h-[380px] text-slate-200 dark:text-slate-700 gap-3 px-6 text-center">
               <Zap className="w-6 h-6" />
               <span className="text-xs text-slate-300 dark:text-slate-600">Output appears here</span>
+              <span className="text-[11px] text-slate-400 dark:text-slate-500 max-w-xs leading-relaxed">Bring text from Stealth or any humanizer — kill all AI in one beat</span>
             </div>
           )}
 

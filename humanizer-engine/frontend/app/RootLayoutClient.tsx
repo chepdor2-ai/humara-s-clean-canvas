@@ -2,9 +2,10 @@
 import Link from 'next/link';
 import Image from 'next/image';
 import { usePathname } from 'next/navigation';
-import { LayoutDashboard, Edit3, FileText, BrainCircuit, Settings, LogOut, Menu, X, ArrowRight, ShieldCheck, Sun, Moon } from 'lucide-react';
+import { LayoutDashboard, Edit3, FileText, BrainCircuit, Settings, LogOut, Menu, X, ArrowRight, ShieldCheck, Sun, Moon, Shield } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useTheme } from './ThemeProvider';
+import { useAuth } from './AuthProvider';
 
 const Logo = () => (
   <Link href="/" className="flex items-center space-x-2.5">
@@ -18,6 +19,7 @@ const APP_ROUTES = ['/app'];
 export default function RootLayoutClient({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const { theme, toggle: toggleTheme } = useTheme();
+  const { signOut } = useAuth();
   const isAppRoute = APP_ROUTES.some((route) => pathname === route || pathname.startsWith(route + '/'));
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
@@ -35,6 +37,7 @@ export default function RootLayoutClient({ children }: { children: React.ReactNo
     { name: 'AI Detector', href: '/app/detector', icon: ShieldCheck },
     { name: 'Style Profiles', href: '/app/style', icon: BrainCircuit },
     { name: 'Settings', href: '/app/settings', icon: Settings },
+    { name: 'Admin', href: '/app/admin', icon: Shield },
   ];
 
   if (!isAppRoute) {
@@ -164,7 +167,7 @@ export default function RootLayoutClient({ children }: { children: React.ReactNo
           <Link href="/" className="flex items-center justify-between px-3 py-2.5 rounded-lg text-sm font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white transition-colors group">
             Back to Home <ArrowRight className="w-4 h-4 opacity-0 group-hover:opacity-100 group-hover:translate-x-0.5 transition-all" />
           </Link>
-          <button className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-slate-600 dark:text-slate-400 hover:bg-red-50 dark:hover:bg-red-950 hover:text-red-600 w-full transition-colors">
+          <button onClick={signOut} className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-slate-600 dark:text-slate-400 hover:bg-red-50 dark:hover:bg-red-950 hover:text-red-600 w-full transition-colors">
             <LogOut className="w-[18px] h-[18px]" />
             Sign Out
           </button>

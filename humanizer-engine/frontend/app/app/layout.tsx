@@ -1,9 +1,11 @@
-﻿export const metadata = {
+﻿import AuthGuard from './AuthGuard';
+
+export const metadata = {
   title: "Humara App - Best AI Text Converter",
   description: 'Make AI text look natural and bypass detectors easily.',
 };
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
-  return <>{children}</>;
+  return <AuthGuard>{children}</AuthGuard>;
 }
 

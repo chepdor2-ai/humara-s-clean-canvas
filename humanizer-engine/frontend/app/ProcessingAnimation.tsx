@@ -9,7 +9,7 @@ const STEPS = [
   { label: 'Validating output', icon: ShieldCheck },
 ];
 
-export default function ProcessingAnimation({ isRephrasing = false }: { isRephrasing?: boolean }) {
+export default function ProcessingAnimation({ isRephrasing = false, iteration = 0 }: { isRephrasing?: boolean; iteration?: number }) {
   const [step, setStep] = useState(0);
   const [progress, setProgress] = useState(0);
 
@@ -38,7 +38,7 @@ export default function ProcessingAnimation({ isRephrasing = false }: { isRephra
       {/* Status text */}
       <div className="text-center space-y-1.5">
         <p className="text-sm font-semibold text-slate-700 dark:text-slate-200">
-          {isRephrasing ? 'Rephrasing' : 'Humanizing'} your text
+          {isRephrasing ? 'Rephrasing' : iteration > 0 ? `Iteration ${iteration} — Reducing AI score` : 'Humanizing'} your text
         </p>
         <p className="text-xs text-brand-600 dark:text-brand-400 flex items-center gap-2 justify-center">
           <span className="flex gap-0.5">

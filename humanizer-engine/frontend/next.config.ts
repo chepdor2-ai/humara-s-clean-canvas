@@ -5,6 +5,11 @@ const nextConfig: NextConfig = {
   turbopack: {
     root: path.resolve(process.cwd()),
   },
+  images: {
+    formats: ['image/avif', 'image/webp'],
+  },
+  compress: true,
+  poweredByHeader: false,
   webpack: (config) => {
     // Resolve compromise & openai from ts-engine/node_modules
     // (avoids needing to install them separately in frontend)

@@ -2,6 +2,7 @@
 import Link from 'next/link';
 import { ArrowRight, CheckCircle2, ShieldCheck, Zap, Sparkles, Brain, FileText, Wand2, BarChart3, Globe, Lock, Users } from 'lucide-react';
 import HeroAnimation from './HeroAnimation';
+import FreeTrial from './FreeTrial';
 
 export const metadata: Metadata = {
   title: 'Humara — #1 AI Humanizer | Make AI Text Undetectable',
@@ -52,6 +53,17 @@ export default function Home() {
             <span className="text-sm font-semibold">Copyleaks</span>
             <span className="text-sm font-semibold">Winston AI</span>
           </div>
+        </div>
+      </section>
+
+      {/* Free Trial Humanizer */}
+      <section className="py-20 bg-white w-full">
+        <div className="max-w-5xl mx-auto px-6">
+          <div className="text-center mb-10">
+            <h2 className="text-3xl font-semibold text-slate-900 mb-3">Try it now — free</h2>
+            <p className="text-slate-500 max-w-xl mx-auto">Paste up to 250 words and see the magic. 2 free attempts, no account needed.</p>
+          </div>
+          <FreeTrial />
         </div>
       </section>
 
@@ -223,48 +235,59 @@ export default function Home() {
       <section className="py-20 bg-white w-full">
         <div className="max-w-5xl mx-auto px-6 text-center">
           <h2 className="text-3xl font-semibold text-slate-900 mb-3">Simple pricing</h2>
-          <p className="text-slate-500 mb-12 max-w-md mx-auto">Start free, upgrade when you need more.</p>
-          <div className="grid md:grid-cols-3 gap-6 max-w-4xl mx-auto text-left">
-            {/* Free */}
-            <div className="p-6 bg-white rounded-xl border border-slate-200">
+          <p className="text-slate-500 mb-12 max-w-md mx-auto">Daily word limits that reset every 24 hours. Plans from $5/mo.</p>
+          <div className="grid md:grid-cols-4 gap-5 max-w-5xl mx-auto text-left">
+            {/* Starter */}
+            <div className="p-5 bg-white rounded-xl border border-slate-200">
               <h3 className="text-lg font-semibold text-slate-900 mb-1">Starter</h3>
-              <p className="text-sm text-slate-400 mb-4">Try the basics</p>
-              <p className="text-3xl font-semibold text-slate-900 mb-6">$0<span className="text-sm text-slate-400 font-normal">/mo</span></p>
-              <ul className="space-y-2.5 mb-6 text-sm text-slate-600">
-                <li className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" /> 2,000 words/month</li>
-                <li className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" /> Ghost Mini engine</li>
-                <li className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" /> Basic AI detection</li>
+              <p className="text-sm text-slate-400 mb-4">Light usage</p>
+              <p className="text-3xl font-semibold text-slate-900 mb-5">$5<span className="text-sm text-slate-400 font-normal">/mo</span></p>
+              <ul className="space-y-2 mb-5 text-sm text-slate-600">
+                <li className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" /> 20K words/day (Fast)</li>
+                <li className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" /> 10K words/day (Stealth)</li>
+                <li className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" /> Basic detection</li>
               </ul>
-              <Link href="/signup" className="block w-full text-center text-sm text-slate-700 font-medium border border-slate-200 rounded-lg py-2.5 hover:bg-slate-50 transition-colors">Sign Up Free</Link>
+              <Link href="/signup" className="block w-full text-center text-sm text-slate-700 font-medium border border-slate-200 rounded-lg py-2.5 hover:bg-slate-50 transition-colors">Get Started</Link>
             </div>
-            {/* Pro */}
-            <div className="p-6 bg-slate-900 rounded-xl border border-slate-800 relative">
-              <span className="absolute -top-2.5 left-6 bg-brand-600 text-white text-[10px] font-semibold uppercase tracking-wider py-1 px-2.5 rounded-full">Popular</span>
-              <h3 className="text-lg font-semibold text-white mb-1">Pro</h3>
+            {/* Creator */}
+            <div className="p-5 bg-slate-900 rounded-xl border border-slate-800 relative">
+              <span className="absolute -top-2.5 left-5 bg-brand-600 text-white text-[10px] font-semibold uppercase tracking-wider py-1 px-2.5 rounded-full">Popular</span>
+              <h3 className="text-lg font-semibold text-white mb-1">Creator</h3>
               <p className="text-sm text-slate-400 mb-4">For content creators</p>
-              <p className="text-3xl font-semibold text-white mb-6">$19<span className="text-sm text-slate-400 font-normal">/mo</span></p>
-              <ul className="space-y-2.5 mb-6 text-sm text-slate-300">
-                <li className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-brand-400 shrink-0" /> 100,000 words/month</li>
-                <li className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-brand-400 shrink-0" /> Ghost Pro engine</li>
+              <p className="text-3xl font-semibold text-white mb-5">$10<span className="text-sm text-slate-400 font-normal">/mo</span></p>
+              <ul className="space-y-2 mb-5 text-sm text-slate-300">
+                <li className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-brand-400 shrink-0" /> 40K words/day (Fast)</li>
+                <li className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-brand-400 shrink-0" /> 20K words/day (Stealth)</li>
                 <li className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-brand-400 shrink-0" /> Full detector suite</li>
-                <li className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-brand-400 shrink-0" /> SEO tone formatting</li>
               </ul>
               <Link href="/signup" className="block w-full text-center text-sm text-white font-medium bg-brand-600 hover:bg-brand-700 rounded-lg py-2.5 transition-colors">Get Started</Link>
             </div>
-            {/* Ninja */}
-            <div className="p-6 bg-white rounded-xl border border-slate-200">
-              <h3 className="text-lg font-semibold text-slate-900 mb-1">Ninja</h3>
-              <p className="text-sm text-slate-400 mb-4">Maximum precision</p>
-              <p className="text-3xl font-semibold text-slate-900 mb-6">$49<span className="text-sm text-slate-400 font-normal">/mo</span></p>
-              <ul className="space-y-2.5 mb-6 text-sm text-slate-600">
-                <li className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" /> 500,000 words/month</li>
-                <li className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" /> Ninja LLM multi-pass</li>
+            {/* Professional */}
+            <div className="p-5 bg-white rounded-xl border border-slate-200">
+              <h3 className="text-lg font-semibold text-slate-900 mb-1">Professional</h3>
+              <p className="text-sm text-slate-400 mb-4">Power users</p>
+              <p className="text-3xl font-semibold text-slate-900 mb-5">$20<span className="text-sm text-slate-400 font-normal">/mo</span></p>
+              <ul className="space-y-2 mb-5 text-sm text-slate-600">
+                <li className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" /> 80K words/day (Fast)</li>
+                <li className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" /> 40K words/day (Stealth)</li>
                 <li className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" /> API access</li>
-                <li className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" /> Early V4 access</li>
               </ul>
-              <Link href="/signup" className="block w-full text-center text-sm text-slate-700 font-medium border border-slate-200 rounded-lg py-2.5 hover:bg-slate-50 transition-colors">Contact Us</Link>
+              <Link href="/signup" className="block w-full text-center text-sm text-slate-700 font-medium border border-slate-200 rounded-lg py-2.5 hover:bg-slate-50 transition-colors">Get Started</Link>
+            </div>
+            {/* Business */}
+            <div className="p-5 bg-white rounded-xl border border-slate-200">
+              <h3 className="text-lg font-semibold text-slate-900 mb-1">Business</h3>
+              <p className="text-sm text-slate-400 mb-4">Teams & enterprise</p>
+              <p className="text-3xl font-semibold text-slate-900 mb-5">$35<span className="text-sm text-slate-400 font-normal">/mo</span></p>
+              <ul className="space-y-2 mb-5 text-sm text-slate-600">
+                <li className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" /> 150K words/day (Fast)</li>
+                <li className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" /> 75K words/day (Stealth)</li>
+                <li className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" /> Dedicated manager</li>
+              </ul>
+              <Link href="/contact" className="block w-full text-center text-sm text-slate-700 font-medium border border-slate-200 rounded-lg py-2.5 hover:bg-slate-50 transition-colors">Contact Sales</Link>
             </div>
           </div>
+          <p className="text-xs text-slate-400 mt-6">Save 15% with yearly billing. <Link href="/pricing" className="text-brand-600 hover:underline">View full pricing →</Link></p>
         </div>
       </section>
 
