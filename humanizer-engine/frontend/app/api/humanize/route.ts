@@ -68,21 +68,12 @@ export async function POST(req: Request) {
         enable_post_processing !== false,
       );
     } else if (engine === 'ghost_pro') {
-      // Ghost Pro: Deep LLM rewrite + signal-aware post-processing + Ghost Mini statistical finishing pass
-      const ghostProOutput = await ghostProHumanize(text, {
+      // Ghost Pro: Single LLM rewrite + signal-aware post-processing
+      humanized = await ghostProHumanize(text, {
         strength: strength ?? 'medium',
         tone: tone ?? 'neutral',
         strictMeaning: strict_meaning ?? false,
         enablePostProcessing: enable_post_processing !== false,
-      });
-      // Run through Ghost Mini's detector-guided statistical pipeline as a finishing pass
-      humanized = humanize(ghostProOutput, {
-        mode: 'ghost_pro',
-        strength: strength ?? 'medium',
-        tone: tone ?? 'neutral',
-        strictMeaning: strict_meaning ?? false,
-        enablePostProcessing: enable_post_processing !== false,
-        stealth: true,
       });
     } else {
       // Ghost Mini: Statistical-only pipeline (no LLM)

@@ -38,6 +38,7 @@ import {
 import { semanticSimilaritySync } from "./semantic-guard";
 import { TextSignals, getDetector } from "./multi-detector";
 import { expandContractions } from "./advanced-transforms";
+import { premiumDeepClean } from "./premium-deep-clean";
 
 // ── Config ──
 
@@ -1090,6 +1091,23 @@ export async function premiumHumanize(
   result = result.replace(/ – /g, ", ").replace(/–/g, ", ");
   result = result.replace(/\.[ \t]+([a-z])/g, (_, ch) => ". " + ch.toUpperCase());
   result = result.replace(/^([a-z])/gm, (_, ch) => ch.toUpperCase());
+
+  // ═══════════════════════════════════════════
+  // DEEP-CLEAN POST-PROCESSING (non-LLM)
+  // ═══════════════════════════════════════════
+  console.log("  [Premium] Deep-Clean: Starting non-LLM post-processing...");
+  try {
+    const deepCleanResult = await premiumDeepClean(result, 3);
+    result = deepCleanResult.text;
+    console.log(
+      `  [Premium] Deep-Clean: ${deepCleanResult.passNumber} passes, word change ${deepCleanResult.wordChangePercent}%`,
+    );
+    console.log(
+      `  [Premium] Deep-Clean: Final scores: ${JSON.stringify(deepCleanResult.finalScores)}`,
+    );
+  } catch (e) {
+    console.warn(`  [Premium] Deep-Clean failed (continuing with LLM output): ${e}`);
+  }
 
   // ═══════════════════════════════════════════
   // FINAL DIAGNOSTICS

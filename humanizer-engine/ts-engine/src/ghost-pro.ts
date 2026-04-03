@@ -1837,84 +1837,32 @@ async function processChunk(
   const chunkWords = chunkText.trim().split(/\s+/).length;
 
   // ═══════════════════════════════════════════
-  // PASS 1: SENTENCE-BY-SENTENCE LLM Rewrite
-  // Each sentence is independently humanized by the LLM.
-  // Adjacent sentences are provided as read-only context.
+  // PASS 1: FULL-TEXT LLM Rewrite (single call for speed)
   // ═══════════════════════════════════════════
-  console.log("  [GhostPro]   Pass 1: Sentence-by-sentence LLM rewrite...");
+  console.log("  [GhostPro]   Pass 1: Full-text LLM rewrite...");
 
-  const sentenceSystem = getSentenceSystemPrompt(options.tone);
-  const paragraphs = chunkText.split(/\n\s*\n/).filter(p => p.trim());
-  const rewrittenParagraphs: string[] = [];
+  const llmMaxTokens = Math.min(16384, Math.max(4096, Math.ceil(chunkWords * 2.5)));
+  const systemPrompt = getSystemPrompt(options.tone, chunkWords);
+  const userPrompt = buildUserPrompt(
+    placeholdersToLLMFormat(chunkText),
+    features,
+    options.tone,
+  );
 
-  for (const para of paragraphs) {
-    const trimmedPara = para.trim();
-    // Skip headings/titles — pass through unchanged
-    if (trimmedPara.split(/\s+/).length <= 10 && !/[.!?]$/.test(trimmedPara)) {
-      rewrittenParagraphs.push(trimmedPara);
-      continue;
+  let result: string;
+  try {
+    const raw = await llmCall(systemPrompt, userPrompt, options.temperature, llmMaxTokens);
+    result = llmFormatToPlaceholders(raw ?? "");
+    if (!result || result.trim().length < chunkText.length * 0.3) {
+      console.warn("  [GhostPro]   LLM output too short, using original");
+      result = chunkText;
     }
-
-    const sentences = robustSentenceSplit(trimmedPara);
-    if (sentences.length === 0) {
-      rewrittenParagraphs.push(trimmedPara);
-      continue;
-    }
-
-    // Process each sentence independently via LLM (parallel for speed)
-    const rewritePromises = sentences.map(async (sent, idx) => {
-      const trimmed = sent.trim();
-      if (!trimmed || trimmed.split(/\s+/).length < 3) return trimmed;
-
-      const prevSent = idx > 0 ? sentences[idx - 1] : null;
-      const nextSent = idx < sentences.length - 1 ? sentences[idx + 1] : null;
-
-      const userPrompt = buildSentenceUserPrompt(
-        placeholdersToLLMFormat(trimmed),
-        prevSent ? placeholdersToLLMFormat(prevSent) : null,
-        nextSent ? placeholdersToLLMFormat(nextSent) : null,
-        features,
-      );
-
-      // Vary temperature per-sentence for maximum unpredictability
-      const sentTemp = options.temperature + (Math.random() * 0.12 - 0.06);
-      const clampedTemp = Math.max(0.3, Math.min(1.0, sentTemp));
-      const sentMaxTokens = Math.max(256, Math.ceil(trimmed.split(/\s+/).length * 3));
-
-      try {
-        let rewritten = llmFormatToPlaceholders(
-          await llmCall(sentenceSystem, userPrompt, clampedTemp, sentMaxTokens) ?? ''
-        );
-        // Validate: if LLM output is too short or empty, keep original
-        if (!rewritten || rewritten.trim().length < trimmed.length * 0.2) {
-          return trimmed;
-        }
-        // Strip any label artifacts the LLM might add
-        rewritten = rewritten.replace(/^\[TARGET\]:\s*/i, "").trim();
-        // Enforce single sentence: if LLM returned multiple sentences, collapse to one
-        const llmSents = robustSentenceSplit(rewritten);
-        if (llmSents.length > 1) {
-          rewritten = llmSents.map((s, i) => {
-            if (i === 0) return s.replace(/\.\s*$/, "");
-            return s[0]?.toLowerCase() + s.slice(1);
-          }).join(", ") + (llmSents[llmSents.length - 1].match(/[.!?]$/) ? "" : ".");
-        }
-        return rewritten;
-      } catch {
-        return trimmed;
-      }
-    });
-
-    const rewrittenSentences = await Promise.all(rewritePromises);
-    // Strict sentence count enforcement: input sentences = output sentences per paragraph
-    if (rewrittenSentences.length !== sentences.length) {
-      console.warn(`  [GhostPro] Sentence count mismatch in paragraph: input=${sentences.length}, output=${rewrittenSentences.length}`);
-    }
-    rewrittenParagraphs.push(rewrittenSentences.join(" "));
+  } catch (err) {
+    console.warn("  [GhostPro]   LLM call failed, using original:", err);
+    result = chunkText;
   }
 
-  let result = rewrittenParagraphs.join("\n\n");
-  console.log(`  [GhostPro]   Pass 1 done: ${result.split(/\s+/).length} words (${paragraphs.reduce((sum, p) => sum + robustSentenceSplit(p).length, 0)} sentences processed independently)`);
+  console.log(`  [GhostPro]   Pass 1 done: ${result.split(/\s+/).length} words`);
 
   // ═══════════════════════════════════════════
   // PASS 2: SENTENCE-INDEPENDENT Post-processing
@@ -1922,15 +1870,9 @@ async function processChunk(
   // ═══════════════════════════════════════════
   console.log("  [GhostPro]   Pass 2: Sentence-independent post-processing...");
 
-  // Single deep post-processing pass (speed: removed extra rounds)
+  // Single deep post-processing pass
   result = sentenceIndependentPostProcess(result, features, strength);
-  console.log(`  [GhostPro]   Post-processing: round 1 at strength=${strength}`);
-
-  // Second post-processing round for stronger cleanup on medium/strong
-  if (strength === "medium" || strength === "strong") {
-    result = sentenceIndependentPostProcess(result, features, strength);
-    console.log(`  [GhostPro]   Post-processing: round 2 at strength=${strength}`);
-  }
+  console.log(`  [GhostPro]   Post-processing done at strength=${strength}`);
 
   // De-repeat n-grams across full text after post-processing
   result = deRepeatNgrams(result);
@@ -1943,7 +1885,7 @@ async function processChunk(
   // Analyze with detector, apply per-sentence anti-detection + deep cleaning
   // until scores drop or we hit the iteration cap.
   // ═══════════════════════════════════════════
-  const maxFeedbackPasses = strength === "strong" ? 4 : strength === "medium" ? 3 : 2;
+  const maxFeedbackPasses = 1;
   const targetAiScore = strength === "strong" ? 15 : strength === "medium" ? 25 : 35;
 
   for (let fbPass = 0; fbPass < maxFeedbackPasses; fbPass++) {

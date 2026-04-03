@@ -705,6 +705,9 @@ export default function EditorPage() {
           <div className="flex items-center justify-between px-4 py-2.5 border-b border-slate-100 dark:border-zinc-800 bg-slate-50/50 dark:bg-zinc-800/50">
             <div className="flex items-center gap-2">
               <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">Output</span>
+              {result && !loading && !rephrasing && (
+                <span className="text-[10px] text-emerald-600/70 dark:text-emerald-400/60 font-medium italic">proofread &amp; edit here</span>
+              )}
               {outputDetection && (
                 <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
                   outputDetection.overallAi <= 15 ? 'text-emerald-700 bg-emerald-50 dark:text-emerald-400 dark:bg-emerald-950' : outputDetection.overallAi <= 60 ? 'text-amber-700 bg-amber-50 dark:text-amber-400 dark:bg-amber-950' : 'text-red-700 bg-red-50 dark:text-red-400 dark:bg-red-950'
@@ -747,9 +750,6 @@ export default function EditorPage() {
                 className="relative z-10 flex-1 w-full min-h-[380px] bg-transparent outline-none resize-none text-[14px] leading-relaxed text-slate-800 dark:text-slate-200 p-4"
                 style={{ fontFamily: 'inherit' }}
                 placeholder="Output appears here…" />
-              <div className="absolute bottom-2 left-4 right-4 flex items-center gap-1.5 z-10">
-                <span className="text-[10px] text-emerald-600/70 dark:text-emerald-400/60 font-medium">You can proofread &amp; edit directly here</span>
-              </div>
             </div>
           ) : (
             <div className="flex flex-col items-center justify-center min-h-[380px] text-slate-200 dark:text-slate-700 gap-3 px-6 text-center">
