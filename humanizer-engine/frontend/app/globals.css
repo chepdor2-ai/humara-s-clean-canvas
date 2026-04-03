@@ -1,5 +1,7 @@
 @import "../node_modules/tailwindcss/index.css";
 
+@variant dark (&:where(.dark, .dark *));
+
 @theme {
   --color-brand-50: #eef2ff;
   --color-brand-100: #e0e7ff;
@@ -37,8 +39,12 @@
 @layer components {
   .glass-nav {
       background: rgba(255, 255, 255, 0.95);
-      backdrop-filter: blur(12px);
       -webkit-backdrop-filter: blur(12px);
+      backdrop-filter: blur(12px);
       border-bottom: 1px solid #e2e8f0;
+  }
+  .dark .glass-nav {
+      background: rgba(15, 23, 42, 0.95);
+      border-bottom-color: #334155;
   }
 }

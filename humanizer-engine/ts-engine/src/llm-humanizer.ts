@@ -33,7 +33,7 @@
 import OpenAI from "openai";
 import { sentTokenize } from "./utils";
 import { expandContractions } from "./advanced-transforms";
-import { protectSpecialContent, restoreSpecialContent, protectContentTerms, restoreContentTerms, cleanOutputRepetitions, robustSentenceSplit, placeholdersToLLMFormat, llmFormatToPlaceholders, countSentences, enforceSentenceCountStrict } from "./content-protection";
+import { protectSpecialContent, restoreSpecialContent, protectContentTerms, restoreContentTerms, cleanOutputRepetitions, robustSentenceSplit, placeholdersToLLMFormat, llmFormatToPlaceholders, countSentences, enforceSentenceCountStrict, enforcePerParagraphSentenceCounts, rephraseCitations } from "./content-protection";
 import { semanticSimilaritySync } from "./semantic-guard";
 import { TextSignals, getDetector } from "./multi-detector";
 import { getStyleMemory, profileSummaryText } from "./style-memory";
@@ -67,7 +67,7 @@ function getClient(): OpenAI {
   return _client;
 }
 
-function llmCall(system: string, user: string, temperature: number): Promise<string> {
+function llmCall(system: string, user: string, temperature: number, maxTokens = 4096): Promise<string> {
   const client = getClient();
   return client.chat.completions.create({
     model: LLM_MODEL,
@@ -76,7 +76,7 @@ function llmCall(system: string, user: string, temperature: number): Promise<str
       { role: "user", content: user },
     ],
     temperature,
-    max_tokens: 4096,
+    max_tokens: maxTokens,
   }).then((r: any) => r.choices[0]?.message?.content?.trim() ?? "");
 }
 
@@ -139,7 +139,7 @@ ABSOLUTE REQUIREMENTS:
 
 3. SENTENCE STARTERS — vary dramatically:
    - Start some with subject directly, some with short clauses
-   - Start 1-2 with "And" or "But"
+   - Do NOT start any sentence with a conjunction like "And", "But", "Or", "So", "Yet"
    - NEVER use the same starting word consecutively
    - NEVER start with: "Furthermore," "Moreover," "Additionally," "However," "Nevertheless," "It is"
 
@@ -381,6 +381,8 @@ function buildNinjaSentenceUserPrompt(
 
   return `${variationGuide}
 
+CRITICAL: Rewrite ONLY the [TARGET] sentence. Do NOT borrow, merge, or incorporate ANY content from [BEFORE] or [AFTER]. They are read-only context for tone continuity only. Your output must contain ONLY the meaning from [TARGET].
+
 ${contextBefore}[TARGET]: ${sentence}${contextAfter}`;
 }
 
@@ -511,17 +513,17 @@ function killAIVocabulary(text: string): string {
 // ── Connector Naturalization ──
 
 const FORMAL_CONNECTORS: Record<string, string[]> = {
-  "Furthermore, ": ["Also, ", "And ", "Plus, "],
-  "Moreover, ": ["On top of that, ", "And ", "Beyond that, "],
-  "Additionally, ": ["Also, ", "And ", "Plus, "],
+  "Furthermore, ": ["Also, ", "In addition, ", "Plus, "],
+  "Moreover, ": ["On top of that, ", "In addition, ", "Beyond that, "],
+  "Additionally, ": ["Also, ", "In addition, ", "Plus, "],
   "Consequently, ": ["So ", "Because of that, ", "That meant "],
-  "Nevertheless, ": ["Still, ", "Even so, ", "But "],
-  "Nonetheless, ": ["Still, ", "Yet ", "But "],
-  "In contrast, ": ["But ", "Then again, ", "On the flip side, "],
+  "Nevertheless, ": ["Still, ", "Even so, ", "All the same, "],
+  "Nonetheless, ": ["Still, ", "Even so, ", "All the same, "],
+  "In contrast, ": ["On the other hand, ", "Then again, ", "On the flip side, "],
   "Subsequently, ": ["After that, ", "Then ", "Later, "],
   "In conclusion, ": ["All in all, ", "When you put it together, "],
   "Therefore, ": ["So ", "That is why ", "This is why "],
-  "However, ": ["But ", "That said, ", "Still, "],
+  "However, ": ["Still, ", "Even so, ", "All the same, "],
   "Thus, ": ["So ", "That way, ", "This meant "],
   "Hence, ": ["So ", "That is why "],
   "Indeed, ": ["In fact, ", "Sure enough, "],
@@ -531,7 +533,7 @@ const FORMAL_CONNECTORS: Record<string, string[]> = {
   "As a result, ": ["So ", "Because of this, "],
   "For example, ": ["Take ", "Like ", "Consider "],
   "For instance, ": ["Take ", "Like ", "Say "],
-  "On the other hand, ": ["Then again, ", "But "],
+  "On the other hand, ": ["Then again, ", "At the same time, "],
   "In other words, ": ["Put simply, ", "Basically, "],
 };
 
@@ -559,19 +561,9 @@ const NATURAL_REROUTES: string[] = [
 ];
 
 function diversifyStarters(text: string): string {
-  const paragraphs = text.split(/\n\s*\n/);
-
-  return paragraphs.map(para => {
-    const p = para.trim();
-    if (!p) return "";
-
-    const sentences = robustSentenceSplit(p);
-    if (sentences.length === 0) return "";
-
-    // Use shared academic sentence starter cleanup
-    const cleaned = cleanSentenceStarters(sentences);
-    return cleaned.join(" ");
-  }).filter(Boolean).join("\n\n");
+  // Sentence starters are handled per-sentence during individual processing.
+  // No cross-sentence starter injection to preserve independent processing.
+  return text;
 }
 
 // ── Sentence Count Enforcement ──
@@ -631,55 +623,9 @@ function enforceSentenceCount(text: string, targetCount: number): string {
 // ── Burstiness Enforcement ──
 
 function enforceBurstiness(text: string): string {
-  const paragraphs = text.split(/\n\s*\n/);
-
-  return paragraphs.map(para => {
-    const p = para.trim();
-    if (!p) return "";
-
-    const sentences = robustSentenceSplit(p);
-    if (sentences.length < 3) return p;
-
-    const result: string[] = [];
-
-    for (let i = 0; i < sentences.length; i++) {
-      let sent = sentences[i].trim();
-      if (!sent) continue;
-
-      // Check for 3 consecutive similar lengths
-      if (result.length >= 2) {
-        const len = sent.split(/\s+/).length;
-        const prev1Len = result[result.length - 1].split(/\s+/).length;
-        const prev2Len = result[result.length - 2].split(/\s+/).length;
-
-        if (Math.abs(len - prev1Len) < 8 && Math.abs(len - prev2Len) < 8 && Math.abs(prev1Len - prev2Len) < 8) {
-          if (len > 20) {
-            const splitPoints = [/,\s+(?:and|but|which|where|although|while|since|because|so)\s+/i, /;\s+/, /\s+—\s+/, /,\s+/];
-            for (const sp of splitPoints) {
-              const match = sent.match(sp);
-              if (match && match.index) {
-                const part1Words = sent.slice(0, match.index).split(/\s+/).length;
-                const part2Words = sent.slice(match.index + match[0].length).split(/\s+/).length;
-                if (part1Words >= 4 && part2Words >= 4 && Math.abs(part1Words - part2Words) > 5) {
-                  let part1 = sent.slice(0, match.index).trim();
-                  let part2 = sent.slice(match.index + match[0].length).trim();
-                  if (!part1.endsWith(".")) part1 += ".";
-                  part2 = part2[0].toUpperCase() + part2.slice(1);
-                  result.push(part1);
-                  sent = part2;
-                  break;
-                }
-              }
-            }
-          }
-        }
-      }
-
-      result.push(sent);
-    }
-
-    return result.join(" ");
-  }).filter(Boolean).join("\n\n");
+  // Sentence order and count must be preserved — no splitting or reordering allowed.
+  // Burstiness is achieved through per-sentence LLM processing, not post-hoc splitting.
+  return text;
 }
 
 // ── Punctuation Humanization ──
@@ -708,20 +654,7 @@ function humanizePunctuation(text: string, features: InputFeatures): string {
       // Em-dash injection DISABLED — produces unnatural patterns
       // Original code converted comma-separated asides to em-dash format
 
-      // Re-enabled as comma-based hedging (no brackets)
-      if (parenBudget > 0 && words.length > 18 && Math.random() < 0.3) {
-        const asides = [
-          ", at least in theory,", ", which few expected,", ", to some degree,",
-          ", or so it seemed,", ", not without pushback,", ", though not everyone agreed,",
-        ];
-        const mid = Math.floor(sent.length / 2);
-        const nearComma = sent.indexOf(", ", Math.max(mid - 20, 0));
-        if (nearComma > 0 && nearComma < sent.length - 15) {
-          const aside = asides[Math.floor(Math.random() * asides.length)];
-          sent = sent.slice(0, nearComma) + aside + " " + sent.slice(nearComma + 2);
-          parenBudget--;
-        }
-      }
+      // Comma-based hedging DISABLED — produces unnatural phrases that detectors flag
 
       processed.push(sent);
     }
@@ -1140,107 +1073,15 @@ function signalAwareRefinement(text: string, features: InputFeatures, iteration:
 }
 
 function forceExtremeVariation(text: string): string {
-  const paragraphs = text.split(/\n\s*\n/);
-
-  return paragraphs.map(para => {
-    const p = para.trim();
-    if (!p) return "";
-
-    const sentences = robustSentenceSplit(p);
-    if (sentences.length < 3) return p;
-
-    const result: string[] = [];
-
-    for (let i = 0; i < sentences.length; i++) {
-      const sent = sentences[i].trim();
-      if (!sent) continue;
-      const words = sent.split(/\s+/);
-
-      // If in the "boring middle" (14-24 words) and too many already
-      const middleCount = result.filter(s => {
-        const len = s.split(/\s+/).length;
-        return len >= 14 && len <= 24;
-      }).length;
-
-      if (words.length >= 14 && words.length <= 24 && middleCount >= 2) {
-        const commaIdx = sent.indexOf(", ");
-        if (commaIdx > 0 && commaIdx < sent.length / 2) {
-          const part1Words = sent.slice(0, commaIdx).split(/\s+/).length;
-          if (part1Words >= 3 && part1Words <= 9) {
-            let part1 = sent.slice(0, commaIdx).trim();
-            let part2 = sent.slice(commaIdx + 2).trim();
-            if (!part1.endsWith(".")) part1 += ".";
-            part2 = part2[0].toUpperCase() + part2.slice(1);
-            result.push(part1);
-            result.push(part2);
-            continue;
-          }
-        }
-      }
-
-      result.push(sent);
-    }
-
-    return result.join(" ");
-  }).filter(Boolean).join("\n\n");
+  // Sentence splitting disabled — 1 sentence in = 1 sentence out.
+  // Variation is achieved through per-sentence LLM processing.
+  return text;
 }
 
 function breakSentenceUniformity(text: string): string {
-  const paragraphs = text.split(/\n\s*\n/);
-
-  return paragraphs.map(para => {
-    const p = para.trim();
-    if (!p) return "";
-
-    const sentences = robustSentenceSplit(p);
-    if (sentences.length < 4) return p;
-
-    const result: string[] = [];
-    let uniformRun = 0;
-
-    for (let i = 0; i < sentences.length; i++) {
-      const sent = sentences[i].trim();
-      if (!sent) continue;
-      const len = sent.split(/\s+/).length;
-
-      if (result.length > 0) {
-        const prevLen = result[result.length - 1].split(/\s+/).length;
-        if (Math.abs(len - prevLen) < 6) {
-          uniformRun++;
-        } else {
-          uniformRun = 0;
-        }
-      }
-
-      if (uniformRun >= 2 && len > 16) {
-        const splitPoints = [/,\s+(?:and|but|which|while|so)\s+/i, /;\s+/, /\s+—\s+/];
-        let split = false;
-        for (const sp of splitPoints) {
-          const match = sent.match(sp);
-          if (match && match.index) {
-            const part1Words = sent.slice(0, match.index).split(/\s+/).length;
-            const part2Words = sent.slice(match.index + match[0].length).split(/\s+/).length;
-            if (part1Words >= 4 && part2Words >= 4) {
-              let part1 = sent.slice(0, match.index).trim();
-              let part2 = sent.slice(match.index + match[0].length).trim();
-              if (!part1.endsWith(".")) part1 += ".";
-              part2 = part2[0].toUpperCase() + part2.slice(1);
-              result.push(part1);
-              result.push(part2);
-              uniformRun = 0;
-              split = true;
-              break;
-            }
-          }
-        }
-        if (!split) result.push(sent);
-      } else {
-        result.push(sent);
-      }
-    }
-
-    return result.join(" ");
-  }).filter(Boolean).join("\n\n");
+  // Sentence splitting disabled — 1 sentence in = 1 sentence out.
+  // Uniformity is broken through per-sentence LLM processing.
+  return text;
 }
 
 // ── Word Diversity Injection ──
@@ -1544,11 +1385,9 @@ function sentenceIndependentStealthPass(text: string, features: InputFeatures, s
       return stealthProcessSingleSentence(trimmed, features, strength);
     }).filter(Boolean);
 
-    // Remove fragment sentences (under 4 real words) that result from phrase stripping
-    const cleaned = processed.filter(sent => {
-      const words = sent.replace(/[^a-zA-Z\s]/g, "").trim().split(/\s+/).filter(w => w.length > 0);
-      return words.length >= 4;
-    });
+    // Fragment removal DISABLED — would alter sentence count (1-in=1-out)
+    // Sentences must be preserved regardless of length
+    const cleaned = processed;
 
     return (cleaned.length > 0 ? cleaned : processed).join(" ");
   }).filter(Boolean).join("\n\n");
@@ -1717,14 +1556,21 @@ export async function llmHumanize(
   console.log(`  [Ninja] Starting Ninja v2 pipeline...`);
   console.log(`  [Ninja] Input: ${features.wordCount} words, ${features.sentenceCount} sents, ${features.paragraphCount} paras`);
 
+  // Rephrase ~30% of end-of-sentence citations for natural variation
+  const citationText = rephraseCitations(original);
+
   // Protect special content (brackets, figures, citations)
-  const { text: protectedText0, map: protectionMap } = protectSpecialContent(original);
+  const { text: protectedText0, map: protectionMap } = protectSpecialContent(citationText);
 
   // Protect content terms (proper nouns, domain phrases) from synonym swaps
   const { text: protectedText, map: termMap } = protectContentTerms(protectedText0);
 
   // Capture input paragraph count for enforcement at end
-  const inputParagraphCount = original.split(/\n\s*\n/).filter(p => p.trim()).length;
+  const inputParas = original.split(/\n\s*\n/).filter(p => p.trim());
+  const inputParagraphCount = inputParas.length;
+
+  // Capture per-paragraph sentence counts for strict 1:1 enforcement
+  const inputSentenceCountsPerPara = inputParas.map(p => robustSentenceSplit(p.trim()).length);
 
   // Capture input sentence count for strict enforcement (input = output)
   const inputSentenceCount = countSentences(protectedText);
@@ -1743,6 +1589,7 @@ export async function llmHumanize(
   const paragraphs = protectedText.split(/\n\s*\n/).filter(p => p.trim());
   let totalSentencesProcessed = 0;
 
+  // Process ALL paragraphs in parallel for maximum speed
   const rewrittenParagraphs = await Promise.all(paragraphs.map(async (para) => {
     const trimmedPara = para.trim();
     // Skip headings/titles — pass through unchanged
@@ -1813,50 +1660,19 @@ export async function llmHumanize(
   let result = rewrittenParagraphs.join("\n\n");
   console.log(`  [Ninja] LLM done: ${result.split(/\s+/).length} words (${totalSentencesProcessed} sentences processed independently)`);
 
-  // ── Constraint enforcement after LLM ──
+  // ── Constraint enforcement after LLM (rule-based only, no extra LLM calls) ──
   if (!features.hasContractions) result = removeContractions(result);
   if (!features.hasFirstPerson) result = removeFirstPerson(result);
   if (!features.hasRhetoricalQuestions) result = removeRhetoricalQuestions(result);
 
-  // ── LLM Validation removed — was adding extra LLM round trip and re-introducing AI words ──
-  // Rule-based constraint enforcement only:
-  {
-    const validation = validateAll(original, result);
-    console.log(`  [Ninja] Validation: ${validation.all_passed ? "PASSED" : "ISSUES FOUND"}`);
-    if (!validation.all_passed) {
-      if (!features.hasContractions) result = removeContractions(result);
-      if (!features.hasFirstPerson) result = removeFirstPerson(result);
-      if (!features.hasRhetoricalQuestions) result = removeRhetoricalQuestions(result);
-    }
-  }
+  console.log(`  [Ninja] LLM pipeline complete (${totalSentencesProcessed} sentence calls)`);
 
-  const llmPhaseCount = totalSentencesProcessed;
-  console.log(`  [Ninja] LLM pipeline complete (${llmPhaseCount} sentence calls)`);
-
-  // ── Word count enforcement — trim excess words added by LLM ──
+  // ── Word count enforcement — DISABLED: would drop sentences, breaking 1-in=1-out ──
+  // Instead, log the word count so we can monitor it
   const maxAllowedWords = Math.round(features.wordCount * 1.10);
   let currentWords = result.trim().split(/\s+/).length;
   if (currentWords > maxAllowedWords) {
-    console.log(`  [Ninja] Word count enforcement: ${currentWords} > ${maxAllowedWords} (input=${features.wordCount})`);
-    const wcParas = result.split(/\n\s*\n/).filter(p => p.trim());
-    let totalWc = wcParas.reduce((sum, p) => sum + p.trim().split(/\s+/).length, 0);
-    while (totalWc > maxAllowedWords) {
-      let longestIdx = -1;
-      let longestLen = 0;
-      for (let i = 0; i < wcParas.length; i++) {
-        if (isTitleOrHeading(wcParas[i])) continue;
-        const wc = wcParas[i].split(/\s+/).length;
-        if (wc > longestLen) { longestLen = wc; longestIdx = i; }
-      }
-      if (longestIdx < 0) break;
-      const sents = robustSentenceSplit(wcParas[longestIdx]);
-      if (sents.length <= 1) break;
-      const removed = sents.pop()!;
-      wcParas[longestIdx] = sents.join(" ");
-      totalWc -= removed.split(/\s+/).length;
-    }
-    result = wcParas.join("\n\n");
-    console.log(`  [Ninja] Word count after trim: ${result.trim().split(/\s+/).length}`);
+    console.log(`  [Ninja] Word count over budget: ${currentWords} > ${maxAllowedWords} (input=${features.wordCount}) — skipping trim to preserve sentence mapping`);
   }
 
   // ═══════════════════════════════════════════
@@ -1925,9 +1741,9 @@ export async function llmHumanize(
 
   // Merge/split DISABLED — strict sentence count enforcement: input = output
 
-  // ── Strict sentence count enforcement ──
-  bestResult = enforceSentenceCountStrict(bestResult, inputSentenceCount);
-  console.log(`  [Ninja] Sentence enforcement: target=${inputSentenceCount}, actual=${countSentences(bestResult)}`);
+  // ── Strict sentence count enforcement ── DISABLED: 1-in=1-out enforced per-sentence
+  // bestResult = enforceSentenceCountStrict(bestResult, inputSentenceCount);
+  console.log(`  [Ninja] Sentence count: target=${inputSentenceCount}, actual=${countSentences(bestResult)}`);
 
   // ── Restore protected content terms ──
   bestResult = restoreContentTerms(bestResult.trim(), termMap);
@@ -1939,8 +1755,20 @@ export async function llmHumanize(
   bestResult = enforceParagraphCount(bestResult, inputParagraphCount);
   console.log(`  [Ninja] Paragraph enforcement: target=${inputParagraphCount}, actual=${bestResult.split(/\n\s*\n/).filter(p => p.trim()).length}`);
 
-  // ── Final repetition cleanup — remove duplicate clauses, near-dupe sentences, inject phrasal verbs ──
-  bestResult = cleanOutputRepetitions(bestResult);
+  // ── Final repetition cleanup — DISABLED: would alter sentence count ──
+  // bestResult = cleanOutputRepetitions(bestResult);
+
+  // ── STRICT 1:1 per-paragraph sentence count enforcement ──
+  bestResult = enforcePerParagraphSentenceCounts(bestResult, inputSentenceCountsPerPara, "Ninja");
+
+  // ── Clean bad sentence starters (And, By, But, etc.) per paragraph ──
+  {
+    const paras = bestResult.split(/\n\s*\n/).filter(p => p.trim());
+    bestResult = paras.map(p => {
+      const sents = robustSentenceSplit(p.trim());
+      return cleanSentenceStarters(sents).join(" ");
+    }).join("\n\n");
+  }
 
   // ── Final diagnostics ──
   const outputWords = bestResult.split(/\s+/).length;
@@ -1954,7 +1782,7 @@ export async function llmHumanize(
   console.log(`  [Ninja] Final signals: burst=${finalSignals.burstiness.toFixed(1)}, ai_pat=${finalSignals.ai_pattern_score.toFixed(1)}, uniform=${finalSignals.sentence_uniformity.toFixed(1)}, perplex=${finalSignals.perplexity.toFixed(1)}`);
   console.log(`  [Ninja] Final worst: ${worstScore(finalScores).toFixed(1)}%, overall: ${finalScores.overall?.toFixed(1) ?? "?"}%`);
   console.log(`  [Ninja] Meaning similarity: ${meaningScore.toFixed(2)}`);
-  console.log(`  [Ninja] Complete in ${elapsed.toFixed(1)}s (${llmPhaseCount} LLM + ${maxFeedbackIterations} max iterations)`);
+  console.log(`  [Ninja] Complete in ${elapsed.toFixed(1)}s (${totalSentencesProcessed} LLM + ${maxFeedbackIterations} max iterations)`);
 
   // ── Post-humanize sentence verification ──
   const verification = verifySentencePresence(original, bestResult, robustSentenceSplit);

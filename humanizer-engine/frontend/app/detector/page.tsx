@@ -27,22 +27,21 @@ type DetectResponse = {
 };
 
 /* ── Circular Progress Meter ──────────────────────────────────────────── */
-const CircularProgress = ({ score, size = 100, strokeWidth = 8 }: { score: number; size?: number; strokeWidth?: number }) => {
+const CircularProgress = ({ score, size = 100, strokeWidth = 8, color }: { score: number; size?: number; strokeWidth?: number; color?: string }) => {
   const radius = (size - strokeWidth) / 2;
   const circumference = 2 * Math.PI * radius;
   const offset = circumference - (score / 100) * circumference;
-  const getColor = (s: number) => (s <= 20 ? '#10b981' : s <= 75 ? '#eab308' : '#ef4444');
-  const color = getColor(score);
+  const resolvedColor = color || (score <= 20 ? '#10b981' : score <= 75 ? '#eab308' : '#ef4444');
 
   return (
     <div className="relative inline-flex items-center justify-center">
       <svg width={size} height={size} className="transform -rotate-90">
-        <circle cx={size / 2} cy={size / 2} r={radius} stroke="#e5e7eb" strokeWidth={strokeWidth} fill="none" />
-        <circle cx={size / 2} cy={size / 2} r={radius} stroke={color} strokeWidth={strokeWidth} fill="none"
-          strokeDasharray={circumference} strokeDashoffset={offset} strokeLinecap="round" className="transition-all duration-700" />
+        <circle cx={size / 2} cy={size / 2} r={radius} stroke="#f1f5f9" strokeWidth={strokeWidth} fill="none" />
+        <circle cx={size / 2} cy={size / 2} r={radius} stroke={resolvedColor} strokeWidth={strokeWidth} fill="none"
+          strokeDasharray={circumference} strokeDashoffset={offset} strokeLinecap="round" className="transition-all duration-1000 ease-out" />
       </svg>
       <div className="absolute inset-0 flex items-center justify-center">
-        <span className={`font-bold ${size >= 100 ? 'text-2xl' : 'text-lg'} ${score <= 20 ? 'text-green-500' : score <= 75 ? 'text-yellow-500' : 'text-red-500'}`}>
+        <span className={`font-bold ${size >= 100 ? 'text-2xl' : 'text-lg'}`} style={{ color: resolvedColor }}>
           {Math.round(score)}%
         </span>
       </div>
@@ -134,14 +133,14 @@ export default function DetectorPage() {
     <div className="flex flex-col gap-6 animate-in fade-in duration-700">
       {/* Header */}
       <header>
-        <h1 className="text-2xl font-bold text-gray-900">AI Detection</h1>
-        <p className="text-sm text-gray-600 mt-1">Run multi-detector analysis and review every score in one place</p>
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">AI Detection</h1>
+        <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">Run multi-detector analysis and review every score in one place</p>
       </header>
 
       {/* Input / Pasting Pane */}
-      <div className="bg-white border border-gray-200/80 rounded-2xl shadow-sm overflow-hidden transition-all duration-300 focus-within:border-brand-300 focus-within:shadow-md focus-within:ring-4 focus-within:ring-brand-50/50">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-gray-50/60">
-          <h2 className="text-sm font-bold text-gray-900 flex items-center gap-2">
+      <div className="bg-white dark:bg-slate-900 border border-gray-200/80 dark:border-slate-700 rounded-2xl shadow-sm overflow-hidden transition-all duration-300 focus-within:border-brand-300 focus-within:shadow-md focus-within:ring-4 focus-within:ring-brand-50/50">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 dark:border-slate-800 bg-gray-50/60 dark:bg-slate-800/60">
+          <h2 className="text-sm font-bold text-gray-900 dark:text-white flex items-center gap-2">
             <FileText className="w-4 h-4 text-gray-400" />
             Document Analysis
           </h2>
@@ -157,10 +156,10 @@ export default function DetectorPage() {
         <textarea
           value={inputText}
           onChange={(e) => setInputText(e.target.value)}
-          className="w-full bg-white outline-none resize-y text-[15px] leading-loose text-gray-800 placeholder:text-gray-300 p-6 min-h-[220px]"
+          className="w-full bg-white dark:bg-slate-900 outline-none resize-y text-[15px] leading-loose text-gray-800 dark:text-gray-200 placeholder:text-gray-300 dark:placeholder:text-gray-600 p-6 min-h-[220px]"
           placeholder="Paste your text here to run it against our multi-detector engine..."
         />
-        <div className="flex items-center justify-between px-6 py-4 border-t border-gray-100 bg-gray-50/60">
+        <div className="flex items-center justify-between px-6 py-4 border-t border-gray-100 dark:border-slate-800 bg-gray-50/60 dark:bg-slate-800/60">
           {message ? (
             <div className="text-sm font-medium text-red-600 flex items-center gap-2 bg-red-50 px-3 py-1.5 rounded-md border border-red-100">
               <div className="w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse" />
@@ -188,28 +187,28 @@ export default function DetectorPage() {
 
       {/* ── Results ─────────────────────────────────────────────────────── */}
       {results && (
-        <div className="bg-white border border-gray-200/80 rounded-2xl shadow-sm mt-4 overflow-hidden animate-in slide-in-from-bottom-4 fade-in duration-700">
+        <div className="bg-white dark:bg-slate-900 border border-gray-200/80 dark:border-slate-700 rounded-2xl shadow-sm mt-4 overflow-hidden animate-in slide-in-from-bottom-4 fade-in duration-700">
           
           {/* Unified Summary Dashboard */}
-          <div className="grid grid-cols-1 md:grid-cols-3 divide-y md:divide-y-0 md:divide-x divide-gray-100 border-b border-gray-100 bg-gray-50/30">
+          <div className="grid grid-cols-1 md:grid-cols-3 divide-y md:divide-y-0 md:divide-x divide-gray-100 dark:divide-slate-800 border-b border-gray-100 dark:border-slate-800 bg-gray-50/30 dark:bg-slate-800/30">
             <div className="p-6 md:p-8 flex items-center justify-center md:justify-start gap-6">
-              <CircularProgress score={results.summary.overall_ai_score} size={64} strokeWidth={6} />
+              <CircularProgress score={results.summary.overall_ai_score} size={64} strokeWidth={6} color="#ef4444" />
               <div>
-                <h3 className="text-[11px] font-extrabold tracking-wide text-gray-400 mb-1">AI Probability</h3>
+                <h3 className="text-[11px] font-extrabold tracking-wide text-gray-400 mb-1">AI Score</h3>
                 <div className="flex items-baseline gap-1.5">
-                  <span className="text-3xl font-black text-gray-900 tracking-tight">{Math.round(results.summary.overall_ai_score)}</span>
-                  <span className="text-lg font-bold text-gray-400">%</span>
+                  <span className="text-3xl font-black text-red-500 tracking-tight">{Math.round(results.summary.overall_ai_score)}</span>
+                  <span className="text-lg font-bold text-red-300">%</span>
                 </div>
               </div>
             </div>
             
             <div className="p-6 md:p-8 flex items-center justify-center md:justify-start gap-6">
-              <CircularProgress score={results.summary.overall_human_score} size={64} strokeWidth={6} />
+              <CircularProgress score={100 - results.summary.overall_ai_score} size={64} strokeWidth={6} color="#10b981" />
               <div>
                 <h3 className="text-[11px] font-extrabold tracking-wide text-gray-400 mb-1">Human Score</h3>
                 <div className="flex items-baseline gap-1.5">
-                  <span className="text-3xl font-black text-gray-900 tracking-tight">{Math.round(results.summary.overall_human_score)}</span>
-                  <span className="text-lg font-bold text-gray-400">%</span>
+                  <span className="text-3xl font-black text-emerald-500 tracking-tight">{Math.round(100 - results.summary.overall_ai_score)}</span>
+                  <span className="text-lg font-bold text-emerald-300">%</span>
                 </div>
               </div>
             </div>
@@ -229,44 +228,39 @@ export default function DetectorPage() {
           </div>
 
           {/* Premium Detector List */}
-          <div className="bg-white">
-            <div className="px-6 md:px-8 py-4 border-b border-gray-100 flex items-center justify-between">
-              <h3 className="text-sm font-extrabold text-gray-900">Detector Breakdown</h3>
+          <div className="bg-white dark:bg-slate-900">
+            <div className="px-6 md:px-8 py-4 border-b border-gray-100 dark:border-slate-800 flex items-center justify-between">
+              <h3 className="text-sm font-extrabold text-gray-900 dark:text-white">Detector Breakdown</h3>
               <span className="text-[11px] font-bold text-gray-400 tracking-wide">Engine Analysis</span>
             </div>
             
-            <div className="divide-y divide-gray-50">
+            <div className="divide-y divide-gray-50 dark:divide-slate-800">
               {[...results.detectors].sort((a, b) => b.ai_score - a.ai_score).map((row) => {
                 const verdict = row.verdict ?? (row.ai_score >= 50 ? 'AI' : 'Human');
-                const aiColor = row.ai_score <= 20 ? '#10b981' : row.ai_score <= 75 ? '#eab308' : '#ef4444';
                 return (
-                  <div key={row.detector} className="group flex flex-col md:flex-row md:items-center gap-6 px-6 md:px-8 py-5 hover:bg-gray-50/60 transition-all duration-200">
+                  <div key={row.detector} className="group flex flex-col md:flex-row md:items-center gap-6 px-6 md:px-8 py-5 hover:bg-gray-50/60 dark:hover:bg-slate-800/60 transition-all duration-200">
                     
                     {/* Identifier */}
                     <div className="flex items-center gap-4 md:w-[220px] shrink-0 transition-transform group-hover:translate-x-1">
                       <DetectorLogo name={row.detector} size={40} />
                       <div>
-                        <span className="text-[15px] font-bold text-gray-900 block mb-0.5">{row.detector}</span>
+                        <span className="text-[15px] font-bold text-gray-900 dark:text-white block mb-0.5">{row.detector}</span>
                         <span className="text-[11px] font-semibold text-gray-400 tracking-wide">Detection Engine</span>
                       </div>
                     </div>
 
-                    {/* Sleek Line Bars */}
-                    <div className="flex-1 flex flex-col md:flex-row items-center gap-6">
-                      <div className="w-full md:flex-1 flex items-center gap-4">
-                        <div className="w-12 text-sm font-bold text-right" style={{ color: aiColor }}>{Math.round(row.ai_score)}%</div>
-                        <div className="flex-1 h-2 bg-gray-100/80 rounded-full overflow-hidden shadow-inner">
-                          <div className="h-full rounded-full transition-all duration-1000 ease-out" style={{ width: `${row.ai_score}%`, backgroundColor: aiColor }} />
-                        </div>
-                        <span className="text-[11px] font-extrabold text-gray-400 w-10 tracking-widest">AI</span>
+                    {/* Unified Dual Bar */}
+                    <div className="flex-1 flex items-center gap-4">
+                      <div className="flex items-center gap-1.5 w-[70px] shrink-0 justify-end">
+                        <span className="text-xs font-bold text-red-500 tabular-nums">{Math.round(row.ai_score)}%</span>
+                        <span className="text-[10px] text-slate-300">AI</span>
                       </div>
-                      
-                      <div className="w-full md:flex-1 flex items-center gap-4">
-                        <div className="w-12 text-sm font-bold text-right text-green-600">{Math.round(row.human_score)}%</div>
-                        <div className="flex-1 h-2 bg-gray-100/80 rounded-full overflow-hidden shadow-inner">
-                          <div className="h-full rounded-full bg-green-500 transition-all duration-1000 ease-out" style={{ width: `${row.human_score}%` }} />
-                        </div>
-                        <span className="text-[11px] font-extrabold text-gray-400 w-10 tracking-widest">Hum</span>
+                      <div className="flex-1 h-1.5 bg-emerald-400/80 dark:bg-emerald-500/60 rounded-full overflow-hidden flex shadow-inner">
+                        <div className="h-full bg-red-400 dark:bg-red-500 transition-all duration-1000 ease-out" style={{ width: `${row.ai_score}%` }} />
+                      </div>
+                      <div className="flex items-center gap-1.5 w-[70px] shrink-0">
+                        <span className="text-xs font-bold text-emerald-500 tabular-nums">{Math.round(100 - row.ai_score)}%</span>
+                        <span className="text-[10px] text-slate-300">Human</span>
                       </div>
                     </div>
 
@@ -280,6 +274,19 @@ export default function DetectorPage() {
                   </div>
                 );
               })}
+            </div>
+
+            {/* Average Score */}
+            <div className="px-6 md:px-8 py-4 border-t border-gray-100 dark:border-slate-800 bg-gray-50/40 dark:bg-slate-800/40 flex items-center justify-between">
+              <span className="text-sm font-bold text-gray-600 dark:text-gray-300">Average</span>
+              <div className="flex items-center gap-4">
+                <span className="text-sm font-bold text-red-500 tabular-nums">
+                  {Math.round(results.detectors.reduce((s, d) => s + d.ai_score, 0) / results.detectors.length)}% AI
+                </span>
+                <span className="text-sm font-bold text-emerald-500 tabular-nums">
+                  {Math.round(100 - results.detectors.reduce((s, d) => s + d.ai_score, 0) / results.detectors.length)}% Human
+                </span>
+              </div>
             </div>
           </div>
         </div>

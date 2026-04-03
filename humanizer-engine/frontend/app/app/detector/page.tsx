@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { Search, Trash2, RotateCcw, FileText, BarChart3 } from 'lucide-react';
+import { Search, Trash2, RotateCcw, FileText, ShieldCheck, CheckCircle2, AlertTriangle } from 'lucide-react';
 
 type DetectorRow = {
   detector: string;
@@ -26,23 +26,51 @@ type DetectResponse = {
   error?: string;
 };
 
-/* ── Circular Progress Meter ──────────────────────────────────────────── */
-const CircularProgress = ({ score, size = 100, strokeWidth = 8 }: { score: number; size?: number; strokeWidth?: number }) => {
+/* ── Circular Score Ring ──────────────────────────────────────────────── */
+const ScoreRing = ({
+  score,
+  size = 100,
+  strokeWidth = 8,
+  color,
+}: {
+  score: number;
+  size?: number;
+  strokeWidth?: number;
+  color: string;
+}) => {
   const radius = (size - strokeWidth) / 2;
   const circumference = 2 * Math.PI * radius;
   const offset = circumference - (score / 100) * circumference;
-  const getColor = (s: number) => (s <= 20 ? '#10b981' : s <= 75 ? '#eab308' : '#ef4444');
-  const color = getColor(score);
 
   return (
     <div className="relative inline-flex items-center justify-center">
       <svg width={size} height={size} className="transform -rotate-90">
-        <circle cx={size / 2} cy={size / 2} r={radius} stroke="#e5e7eb" strokeWidth={strokeWidth} fill="none" />
-        <circle cx={size / 2} cy={size / 2} r={radius} stroke={color} strokeWidth={strokeWidth} fill="none"
-          strokeDasharray={circumference} strokeDashoffset={offset} strokeLinecap="round" className="transition-all duration-700" />
+        <circle
+          cx={size / 2}
+          cy={size / 2}
+          r={radius}
+          stroke="#f1f5f9"
+          strokeWidth={strokeWidth}
+          fill="none"
+        />
+        <circle
+          cx={size / 2}
+          cy={size / 2}
+          r={radius}
+          stroke={color}
+          strokeWidth={strokeWidth}
+          fill="none"
+          strokeDasharray={circumference}
+          strokeDashoffset={offset}
+          strokeLinecap="round"
+          className="transition-all duration-1000 ease-out"
+        />
       </svg>
       <div className="absolute inset-0 flex items-center justify-center">
-        <span className={`font-bold ${size >= 100 ? 'text-2xl' : 'text-lg'} ${score <= 20 ? 'text-green-500' : score <= 75 ? 'text-yellow-500' : 'text-red-500'}`}>
+        <span
+          className={`font-bold ${size >= 100 ? 'text-3xl' : size >= 64 ? 'text-xl' : 'text-base'}`}
+          style={{ color }}
+        >
           {Math.round(score)}%
         </span>
       </div>
@@ -51,40 +79,32 @@ const CircularProgress = ({ score, size = 100, strokeWidth = 8 }: { score: numbe
 };
 
 /* ── Detector Brand Logos ─────────────────────────────────────────────── */
-const DETECTOR_BRANDS: Record<string, { color: string; bg: string; initials: string; imgUrl: string }> = {
-  'GPTZero': {
-    color: '#4F46E5', bg: '#EEF2FF', initials: 'GZ',
-    imgUrl: 'https://www.google.com/s2/favicons?domain=gptzero.me&sz=64'
-  },
-  'Turnitin': {
-    color: '#DC2626', bg: '#FEF2F2', initials: 'Tn',
-    imgUrl: 'https://www.google.com/s2/favicons?domain=turnitin.com&sz=64'
-  },
-  'Originality.AI': {
-    color: '#7C3AED', bg: '#F5F3FF', initials: 'OA',
-    imgUrl: 'https://www.google.com/s2/favicons?domain=originality.ai&sz=64'
-  },
-  'Winston AI': {
-    color: '#059669', bg: '#ECFDF5', initials: 'WA',
-    imgUrl: 'https://www.google.com/s2/favicons?domain=gowinston.ai&sz=64'
-  },
-  'Copyleaks': {
-    color: '#0891B2', bg: '#ECFEFF', initials: 'CL',
-    imgUrl: 'https://www.google.com/s2/favicons?domain=copyleaks.com&sz=64'
-  },
+const DETECTOR_BRANDS: Record<string, { color: string; bg: string; initials: string }> = {
+  GPTZero: { color: '#4F46E5', bg: '#EEF2FF', initials: 'GZ' },
+  Turnitin: { color: '#DC2626', bg: '#FEF2F2', initials: 'Tn' },
+  'Originality.AI': { color: '#7C3AED', bg: '#F5F3FF', initials: 'OA' },
+  'Winston AI': { color: '#059669', bg: '#ECFDF5', initials: 'WA' },
+  Copyleaks: { color: '#0891B2', bg: '#ECFEFF', initials: 'CL' },
 };
 
-const DetectorLogo = ({ name, size = 40 }: { name: string; size?: number }) => {
-  const brand = DETECTOR_BRANDS[name] || { color: '#6B7280', bg: '#F3F4F6', initials: name.slice(0, 2), imgUrl: '' };
+const DetectorLogo = ({ name, size = 36 }: { name: string; size?: number }) => {
+  const brand = DETECTOR_BRANDS[name] || {
+    color: '#6B7280',
+    bg: '#F3F4F6',
+    initials: name.slice(0, 2),
+  };
   return (
     <div
-      className="rounded-xl flex items-center justify-center shrink-0 overflow-hidden shadow-sm"
-      style={{ width: size, height: size, backgroundColor: brand.bg, color: brand.color }}
+      className="rounded-xl flex items-center justify-center shrink-0 font-bold"
+      style={{
+        width: size,
+        height: size,
+        backgroundColor: brand.bg,
+        color: brand.color,
+        fontSize: size * 0.32,
+      }}
     >
-      {brand.imgUrl ? 
-        <img src={brand.imgUrl} alt={`${name} logo`} className="w-2/3 h-2/3 object-contain" /> : 
-        <span className="font-bold" style={{ fontSize: size * 0.35 }}>{brand.initials}</span>
-      }
+      {brand.initials}
     </div>
   );
 };
@@ -96,7 +116,10 @@ export default function DetectorPage() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [message, setMessage] = useState('');
 
-  const words = useMemo(() => inputText.trim().split(/\s+/).filter(Boolean).length, [inputText]);
+  const words = useMemo(
+    () => inputText.trim().split(/\s+/).filter(Boolean).length,
+    [inputText],
+  );
 
   const handleAnalyze = async () => {
     if (!inputText.trim()) return setMessage('Please enter text to analyze.');
@@ -123,167 +146,254 @@ export default function DetectorPage() {
     }
   };
 
-  const verdictStyle = (v: string) => {
+  const verdictLabel = (v: string) => {
     const l = v.toLowerCase();
-    if (l.includes('human')) return 'text-green-600 bg-green-50 border-green-200';
-    if (l.includes('ai')) return 'text-red-600 bg-red-50 border-red-200';
-    return 'text-yellow-600 bg-yellow-50 border-yellow-200';
+    if (l.includes('human'))
+      return { text: v, cls: 'text-emerald-700 bg-emerald-50 border-emerald-200', icon: CheckCircle2 };
+    if (l.includes('ai'))
+      return { text: v, cls: 'text-red-600 bg-red-50 border-red-200', icon: AlertTriangle };
+    return { text: v, cls: 'text-amber-600 bg-amber-50 border-amber-200', icon: ShieldCheck };
   };
 
   return (
-    <div className="flex flex-col gap-6 animate-in fade-in duration-700">
-      {/* Header */}
-      <header>
-        <h1 className="text-2xl font-bold text-gray-900">AI Detection</h1>
-        <p className="text-sm text-gray-600 mt-1">Run multi-detector analysis and review every score in one place</p>
+    <div className="flex flex-col gap-6 animate-in fade-in duration-500">
+      {/* ── Header ──────────────────────────────────────────────────── */}
+      <header className="flex items-end justify-between">
+        <div>
+          <div className="flex items-center gap-2.5 mb-1">
+            <div className="w-8 h-8 rounded-lg bg-brand-600 flex items-center justify-center">
+              <ShieldCheck className="w-4 h-4 text-white" />
+            </div>
+            <h1 className="text-2xl font-bold text-slate-900 tracking-tight">AI Checker</h1>
+          </div>
+          <p className="text-sm text-slate-500 pl-[42px]">
+            Multi-detector analysis — scan your text against 5 leading AI detectors
+          </p>
+        </div>
+        {results && (
+          <span className="text-xs font-medium text-slate-400 tabular-nums">
+            {results.summary.word_count} words &middot; {results.summary.sentence_count} sentences
+          </span>
+        )}
       </header>
 
-      {/* Input / Pasting Pane */}
-      <div className="bg-white border border-gray-200/80 rounded-2xl shadow-sm overflow-hidden transition-all duration-300 focus-within:border-brand-300 focus-within:shadow-md focus-within:ring-4 focus-within:ring-brand-50/50">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-gray-50/60">
-          <h2 className="text-sm font-bold text-gray-900 flex items-center gap-2">
-            <FileText className="w-4 h-4 text-gray-400" />
-            Document Analysis
-          </h2>
-          <div className="flex items-center gap-3 text-xs font-semibold text-gray-500">
-            <div className="flex items-center gap-1.5 bg-white px-2.5 py-1 border border-gray-200 rounded-md shadow-sm">
-              <span className="text-gray-900">{words}</span> words
-            </div>
-            <div className="flex items-center gap-1.5 bg-white px-2.5 py-1 border border-gray-200 rounded-md shadow-sm">
-              <span className="text-gray-900">{inputText.length}</span> chars
-            </div>
+      {/* ── Input Card ──────────────────────────────────────────────── */}
+      <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm transition-all duration-300 focus-within:border-brand-300 focus-within:shadow-md focus-within:ring-4 focus-within:ring-brand-50">
+        {/* toolbar */}
+        <div className="flex items-center justify-between px-6 py-3.5 border-b border-slate-100 bg-slate-50/50">
+          <div className="flex items-center gap-2 text-xs font-semibold text-slate-600">
+            <FileText className="w-3.5 h-3.5 text-slate-400" />
+            Paste or type your content
+          </div>
+          <div className="flex items-center gap-3 text-xs text-slate-400 font-medium tabular-nums">
+            <span>{words} words</span>
+            <span className="text-slate-200">|</span>
+            <span>{inputText.length} chars</span>
           </div>
         </div>
+
+        {/* textarea */}
         <textarea
           value={inputText}
           onChange={(e) => setInputText(e.target.value)}
-          className="w-full bg-white outline-none resize-y text-[15px] leading-loose text-gray-800 placeholder:text-gray-300 p-6 min-h-[220px]"
-          placeholder="Paste your text here to run it against our multi-detector engine..."
+          className="w-full bg-white outline-none resize-y text-[15px] leading-[1.85] text-slate-800 placeholder:text-slate-300 p-6 min-h-[220px]"
+          placeholder="Paste your text here to check for AI-generated content…"
         />
-        <div className="flex items-center justify-between px-6 py-4 border-t border-gray-100 bg-gray-50/60">
+
+        {/* actions */}
+        <div className="flex items-center justify-between px-6 py-3.5 border-t border-slate-100 bg-slate-50/50">
           {message ? (
-            <div className="text-sm font-medium text-red-600 flex items-center gap-2 bg-red-50 px-3 py-1.5 rounded-md border border-red-100">
+            <div className="text-sm font-medium text-red-600 flex items-center gap-2 bg-red-50 px-3 py-1.5 rounded-lg border border-red-100">
               <div className="w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse" />
               {message}
             </div>
-          ) : <div />}
-          <div className="flex items-center gap-3">
+          ) : (
+            <div />
+          )}
+          <div className="flex items-center gap-2.5">
             <button
-              onClick={() => { setInputText(''); setResults(null); setMessage(''); }}
-              className="px-5 py-2.5 border border-gray-200 bg-white rounded-lg text-sm font-bold text-gray-700 hover:bg-gray-50 hover:text-gray-900 hover:border-gray-300 transition-all flex items-center gap-2 shadow-sm"
+              onClick={() => {
+                setInputText('');
+                setResults(null);
+                setMessage('');
+              }}
+              className="px-4 py-2.5 border border-slate-200 bg-white rounded-xl text-sm font-semibold text-slate-600 hover:bg-slate-50 hover:border-slate-300 transition-all flex items-center gap-2"
             >
-              <Trash2 className="w-4 h-4" /> Clear
+              <Trash2 className="w-3.5 h-3.5" /> Clear
             </button>
             <button
               onClick={handleAnalyze}
               disabled={isProcessing}
-              className="px-7 py-2.5 bg-brand-500 hover:bg-brand-600 text-white text-sm font-bold rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center gap-2 shadow-md hover:shadow-lg transform active:scale-[0.98]"
+              className="px-6 py-2.5 bg-brand-600 hover:bg-brand-700 text-white text-sm font-semibold rounded-xl disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center gap-2 shadow-sm hover:shadow-md active:scale-[0.98]"
             >
-              {isProcessing ? <RotateCcw className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
-              {isProcessing ? 'Analyzing...' : 'Analyze Text'}
+              {isProcessing ? (
+                <RotateCcw className="w-4 h-4 animate-spin" />
+              ) : (
+                <Search className="w-4 h-4" />
+              )}
+              {isProcessing ? 'Scanning…' : 'Analyze Text'}
             </button>
           </div>
         </div>
       </div>
 
-      {/* ── Results ─────────────────────────────────────────────────────── */}
-      {results && (
-        <div className="bg-white border border-gray-200/80 rounded-2xl shadow-sm mt-4 overflow-hidden animate-in slide-in-from-bottom-4 fade-in duration-700">
-          
-          {/* Unified Summary Dashboard */}
-          <div className="grid grid-cols-1 md:grid-cols-3 divide-y md:divide-y-0 md:divide-x divide-gray-100 border-b border-gray-100 bg-gray-50/30">
-            <div className="p-6 md:p-8 flex items-center justify-center md:justify-start gap-6">
-              <CircularProgress score={results.summary.overall_ai_score} size={64} strokeWidth={6} />
-              <div>
-                <h3 className="text-[11px] font-extrabold tracking-wide text-gray-400 mb-1">AI Probability</h3>
-                <div className="flex items-baseline gap-1.5">
-                  <span className="text-3xl font-black text-gray-900 tracking-tight">{Math.round(results.summary.overall_ai_score)}</span>
-                  <span className="text-lg font-bold text-gray-400">%</span>
-                </div>
-              </div>
-            </div>
-            
-            <div className="p-6 md:p-8 flex items-center justify-center md:justify-start gap-6">
-              <CircularProgress score={results.summary.overall_human_score} size={64} strokeWidth={6} />
-              <div>
-                <h3 className="text-[11px] font-extrabold tracking-wide text-gray-400 mb-1">Human Score</h3>
-                <div className="flex items-baseline gap-1.5">
-                  <span className="text-3xl font-black text-gray-900 tracking-tight">{Math.round(results.summary.overall_human_score)}</span>
-                  <span className="text-lg font-bold text-gray-400">%</span>
-                </div>
-              </div>
-            </div>
-
-            <div className="p-6 md:p-8 flex flex-col justify-center items-center md:items-start">
-              <h3 className="text-[11px] font-extrabold tracking-wide text-gray-400 mb-3">Final Verdict</h3>
-              <div className="flex items-center gap-3">
-                <span className={`text-[15px] font-black px-4 py-1.5 rounded-lg border-2 shadow-sm ${verdictStyle(results.summary.overall_verdict)}`}>
-                  {results.summary.overall_verdict}
-                </span>
-                <span className="text-xs font-bold text-gray-400 flex items-center gap-1.5">
-                  <BarChart3 className="w-3.5 h-3.5" />
-                  {results.summary.total_detectors} checks
-                </span>
-              </div>
-            </div>
-          </div>
-
-          {/* Premium Detector List */}
-          <div className="bg-white">
-            <div className="px-6 md:px-8 py-4 border-b border-gray-100 flex items-center justify-between">
-              <h3 className="text-sm font-extrabold text-gray-900">Detector Breakdown</h3>
-              <span className="text-[11px] font-bold text-gray-400 tracking-wide">Engine Analysis</span>
-            </div>
-            
-            <div className="divide-y divide-gray-50">
-              {[...results.detectors].sort((a, b) => b.ai_score - a.ai_score).map((row) => {
-                const verdict = row.verdict ?? (row.ai_score >= 50 ? 'AI' : 'Human');
-                const aiColor = row.ai_score <= 20 ? '#10b981' : row.ai_score <= 75 ? '#eab308' : '#ef4444';
-                return (
-                  <div key={row.detector} className="group flex flex-col md:flex-row md:items-center gap-6 px-6 md:px-8 py-5 hover:bg-gray-50/60 transition-all duration-200">
-                    
-                    {/* Identifier */}
-                    <div className="flex items-center gap-4 md:w-[220px] shrink-0 transition-transform group-hover:translate-x-1">
-                      <DetectorLogo name={row.detector} size={40} />
-                      <div>
-                        <span className="text-[15px] font-bold text-gray-900 block mb-0.5">{row.detector}</span>
-                        <span className="text-[11px] font-semibold text-gray-400 tracking-wide">Detection Engine</span>
-                      </div>
-                    </div>
-
-                    {/* Sleek Line Bars */}
-                    <div className="flex-1 flex flex-col md:flex-row items-center gap-6">
-                      <div className="w-full md:flex-1 flex items-center gap-4">
-                        <div className="w-12 text-sm font-bold text-right" style={{ color: aiColor }}>{Math.round(row.ai_score)}%</div>
-                        <div className="flex-1 h-2 bg-gray-100/80 rounded-full overflow-hidden shadow-inner">
-                          <div className="h-full rounded-full transition-all duration-1000 ease-out" style={{ width: `${row.ai_score}%`, backgroundColor: aiColor }} />
-                        </div>
-                        <span className="text-[11px] font-extrabold text-gray-400 w-10 tracking-widest">AI</span>
-                      </div>
-                      
-                      <div className="w-full md:flex-1 flex items-center gap-4">
-                        <div className="w-12 text-sm font-bold text-right text-green-600">{Math.round(row.human_score)}%</div>
-                        <div className="flex-1 h-2 bg-gray-100/80 rounded-full overflow-hidden shadow-inner">
-                          <div className="h-full rounded-full bg-green-500 transition-all duration-1000 ease-out" style={{ width: `${row.human_score}%` }} />
-                        </div>
-                        <span className="text-[11px] font-extrabold text-gray-400 w-10 tracking-widest">Hum</span>
-                      </div>
-                    </div>
-
-                    {/* Minimal Verdict Pill */}
-                    <div className="md:w-[120px] shrink-0 flex items-center justify-start md:justify-end">
-                      <span className={`text-[11px] font-bold tracking-widest px-3 py-1.5 rounded-md border ${verdictStyle(verdict)} bg-transparent`}>
-                        {verdict}
-                      </span>
-                    </div>
-
+      {/* ── Results Dashboard ───────────────────────────────────────── */}
+      {results && (() => {
+        const verdict = verdictLabel(results.summary.overall_verdict);
+        const VerdictIcon = verdict.icon;
+        return (
+          <div className="space-y-5 animate-in slide-in-from-bottom-4 fade-in duration-700">
+            {/* Score Cards */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {/* AI Score — always red */}
+              <div className="bg-white border border-slate-200 rounded-2xl p-6 flex items-center gap-5 shadow-sm">
+                <ScoreRing
+                  score={results.summary.overall_ai_score}
+                  size={80}
+                  strokeWidth={7}
+                  color="#ef4444"
+                />
+                <div>
+                  <h3 className="text-[11px] font-semibold tracking-wider text-slate-400 uppercase mb-1">
+                    AI Score
+                  </h3>
+                  <div className="flex items-baseline gap-1">
+                    <span className="text-3xl font-bold text-red-500 tracking-tight tabular-nums">
+                      {Math.round(results.summary.overall_ai_score)}
+                    </span>
+                    <span className="text-base font-semibold text-red-300">%</span>
                   </div>
-                );
-              })}
+                  <p className="text-[11px] text-slate-400 mt-1">
+                    {results.summary.detectors_flagged_ai} detector{results.summary.detectors_flagged_ai !== 1 ? 's' : ''} flagged
+                  </p>
+                </div>
+              </div>
+
+              {/* Human Score — always green */}
+              <div className="bg-white border border-slate-200 rounded-2xl p-6 flex items-center gap-5 shadow-sm">
+                <ScoreRing
+                  score={results.summary.overall_human_score}
+                  size={80}
+                  strokeWidth={7}
+                  color="#10b981"
+                />
+                <div>
+                  <h3 className="text-[11px] font-semibold tracking-wider text-slate-400 uppercase mb-1">
+                    Human Score
+                  </h3>
+                  <div className="flex items-baseline gap-1">
+                    <span className="text-3xl font-bold text-emerald-500 tracking-tight tabular-nums">
+                      {Math.round(results.summary.overall_human_score)}
+                    </span>
+                    <span className="text-base font-semibold text-emerald-300">%</span>
+                  </div>
+                  <p className="text-[11px] text-slate-400 mt-1">
+                    {results.summary.detectors_flagged_human} detector{results.summary.detectors_flagged_human !== 1 ? 's' : ''} passed
+                  </p>
+                </div>
+              </div>
+
+              {/* Verdict */}
+              <div className="bg-white border border-slate-200 rounded-2xl p-6 flex flex-col justify-center shadow-sm">
+                <h3 className="text-[11px] font-semibold tracking-wider text-slate-400 uppercase mb-3">
+                  Final Verdict
+                </h3>
+                <div className="flex items-center gap-3">
+                  <span
+                    className={`inline-flex items-center gap-1.5 text-sm font-bold px-4 py-2 rounded-xl border ${verdict.cls}`}
+                  >
+                    <VerdictIcon className="w-4 h-4" />
+                    {verdict.text}
+                  </span>
+                </div>
+                <p className="text-[11px] text-slate-400 mt-3">
+                  Based on {results.summary.total_detectors} detection engines
+                </p>
+              </div>
+            </div>
+
+            {/* Detector Breakdown */}
+            <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm">
+              <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
+                <h3 className="text-sm font-bold text-slate-900">Detector Breakdown</h3>
+                <div className="flex items-center gap-4 text-[11px] font-semibold text-slate-400">
+                  <span className="flex items-center gap-1.5">
+                    <span className="w-2.5 h-2.5 rounded-full bg-red-400" /> AI
+                  </span>
+                  <span className="flex items-center gap-1.5">
+                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-400" /> Human
+                  </span>
+                </div>
+              </div>
+
+              <div className="divide-y divide-slate-50">
+                {[...results.detectors]
+                  .sort((a, b) => b.ai_score - a.ai_score)
+                  .map((row) => {
+                    const v = row.verdict ?? (row.ai_score >= 50 ? 'AI' : 'Human');
+                    const vStyle = verdictLabel(v);
+                    return (
+                      <div
+                        key={row.detector}
+                        className="group flex flex-col md:flex-row md:items-center gap-4 px-6 py-4 hover:bg-slate-50/60 transition-colors"
+                      >
+                        {/* Detector identity */}
+                        <div className="flex items-center gap-3 md:w-[170px] shrink-0">
+                          <DetectorLogo name={row.detector} />
+                          <span className="text-sm font-semibold text-slate-900">
+                            {row.detector}
+                          </span>
+                        </div>
+
+                        {/* Score bars */}
+                        <div className="flex-1 flex flex-col md:flex-row items-center gap-4">
+                          {/* AI bar — always red */}
+                          <div className="w-full md:flex-1 flex items-center gap-3">
+                            <span className="w-10 text-xs font-bold text-right text-red-500 tabular-nums">
+                              {Math.round(row.ai_score)}%
+                            </span>
+                            <div className="flex-1 h-2 bg-slate-100 rounded-full overflow-hidden">
+                              <div
+                                className="h-full rounded-full bg-red-400 transition-all duration-700 ease-out"
+                                style={{ width: `${row.ai_score}%` }}
+                              />
+                            </div>
+                            <span className="text-[10px] font-semibold text-slate-400 w-7">AI</span>
+                          </div>
+
+                          {/* Human bar — always green */}
+                          <div className="w-full md:flex-1 flex items-center gap-3">
+                            <span className="w-10 text-xs font-bold text-right text-emerald-500 tabular-nums">
+                              {Math.round(row.human_score)}%
+                            </span>
+                            <div className="flex-1 h-2 bg-slate-100 rounded-full overflow-hidden">
+                              <div
+                                className="h-full rounded-full bg-emerald-400 transition-all duration-700 ease-out"
+                                style={{ width: `${row.human_score}%` }}
+                              />
+                            </div>
+                            <span className="text-[10px] font-semibold text-slate-400 w-7">
+                              Hum
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Verdict */}
+                        <div className="md:w-[100px] shrink-0 flex items-center justify-start md:justify-end">
+                          <span
+                            className={`text-[10px] font-bold tracking-wider px-2.5 py-1 rounded-lg border ${vStyle.cls}`}
+                          >
+                            {v}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })}
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
     </div>
   );
 }

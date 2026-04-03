@@ -1,685 +1,750 @@
 'use client';
 import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
-import { Copy, Check, ShieldCheck, Zap, Eraser, Info, RotateCcw, Type, AlignLeft } from 'lucide-react';
+import { Copy, Check, Zap, Eraser, RotateCcw, Type, AlignLeft, RefreshCw, AlertTriangle } from 'lucide-react';
+import ProcessingAnimation from '../ProcessingAnimation';
 
-interface DetectorScore {
-  detector: string;
-  ai_score: number;
-  human_score: number;
-}
-
-interface DetectorBlock {
-  overall: number;
-  detectors: DetectorScore[];
-}
-
+/* ── Types ──────────────────────────────────────────────────────────────── */
+interface DetectorScore { detector: string; ai_score: number; human_score: number; }
+interface DetectionResult { overallAi: number; overallHuman: number; detectors: DetectorScore[]; }
 interface HumanizeResponse {
-  success: boolean;
-  humanized: string;
-  word_count: number;
-  input_word_count: number;
-  engine_used: string;
-  meaning_preserved: boolean;
-  meaning_similarity: number;
-  input_detector_results: DetectorBlock;
-  output_detector_results: DetectorBlock;
+  success: boolean; humanized: string; word_count: number; input_word_count: number;
+  engine_used: string; meaning_preserved: boolean; meaning_similarity: number;
+  input_detector_results: { overall: number; detectors: DetectorScore[] };
+  output_detector_results: { overall: number; detectors: DetectorScore[] };
   error?: string;
 }
+interface SynonymOption { word: string; isOriginal: boolean; }
+interface SentenceAlternative { text: string; score: number; }
+interface SelectionInfo { text: string; start: number; end: number; rect: { x: number; y: number }; type: 'word' | 'sentence'; }
+interface ScoredSentence { text: string; start: number; end: number; score: number; }
 
-interface SynonymOption {
-  word: string;
-  isOriginal: boolean;
-}
+/* ── Per-sentence AI scoring — same micro-signals as backend multi-detector ── */
+const AI_MARKER_WORDS = new Set([
+  'utilize','leverage','facilitate','comprehensive','multifaceted','paramount',
+  'furthermore','moreover','additionally','consequently','subsequently','nevertheless',
+  'notwithstanding','aforementioned','paradigm','trajectory','discourse','robust',
+  'nuanced','pivotal','intricate','transformative','innovative','groundbreaking',
+  'mitigate','streamline','optimize','bolster','catalyze','delve','embark','foster',
+  'harness','spearhead','unravel','unveil','tapestry','cornerstone','nexus','myriad',
+  'plethora','realm','landscape','methodology','framework','holistic','substantive',
+  'salient','ubiquitous','meticulous','profound','enhance','crucial','vital','essential',
+  'significant','implement','navigate','underscore','highlight','interplay','diverse',
+  'dynamic','ensure','aspect','notion','endeavor','pertaining','integral',
+]);
+const AI_STARTERS_CLIENT = [
+  'furthermore,','moreover,','additionally,','consequently,','subsequently,',
+  'nevertheless,','notwithstanding,','accordingly,','thus,','hence,',
+  'indeed,','notably,','specifically,','crucially,','importantly,',
+  'essentially,','fundamentally,','arguably,','undeniably,','undoubtedly,',
+  'interestingly,','remarkably,','evidently,','in conclusion,','to summarize,',
+  'it is important','it is worth','it is essential','it is crucial',
+  'it should be noted','in today\'s','in the realm','when it comes to',
+];
+const AI_PHRASE_PATTERNS_CLIENT = [
+  /\b(plays? a (crucial|vital|important|significant|key|pivotal|critical|fundamental|instrumental|central|essential|major) role)\b/i,
+  /\b(a (wide|broad|vast|diverse|rich|extensive) (range|array|spectrum|variety|selection) of)\b/i,
+  /\b(it is (important|crucial|essential|vital|imperative|worth noting|notable|noteworthy) (to note |to mention |to emphasize |to stress |to recognize |to acknowledge |to highlight |to consider )?that)\b/i,
+  /\b(in today's (world|society|landscape|era|age|environment|climate|context))\b/i,
+  /\b(in (order to|the context of|terms of|light of))\b/i,
+  /\b(has (significantly|substantially|dramatically|fundamentally) (changed|transformed|impacted|influenced))\b/i,
+  /\b(it (should|must|can) be (noted|observed|mentioned|emphasized) that)\b/i,
+  /\b(on the other hand|by the same token|in the same vein)\b/i,
+  /\b(the (importance|significance|impact|role) of)\b/i,
+  /\b(this (essay|paper|article|report|analysis) (will|aims to|seeks to|explores))\b/i,
+  /\b(not only .{5,80}? but also)\b/i,
+  /\b(serves? as a (testament|reminder|catalyst|cornerstone|foundation|beacon|symbol))\b/i,
+  /\b(each and every)\b/i,
+  /\b(there is no doubt that)\b/i,
+  /\b(when it comes to)\b/i,
+];
+const FUNCTION_WORDS_CLIENT = new Set(['the','a','an','in','on','at','to','for','of','with','by','from','is','are','was','were','be','been','being','have','has','had','do','does','did','will','would','shall','should','may','might','can','could','must','that','this','these','those','it','its','and','but','or','nor','not','no','so','if','as','than','into','about','up','out','them','they','their','we','our','he','she','his','her']);
 
-interface SentenceAlternative {
-  text: string;
-  score: number;
-}
+const scoreSentence = (sentence: string, overallAi: number): number => {
+  if (overallAi <= 5) return 0;
+  const trimmed = sentence.trim();
+  if (!trimmed) return 0;
+  const words = trimmed.toLowerCase().split(/\s+/).filter(Boolean);
+  if (words.length < 4) return 0;
+  let miniScore = 0;
+  const lower = trimmed.toLowerCase();
+  // Signal 1: AI sentence starters (+0.20)
+  if (AI_STARTERS_CLIENT.some(s => lower.startsWith(s))) miniScore += 0.20;
+  // Signal 2: AI marker word density (+0.00-0.20)
+  const markerD = words.filter(w => AI_MARKER_WORDS.has(w)).length / words.length;
+  miniScore += Math.min(markerD * 5.0, 0.20);
+  // Signal 3: Word length CV < 0.35 (+0.12)
+  const wLens = words.map(w => w.length);
+  const mean = wLens.reduce((a,b)=>a+b,0)/wLens.length;
+  const std = Math.sqrt(wLens.reduce((a,l)=>a+(l-mean)**2,0)/wLens.length);
+  if (mean > 0 && std/mean < 0.35) miniScore += 0.12;
+  // Signal 4: AI sweet spot length 13-30 words (+0.10)
+  if (words.length >= 13 && words.length <= 30) miniScore += 0.10;
+  // Signal 5: Function word ratio in AI range (+0.10)
+  const fwR = words.filter(w => FUNCTION_WORDS_CLIENT.has(w)).length / words.length;
+  if (fwR >= 0.35 && fwR <= 0.55) miniScore += 0.10;
+  // Signal 6: AI phrase patterns (+0.12)
+  if (AI_PHRASE_PATTERNS_CLIENT.some(p => p.test(lower))) miniScore += 0.12;
+  // Signal 7: No contractions (+0.03)
+  if (!words.some(w => w.includes("'"))) miniScore += 0.03;
+  // Signal 8: Formal link words (+0.10)
+  const formalLinks = new Set(['however','therefore','furthermore','moreover','consequently','additionally','conversely','similarly','specifically','particularly','notably','indeed','essentially','fundamentally','accordingly','thus']);
+  if (words.some(w => formalLinks.has(w))) miniScore += 0.10;
+  // Signal 9: No personal pronouns (+0.02)
+  const personal = new Set(['i','we','you','my','me','your','our','us']);
+  if (!words.some(w => personal.has(w))) miniScore += 0.02;
+  // Signal 10: Passive voice (+0.06)
+  if (/\b(is|are|was|were|been|being)\s+(being\s+)?\w+ed\b/i.test(trimmed)) miniScore += 0.06;
+  // Combine: if sentence scores above threshold, blend with overall
+  const sentenceAi = miniScore >= 0.28 ? Math.min(100, overallAi * 0.5 + miniScore * 120) : Math.max(0, overallAi * 0.3 + miniScore * 60);
+  return Math.min(100, Math.max(0, sentenceAi));
+};
 
-interface SelectionInfo {
-  text: string;
-  start: number;
-  end: number;
-  rect: { x: number; y: number };
-  type: 'word' | 'sentence';
-}
+const splitSentences = (text: string): { text: string; start: number; end: number }[] => {
+  if (!text) return [];
+  const result: { text: string; start: number; end: number }[] = [];
+  const regex = /[^.!?\n]*[.!?][\s]*/g;
+  let match;
+  let lastEnd = 0;
+  while ((match = regex.exec(text)) !== null) {
+    if (match.index > lastEnd) result.push({ text: text.slice(lastEnd, match.index), start: lastEnd, end: match.index });
+    result.push({ text: match[0], start: match.index, end: match.index + match[0].length });
+    lastEnd = match.index + match[0].length;
+  }
+  if (lastEnd < text.length) result.push({ text: text.slice(lastEnd), start: lastEnd, end: text.length });
+  return result;
+};
 
-// Circular Progress Component
-const CircularProgress = ({ score, size = 100 }: { score: number; size?: number }) => {
-  const radius = (size - 8) / 2;
-  const circumference = 2 * Math.PI * radius;
-  const offset = circumference - (score / 100) * circumference;
-  
-  const getColor = (s: number) => {
-    if (s <= 20) return '#10b981';
-    if (s <= 75) return '#eab308';
-    return '#ef4444';
-  };
-
-  const color = getColor(score);
-
+/* ── Dual AI/Human Score Bar ─────────────────────────────────────────── */
+const DetectorBar = ({ name, aiScore }: { name: string; aiScore: number }) => {
+  const humanScore = 100 - aiScore;
   return (
-    <div className="relative inline-flex items-center justify-center">
-      <svg width={size} height={size} className="transform -rotate-90">
-        <circle cx={size / 2} cy={size / 2} r={radius} stroke="#e5e7eb" strokeWidth="8" fill="none" />
-        <circle cx={size / 2} cy={size / 2} r={radius} stroke={color} strokeWidth="8" fill="none"
-          strokeDasharray={circumference} strokeDashoffset={offset} strokeLinecap="round" className="transition-all duration-500" />
-      </svg>
-      <div className="absolute inset-0 flex items-center justify-center">
-        <span className={`text-2xl font-bold ${score <= 20 ? 'text-green-500' : score <= 75 ? 'text-yellow-500' : 'text-red-500'}`}>
-          {Math.round(score)}%
-        </span>
+    <div className="flex items-center gap-2">
+      <span className="text-[11px] font-medium text-slate-600 dark:text-slate-400 w-[90px] truncate">{name}</span>
+      <div className="flex-1 h-1.5 bg-emerald-400/80 dark:bg-emerald-500/60 rounded-full overflow-hidden flex">
+        <div className="h-full bg-red-400 dark:bg-red-500 transition-all duration-700" style={{ width: `${aiScore}%` }} />
+      </div>
+      <div className="flex items-center gap-1 w-[90px] justify-end">
+        <span className="text-[10px] font-bold text-red-500 tabular-nums">{Math.round(aiScore)}%</span>
+        <span className="text-[10px] text-slate-300 dark:text-slate-600">/</span>
+        <span className="text-[10px] font-bold text-emerald-600 tabular-nums">{Math.round(humanScore)}%</span>
       </div>
     </div>
   );
 };
 
+/* ── Constants ──────────────────────────────────────────────────────────── */
 const ENGINES = [
-  { id: 'ghost_mini', label: 'Ghost Mini', desc: 'Efficiency focus' },
-  { id: 'ghost_pro', label: 'Ghost Pro', desc: 'Standard balance' },
-  { id: 'ninja', label: 'Ninja Stealth', desc: 'Maximum evasion' },
+  { id: 'ghost_mini', label: 'Fast' },
+  { id: 'ghost_pro', label: 'Standard' },
+  { id: 'ninja', label: 'Stealth' },
+  { id: 'undetectable', label: 'Undetectable' },
 ];
-
 const STRENGTHS = [
   { id: 'light', label: 'Light' },
-  { id: 'medium', label: 'Advanced' },
-  { id: 'strong', label: 'Deep' },
+  { id: 'medium', label: 'Medium' },
+  { id: 'strong', label: 'Strong' },
 ];
-
 const TONES = [
   { id: 'neutral', label: 'Natural' },
   { id: 'academic', label: 'Academic' },
   { id: 'professional', label: 'Business' },
   { id: 'simple', label: 'Direct' },
 ];
-
 const TOP_DETECTORS = ['GPTZero', 'Turnitin', 'Originality.AI', 'Winston AI', 'Copyleaks'];
 
+/* ── Page ───────────────────────────────────────────────────────────────── */
 export default function EditorPage() {
   const [text, setText] = useState('');
   const [result, setResult] = useState('');
   const [loading, setLoading] = useState(false);
-  const [checking, setChecking] = useState(false);
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState('');
+  const [rephrasing, setRephrasing] = useState(false);
 
   const [engine, setEngine] = useState('ghost_pro');
   const [strength, setStrength] = useState('medium');
   const [tone, setTone] = useState('academic');
   const [strictMeaning, setStrictMeaning] = useState(true);
 
-  const [inputScores, setInputScores] = useState<DetectorBlock | null>(null);
-  const [outputScores, setOutputScores] = useState<DetectorBlock | null>(null);
+  const [inputDetection, setInputDetection] = useState<DetectionResult | null>(null);
+  const [outputDetection, setOutputDetection] = useState<DetectionResult | null>(null);
+  const [autoDetecting, setAutoDetecting] = useState(false);
+  const [sentenceScores, setSentenceScores] = useState<ScoredSentence[]>([]);
   const [meaningScore, setMeaningScore] = useState<number | null>(null);
 
-  // Editing / selection state
   const [selectionInfo, setSelectionInfo] = useState<SelectionInfo | null>(null);
   const [synonyms, setSynonyms] = useState<SynonymOption[]>([]);
   const [sentenceAlternatives, setSentenceAlternatives] = useState<SentenceAlternative[]>([]);
   const [popupType, setPopupType] = useState<'synonym' | 'sentence' | null>(null);
   const [loadingPopup, setLoadingPopup] = useState(false);
+  const [rehumanizing, setRehumanizing] = useState(false);
+
+  const inputRef = useRef<HTMLTextAreaElement>(null);
   const outputRef = useRef<HTMLTextAreaElement>(null);
+  const outputBackdropRef = useRef<HTMLDivElement>(null);
   const popupRef = useRef<HTMLDivElement>(null);
+  const detectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const inputWords = useMemo(() => text.trim() ? text.trim().split(/\s+/).length : 0, [text]);
-  const outputWords = useMemo(() => result.trim() ? result.trim().split(/\s+/).length : 0, [result]);
+  const inputWords = useMemo(() => (text.trim() ? text.trim().split(/\s+/).length : 0), [text]);
+  const outputWords = useMemo(() => (result.trim() ? result.trim().split(/\s+/).length : 0), [result]);
 
+  const outputSentenceScores = useMemo<ScoredSentence[]>(() => {
+    if (!result || !outputDetection) return [];
+    return splitSentences(result).map(s => ({ ...s, score: scoreSentence(s.text, outputDetection.overallAi) }));
+  }, [result, outputDetection]);
+
+  const inputAvgAi = useMemo(() => {
+    if (!inputDetection) return 0;
+    // Use same formula as AI Detection page: overall score from all detectors (weighted by backend)
+    return inputDetection.overallAi;
+  }, [inputDetection]);
+
+  const outputAvgAi = useMemo(() => {
+    if (!outputDetection) return 0;
+    // Use same formula as AI Detection page: overall score from all detectors (weighted by backend)
+    return outputDetection.overallAi;
+  }, [outputDetection]);
+
+  /* ── Auto-detect input (debounced 1.5s) ─────────────────────────────── */
+  useEffect(() => {
+    if (detectTimerRef.current) clearTimeout(detectTimerRef.current);
+    if (!text.trim() || inputWords < 10) {
+      setInputDetection(null);
+      setSentenceScores([]);
+      return;
+    }
+    const controller = new AbortController();
+    detectTimerRef.current = setTimeout(async () => {
+      setAutoDetecting(true);
+      try {
+        const res = await fetch('/api/detect', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text }),
+          signal: controller.signal,
+        });
+        const data = await res.json();
+        if (res.ok && !data.error) {
+          const det: DetectionResult = {
+            overallAi: data.summary.overall_ai_score,
+            overallHuman: data.summary.overall_human_score,
+            detectors: data.detectors,
+          };
+          setInputDetection(det);
+          const sentences = splitSentences(text);
+          setSentenceScores(sentences.map(s => ({ ...s, score: scoreSentence(s.text, det.overallAi) })));
+        }
+      } catch (err) {
+        if (err instanceof Error && err.name === 'AbortError') return;
+      } finally {
+        setAutoDetecting(false);
+      }
+    }, 1500);
+    return () => { if (detectTimerRef.current) clearTimeout(detectTimerRef.current); controller.abort(); };
+  }, [text, inputWords]);
+
+  /* ── Scroll sync for highlight overlay ──────────────────────────────── */
+  const syncOutputScroll = useCallback(() => {
+    if (outputRef.current && outputBackdropRef.current) {
+      outputBackdropRef.current.scrollTop = outputRef.current.scrollTop;
+      outputBackdropRef.current.scrollLeft = outputRef.current.scrollLeft;
+    }
+  }, []);
+
+  /* ── Handlers ───────────────────────────────────────────────────────── */
   const handleHumanize = async () => {
     if (!text.trim()) return;
-    if (inputWords < 10) { setError('Minimum 10 words required for analysis.'); return; }
-
-    setLoading(true);
-    setError('');
-    setResult('');
-    setInputScores(null);
-    setOutputScores(null);
-    setMeaningScore(null);
-
+    if (inputWords < 10) { setError('Please enter at least 10 words.'); return; }
+    setLoading(true); setError(''); setResult(''); setOutputDetection(null); setMeaningScore(null);
     try {
-      const response = await fetch('/api/humanize', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          text,
-          engine,
-          strength,
-          tone,
-          strict_meaning: strictMeaning,
-          enable_post_processing: true,
-        }),
+      const res = await fetch('/api/humanize', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text, engine, strength, tone, strict_meaning: strictMeaning, enable_post_processing: true }),
       });
-
-      const data: HumanizeResponse = await response.json();
-
-      if (!response.ok || data.error) {
-        throw new Error(data.error || 'Humanization failed');
-      }
-
+      const data: HumanizeResponse = await res.json();
+      if (!res.ok || data.error) throw new Error(data.error || 'Humanization failed');
       setResult(data.humanized);
-      setInputScores(data.input_detector_results);
-      setOutputScores(data.output_detector_results);
       setMeaningScore(data.meaning_similarity);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Engine error encountered');
-    } finally {
-      setLoading(false);
-    }
+      if (data.input_detector_results) {
+        const d = data.input_detector_results;
+        setInputDetection({ overallAi: d.overall, overallHuman: 100 - d.overall, detectors: d.detectors });
+        const sentences = splitSentences(text);
+        setSentenceScores(sentences.map(s => ({ ...s, score: scoreSentence(s.text, d.overall) })));
+      }
+      if (data.output_detector_results) {
+        const d = data.output_detector_results;
+        setOutputDetection({ overallAi: d.overall, overallHuman: 100 - d.overall, detectors: d.detectors });
+      }
+    } catch (err) { setError(err instanceof Error ? err.message : 'Processing failed'); }
+    finally { setLoading(false); }
+  };
+
+  const handleRephrase = async () => {
+    if (!result.trim()) return;
+    if (outputWords < 10) { setError('Output too short to rephrase.'); return; }
+    setRephrasing(true); setError('');
+    try {
+      const res = await fetch('/api/humanize', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: result, engine, strength, tone, strict_meaning: strictMeaning, enable_post_processing: true }),
+      });
+      const data: HumanizeResponse = await res.json();
+      if (!res.ok || data.error) throw new Error(data.error || 'Rephrase failed');
+      setResult(data.humanized);
+      setMeaningScore(data.meaning_similarity);
+      if (data.output_detector_results) {
+        const d = data.output_detector_results;
+        setOutputDetection({ overallAi: d.overall, overallHuman: 100 - d.overall, detectors: d.detectors });
+      }
+    } catch (err) { setError(err instanceof Error ? err.message : 'Rephrase failed'); }
+    finally { setRephrasing(false); }
   };
 
   const handleCopy = () => {
-    if (result) {
-      navigator.clipboard.writeText(result);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    }
-  };
-
-  const handleCheck = async () => {
-    if (!text.trim()) return;
-    if (inputWords < 10) { setError('Minimum 10 words required for detection.'); return; }
-
-    setChecking(true);
-    setError('');
-    setInputScores(null);
-
-    try {
-      const response = await fetch('/api/detect', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text }),
-      });
-
-      const data = await response.json();
-
-      if (!response.ok || data.error) {
-        throw new Error(data.error || 'Detection failed');
-      }
-
-      setInputScores(data.results);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Detection error encountered');
-    } finally {
-      setChecking(false);
-    }
+    if (!result) return;
+    navigator.clipboard.writeText(result);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
   };
 
   const handleClear = () => {
-    setText('');
-    setResult('');
-    setInputScores(null);
-    setOutputScores(null);
-    setMeaningScore(null);
-    setError('');
-    closePopup();
+    setText(''); setResult('');
+    setInputDetection(null); setOutputDetection(null);
+    setSentenceScores([]); setMeaningScore(null);
+    setError(''); closePopup();
   };
 
+  const handleRehumanizeFlagged = async () => {
+    if (!result) return;
+    setRehumanizing(true); setError('');
+    const MAX_ITERATIONS = 5;
+    let currentText = result;
+
+    try {
+      for (let iteration = 0; iteration < MAX_ITERATIONS; iteration++) {
+        // Re-score sentences against current text
+        const detectRes = await fetch('/api/detect', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: currentText }) });
+        const detectData = await detectRes.json();
+        if (!detectRes.ok || detectData.error) break;
+
+        const currentOverallAi = detectData.summary.overall_ai_score;
+        setOutputDetection({ overallAi: currentOverallAi, overallHuman: detectData.summary.overall_human_score, detectors: detectData.detectors });
+
+        // Score each sentence
+        const currentSentences = splitSentences(currentText);
+        const scored = currentSentences.map(s => ({ ...s, score: scoreSentence(s.text, currentOverallAi) }));
+
+        // Find flagged sentences (score > 35)
+        const flagged = scored.filter(s => s.score > 35);
+        if (flagged.length === 0) {
+          // All green — done
+          setResult(currentText);
+          break;
+        }
+
+        console.log(`[FixFlagged] Iteration ${iteration + 1}: ${flagged.length} flagged sentences, re-humanizing...`);
+
+        // Aggressively re-humanize each flagged sentence with strong strength
+        const fixes = await Promise.all(
+          flagged.map(s =>
+            fetch('/api/humanize', {
+              method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                text: s.text.trim(),
+                engine: engine === 'ghost_mini' ? 'ghost_pro' : engine,
+                strength: 'strong',
+                tone,
+                strict_meaning: strictMeaning,
+                enable_post_processing: true,
+              }),
+            }).then(r => r.json()).then((d: HumanizeResponse) => ({
+              original: s.text,
+              humanized: d.success && d.humanized ? d.humanized.trim() : s.text,
+            })).catch(() => ({ original: s.text, humanized: s.text }))
+          )
+        );
+
+        // Apply fixes to the text
+        let updated = currentText;
+        let anyChanged = false;
+        for (const f of fixes) {
+          if (f.humanized !== f.original && updated.includes(f.original)) {
+            updated = updated.replace(f.original, f.humanized);
+            anyChanged = true;
+          }
+        }
+
+        if (!anyChanged) break; // Nothing changed, stop iterating
+        currentText = updated;
+        setResult(currentText);
+      }
+
+      // Final detection pass
+      const finalRes = await fetch('/api/detect', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: currentText }) });
+      const finalData = await finalRes.json();
+      if (finalRes.ok && !finalData.error) {
+        setOutputDetection({ overallAi: finalData.summary.overall_ai_score, overallHuman: finalData.summary.overall_human_score, detectors: finalData.detectors });
+      }
+    } catch (err) { setError(err instanceof Error ? err.message : 'Rehumanize failed'); }
+    finally { setRehumanizing(false); }
+  };
+
+  /* ── Popup helpers ──────────────────────────────────────────────────── */
   const closePopup = useCallback(() => {
-    setPopupType(null);
-    setSelectionInfo(null);
-    setSynonyms([]);
-    setSentenceAlternatives([]);
+    setPopupType(null); setSelectionInfo(null); setSynonyms([]); setSentenceAlternatives([]);
   }, []);
 
-  // Detect the sentence surrounding the cursor position
-  const getContainingSentence = (text: string, cursor: number): { start: number; end: number } | null => {
+  const getContainingSentence = (t: string, cursor: number) => {
     const enders = /[.!?]/;
     let start = cursor;
-    while (start > 0 && !enders.test(text[start - 1])) start--;
-    while (start < cursor && /\s/.test(text[start])) start++;
+    while (start > 0 && !enders.test(t[start - 1])) start--;
+    while (start < cursor && /\s/.test(t[start])) start++;
     let end = cursor;
-    while (end < text.length && !enders.test(text[end])) end++;
-    if (end < text.length) end++; // include punctuation
+    while (end < t.length && !enders.test(t[end])) end++;
+    if (end < t.length) end++;
     if (end <= start || (end - start) < 10) return null;
     return { start, end };
   };
 
-  // Handle text selection in the output textarea (double-click word or drag-select)
   const selectionTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const handleOutputSelect = useCallback(() => {
-    // Debounce to avoid firing during drag
     if (selectionTimer.current) clearTimeout(selectionTimer.current);
-
     selectionTimer.current = setTimeout(() => {
       const el = outputRef.current;
       if (!el || !result) return;
-
       const start = el.selectionStart;
       const end = el.selectionEnd;
-
-      // Click (no drag) → detect and highlight containing sentence for alternatives
       if (start === end) {
         const bounds = getContainingSentence(result, start);
         if (!bounds) return;
         const sentence = result.slice(bounds.start, bounds.end).trim();
         el.setSelectionRange(bounds.start, bounds.end);
         const rect = el.getBoundingClientRect();
-        const textBefore = result.slice(0, bounds.start);
-        const linesAbove = textBefore.split('\n').length - 1;
-        const lineHeight = 22;
-        const popupY = rect.top + window.scrollY + Math.min(linesAbove * lineHeight + 40, rect.height - 40);
-        const popupX = rect.left + rect.width / 2;
-        setSelectionInfo({
-          text: sentence,
-          start: bounds.start,
-          end: bounds.end,
-          rect: { x: popupX, y: popupY },
-          type: 'sentence',
-        });
+        const la = result.slice(0, bounds.start).split('\n').length - 1;
+        setSelectionInfo({ text: sentence, start: bounds.start, end: bounds.end, rect: { x: rect.left + rect.width / 2, y: rect.top + window.scrollY + Math.min(la * 22 + 40, rect.height - 40) }, type: 'sentence' });
         fetchSentenceAlternatives(sentence, 4);
         return;
       }
-
-      const selectedText = result.slice(start, end).trim();
-      if (!selectedText || selectedText.length < 2) return;
-
-      // Compute popup position using textarea geometry
+      const sel = result.slice(start, end).trim();
+      if (!sel || sel.length < 2) return;
       const rect = el.getBoundingClientRect();
-      const textBeforeSelection = result.slice(0, start);
-      const linesAbove = textBeforeSelection.split('\n').length - 1;
-      const lineHeight = 22;
-      const popupY = rect.top + window.scrollY + Math.min(linesAbove * lineHeight + 40, rect.height - 40);
-      const popupX = rect.left + rect.width / 2;
-
-      const isSingleWord = !/\s/.test(selectedText) && !/[.!?]/.test(selectedText);
-
-      setSelectionInfo({
-        text: selectedText,
-        start,
-        end,
-        rect: { x: popupX, y: popupY },
-        type: isSingleWord ? 'word' : 'sentence',
-      });
-
-      if (isSingleWord) {
-        fetchSynonyms(selectedText);
-      } else {
-        fetchSentenceAlternatives(selectedText);
-      }
-    }, 300);
+      const la = result.slice(0, start).split('\n').length - 1;
+      const isWord = !/\s/.test(sel) && !/[.!?]/.test(sel);
+      setSelectionInfo({ text: sel, start, end, rect: { x: rect.left + rect.width / 2, y: rect.top + window.scrollY + Math.min(la * 22 + 40, rect.height - 40) }, type: isWord ? 'word' : 'sentence' });
+      if (isWord) fetchSynonyms(sel); else fetchSentenceAlternatives(sel);
+    }, 120);
   }, [result]);
 
-  // Fetch synonyms from API
   const fetchSynonyms = async (word: string) => {
-    setPopupType('synonym');
-    setLoadingPopup(true);
-    setSynonyms([]);
+    setPopupType('synonym'); setLoadingPopup(true); setSynonyms([]);
     try {
-      const response = await fetch('/api/synonyms', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ word }),
-      });
-      if (response.ok) {
-        const data = await response.json();
-        setSynonyms(data.synonyms || [{ word, isOriginal: true }]);
-      } else {
-        setSynonyms([{ word, isOriginal: true }]);
-      }
-    } catch {
-      setSynonyms([{ word, isOriginal: true }]);
-    } finally {
-      setLoadingPopup(false);
-    }
+      const r = await fetch('/api/synonyms', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ word }) });
+      if (r.ok) { const d = await r.json(); setSynonyms(d.synonyms || [{ word, isOriginal: true }]); }
+      else setSynonyms([{ word, isOriginal: true }]);
+    } catch { setSynonyms([{ word, isOriginal: true }]); }
+    finally { setLoadingPopup(false); }
   };
 
-  // Fetch sentence alternatives from API — request more options
   const fetchSentenceAlternatives = async (sentence: string, count = 8) => {
-    setPopupType('sentence');
-    setLoadingPopup(true);
-    setSentenceAlternatives([]);
+    setPopupType('sentence'); setLoadingPopup(true); setSentenceAlternatives([]);
     try {
-      const response = await fetch('/api/alternatives', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sentence, engine, count }),
-      });
-      if (response.ok) {
-        const data = await response.json();
-        setSentenceAlternatives(data.alternatives || []);
-      } else {
-        setSentenceAlternatives([{ text: sentence, score: 1.0 }]);
-      }
-    } catch {
-      setSentenceAlternatives([{ text: sentence, score: 1.0 }]);
-    } finally {
-      setLoadingPopup(false);
-    }
+      const r = await fetch('/api/alternatives', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sentence, engine, count }) });
+      if (r.ok) { const d = await r.json(); setSentenceAlternatives(d.alternatives || []); }
+      else setSentenceAlternatives([{ text: sentence, score: 1.0 }]);
+    } catch { setSentenceAlternatives([{ text: sentence, score: 1.0 }]); }
+    finally { setLoadingPopup(false); }
   };
 
-  // Replace a word or sentence in the result
   const applyReplacement = useCallback((newText: string) => {
     if (!selectionInfo) return;
-    const before = result.slice(0, selectionInfo.start);
-    const after = result.slice(selectionInfo.end);
-    setResult(before + newText + after);
+    setResult(result.slice(0, selectionInfo.start) + newText + result.slice(selectionInfo.end));
     closePopup();
-    // Refocus textarea
     setTimeout(() => outputRef.current?.focus(), 50);
   }, [selectionInfo, result, closePopup]);
 
-  // Close popup when clicking outside
   useEffect(() => {
-    const handleClick = (e: MouseEvent) => {
-      if (popupRef.current && !popupRef.current.contains(e.target as Node)) {
-        closePopup();
-      }
-    };
-    if (popupType) {
-      document.addEventListener('mousedown', handleClick);
-      return () => document.removeEventListener('mousedown', handleClick);
-    }
+    const h = (e: MouseEvent) => { if (popupRef.current && !popupRef.current.contains(e.target as Node)) closePopup(); };
+    if (popupType) { document.addEventListener('mousedown', h); return () => document.removeEventListener('mousedown', h); }
   }, [popupType, closePopup]);
 
+  /* ── Highlighted output overlay ────────────────────────────────────── */
+  const renderOutputHighlighted = () => {
+    if (outputSentenceScores.length === 0) return <span className="text-transparent">{result || ' '}</span>;
+    return outputSentenceScores.map((s, i) => (
+      <span key={i} className={`${s.score > 35 ? 'bg-red-100/80 dark:bg-red-900/30' : 'bg-emerald-100/60 dark:bg-emerald-900/20'} rounded-sm transition-colors duration-300`}>{s.text}</span>
+    ));
+  };
+
+  /* ── Render ───────────────────────────────────────────────────────────── */
   return (
-    <div className="flex flex-col gap-5 animate-in fade-in duration-500">
+    <div className="flex flex-col gap-4 animate-in fade-in duration-500">
+      {/* Header */}
       <header className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-semibold text-slate-900">AI Humanizer</h1>
-          <p className="text-sm text-slate-500 mt-0.5">Transform AI text into natural, human-like content</p>
+          <h1 className="text-xl font-bold text-slate-900 dark:text-white tracking-tight">AI Humanizer</h1>
+          <p className="text-[13px] text-slate-500 dark:text-slate-400">Make AI text undetectable</p>
         </div>
-        <div className="flex gap-2">
-           <button onClick={handleClear} className="px-3 py-2 border border-slate-200 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-50 transition-colors flex items-center gap-1.5">
-              <Eraser className="w-3.5 h-3.5" /> Clear
-           </button>
-           {meaningScore !== null && (
-             <div className="px-3 py-2 bg-emerald-50 border border-emerald-200 rounded-lg flex items-center gap-1.5">
-               <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
-               <span className="text-sm font-medium text-emerald-700">
-                 Meaning: {Math.round(meaningScore * 100)}%
-               </span>
-             </div>
-           )}
+        <div className="flex items-center gap-2">
+          {meaningScore !== null && (
+            <span className="text-xs font-semibold text-emerald-700 bg-emerald-50 dark:text-emerald-400 dark:bg-emerald-950 border border-emerald-200 dark:border-emerald-800 px-2.5 py-1.5 rounded-lg tabular-nums">
+              Meaning kept: {Math.round(meaningScore * 100)}%
+            </span>
+          )}
+          <button onClick={handleClear} className="text-xs font-medium text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 px-2.5 py-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors flex items-center gap-1">
+            <Eraser className="w-3 h-3" /> Clear
+          </button>
         </div>
       </header>
 
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        <div className="col-span-1 lg:col-span-3 space-y-4">
-          <div className="bg-white border border-slate-200 rounded-xl p-5">
-            <h3 className="text-xs font-semibold text-slate-900 uppercase tracking-wider mb-4 pb-3 border-b border-slate-100">Settings</h3>
-            
-            <div className="space-y-5">
-              <div className="space-y-2">
-                <label className="text-xs font-medium text-slate-500 block">Mode</label>
-                <div className="space-y-1.5">
-                  {ENGINES.map((e) => (
-                    <button
-                      key={e.id}
-                      onClick={() => setEngine(e.id)}
-                      className={`w-full text-left px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
-                        engine === e.id
-                          ? 'bg-brand-50 text-brand-700 border border-brand-200'
-                          : 'bg-slate-50 text-slate-600 border border-slate-200 hover:border-slate-300'
-                      }`}
-                    >
-                      {e.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-xs font-medium text-slate-500 block">Strength</label>
-                <div className="grid grid-cols-3 gap-1 bg-slate-100 rounded-lg p-1">
-                  {STRENGTHS.map((s) => (
-                    <button
-                      key={s.id}
-                      onClick={() => setStrength(s.id)}
-                      className={`py-2 text-xs font-medium rounded-md transition-colors ${
-                        strength === s.id
-                          ? 'bg-white text-slate-900 shadow-sm'
-                          : 'text-slate-500 hover:text-slate-700'
-                      }`}
-                    >
-                      {s.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-xs font-medium text-slate-500 block">Tone</label>
-                <select
-                  value={tone}
-                  onChange={(e) => setTone(e.target.value)}
-                  title="Select tone for humanized text"
-                  className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2.5 text-sm font-medium text-slate-700 outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
-                >
-                  {TONES.map((t) => (
-                    <option key={t.id} value={t.id}>{t.label}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="flex items-center justify-between pt-3 border-t border-slate-100">
-                <label className="text-xs font-medium text-slate-600">Preserve Meaning</label>
-                <button
-                  onClick={() => setStrictMeaning(!strictMeaning)}
-                  title={strictMeaning ? 'Meaning preservation enabled' : 'Meaning preservation disabled'}
-                  className={`w-11 h-6 rounded-full transition-all relative ${
-                    strictMeaning ? 'bg-brand-600' : 'bg-slate-200'
-                  }`}
-                >
-                  <div
-                    className={`w-4 h-4 bg-white rounded-full absolute top-1 transition-all shadow-sm ${
-                      strictMeaning ? 'left-6' : 'left-1'
-                    }`}
-                  />
-                </button>
-              </div>
-
-              <div className="grid grid-cols-2 gap-2 pt-2">
-                <button
-                  onClick={handleCheck}
-                  disabled={!text.trim() || checking || loading}
-                  className="py-2.5 bg-white border border-brand-200 text-brand-700 hover:bg-brand-50 text-sm font-medium rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-1.5"
-                >
-                  {checking ? <RotateCcw className="w-4 h-4 animate-spin" /> : <><ShieldCheck className="w-4 h-4" /> Check</>}
-                </button>
-                <button
-                  onClick={handleHumanize}
-                  disabled={!text.trim() || loading || checking}
-                  className="py-2.5 bg-brand-600 hover:bg-brand-700 text-white text-sm font-medium rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-1.5"
-                >
-                  {loading ? <RotateCcw className="w-4 h-4 animate-spin" /> : <><Zap className="w-4 h-4" /> Humanize</>}
-                </button>
-              </div>
-            </div>
-          </div>
-          
-          <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl">
-             <div className="flex gap-1.5 mb-2"><Info className="w-3.5 h-3.5 text-slate-400" /> <span className="text-xs font-medium text-slate-700">Tips</span></div>
-             <ul className="text-xs text-slate-500 leading-relaxed space-y-1">
-               <li>• Select a word for synonyms</li>
-               <li>• Click a sentence for alternatives</li>
-               <li>• Edit the output directly</li>
-             </ul>
+      {/* Settings Bar */}
+      <div className="flex flex-wrap items-center gap-x-5 gap-y-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2.5">
+        <div className="flex items-center gap-2">
+          <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Mode</span>
+          <div className="flex bg-slate-100 dark:bg-slate-800 rounded-lg p-0.5">
+            {ENGINES.map(e => (
+              <button key={e.id} onClick={() => setEngine(e.id)}
+                className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-all ${engine === e.id ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-white'}`}>
+                {e.label}
+              </button>
+            ))}
           </div>
         </div>
+        <div className="w-px h-5 bg-slate-200 dark:bg-slate-700 hidden sm:block" />
+        <div className="flex items-center gap-2">
+          <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Depth</span>
+          <div className="flex bg-slate-100 dark:bg-slate-800 rounded-lg p-0.5">
+            {STRENGTHS.map(s => (
+              <button key={s.id} onClick={() => setStrength(s.id)}
+                className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-all ${strength === s.id ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-white'}`}>
+                {s.label}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="w-px h-5 bg-slate-200 dark:bg-slate-700 hidden sm:block" />
+        <div className="flex items-center gap-2">
+          <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Tone</span>
+          <select value={tone} onChange={(e) => setTone(e.target.value)} title="Tone"
+            className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-slate-700 dark:text-slate-300 outline-none focus:border-brand-400">
+            {TONES.map(t => <option key={t.id} value={t.id}>{t.label}</option>)}
+          </select>
+        </div>
+        <div className="w-px h-5 bg-slate-200 dark:bg-slate-700 hidden sm:block" />
+        <label className="flex items-center gap-2 cursor-pointer select-none">
+          <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Keep Meaning</span>
+          <button onClick={() => setStrictMeaning(!strictMeaning)} title={strictMeaning ? 'On' : 'Off'}
+            className={`w-8 h-[18px] rounded-full transition-all relative ${strictMeaning ? 'bg-brand-600' : 'bg-slate-200 dark:bg-slate-600'}`}>
+            <div className={`w-3 h-3 bg-white rounded-full absolute top-[3px] transition-all shadow-sm ${strictMeaning ? 'left-[15px]' : 'left-[3px]'}`} />
+          </button>
+        </label>
+        <div className="w-px h-5 bg-slate-200 dark:bg-slate-700 hidden sm:block" />
+        <button onClick={handleHumanize} disabled={!text.trim() || loading || rephrasing}
+          className="ml-auto bg-brand-600 hover:bg-brand-700 text-white text-xs font-bold rounded-lg px-5 py-2 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center gap-1.5 shadow-sm hover:shadow-md active:scale-[0.98]">
+          {loading ? <RotateCcw className="w-3.5 h-3.5 animate-spin" /> : <Zap className="w-3.5 h-3.5" />}
+          {loading ? 'Humanizing…' : 'Humanize'}
+        </button>
+      </div>
 
-        <div className="col-span-1 lg:col-span-9 space-y-4">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <div className="bg-white border border-gray-200 rounded-lg p-6 space-y-3">
-              <div className="flex justify-between items-center">
-                <span className="text-sm font-semibold text-gray-900">Input Text</span>
-                <span className="text-xs font-medium text-gray-500">{inputWords} words</span>
-              </div>
-              <textarea
-                value={text}
-                onChange={(e) => setText(e.target.value)}
-                className="w-full h-[500px] bg-transparent outline-none resize-none text-sm leading-relaxed text-gray-900 placeholder:text-gray-400"
-                placeholder="Paste your AI-generated text here..."
-              />
+      {/* Editor Grid */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {/* Input Panel */}
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden flex flex-col">
+          <div className="flex items-center justify-between px-4 py-2.5 border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/50">
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">Input</span>
+              {autoDetecting && (
+                <span className="flex items-center gap-1 text-[10px] text-brand-600 font-medium">
+                  <RotateCcw className="w-2.5 h-2.5 animate-spin" /> Scanning…
+                </span>
+              )}
+              {inputDetection && !autoDetecting && (
+                <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
+                  inputDetection.overallAi <= 15 ? 'text-emerald-700 bg-emerald-50 dark:text-emerald-400 dark:bg-emerald-950' : inputDetection.overallAi <= 60 ? 'text-amber-700 bg-amber-50 dark:text-amber-400 dark:bg-amber-950' : 'text-red-700 bg-red-50 dark:text-red-400 dark:bg-red-950'
+                }`}>{Math.round(inputDetection.overallAi)}% AI</span>
+              )}
             </div>
+            <span className="text-[11px] text-slate-400 tabular-nums">{inputWords} words</span>
+          </div>
 
-            <div className="bg-white border border-gray-200 rounded-lg p-6 space-y-3 relative">
-              <div className="flex justify-between items-center">
-                <div>
-                  <span className="text-sm font-semibold text-gray-900">Humanized Output</span>
-                  {result && (
-                    <p className="text-xs text-gray-500 mt-0.5">Select a word for synonyms, or a sentence for alternatives</p>
-                  )}
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-medium text-gray-500">{outputWords} words</span>
-                  {result && (
-                    <button
-                      onClick={handleCopy}
-                      className="p-2 bg-brand-500 text-white rounded-lg hover:bg-brand-600 transition-colors"
-                      title="Copy to clipboard"
-                    >
-                      {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+          {/* Input textarea */}
+          <div className="flex-1">
+            <textarea ref={inputRef} value={text}
+              onChange={(e) => setText(e.target.value)}
+              className="w-full min-h-[380px] bg-transparent outline-none resize-none text-[14px] leading-relaxed text-slate-800 dark:text-slate-200 p-4"
+              placeholder="Paste your AI-generated text here…" />
+          </div>
+
+          {/* Input Detector Scores */}
+          {inputDetection && (
+            <div className="border-t border-slate-100 dark:border-slate-800 px-4 py-3 space-y-1.5 bg-slate-50/30 dark:bg-slate-800/30">
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Input Scan</span>
+                <span className={`text-[10px] font-bold ${inputDetection.overallAi <= 20 ? 'text-emerald-600' : 'text-red-500'}`}>
+                  {Math.round(inputDetection.overallAi)}% AI detected
+                </span>
+              </div>
+              {[...inputDetection.detectors].sort((a, b) => b.ai_score - a.ai_score).slice(0, 5).map(d => (
+                <DetectorBar key={d.detector} name={d.detector} aiScore={d.ai_score} />
+              ))}
+              <div className="flex items-center justify-between pt-1.5 mt-1 border-t border-slate-100 dark:border-slate-700">
+                <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400">Overall</span>
+                <span className={`text-[10px] font-bold ${inputAvgAi <= 20 ? 'text-emerald-600' : 'text-red-500'}`}>
+                  {Math.round(inputAvgAi)}% AI / {Math.round(100 - inputAvgAi)}% Human
+                </span>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Output Panel */}
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden flex flex-col relative">
+          <div className="flex items-center justify-between px-4 py-2.5 border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/50">
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">Output</span>
+              {outputDetection && (
+                <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
+                  outputDetection.overallAi <= 15 ? 'text-emerald-700 bg-emerald-50 dark:text-emerald-400 dark:bg-emerald-950' : outputDetection.overallAi <= 60 ? 'text-amber-700 bg-amber-50 dark:text-amber-400 dark:bg-amber-950' : 'text-red-700 bg-red-50 dark:text-red-400 dark:bg-red-950'
+                }`}>{Math.round(outputDetection.overallAi)}% AI</span>
+              )}
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-[11px] text-slate-400 tabular-nums">{outputWords} words</span>
+              {result && (
+                <>
+                  {outputSentenceScores.some(s => s.score > 35) && (
+                    <button onClick={handleRehumanizeFlagged} disabled={rehumanizing || loading || rephrasing}
+                      className="text-[11px] font-semibold text-red-500 hover:text-red-600 dark:text-red-400 px-2 py-1 rounded-md hover:bg-red-50 dark:hover:bg-red-950 transition-colors flex items-center gap-1 disabled:opacity-50"
+                      title="Rehumanize flagged sentences">
+                      {rehumanizing ? <RotateCcw className="w-3 h-3 animate-spin" /> : <AlertTriangle className="w-3 h-3" />}
+                      {rehumanizing ? 'Fixing…' : 'Fix Flagged'}
                     </button>
                   )}
-                </div>
-              </div>
-
-              {loading ? (
-                <div className="flex flex-col items-center justify-center h-[500px] gap-3">
-                  <div className="w-8 h-8 border-[3px] border-gray-200 border-t-brand-500 rounded-full animate-spin" />
-                  <span className="text-sm font-medium text-gray-600">Humanizing text...</span>
-                </div>
-              ) : result ? (
-                <textarea
-                  ref={outputRef}
-                  value={result}
-                  onChange={(e) => setResult(e.target.value)}
-                  onSelect={handleOutputSelect}
-                  className="w-full h-[500px] bg-transparent outline-none resize-none text-sm leading-relaxed text-gray-900 placeholder:text-gray-400"
-                  placeholder="Humanized text will appear here..."
-                />
-              ) : (
-                <div className="flex flex-col items-center justify-center h-[500px] text-gray-300 gap-4">
-                  <Zap className="w-10 h-10" />
-                  <span className="text-sm font-medium text-gray-400">Output will appear here</span>
-                </div>
-              )}
-
-              {/* Synonym Popup */}
-              {popupType === 'synonym' && selectionInfo && (
-                <div
-                  ref={popupRef}
-                  className="fixed z-50 bg-white border border-gray-200 rounded-xl shadow-2xl py-2 w-[220px]"
-                  style={{
-                    left: `${Math.min(selectionInfo.rect.x, window.innerWidth - 240)}px`,
-                    top: `${selectionInfo.rect.y}px`,
-                    transform: 'translateX(-50%)'
-                  }}
-                >
-                  <div className="px-3 py-1.5 text-xs font-semibold text-gray-500 border-b border-gray-100 flex items-center gap-2">
-                    <Type className="w-3 h-3" />
-                    Synonyms for &ldquo;{selectionInfo.text}&rdquo;
-                  </div>
-                  <div className="max-h-60 overflow-y-auto">
-                    {loadingPopup ? (
-                      <div className="px-3 py-4 text-xs text-gray-400 text-center flex items-center justify-center gap-2">
-                        <RotateCcw className="w-3 h-3 animate-spin" /> Finding synonyms...
-                      </div>
-                    ) : synonyms.length > 0 ? (
-                      synonyms.map((syn, idx) => (
-                        <button
-                          key={idx}
-                          onClick={() => applyReplacement(syn.word)}
-                          className={`w-full text-left px-3 py-2 text-sm transition-colors flex items-center justify-between ${
-                            syn.isOriginal
-                              ? 'text-red-600 font-semibold bg-red-50 hover:bg-red-100'
-                              : 'text-gray-700 hover:bg-brand-50'
-                          }`}
-                        >
-                          <span>{syn.word}</span>
-                          {syn.isOriginal && (
-                            <span className="text-[10px] bg-red-100 text-red-500 px-1.5 py-0.5 rounded-full font-medium">original</span>
-                          )}
-                        </button>
-                      ))
-                    ) : (
-                      <div className="px-3 py-3 text-xs text-gray-400 text-center">No synonyms found</div>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {/* Sentence Alternatives Popup */}
-              {popupType === 'sentence' && selectionInfo && (
-                <div
-                  ref={popupRef}
-                  className="fixed z-50 bg-white border border-gray-200 rounded-xl shadow-2xl py-2 w-[500px] max-w-[90vw]"
-                  style={{
-                    left: `${Math.min(selectionInfo.rect.x, window.innerWidth - 520)}px`,
-                    top: `${selectionInfo.rect.y}px`,
-                    transform: 'translateX(-50%)'
-                  }}
-                >
-                  <div className="px-3 py-1.5 text-xs font-semibold text-gray-500 border-b border-gray-100 flex items-center gap-2">
-                    <AlignLeft className="w-3 h-3" />
-                    Alternative Sentences
-                  </div>
-                  <div className="max-h-[400px] overflow-y-auto">
-                    {loadingPopup ? (
-                      <div className="px-3 py-6 text-xs text-gray-400 text-center flex flex-col items-center gap-2">
-                        <RotateCcw className="w-4 h-4 animate-spin" />
-                        Generating alternatives...
-                      </div>
-                    ) : sentenceAlternatives.length > 0 ? (
-                      sentenceAlternatives.map((alt, idx) => (
-                        <button
-                          key={idx}
-                          onClick={() => applyReplacement(alt.text)}
-                          className="w-full text-left px-3 py-2.5 text-sm border-b border-gray-50 last:border-0 hover:bg-brand-50 transition-colors"
-                        >
-                          <div className="flex items-start gap-3">
-                            <span className="text-xs font-bold text-brand-500 bg-brand-50 px-1.5 py-0.5 rounded mt-0.5 shrink-0">
-                              {idx + 1}
-                            </span>
-                            <span className="flex-1 text-gray-700 leading-relaxed">{alt.text}</span>
-                            <span className="text-xs text-gray-400 font-medium whitespace-nowrap mt-0.5">
-                              {Math.round(alt.score * 100)}%
-                            </span>
-                          </div>
-                        </button>
-                      ))
-                    ) : (
-                      <div className="px-3 py-4 text-xs text-gray-400 text-center">No alternatives generated</div>
-                    )}
-                  </div>
-                </div>
+                  <button onClick={handleRephrase} disabled={rephrasing || loading}
+                    className="text-[11px] font-semibold text-brand-600 hover:text-brand-700 dark:text-brand-400 px-2 py-1 rounded-md hover:bg-brand-50 dark:hover:bg-brand-950 transition-colors flex items-center gap-1 disabled:opacity-50"
+                    title="Rephrase output">
+                    <RefreshCw className={`w-3 h-3 ${rephrasing ? 'animate-spin' : ''}`} />
+                    {rephrasing ? 'Rephrasing…' : 'Rephrase'}
+                  </button>
+                  <button onClick={handleCopy} className="p-1.5 text-brand-600 dark:text-brand-400 hover:bg-brand-50 dark:hover:bg-brand-950 rounded-md transition-colors" title="Copy">
+                    {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                  </button>
+                </>
               )}
             </div>
           </div>
 
-          {error && (
-            <div className="p-4 bg-red-50 border border-red-200 rounded-lg text-sm font-medium text-red-700">
-              {error}
+          {loading || rephrasing ? (
+            <ProcessingAnimation isRephrasing={rephrasing} />
+          ) : result ? (
+            <div className="relative flex-1">
+              {outputSentenceScores.length > 0 && (
+                <div ref={outputBackdropRef} aria-hidden="true"
+                  className="absolute inset-0 p-4 text-[14px] leading-relaxed whitespace-pre-wrap break-words overflow-hidden pointer-events-none"
+                  style={{ fontFamily: 'inherit', wordBreak: 'break-word' }}>
+                  {renderOutputHighlighted()}
+                </div>
+              )}
+              <textarea ref={outputRef} value={result}
+                onChange={(e) => setResult(e.target.value)} onSelect={handleOutputSelect} onScroll={syncOutputScroll}
+                className={`relative z-10 flex-1 w-full min-h-[380px] bg-transparent outline-none resize-none text-[14px] leading-relaxed p-4 ${
+                  outputSentenceScores.length > 0 ? 'text-transparent caret-slate-800 dark:caret-slate-200 selection:bg-brand-200/40' : 'text-slate-800 dark:text-slate-200'
+                }`}
+                style={{ fontFamily: 'inherit' }}
+                placeholder="Output appears here…" />
+            </div>
+          ) : (
+            <div className="flex flex-col items-center justify-center min-h-[380px] text-slate-200 dark:text-slate-700 gap-2">
+              <Zap className="w-6 h-6" />
+              <span className="text-xs text-slate-300 dark:text-slate-600">Output appears here</span>
             </div>
           )}
 
-          {(inputScores || outputScores) && (
-            <div className="space-y-4">
-              <h3 className="text-sm font-semibold text-gray-900">AI Detection Results</h3>
-              <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
-                {TOP_DETECTORS.map((name) => {
-                  const inputD = inputScores?.detectors.find((d) => d.detector === name);
-                  const outputD = outputScores?.detectors.find((d) => d.detector === name);
-                  const scoreToShow = outputD?.ai_score ?? inputD?.ai_score ?? 0;
-                  const isOutput = !!outputD;
+          {/* Output Detector Scores */}
+          {outputDetection && (
+            <div className="border-t border-slate-100 dark:border-slate-800 px-4 py-3 space-y-1.5 bg-slate-50/30 dark:bg-slate-800/30">
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Output Scan</span>
+                <span className={`text-[10px] font-bold ${outputDetection.overallAi <= 20 ? 'text-emerald-600' : 'text-red-500'}`}>
+                  {Math.round(outputDetection.overallAi)}% AI detected
+                </span>
+              </div>
+              {[...outputDetection.detectors].sort((a, b) => b.ai_score - a.ai_score).slice(0, 5).map(d => (
+                <DetectorBar key={d.detector} name={d.detector} aiScore={d.ai_score} />
+              ))}
+              <div className="flex items-center justify-between pt-1.5 mt-1 border-t border-slate-100 dark:border-slate-700">
+                <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400">Overall</span>
+                <span className={`text-[10px] font-bold ${outputAvgAi <= 20 ? 'text-emerald-600' : 'text-red-500'}`}>
+                  {Math.round(outputAvgAi)}% AI / {Math.round(100 - outputAvgAi)}% Human
+                </span>
+              </div>
+            </div>
+          )}
 
-                  return (
-                    <div key={name} className="bg-white border border-gray-200 rounded-lg p-5 flex flex-col items-center">
-                      <div className="text-xs font-medium text-gray-600 mb-3 text-center truncate w-full">
-                        {name}
+          {/* Synonym Popup */}
+          {popupType === 'synonym' && selectionInfo && (
+            <div ref={popupRef} className="fixed z-50 bg-white border border-slate-200 rounded-xl shadow-xl py-1.5 w-[200px]"
+              style={{ left: `${Math.min(selectionInfo.rect.x, window.innerWidth - 220)}px`, top: `${selectionInfo.rect.y}px`, transform: 'translateX(-50%)' }}>
+              <div className="px-3 py-1.5 text-xs font-medium text-slate-400 border-b border-slate-100 flex items-center gap-1.5">
+                <Type className="w-3 h-3" /> Synonyms for &ldquo;{selectionInfo.text}&rdquo;
+              </div>
+              <div className="max-h-56 overflow-y-auto">
+                {loadingPopup ? (
+                  <div className="px-3 py-4 text-xs text-slate-400 text-center flex items-center justify-center gap-1.5">
+                    <RotateCcw className="w-3 h-3 animate-spin" /> Finding…
+                  </div>
+                ) : synonyms.length > 0 ? (
+                  synonyms.map((syn, idx) => (
+                    <button key={idx} onClick={() => applyReplacement(syn.word)}
+                      className={`w-full text-left px-3 py-2 text-sm transition-colors flex items-center justify-between ${
+                        syn.isOriginal ? 'text-red-500 font-medium bg-red-50 hover:bg-red-100' : 'text-slate-700 hover:bg-brand-50'
+                      }`}>
+                      <span>{syn.word}</span>
+                      {syn.isOriginal && <span className="text-[10px] bg-red-100 text-red-400 px-1.5 py-0.5 rounded-full font-medium">original</span>}
+                    </button>
+                  ))
+                ) : <div className="px-3 py-3 text-xs text-slate-400 text-center">No synonyms found</div>}
+              </div>
+            </div>
+          )}
+
+          {/* Sentence Alternatives Popup */}
+          {popupType === 'sentence' && selectionInfo && (
+            <div ref={popupRef} className="fixed z-50 bg-white border border-slate-200 rounded-xl shadow-xl py-1.5 w-[480px] max-w-[90vw]"
+              style={{ left: `${Math.min(selectionInfo.rect.x, window.innerWidth - 500)}px`, top: `${selectionInfo.rect.y}px`, transform: 'translateX(-50%)' }}>
+              <div className="px-3 py-1.5 text-xs font-medium text-slate-400 border-b border-slate-100 flex items-center gap-1.5">
+                <AlignLeft className="w-3 h-3" /> Alternatives
+              </div>
+              <div className="max-h-[350px] overflow-y-auto">
+                {loadingPopup ? (
+                  <div className="px-3 py-5 text-xs text-slate-400 text-center flex flex-col items-center gap-2">
+                    <RotateCcw className="w-4 h-4 animate-spin" /> Generating…
+                  </div>
+                ) : sentenceAlternatives.length > 0 ? (
+                  sentenceAlternatives.map((alt, idx) => (
+                    <button key={idx} onClick={() => applyReplacement(alt.text)}
+                      className="w-full text-left px-3 py-2.5 text-sm border-b border-slate-50 last:border-0 hover:bg-brand-50 transition-colors">
+                      <div className="flex items-start gap-2.5">
+                        <span className="text-xs font-semibold text-brand-600 bg-brand-50 px-1.5 py-0.5 rounded mt-0.5 shrink-0">{idx + 1}</span>
+                        <span className="flex-1 text-slate-700 leading-relaxed">{alt.text}</span>
+                        <span className="text-xs text-slate-400 font-medium whitespace-nowrap mt-0.5">{Math.round(alt.score * 100)}%</span>
                       </div>
-                      <CircularProgress score={scoreToShow} size={90} />
-                      <div className="text-xs text-gray-500 mt-3 text-center">
-                        {isOutput ? 'After humanize' : 'AI detected'}
-                      </div>
-                    </div>
-                  );
-                })}
+                    </button>
+                  ))
+                ) : <div className="px-3 py-4 text-xs text-slate-400 text-center">No alternatives available</div>}
               </div>
             </div>
           )}
         </div>
       </div>
+
+      {/* Error */}
+      {error && (
+        <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-600 flex items-center gap-2">
+          <div className="w-1.5 h-1.5 bg-red-500 rounded-full" /> {error}
+        </div>
+      )}
+
     </div>
   );
 }

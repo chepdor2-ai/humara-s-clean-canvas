@@ -1,5 +1,13 @@
-﻿import Link from 'next/link';
-import { ArrowRight, CheckCircle2, ShieldCheck, Zap, Sparkles } from 'lucide-react';
+﻿import type { Metadata } from 'next';
+import Link from 'next/link';
+import { ArrowRight, CheckCircle2, ShieldCheck, Zap, Sparkles, Brain, FileText, Wand2, BarChart3, Globe, Lock, Users } from 'lucide-react';
+import HeroAnimation from './HeroAnimation';
+
+export const metadata: Metadata = {
+  title: 'Humara — #1 AI Humanizer | Make AI Text Undetectable',
+  description: 'Humara rewrites AI-generated text to bypass Turnitin, GPTZero, Originality.AI and Copyleaks. Get 100% human scores while preserving meaning.',
+  alternates: { canonical: 'https://humara.ai' },
+};
 
 export default function Home() {
   return (
@@ -19,7 +27,7 @@ export default function Home() {
           </p>
           <div className="flex flex-col sm:flex-row justify-center items-center gap-3">
             <Link href="/app" className="bg-brand-600 hover:bg-brand-700 text-white px-7 py-3 rounded-lg text-sm font-medium transition-colors flex items-center gap-2">
-              Try the Editor <ArrowRight className="w-4 h-4" />
+              Try the Humanizer <ArrowRight className="w-4 h-4" />
             </Link>
             <Link href="/pricing" className="bg-white hover:bg-slate-50 text-slate-700 px-7 py-3 rounded-lg text-sm font-medium border border-slate-200 transition-colors">
               View Pricing
@@ -27,33 +35,9 @@ export default function Home() {
           </div>
         </div>
 
-        {/* Before/After preview */}
-        <div className="mt-16 mx-auto max-w-3xl px-6">
-          <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
-            <div className="flex items-center gap-2 px-5 py-3 border-b border-slate-100 bg-slate-50">
-              <div className="w-2.5 h-2.5 bg-slate-200 rounded-full"></div>
-              <div className="w-2.5 h-2.5 bg-slate-200 rounded-full"></div>
-              <div className="w-2.5 h-2.5 bg-slate-200 rounded-full"></div>
-              <span className="text-xs text-slate-400 ml-2">Humara Editor</span>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2">
-              <div className="p-6">
-                <span className="text-xs font-medium text-slate-400 uppercase tracking-wider">Input</span>
-                <p className="text-slate-400 text-sm mt-3 italic leading-relaxed">&ldquo;Artificial intelligence has fundamentally transformed numerous sectors across the global economy...&rdquo;</p>
-                <div className="mt-5 flex items-center gap-1.5 text-red-500 text-sm font-medium">
-                  <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" /></svg>
-                  98% AI Detected
-                </div>
-              </div>
-              <div className="p-6 border-l border-slate-100 bg-slate-50/50">
-                <span className="text-xs font-medium text-brand-600 uppercase tracking-wider">Output</span>
-                <p className="text-slate-700 text-sm mt-3 leading-relaxed">&ldquo;These tools radically shift how we work. Instead of typing by hand, machines spot patterns we can&apos;t see, changing fields like healthcare and finance overnight.&rdquo;</p>
-                <div className="mt-5 flex items-center gap-1.5 text-emerald-600 text-sm font-medium">
-                  <CheckCircle2 className="w-4 h-4" /> 100% Human Score
-                </div>
-              </div>
-            </div>
-          </div>
+        {/* Animated Hero Demo */}
+        <div className="mt-16 mx-auto max-w-4xl px-6">
+          <HeroAnimation />
         </div>
       </section>
 
@@ -71,8 +55,49 @@ export default function Home() {
         </div>
       </section>
 
-      {/* How it works */}
+      {/* Services */}
       <section className="py-20 bg-white w-full">
+        <div className="max-w-5xl mx-auto px-6">
+          <div className="text-center mb-14">
+            <h2 className="text-3xl font-semibold text-slate-900 mb-3">Our services</h2>
+            <p className="text-slate-500 max-w-xl mx-auto">Everything you need to make AI-generated content pass as human-written.</p>
+          </div>
+          <div className="grid md:grid-cols-3 gap-8">
+            {[
+              { icon: Wand2, title: 'AI Text Humanization', desc: 'Structurally rewrite AI-generated text with burstiness, natural rhythm, and idiomatic phrasing that bypasses every major detector.' },
+              { icon: ShieldCheck, title: 'Multi-Detector Scanning', desc: 'Run your text against 7+ AI detectors simultaneously — Turnitin, GPTZero, Originality.AI, Copyleaks, Winston AI, and more.' },
+              { icon: BarChart3, title: 'Before & After Analysis', desc: 'See AI vs. human scores side by side before and after humanization with per-detector breakdowns and meaning preservation metrics.' },
+            ].map((svc) => (
+              <div key={svc.title} className="p-6 bg-slate-50 rounded-xl border border-slate-100 hover:border-brand-200 hover:shadow-md transition-all">
+                <div className="w-10 h-10 bg-brand-50 rounded-lg flex items-center justify-center mb-4">
+                  <svc.icon className="w-5 h-5 text-brand-600" />
+                </div>
+                <h3 className="text-lg font-semibold text-slate-900 mb-2">{svc.title}</h3>
+                <p className="text-sm text-slate-500 leading-relaxed">{svc.desc}</p>
+              </div>
+            ))}
+          </div>
+
+          {/* Additional Service cards */}
+          <div className="grid md:grid-cols-4 gap-6 mt-8">
+            {[
+              { icon: Brain, title: 'Context Preservation', desc: 'Maps entities, arguments, and key concepts so technical meaning stays intact during rewrites.' },
+              { icon: FileText, title: 'Style Profiles', desc: 'Academic, professional, casual, or direct — match any writing style automatically.' },
+              { icon: Globe, title: 'Synonym Engine', desc: 'Click any word in the output for context-aware synonym suggestions from curated dictionaries.' },
+              { icon: Lock, title: 'Privacy First', desc: 'Text is processed in memory and discarded. We never store your content permanently.' },
+            ].map((svc) => (
+              <div key={svc.title} className="p-5 bg-white rounded-xl border border-slate-200 hover:border-brand-200 hover:shadow-sm transition-all">
+                <svc.icon className="w-5 h-5 text-brand-600 mb-3" />
+                <h4 className="text-sm font-semibold text-slate-900 mb-1">{svc.title}</h4>
+                <p className="text-xs text-slate-500 leading-relaxed">{svc.desc}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* How it works */}
+      <section className="py-20 bg-slate-50 border-y border-slate-100 w-full">
         <div className="max-w-5xl mx-auto px-6">
           <div className="text-center mb-14">
             <h2 className="text-3xl font-semibold text-slate-900 mb-3">How it works</h2>
@@ -84,7 +109,7 @@ export default function Home() {
               { step: '2', title: 'Structural Rewrite', desc: 'Sentences are restructured with natural burstiness — varying lengths and complexity that match genuine human writing.' },
               { step: '3', title: 'Tone Calibration', desc: 'The final output is adjusted to match your target voice — academic, professional, conversational, or direct.' },
             ].map((item) => (
-              <div key={item.step} className="p-6 bg-slate-50 rounded-xl border border-slate-100">
+              <div key={item.step} className="p-6 bg-white rounded-xl border border-slate-200">
                 <div className="w-10 h-10 bg-brand-100 rounded-lg flex items-center justify-center mb-4">
                   <span className="text-sm font-bold text-brand-700">{item.step}</span>
                 </div>
@@ -96,8 +121,53 @@ export default function Home() {
         </div>
       </section>
 
+      {/* Engine Modes */}
+      <section className="py-20 bg-white w-full">
+        <div className="max-w-5xl mx-auto px-6">
+          <div className="text-center mb-14">
+            <h2 className="text-3xl font-semibold text-slate-900 mb-3">Multiple engine modes</h2>
+            <p className="text-slate-500 max-w-xl mx-auto">Choose the right balance of speed and stealth for your content.</p>
+          </div>
+          <div className="grid md:grid-cols-4 gap-6">
+            {[
+              { name: 'Ghost Mini', tag: 'Fast', desc: 'Quick rewrites for everyday content — emails, blog posts, casual writing.' },
+              { name: 'Ghost Pro', tag: 'Balanced', desc: 'Deep structural rewriting with style preservation. Ideal for professional use.' },
+              { name: 'Ninja Stealth', tag: 'Maximum', desc: 'Multi-pass LLM pipeline for critical academic submissions.' },
+              { name: 'Undetectable', tag: 'Extreme', desc: 'Our most aggressive mode. Passes the strictest detectors consistently.' },
+            ].map((eng) => (
+              <div key={eng.name} className="p-5 bg-slate-50 rounded-xl border border-slate-100 hover:border-brand-200 transition-all">
+                <div className="flex items-center gap-2 mb-3">
+                  <h4 className="text-sm font-semibold text-slate-900">{eng.name}</h4>
+                  <span className="text-[10px] font-medium text-brand-600 bg-brand-50 px-2 py-0.5 rounded">{eng.tag}</span>
+                </div>
+                <p className="text-xs text-slate-500 leading-relaxed">{eng.desc}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Social Proof / Stats */}
+      <section className="py-16 bg-slate-50 border-y border-slate-100 w-full">
+        <div className="max-w-4xl mx-auto px-6">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-8 text-center">
+            {[
+              { val: '99.2%', label: 'Average Human Score' },
+              { val: '7+', label: 'Detectors Bypassed' },
+              { val: '50K+', label: 'Documents Processed' },
+              { val: '<3s', label: 'Average Processing Time' },
+            ].map((stat) => (
+              <div key={stat.label}>
+                <p className="text-3xl font-bold text-slate-900 mb-1">{stat.val}</p>
+                <p className="text-xs text-slate-500 font-medium">{stat.label}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
       {/* Features */}
-      <section className="py-20 bg-slate-50 border-y border-slate-100 w-full">
+      <section className="py-20 bg-white w-full">
         <div className="max-w-5xl mx-auto px-6">
           <div className="text-center mb-14">
             <h2 className="text-3xl font-semibold text-slate-900 mb-3">Built for reliability</h2>
@@ -110,7 +180,7 @@ export default function Home() {
               { icon: Sparkles, title: 'Meaning Preservation', desc: 'Our context analyzer maps entities and key concepts, ensuring technical accuracy is maintained throughout the rewrite.' },
               { icon: CheckCircle2, title: 'Granular Controls', desc: 'Adjust strength, tone, and style profiles to match your specific needs — from academic papers to SEO blog posts.' },
             ].map((f) => (
-              <div key={f.title} className="flex gap-4 p-6 bg-white rounded-xl border border-slate-200">
+              <div key={f.title} className="flex gap-4 p-6 bg-slate-50 rounded-xl border border-slate-100">
                 <div className="w-10 h-10 bg-brand-50 rounded-lg flex items-center justify-center shrink-0">
                   <f.icon className="w-5 h-5 text-brand-600" />
                 </div>
@@ -118,6 +188,31 @@ export default function Home() {
                   <h4 className="text-sm font-semibold text-slate-900 mb-1">{f.title}</h4>
                   <p className="text-sm text-slate-500 leading-relaxed">{f.desc}</p>
                 </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Use Cases */}
+      <section className="py-20 bg-slate-50 border-y border-slate-100 w-full">
+        <div className="max-w-5xl mx-auto px-6">
+          <div className="text-center mb-14">
+            <h2 className="text-3xl font-semibold text-slate-900 mb-3">Who uses Humara</h2>
+            <p className="text-slate-500 max-w-xl mx-auto">Trusted by professionals across education, content, and enterprise.</p>
+          </div>
+          <div className="grid md:grid-cols-3 gap-8">
+            {[
+              { icon: Users, title: 'Students & Researchers', desc: 'Refine AI-drafted papers to meet academic integrity standards while keeping arguments and citations intact.' },
+              { icon: Globe, title: 'Content Creators & SEO', desc: 'Produce high-volume human-sounding content that ranks on search engines without triggering AI content filters.' },
+              { icon: Lock, title: 'Enterprise & Legal', desc: 'Generate compliant documentation, reports, and communications that pass corporate AI content policies.' },
+            ].map((uc) => (
+              <div key={uc.title} className="p-6 bg-white rounded-xl border border-slate-200">
+                <div className="w-10 h-10 bg-brand-50 rounded-lg flex items-center justify-center mb-4">
+                  <uc.icon className="w-5 h-5 text-brand-600" />
+                </div>
+                <h3 className="text-lg font-semibold text-slate-900 mb-2">{uc.title}</h3>
+                <p className="text-sm text-slate-500 leading-relaxed">{uc.desc}</p>
               </div>
             ))}
           </div>

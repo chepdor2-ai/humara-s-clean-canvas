@@ -22,27 +22,27 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="bg-brand-950 text-gray-900 font-sans antialiased flex flex-col min-h-screen">
-      <main className="flex-grow pt-20">
-        <section className="min-h-[80vh] flex items-center justify-center p-6 bg-brand-50">
-          <div className="max-w-md w-full bg-white border-2 border-brand-600 shadow-[6px_6px_0px_#fb8c00] p-8 transition-all hover:shadow-[9px_9px_0px_#fb8c00] hover:-translate-x-1 hover:-translate-y-1">
+    <div className="min-h-screen flex flex-col">
+      <main className="flex-grow">
+        <section className="min-h-[85vh] flex items-center justify-center p-6 bg-slate-50">
+          <div className="max-w-md w-full bg-white rounded-xl border border-slate-200 shadow-sm p-8">
             <div className="flex justify-center mb-6">
-              <div className="p-3 bg-brand-100 rounded-lg">
-                <Lock className="h-8 w-8 text-brand-600" strokeWidth={2} />
+              <div className="w-12 h-12 bg-brand-50 rounded-xl flex items-center justify-center">
+                <Lock className="h-6 w-6 text-brand-600" strokeWidth={2} />
               </div>
             </div>
-            <h2 className="text-3xl font-black text-center mb-8 text-gray-900">Welcome Back</h2>
+            <h2 className="text-2xl font-semibold text-center mb-8 text-slate-900">Welcome back</h2>
             
-            <form onSubmit={handleSubmit} className="space-y-6">
+            <form onSubmit={handleSubmit} className="space-y-5">
               <div>
-                <label className="block text-sm font-bold text-gray-700 mb-2">Email Address</label>
+                <label className="block text-sm font-medium text-slate-700 mb-1.5">Email Address</label>
                 <div className="relative">
-                  <Mail className="absolute left-3 top-3.5 h-5 w-5 text-brand-600 pointer-events-none" strokeWidth={2} />
+                  <Mail className="absolute left-3 top-3 h-4.5 w-4.5 text-slate-400 pointer-events-none" strokeWidth={2} />
                   <input
                     type="email"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    className="w-full pl-10 pr-4 py-3 border-2 border-gray-200 focus:border-brand-500 focus:outline-none transition-colors font-medium"
+                    className="w-full pl-10 pr-4 py-2.5 border border-slate-200 rounded-lg focus:border-brand-500 focus:ring-2 focus:ring-brand-50 focus:outline-none transition-all text-sm"
                     placeholder="user@example.com"
                     required
                   />
@@ -50,31 +50,31 @@ export default function LoginPage() {
               </div>
 
               <div>
-                <div className="flex justify-between items-center mb-2">
-                  <label className="block text-sm font-bold text-gray-700">Password</label>
-                  <Link href="/reset-password" className="text-xs font-bold text-brand-600 hover:underline">
+                <div className="flex justify-between items-center mb-1.5">
+                  <label className="block text-sm font-medium text-slate-700">Password</label>
+                  <Link href="/reset-password" className="text-xs font-medium text-brand-600 hover:underline">
                     Forgot?
                   </Link>
                 </div>
                 <div className="relative">
-                  <Lock className="absolute left-3 top-3.5 h-5 w-5 text-brand-600 pointer-events-none" strokeWidth={2} />
+                  <Lock className="absolute left-3 top-3 h-4.5 w-4.5 text-slate-400 pointer-events-none" strokeWidth={2} />
                   <input
                     type={showPassword ? 'text' : 'password'}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    className="w-full pl-10 pr-12 py-3 border-2 border-gray-200 focus:border-brand-500 focus:outline-none transition-colors font-medium"
+                    className="w-full pl-10 pr-12 py-2.5 border border-slate-200 rounded-lg focus:border-brand-500 focus:ring-2 focus:ring-brand-50 focus:outline-none transition-all text-sm"
                     placeholder=""
                     required
                   />
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-3.5 text-gray-400 hover:text-brand-600 transition-colors"
+                    className="absolute right-3 top-3 text-slate-400 hover:text-brand-600 transition-colors"
                   >
                     {showPassword ? (
-                      <EyeOff className="h-5 w-5" strokeWidth={2} />
+                      <EyeOff className="h-4.5 w-4.5" strokeWidth={2} />
                     ) : (
-                      <Eye className="h-5 w-5" strokeWidth={2} />
+                      <Eye className="h-4.5 w-4.5" strokeWidth={2} />
                     )}
                   </button>
                 </div>
@@ -83,15 +83,15 @@ export default function LoginPage() {
               <button
                 type="submit"
                 disabled={isLoading}
-                className="w-full bg-gray-900 text-white font-bold py-4 border-2 border-gray-900 shadow-[4px_4px_0px_rgba(31,41,55,1)] hover:shadow-[6px_6px_0px_rgba(31,41,55,1)] hover:-translate-x-1 hover:-translate-y-1 active:translate-x-0.5 active:translate-y-0.5 transition-all disabled:opacity-50 disabled:cursor-not-allowed mt-4"
+                className="w-full bg-brand-600 hover:bg-brand-700 text-white font-medium py-2.5 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm mt-2"
               >
                 {isLoading ? 'Logging in...' : 'Log In'}
               </button>
             </form>
 
-            <p className="text-center text-sm font-medium text-gray-500 mt-8">
+            <p className="text-center text-sm text-slate-500 mt-6">
               Need an account?{' '}
-              <Link href="/signup" className="text-brand-600 font-bold hover:underline">
+              <Link href="/signup" className="text-brand-600 font-medium hover:underline">
                 Sign up
               </Link>
             </p>

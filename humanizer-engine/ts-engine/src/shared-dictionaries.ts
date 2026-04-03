@@ -91,7 +91,6 @@ export const AI_WORD_REPLACEMENTS: Record<string, string[]> = {
   accommodate: ["handle", "work with", "make room for"],
   coexist: ["live side by side", "share space"], devise: ["create", "come up with", "work out"],
   emphasize: ["stress", "highlight", "press"], establish: ["set up", "create", "form"],
-  facilitate: ["help", "support", "allow"],
   thereby: ["in turn", "through this", "as a result"],
   profoundly: ["deeply", "greatly"], influenced: ["shaped", "affected", "touched"],
   contributed: ["added", "aided", "led"],
@@ -610,7 +609,6 @@ export const SYNTACTIC_TEMPLATES: SyntacticTemplate[] = [
   // B. PREPOSITIONAL PHRASE REPOSITIONING
   { name: "pp_front_in", pattern: /^(.{15,}?)\s+(in (?:the |this |that |these |those )?\w[\w\s]{3,20})\.$/i, replacements: ["$2, $1."] },
   { name: "pp_front_at", pattern: /^(.{15,}?)\s+(at (?:the |this |that )?\w[\w\s]{3,15})\.$/i, replacements: ["$2, $1."] },
-  { name: "pp_front_by", pattern: /^(.{15,}?)\s+(by (?:the |this |that )?\w[\w\s]{3,15})\.$/i, replacements: ["$2, $1."] },
   { name: "pp_front_with", pattern: /^(.{15,}?)\s+(with (?:the |this |that )?\w[\w\s]{3,20})\.$/i, replacements: ["$2, $1."] },
   { name: "pp_front_through", pattern: /^(.{15,}?)\s+(through (?:the |this |that )?\w[\w\s]{3,20})\.$/i, replacements: ["$2, $1."] },
   { name: "pp_front_during", pattern: /^(.{15,}?)\s+(during (?:the |this |that )?\w[\w\s]{3,20})\.$/i, replacements: ["$2, $1."] },
@@ -1120,15 +1118,19 @@ export function fixPunctuation(text: string): string {
   }
 
   // ── Fix mid-sentence capitalization after introductory comma-phrases ──
+  // Words after "Also, ", "Still, ", "In addition, ", etc. should be lowercase
+  // unless they are proper nouns (I, acronyms, known proper nouns).
+  // Process sentence-by-sentence to only target sentence-initial phrases.
   {
     const PROPER_NOUN_RE = /^(?:I|[A-Z]{2,}|Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday|January|February|March|April|May|June|July|August|September|October|November|December|America|Europe|Asia|Africa|Australia|England|Britain|China|India|Japan|France|Germany|Russia|Canada|Mexico|Brazil|Spanish|French|German|English|Chinese|Japanese|Indian|American|European|African|Asian|British|Canadian|Australian|Latin|Greek|Roman|Christian|Muslim|Jewish|Hindu|Buddhist|Catholic|Protestant|Islamic|Biblical|God|Jesus|Christ|Allah|Buddha|Earth|Mars|Venus|Jupiter|Saturn|Mercury|Neptune|Uranus|Pluto|DNA|RNA|HIV|AIDS|NASA|UN|EU|US|UK|WHO|GDP|CEO|CFO|PhD|MBA|MIT|Harvard|Oxford|Cambridge|Stanford|Yale|Princeton|UNESCO|UNICEF|NATO|FBI|CIA|NSA|NFL|NBA|MLB|NHL)$/;
+    // Match: sentence starts with a Known Phrase + comma, followed by a capitalized word
     const INTRO_PHRASE_RE = /^(Also|Still|Plus|In addition|In fact|On top of that|Beyond that|In practice|Even so|That said|Of course|In real terms|As a result|For this reason|Over time|In contrast|On the other hand|At the same time|For example|In particular|To be fair|Not surprisingly|Interestingly|Similarly|In general|Notably|Meanwhile|As expected|In brief|To some extent|Granted|True|At its core|In many ways|Put simply|As it turns out|In the end|All in all|On a related note|To elaborate|By comparison|Alternatively|Looking at it this way|From that angle|In other words|To put it another way)(,\s+)([A-Z])([a-z]+)/;
     r = r.split(/([.!?]["'\u201D\u2019]?\s+)/).map(segment => {
       const m = segment.match(INTRO_PHRASE_RE);
       if (m) {
         const word = m[3] + m[4];
         if (!PROPER_NOUN_RE.test(word)) {
-          return segment.replace(INTRO_PHRASE_RE, (_: string, phrase: string, comma: string, firstChar: string, rest: string) =>
+          return segment.replace(INTRO_PHRASE_RE, (_, phrase, comma, firstChar, rest) =>
             phrase + comma + firstChar.toLowerCase() + rest
           );
         }
@@ -1251,7 +1253,7 @@ const MARKER_FALLBACK_REPLACEMENTS: Record<string, string> = {
   "trajectory": "path", "paradigm": "model", "methodology": "method",
   "framework": "structure", "multifaceted": "complex", "comprehensive": "thorough",
   "paramount": "most important", "facilitate": "help", "leverage": "use",
-  "utilize": "use", "utilize": "use",
+  "utilize": "use",
   "implications": "effects", "implication": "effect",
   "tapestry": "mix", "cornerstone": "base", "bedrock": "foundation",
   "linchpin": "core", "nexus": "link", "myriad": "many",
@@ -1832,6 +1834,102 @@ export function deepCleaningPass(sentences: string[]): string[] {
   // Phase F: Sentence coherence validation
   result = validateSentenceCoherence(result);
 
+  // Phase G: Readability variation — break readability_consistency signal
+  // Turnitin and Surfer SEO flag text where all sentences have similar readability grades.
+  // Inject variation by simplifying ~20% of sentences and making ~15% more complex.
+  if (result.length >= 4) {
+    result = result.map((sent, i) => {
+      const words = sent.split(/\s+/);
+      if (words.length < 6) return sent;
+      const roll = Math.random();
+
+      // Simplify every ~5th sentence: break long words into simpler ones
+      if (roll < 0.20 && words.length >= 12) {
+        let simplified = sent;
+        // Replace a multi-syllable word with a shorter synonym
+        const simplifyMap: Record<string, string> = {
+          'approximately': 'about', 'demonstrate': 'show', 'establish': 'set up',
+          'significant': 'big', 'considerable': 'large', 'preliminary': 'early',
+          'subsequently': 'then', 'nevertheless': 'still', 'consequently': 'so',
+          'predominantly': 'mostly', 'essentially': 'really',
+          'particularly': 'mainly', 'fundamental': 'basic',
+          'immediately': 'right away', 'unfortunately': 'sadly', 'increasingly': 'more and more',
+          'traditionally': 'in the past', 'substantially': 'a lot', 'significantly': 'greatly',
+          'continuously': 'always', 'simultaneously': 'at once', 'independently': 'on its own',
+          'appropriately': 'rightly', 'investigation': 'study', 'communication': 'talk',
+          'understanding': 'grasp', 'opportunities': 'chances',
+          'circumstances': 'conditions', 'characteristics': 'traits', 'determination': 'resolve',
+          'environmental': 'nature-related', 'infrastructure': 'setup', 'organizations': 'groups',
+          'manufacturing': 'making', 'collaboration': 'teamwork', 'implementation': 'rollout',
+        };
+        for (const [long, short] of Object.entries(simplifyMap)) {
+          const rx = new RegExp(`\\b${long}\\b`, 'i');
+          if (rx.test(simplified)) {
+            simplified = simplified.replace(rx, (m) => m[0] === m[0].toUpperCase() ? short[0].toUpperCase() + short.slice(1) : short);
+            break;
+          }
+        }
+        return simplified;
+      }
+
+      // Make every ~7th sentence slightly more complex: swap a short word for a longer synonym
+      if (roll > 0.85 && words.length >= 8 && words.length <= 18) {
+        const complexifyMap: Record<string, string> = {
+          'show': 'illustrate', 'help': 'facilitate', 'use': 'employ',
+          'get': 'obtain', 'keep': 'maintain', 'give': 'provide',
+          'start': 'commence', 'end': 'conclude', 'try': 'attempt',
+          'need': 'require', 'make': 'construct', 'find': 'identify',
+          'grow': 'expand', 'drop': 'diminish', 'link': 'associate',
+          'pick': 'select', 'fix': 'resolve', 'cut': 'reduce',
+        };
+        let complexified = sent;
+        for (const [short, long] of Object.entries(complexifyMap)) {
+          const rx = new RegExp(`\\b${short}\\b`, 'i');
+          if (rx.test(complexified)) {
+            complexified = complexified.replace(rx, (m) => m[0] === m[0].toUpperCase() ? long[0].toUpperCase() + long.slice(1) : long);
+            break;
+          }
+        }
+        return complexified;
+      }
+
+      return sent;
+    });
+  }
+
+  // Phase H: Cross-sentence n-gram deduplication — break ngram_repetition signal
+  // Turnitin and Pangram flag texts with repeated bigrams across sentences.
+  if (result.length >= 3) {
+    const seenBigrams = new Map<string, number>();
+    result = result.map((sent, sentIdx) => {
+      const words = sent.split(/\s+/);
+      if (words.length < 5) return sent;
+      let modified = false;
+      const newWords = [...words];
+      for (let j = 0; j < words.length - 1; j++) {
+        const w1 = words[j].toLowerCase().replace(/[^a-z]/g, '');
+        const w2 = words[j + 1].toLowerCase().replace(/[^a-z]/g, '');
+        if (!w1 || !w2 || w1.length < 3 || w2.length < 3) continue;
+        const bigram = w1 + ' ' + w2;
+        const count = (seenBigrams.get(bigram) ?? 0) + 1;
+        seenBigrams.set(bigram, count);
+        // If this bigram appeared 3+ times, try to replace the second word
+        if (count >= 3 && j > 0) {
+          const rep = (AI_WORD_REPLACEMENTS as Record<string, string[]>)[w2];
+          if (rep && rep.length > 0) {
+            const alt = rep[(count - 3) % rep.length];
+            const prefix = words[j + 1].match(/^[^a-zA-Z]*/)?.[0] ?? '';
+            const suffix = words[j + 1].match(/[^a-zA-Z]*$/)?.[0] ?? '';
+            const isCap = words[j + 1][prefix.length] === words[j + 1][prefix.length]?.toUpperCase();
+            newWords[j + 1] = prefix + (isCap ? alt[0].toUpperCase() + alt.slice(1) : alt) + suffix;
+            modified = true;
+          }
+        }
+      }
+      return modified ? newWords.join(' ') : sent;
+    });
+  }
+
   return result;
 }
 
@@ -2077,4 +2175,122 @@ export function verifySentencePresence(
     outputCount: outputSents.length,
     missingKeywords: missingKeywords.slice(0, 15),
   };
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// POST-CAPITALIZATION FORMATTING
+// Ensures proper sentence casing: first letter uppercase, rest lowercase
+// unless it is a proper noun, abbreviation, or acronym.
+// ══════════════════════════════════════════════════════════════════════════
+
+/** Known abbreviations and acronyms that must stay uppercase */
+const ABBREVIATIONS = new Set([
+  'AI', 'US', 'USA', 'UK', 'EU', 'UN', 'NASA', 'FBI', 'CIA', 'CEO', 'CFO', 'CTO', 'COO',
+  'PhD', 'MBA', 'MD', 'JD', 'BS', 'BA', 'MA', 'MS', 'DNA', 'RNA', 'HIV', 'AIDS', 'GDP',
+  'GPA', 'SAT', 'ACT', 'GRE', 'GMAT', 'LSAT', 'MCAT', 'STEM', 'NATO', 'WHO', 'IMF',
+  'WTO', 'UNICEF', 'UNESCO', 'OECD', 'OPEC', 'API', 'URL', 'HTML', 'CSS', 'SQL', 'IT',
+  'IoT', 'SaaS', 'PaaS', 'IaaS', 'VPN', 'HTTP', 'HTTPS', 'FTP', 'TCP', 'IP', 'CPU',
+  'GPU', 'RAM', 'ROM', 'SSD', 'HDD', 'USB', 'HDMI', 'LED', 'LCD', 'PDF', 'CSV', 'JSON',
+  'XML', 'ASAP', 'FAQ', 'DIY', 'RSVP', 'ETA', 'FYI', 'TBD', 'TBA', 'ROI', 'KPI',
+  'B2B', 'B2C', 'PR', 'HR', 'QA', 'R&D', 'P&L', 'LLC', 'Inc', 'Corp', 'Ltd', 'Co',
+  'Ave', 'Blvd', 'St', 'Dr', 'Mr', 'Mrs', 'Ms', 'Jr', 'Sr', 'vs', 'etc', 'ie', 'eg',
+  'AM', 'PM', 'BC', 'AD', 'BCE', 'CE', 'ADHD', 'PTSD', 'OCD', 'APA', 'MLA', 'IEEE',
+  'ACM', 'HVAC', 'SWOT', 'SEO', 'CRM', 'ERP', 'MVP', 'UX', 'UI', 'ML', 'NLP', 'LLM',
+  'GPT', 'AWS', 'GCP', 'IBM', 'HP', 'AT&T', 'PSA', 'IPO', 'VC', 'PE', 'M&A', 'ESG',
+]);
+
+/**
+ * Check if a word looks like a proper noun or abbreviation:
+ * - All uppercase (2+ chars) → abbreviation
+ * - Mixed case like "iPhone", "McCoy", "JavaScript" → proper noun
+ * - Starts uppercase followed by lowercase → could be proper noun at non-start position
+ */
+function isProperOrAbbreviation(word: string): boolean {
+  const stripped = word.replace(/[^a-zA-Z&]/g, '');
+  if (stripped.length === 0) return false;
+  // Check known abbreviations
+  if (ABBREVIATIONS.has(stripped)) return true;
+  // All caps (2+ letters) → abbreviation
+  if (stripped.length >= 2 && stripped === stripped.toUpperCase() && /[A-Z]/.test(stripped)) return true;
+  // Mixed case like "iPhone", "JavaScript", "McCoy", "DeepMind"
+  if (/[a-z][A-Z]/.test(stripped) || /^[A-Z][a-z]+[A-Z]/.test(stripped)) return true;
+  // Dotted abbreviations like "U.S.", "e.g.", "i.e."
+  if (/^([A-Za-z]\.){2,}$/.test(word)) return true;
+  return false;
+}
+
+/**
+ * Fix capitalization for the entire output text.
+ * - First letter of each sentence → uppercase
+ * - All other letters → lowercase UNLESS proper noun, abbreviation, or acronym
+ * - Preserves punctuation, numbers, and special characters
+ */
+export function fixCapitalization(text: string): string {
+  if (!text?.trim()) return text;
+
+  // Process paragraph by paragraph to preserve structure
+  return text.split(/(\n\s*\n)/).map(segment => {
+    // Preserve whitespace-only segments (paragraph breaks)
+    if (/^\s*$/.test(segment)) return segment;
+
+    // Split into sentences by period/question/exclamation followed by space+capital or end
+    // We process sentence by sentence
+    return segment.replace(
+      /([^.!?]*[.!?]+)/g,
+      (sentence) => {
+        if (!sentence.trim()) return sentence;
+        return fixSentenceCapitalization(sentence);
+      }
+    );
+  }).join('');
+}
+
+function fixSentenceCapitalization(sentence: string): string {
+  // Find the leading whitespace
+  const leadMatch = sentence.match(/^(\s*)/);
+  const lead = leadMatch ? leadMatch[1] : '';
+  const trimmed = sentence.slice(lead.length);
+  if (!trimmed) return sentence;
+
+  const words = trimmed.split(/(\s+)/); // split keeping spaces
+  let isFirstWord = true;
+
+  const result = words.map((token) => {
+    // Skip whitespace tokens
+    if (/^\s+$/.test(token)) return token;
+
+    // Split off leading/trailing punctuation
+    const puncLeadMatch = token.match(/^([^a-zA-Z0-9]*)/);
+    const puncTrailMatch = token.match(/([^a-zA-Z0-9]*)$/);
+    const puncLead = puncLeadMatch ? puncLeadMatch[1] : '';
+    const puncTrail = puncTrailMatch ? puncTrailMatch[1] : '';
+    const core = token.slice(puncLead.length, token.length - (puncTrail.length || 0));
+
+    if (!core || !/[a-zA-Z]/.test(core)) return token; // numbers, symbols
+
+    // Check if it's a proper noun or abbreviation — always preserve
+    if (isProperOrAbbreviation(core)) {
+      isFirstWord = false;
+      return token; // preserve original casing
+    }
+
+    // Check if it's a single capital letter like "I" — preserve
+    if (core === 'I') {
+      isFirstWord = false;
+      return token;
+    }
+
+    if (isFirstWord) {
+      // First word of sentence → uppercase first letter, rest lowercase
+      isFirstWord = false;
+      const fixed = core[0].toUpperCase() + core.slice(1).toLowerCase();
+      return puncLead + fixed + puncTrail;
+    }
+
+    // Not first word → all lowercase
+    isFirstWord = false;
+    return puncLead + core.toLowerCase() + puncTrail;
+  });
+
+  return lead + result.join('');
 }

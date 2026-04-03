@@ -17,7 +17,7 @@
 import OpenAI from "openai";
 import { sentTokenize } from "./utils";
 import { expandContractions } from "./advanced-transforms";
-import { protectSpecialContent, restoreSpecialContent, protectContentTerms, restoreContentTerms, cleanOutputRepetitions, robustSentenceSplit, placeholdersToLLMFormat, llmFormatToPlaceholders, countSentences, enforceSentenceCountStrict } from "./content-protection";
+import { protectSpecialContent, restoreSpecialContent, protectContentTerms, restoreContentTerms, cleanOutputRepetitions, robustSentenceSplit, placeholdersToLLMFormat, llmFormatToPlaceholders, countSentences, enforceSentenceCountStrict, enforcePerParagraphSentenceCounts, rephraseCitations } from "./content-protection";
 import { semanticSimilaritySync } from "./semantic-guard";
 import { TextSignals } from "./multi-detector";
 import {
@@ -115,7 +115,7 @@ SHORT TEXT — EXTRA RULES (this text is under 300 words, so every sentence matt
 - You MUST include at least 2 very short sentences (4-8 words) to break the rhythm
 - You MUST include at least 1 long complex sentence (30+ words) with subordinate clauses
 - NEVER let the text read as a single uniform block — vary sentence openings aggressively
-- Start at least one sentence with "And" or "But" — real humans do this
+- Do NOT start any sentence with a conjunction like "And", "But", "Or", "So", "Yet"
 - Use comma-based hedging asides naturally (e.g. ", admittedly," or ", to some extent,")
 - Rearrange sentence order within paragraphs for unpredictability
 - Do NOT add any content, sentences, or conclusions not in the original
@@ -171,7 +171,7 @@ ${burstinessRule}
 3. SENTENCE STARTERS — vary them dramatically:
    - Start some sentences with the subject directly ("The economy grew...")
    - Start some with a short clause ("After the reforms took hold, ...")
-   - Start 1-2 with "And" or "But" (like real humans do)
+   - Do NOT start any sentence with a conjunction like And, But, Or, So, Yet
    - Start some with gerunds ("Looking at the data...")
    - NEVER use the same starting word for consecutive sentences
    - NEVER start with: "Furthermore," "Moreover," "Additionally," "However," "Nevertheless," "Consequently," "It is" 
@@ -291,13 +291,16 @@ RULES:
 1. Rewrite ONLY the sentence marked [TARGET]. The [BEFORE] and [AFTER] lines are read-only context.
 2. Return ONLY the rewritten sentence — no labels, no commentary, no quotation marks around it.
 3. OUTPUT EXACTLY ONE SENTENCE. Do NOT split the input into multiple sentences. Do NOT merge with context. One sentence in = one sentence out. NEVER add periods that would create additional sentences.
-4. BANNED WORDS: utilize, facilitate, leverage, comprehensive, multifaceted, paramount, furthermore, moreover, additionally, consequently, subsequently, nevertheless, notwithstanding, aforementioned, paradigm, trajectory, discourse, robust, nuanced, pivotal, intricate, transformative, innovative, groundbreaking, mitigate, streamline, optimize, bolster, catalyze, delve, embark, foster, harness, spearhead, unravel, unveil, tapestry, cornerstone, nexus, myriad, plethora, realm, landscape, methodology, framework, holistic, substantive, salient, ubiquitous, meticulous, profound
-5. BANNED STARTERS: Do NOT start with "Furthermore," "Moreover," "Additionally," "However," "Nevertheless," "Consequently," "It is"
-6. Use everyday words: "use" not "utilize", "help" not "facilitate", "big" not "significant"
+4. BANNED WORDS: utilize, facilitate, leverage, comprehensive, multifaceted, paramount, furthermore, moreover, additionally, consequently, subsequently, nevertheless, notwithstanding, aforementioned, paradigm, trajectory, discourse, robust, nuanced, pivotal, intricate, transformative, innovative, groundbreaking, mitigate, streamline, optimize, bolster, catalyze, delve, embark, foster, harness, spearhead, unravel, unveil, tapestry, cornerstone, nexus, myriad, plethora, realm, landscape, methodology, framework, holistic, substantive, salient, ubiquitous, meticulous, profound, enhance, crucial, vital, essential, significant, implement, navigate, foster, underscore, highlight, interplay, diverse, dynamic, ensure, aspect, notion, endeavor, pertaining, integral
+5. BANNED STARTERS: Do NOT start with "Furthermore," "Moreover," "Additionally," "However," "Nevertheless," "Consequently," "It is," "It's important," "It should be noted," "In today's," "In the realm," "When it comes to"
+6. Use everyday words: "use" not "utilize", "help" not "facilitate", "big" not "significant", "show" not "demonstrate", "part" not "aspect", "idea" not "notion"
 7. CRITICAL: Preserve all placeholder tokens like [[PROT_0]], [[TRM_0]] exactly as-is. Do not remove or modify them.
 8. Keep the same meaning and all factual content, data, citations. Do NOT hallucinate or invent information not present in the original.
 9. Stay within ±20% of the original sentence word count.
-10. Use phrasal verbs where natural: look into, carry out, bring about, figure out, deal with, end up.`;
+10. Use phrasal verbs where natural: look into, carry out, bring about, figure out, deal with, end up.
+11. VARY STRUCTURE: Do NOT always use Subject-Verb-Object order. Sometimes start with a prepositional phrase, a time reference, a dependent clause, or a participial phrase. Write as a real person would — unpredictable structure.
+12. AVOID HEDGING: Do not use "it is important to note", "it is worth mentioning", "one could argue". Make direct statements.
+13. PREFER CONCRETE OVER ABSTRACT: Say "the factory shut down" not "the operation ceased". Say "prices went up" not "costs increased significantly".`;
 }
 
 function buildSentenceUserPrompt(
@@ -390,6 +393,25 @@ const AI_WORD_KILL: Record<string, string[]> = {
   interestingly: ["what stands out is", "curiously"], remarkably: ["surprisingly", "strikingly"],
   evidently: ["clearly", "as it turned out"], henceforth: ["from then on", "after that"],
   catalyst: ["trigger", "spark", "driver"],
+  // Words heavily flagged by Surfer SEO, GPTZero, Originality, Copyleaks, Pangram
+  ensure: ["make sure", "see to it", "guarantee"],
+  aspect: ["part", "side", "piece", "angle"],
+  notion: ["idea", "thought", "concept"],
+  diverse: ["varied", "mixed", "different"],
+  dynamic: ["active", "shifting", "changing"],
+  implement: ["put in place", "carry out", "set up"],
+  pertaining: ["about", "related to", "tied to"],
+  integral: ["key", "central", "core"],
+  interplay: ["give and take", "back and forth", "exchange"],
+  demonstrate: ["show", "prove", "make clear"],
+  addressing: ["handling", "dealing with", "tackling"],
+  highlight: ["point out", "show", "bring up"],
+  ultimately: ["in the end", "finally", "when all was done"],
+  therefore: ["so", "for that reason", "because of this"],
+  however: ["but", "still", "yet", "even so"],
+  particularly: ["especially", "mainly"],
+  respectively: ["in that order", "each"],
+  encompasses: ["includes", "covers", "takes in"],
 };
 
 const AI_PHRASE_KILL: [RegExp, string][] = [
@@ -465,30 +487,9 @@ function killAIVocabulary(text: string): string {
 // Targets: burstiness, sentence_uniformity, readability_consistency, spectral_flatness
 
 function enforceBurstiness(text: string): string {
-  // STRICT SENTENCE-BY-SENTENCE: No splitting allowed.
-  // Only reorder sentences within paragraphs to break uniform length runs.
-  const paragraphs = text.split(/\n\s*\n/);
-
-  return paragraphs.map(para => {
-    const p = para.trim();
-    if (!p) return "";
-
-    const sentences = robustSentenceSplit(p);
-    if (sentences.length < 3) return p;
-
-    const result = [...sentences];
-    // Swap adjacent sentences when 3+ consecutive have similar lengths
-    for (let i = 2; i < result.length; i++) {
-      const l0 = result[i - 2].split(/\s+/).length;
-      const l1 = result[i - 1].split(/\s+/).length;
-      const l2 = result[i].split(/\s+/).length;
-      if (Math.abs(l0 - l1) < 6 && Math.abs(l1 - l2) < 6 && i + 1 < result.length) {
-        [result[i], result[i + 1]] = [result[i + 1], result[i]];
-      }
-    }
-
-    return result.join(" ");
-  }).filter(Boolean).join("\n\n");
+  // Sentence order must be preserved — no reordering allowed.
+  // Burstiness is achieved through per-sentence processing, not swapping.
+  return text;
 }
 
 // ── 2C: STARTER DIVERSIFIER ──
@@ -508,41 +509,31 @@ const NATURAL_REROUTES: string[] = [
   "At its core,", "As things stood,",
   "In real terms,", "With that shift,",
   "Looking at it this way,", "What this meant was",
-  "The upshot:", "And so,",
-  "But then,", "Still,",
+  "The upshot:", "As a result,",
+  "Even so,", "Still,",
 ];
 
 function diversifyStarters(text: string): string {
-  const paragraphs = text.split(/\n\s*\n/);
-
-  return paragraphs.map(para => {
-    const p = para.trim();
-    if (!p) return "";
-
-    const sentences = robustSentenceSplit(p);
-    if (sentences.length === 0) return "";
-
-    // Use shared academic sentence starter cleanup
-    const cleaned = cleanSentenceStarters(sentences);
-    return cleaned.join(" ");
-  }).filter(Boolean).join("\n\n");
+  // Sentence starters are handled per-sentence during individual processing.
+  // No cross-sentence starter injection to preserve independent processing.
+  return text;
 }
 
 // ── 2D: CONNECTOR NATURALIZER ──
 // Targets: ai_pattern_score (connector sub-signal)
 
 const FORMAL_CONNECTORS: Record<string, string[]> = {
-  "Furthermore, ": ["Also, ", "And ", "Plus, "],
-  "Moreover, ": ["On top of that, ", "And ", "Beyond that, "],
-  "Additionally, ": ["Also, ", "And ", "Plus, "],
+  "Furthermore, ": ["Also, ", "In addition, ", "Plus, "],
+  "Moreover, ": ["On top of that, ", "In addition, ", "Beyond that, "],
+  "Additionally, ": ["Also, ", "In addition, ", "Plus, "],
   "Consequently, ": ["So ", "Because of that, ", "That meant "],
-  "Nevertheless, ": ["Still, ", "Even so, ", "But "],
-  "Nonetheless, ": ["Still, ", "Yet ", "But "],
-  "In contrast, ": ["But ", "Then again, ", "On the flip side, "],
+  "Nevertheless, ": ["Still, ", "Even so, ", "All the same, "],
+  "Nonetheless, ": ["Still, ", "Even so, ", "All the same, "],
+  "In contrast, ": ["On the other hand, ", "Then again, ", "On the flip side, "],
   "Subsequently, ": ["After that, ", "Then ", "Later, "],
   "In conclusion, ": ["All in all, ", "When you put it together, ", "Looking at the whole picture, "],
   "Therefore, ": ["So ", "That is why ", "This is why "],
-  "However, ": ["But ", "That said, ", "Still, "],
+  "However, ": ["Still, ", "Even so, ", "All the same, "],
   "Thus, ": ["So ", "That way, ", "This meant "],
   "Hence, ": ["So ", "That is why ", "Because of that, "],
   "Indeed, ": ["In fact, ", "Sure enough, ", "As it turned out, "],
@@ -552,7 +543,7 @@ const FORMAL_CONNECTORS: Record<string, string[]> = {
   "As a result, ": ["So ", "Because of this, ", "That meant "],
   "For example, ": ["Take ", "Like ", "Consider "],
   "For instance, ": ["Take ", "Like ", "Say "],
-  "On the other hand, ": ["Then again, ", "But ", "At the same time, "],
+  "On the other hand, ": ["Then again, ", "At the same time, ", "Conversely, "],
   "In other words, ": ["Put simply, ", "Basically, ", "What that means is "],
 };
 
@@ -1440,8 +1431,117 @@ function postProcessSingleSentence(sent: string, features: InputFeatures, streng
     }
   }
 
+  // 12a. Burstiness injection — break AI-typical sentence length uniformity
+  // Real detectors (GPTZero, Pangram) flag sentences in the 15-25 word "AI sweet spot"
+  {
+    const words = result.split(/\s+/);
+    const wc = words.length;
+    if (wc >= 16 && wc <= 24) {
+      const roll = Math.random();
+      if (roll < 0.25) {
+        // Shorten: remove a non-essential adverb or qualifier
+        const adverbKill = /\b(very|really|quite|rather|somewhat|fairly|extremely|particularly|especially|significantly|substantially|generally|typically|essentially|fundamentally|relatively|primarily|largely|mainly)\s+/i;
+        const before = result;
+        result = result.replace(adverbKill, "");
+        if (result === before) {
+          // Try removing a hedging phrase
+          result = result.replace(/\b(in fact|of course|to some extent|in many ways|for the most part|as a matter of fact),?\s*/i, "");
+        }
+      }
+    }
+  }
+
   // 12b. Second-pass AI word kill — catch any AI words reintroduced by synonym/template steps
   result = applyAIWordKill(result);
+
+  // 12b2. Structural diversity — break SVO monotony that detectors flag
+  // Randomly front prepositional phrases, add inversions, or restructure
+  {
+    const words = result.split(/\s+/);
+    if (words.length >= 10 && Math.random() < 0.20) {
+      // Try to move a prepositional phrase from mid-sentence to front
+      const prepMatch = result.match(/^([A-Z][^,]{8,40}),?\s+(in \w+|at \w+|by \w+|for \w+|from \w+|with \w+|during \w+|before \w+|after \w+|through \w+)\s+(.+)$/i);
+      if (prepMatch) {
+        const prep = prepMatch[2];
+        const mainClause = prepMatch[1] + " " + prepMatch[3];
+        result = prep[0].toUpperCase() + prep.slice(1) + ", " + mainClause[0].toLowerCase() + mainClause.slice(1);
+      }
+    }
+    // Occasionally add a sentence-initial time/manner adverb for variety
+    if (words.length >= 8 && Math.random() < 0.08) {
+      const fronters = ["Back then, ", "At the time, ", "By that point, ", "In those days, ",
+        "Looking back, ", "As it turned out, ", "Sure enough, ", "Oddly, "];
+      const fronter = fronters[Math.floor(Math.random() * fronters.length)];
+      result = fronter + result[0].toLowerCase() + result.slice(1);
+    }
+  }
+
+  // 12c. Per-sentence anti-detection — score this sentence against the same 9 micro-signals
+  // the detector uses and apply targeted fixes to push it below detection threshold
+  {
+    const antiDetected = perSentenceAntiDetection([result], features.hasContractions);
+    if (antiDetected.length > 0 && antiDetected[0].trim()) {
+      result = antiDetected[0];
+    }
+  }
+
+  // 12d. Deep cleaning — eliminate residual AI structural patterns
+  {
+    const deepCleaned = deepCleaningPass([result]);
+    if (deepCleaned.length > 0 && deepCleaned[0].trim()) {
+      result = deepCleaned[0];
+    }
+  }
+
+  // 12e. Pre-1990 naturalness — replace modern collocations with older phrasing
+  result = result.replace(/\bin terms of\b/gi, "regarding");
+  result = result.replace(/\bat the end of the day\b/gi, "when all is said and done");
+  result = result.replace(/\bmoving forward\b/gi, "from here on");
+  result = result.replace(/\bgame[- ]changer\b/gi, "turning point");
+  result = result.replace(/\bimpact(?:s|ed|ing)? on\b/gi, (m) => m.replace(/impact/i, "effect"));
+  result = result.replace(/\bfocus(?:es|ed|ing)? on\b/gi, (m) => m.replace(/focus/i, "center"));
+  result = result.replace(/\bdriven by\b/gi, "caused by");
+  result = result.replace(/\bengage(?:s|d|ment)? with\b/gi, (m) => m.replace(/engage/i, "deal"));
+  result = result.replace(/\baddress(?:es|ed|ing)?\b(?!\s+(?:book|number|line|bar))/gi, (m) => m.replace(/address/i, "handle"));
+  result = result.replace(/\bgoing forward\b/gi, "from now on");
+  result = result.replace(/\bkey factor\b/gi, "main cause");
+  result = result.replace(/\bplayed a role\b/gi, "mattered");
+  result = result.replace(/\bplays a role\b/gi, "matters");
+  result = result.replace(/\bdue to\b/gi, "because of");
+  result = result.replace(/\bas well as\b/gi, "and");
+
+  // 12f. N-gram pattern breaking — Pangram and Copyleaks use n-gram frequency analysis
+  // These are the most common AI bigram/trigram patterns that flag text as AI-generated
+  result = result.replace(/\bplays a crucial role\b/gi, "matters a great deal");
+  result = result.replace(/\bplay a crucial role\b/gi, "matter a great deal");
+  result = result.replace(/\bplays an important role\b/gi, "carries real weight");
+  result = result.replace(/\bit is worth noting\b/gi, "note that");
+  result = result.replace(/\bit is important to\b/gi, "one must");
+  result = result.replace(/\bit is essential to\b/gi, "one must");
+  result = result.replace(/\bin order to\b/gi, "to");
+  result = result.replace(/\bthe ability to\b/gi, "a way to");
+  result = result.replace(/\ba wide range of\b/gi, "many");
+  result = result.replace(/\ba wide variety of\b/gi, "many kinds of");
+  result = result.replace(/\bon the other hand\b/gi, "then again");
+  result = result.replace(/\bin this context\b/gi, "here");
+  result = result.replace(/\bin this regard\b/gi, "in that respect");
+  result = result.replace(/\bin the context of\b/gi, "within");
+  result = result.replace(/\bwith regard to\b/gi, "about");
+  result = result.replace(/\bwith respect to\b/gi, "about");
+  result = result.replace(/\bin the case of\b/gi, "for");
+  result = result.replace(/\bserves as a\b/gi, "works as a");
+  result = result.replace(/\baims to\b/gi, "tries to");
+  result = result.replace(/\bseeks to\b/gi, "tries to");
+  result = result.replace(/\bhas the potential to\b/gi, "could");
+  result = result.replace(/\bthe fact that\b/gi, "that");
+  result = result.replace(/\bby means of\b/gi, "through");
+  result = result.replace(/\bin light of\b/gi, "given");
+  result = result.replace(/\btake into account\b/gi, "consider");
+  result = result.replace(/\btaken into account\b/gi, "considered");
+  result = result.replace(/\bgive rise to\b/gi, "cause");
+  result = result.replace(/\bas a result of\b/gi, "from");
+  result = result.replace(/\bas a consequence of\b/gi, "from");
+  result = result.replace(/\bon the basis of\b/gi, "based on");
 
   // 13. Constraint enforcement per sentence
   if (!features.hasContractions) {
@@ -1573,11 +1673,9 @@ function sentenceIndependentPostProcess(text: string, features: InputFeatures, s
       return postProcessSingleSentence(trimmed, features, strength);
     }).filter(Boolean);
 
-    // Remove fragment sentences (under 4 real words) that result from phrase stripping
-    const cleaned = processed.filter(sent => {
-      const words = sent.replace(/[^a-zA-Z\s]/g, "").trim().split(/\s+/).filter(w => w.length > 0);
-      return words.length >= 4;
-    });
+    // Fragment removal DISABLED — would alter sentence count (1-in=1-out)
+    // Sentences must be preserved regardless of length
+    const cleaned = processed;
 
     return (cleaned.length > 0 ? cleaned : processed).join(" ");
   }).filter(Boolean).join("\n\n");
@@ -1826,7 +1924,13 @@ async function processChunk(
 
   // Single deep post-processing pass (speed: removed extra rounds)
   result = sentenceIndependentPostProcess(result, features, strength);
-  console.log(`  [GhostPro]   Post-processing: 1 round at strength=${strength}`);
+  console.log(`  [GhostPro]   Post-processing: round 1 at strength=${strength}`);
+
+  // Second post-processing round for stronger cleanup on medium/strong
+  if (strength === "medium" || strength === "strong") {
+    result = sentenceIndependentPostProcess(result, features, strength);
+    console.log(`  [GhostPro]   Post-processing: round 2 at strength=${strength}`);
+  }
 
   // De-repeat n-grams across full text after post-processing
   result = deRepeatNgrams(result);
@@ -1834,9 +1938,52 @@ async function processChunk(
   // Light global polish (punctuation artifact cleanup only)
   result = finalPolish(result);
 
-  // PASS 3: REMOVED — signal-aware refinement was calling NO-OP functions
-  // (enforceBurstiness, diversifyStarters, forceExtremeVariation, breakSentenceUniformity
-  //  all return text unchanged). Removing saves 1-2 full text scans + analyzeSignals calls.
+  // ═══════════════════════════════════════════
+  // PASS 3: DETECTOR FEEDBACK LOOP
+  // Analyze with detector, apply per-sentence anti-detection + deep cleaning
+  // until scores drop or we hit the iteration cap.
+  // ═══════════════════════════════════════════
+  const maxFeedbackPasses = strength === "strong" ? 4 : strength === "medium" ? 3 : 2;
+  const targetAiScore = strength === "strong" ? 15 : strength === "medium" ? 25 : 35;
+
+  for (let fbPass = 0; fbPass < maxFeedbackPasses; fbPass++) {
+    const fbSignals = analyzeSignals(result);
+    const fbAiScore = fbSignals.ai_pattern_score ?? 50;
+    const fbUniformity = fbSignals.sentence_uniformity ?? 50;
+    const fbPerSentAI = fbSignals.per_sentence_ai_ratio ?? 50;
+
+    // Check multiple signals — real detectors weight all of these
+    const needsFix = fbAiScore > targetAiScore ||
+      fbUniformity > (targetAiScore + 15) ||
+      fbPerSentAI > (targetAiScore + 10);
+
+    if (!needsFix) {
+      console.log(`  [GhostPro]   Pass 3: Signals OK (ai=${fbAiScore.toFixed(1)}, uniform=${fbUniformity.toFixed(1)}, perSentAI=${fbPerSentAI.toFixed(1)}) after ${fbPass} feedback passes`);
+      break;
+    }
+    console.log(`  [GhostPro]   Pass 3 feedback ${fbPass + 1}/${maxFeedbackPasses}: ai=${fbAiScore.toFixed(1)}, uniform=${fbUniformity.toFixed(1)}, perSentAI=${fbPerSentAI.toFixed(1)} — applying fixes...`);
+
+    // Per-sentence anti-detection: scores each sentence and applies targeted fixes
+    const fbParas = result.split(/\n\s*\n/).filter(p => p.trim());
+    result = fbParas.map(para => {
+      const sents = robustSentenceSplit(para.trim());
+      if (sents.length === 0) return para;
+      const fixed = perSentenceAntiDetection(sents, features.hasContractions);
+      return fixed.join(" ");
+    }).join("\n\n");
+
+    // Deep cleaning pass: removes residual AI patterns at word/phrase level
+    const dcParas = result.split(/\n\s*\n/).filter(p => p.trim());
+    result = dcParas.map(para => {
+      const sents = robustSentenceSplit(para.trim());
+      if (sents.length === 0) return para;
+      const cleaned = deepCleaningPass(sents);
+      return cleaned.join(" ");
+    }).join("\n\n");
+
+    // Re-polish after fixes
+    result = finalPolish(result);
+  }
 
   // Final constraint pass
   if (!features.hasContractions) result = removeContractions(result);
@@ -1901,14 +2048,21 @@ export async function ghostProHumanize(
   console.log(`  [GhostPro] Input: ${features.wordCount} words, ${features.paragraphCount} paras`);
   console.log(`  [GhostPro] Features: contractions=${features.hasContractions}, firstPerson=${features.hasFirstPerson}, rhetoricalQs=${features.hasRhetoricalQuestions}`);
 
+  // Rephrase ~30% of end-of-sentence citations for natural variation
+  const citationText = rephraseCitations(original);
+
   // Protect special content
-  const { text: protectedText0, map: protectionMap } = protectSpecialContent(original);
+  const { text: protectedText0, map: protectionMap } = protectSpecialContent(citationText);
 
   // Protect content terms (proper nouns, domain phrases) from synonym swaps
   const { text: protectedText, map: termMap } = protectContentTerms(protectedText0);
 
   // Capture input paragraph count for enforcement at end
-  const inputParagraphCount = original.split(/\n\s*\n/).filter(p => p.trim()).length;
+  const inputParas = original.split(/\n\s*\n/).filter(p => p.trim());
+  const inputParagraphCount = inputParas.length;
+
+  // Capture per-paragraph sentence counts for strict 1:1 enforcement
+  const inputSentenceCountsPerPara = inputParas.map(p => robustSentenceSplit(p.trim()).length);
 
   // Capture input sentence count for strict enforcement (input = output)
   const inputSentenceCount = countSentences(protectedText);
@@ -1956,9 +2110,9 @@ export async function ghostProHumanize(
 
   // Merge/split DISABLED — strict sentence count enforcement: input = output
 
-  // ── Strict sentence count enforcement ──
-  result = enforceSentenceCountStrict(result, inputSentenceCount);
-  console.log(`  [GhostPro] Sentence enforcement: target=${inputSentenceCount}, actual=${countSentences(result)}`);
+  // ── Strict sentence count enforcement ── DISABLED: 1-in=1-out enforced per-sentence
+  // result = enforceSentenceCountStrict(result, inputSentenceCount);
+  console.log(`  [GhostPro] Sentence count: target=${inputSentenceCount}, actual=${countSentences(result)}`);
 
   // ── Restore protected content terms ──
   result = restoreContentTerms(result.trim(), termMap);
@@ -1970,8 +2124,20 @@ export async function ghostProHumanize(
   result = enforceParagraphCount(result, inputParagraphCount);
   console.log(`  [GhostPro] Paragraph enforcement: target=${inputParagraphCount}, actual=${result.split(/\n\s*\n/).filter(p => p.trim()).length}`);
 
-  // ── Final repetition cleanup — remove duplicate clauses, near-dupe sentences, inject phrasal verbs ──
-  result = cleanOutputRepetitions(result);
+  // ── Final repetition cleanup — DISABLED: would alter sentence count ──
+  // result = cleanOutputRepetitions(result);
+
+  // ── STRICT 1:1 per-paragraph sentence count enforcement ──
+  result = enforcePerParagraphSentenceCounts(result, inputSentenceCountsPerPara, "GhostPro");
+
+  // ── Clean bad sentence starters (And, By, But, etc.) per paragraph ──
+  {
+    const paras = result.split(/\n\s*\n/).filter(p => p.trim());
+    result = paras.map(p => {
+      const sents = robustSentenceSplit(p.trim());
+      return cleanSentenceStarters(sents).join(" ");
+    }).join("\n\n");
+  }
 
   // ── Final diagnostic ──
   const outputWordCount = result.split(/\s+/).length;
@@ -2001,6 +2167,9 @@ export async function ghostProHumanize(
       console.warn(`  [GhostPro] Missing keywords: ${verification.missingKeywords.join(", ")}`);
     }
   }
+
+  // Strip unicode replacement characters (U+FFFD)
+  result = result.replace(/\ufffd/g, "");
 
   return result;
 }

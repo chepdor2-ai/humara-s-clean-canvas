@@ -67,7 +67,7 @@ function getClient(): OpenAI {
   return _client;
 }
 
-function llmCall(system: string, user: string, temperature: number): Promise<string> {
+function llmCall(system: string, user: string, temperature: number, maxTokens = 4096): Promise<string> {
   const client = getClient();
   return client.chat.completions.create({
     model: LLM_MODEL,
@@ -76,7 +76,7 @@ function llmCall(system: string, user: string, temperature: number): Promise<str
       { role: "user", content: user },
     ],
     temperature,
-    max_tokens: 4096,
+    max_tokens: maxTokens,
   }).then((r: any) => r.choices[0]?.message?.content?.trim() ?? "");
 }
 
@@ -654,20 +654,7 @@ function humanizePunctuation(text: string, features: InputFeatures): string {
       // Em-dash injection DISABLED — produces unnatural patterns
       // Original code converted comma-separated asides to em-dash format
 
-      // Re-enabled as comma-based hedging (no brackets)
-      if (parenBudget > 0 && words.length > 18 && Math.random() < 0.3) {
-        const asides = [
-          ", at least in theory,", ", which few expected,", ", to some degree,",
-          ", or so it seemed,", ", not without pushback,", ", though not everyone agreed,",
-        ];
-        const mid = Math.floor(sent.length / 2);
-        const nearComma = sent.indexOf(", ", Math.max(mid - 20, 0));
-        if (nearComma > 0 && nearComma < sent.length - 15) {
-          const aside = asides[Math.floor(Math.random() * asides.length)];
-          sent = sent.slice(0, nearComma) + aside + " " + sent.slice(nearComma + 2);
-          parenBudget--;
-        }
-      }
+      // Comma-based hedging DISABLED — produces unnatural phrases that detectors flag
 
       processed.push(sent);
     }

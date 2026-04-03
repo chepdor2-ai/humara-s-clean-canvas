@@ -4,6 +4,7 @@ import { ghostProHumanize } from '@/lib/engine/ghost-pro';
 import { llmHumanize } from '@/lib/engine/llm-humanizer';
 import { getDetector } from '@/lib/engine/multi-detector';
 import { isMeaningPreserved } from '@/lib/engine/semantic-guard';
+import { fixCapitalization } from '@/lib/engine/shared-dictionaries';
 
 export const maxDuration = 120; // LLM engines need more time
 
@@ -26,7 +27,26 @@ export async function POST(req: Request) {
 
     let humanized: string;
 
-    if (engine === 'ninja') {
+    if (engine === 'undetectable') {
+      // Undetectable: Ninja (Stealth) first, then Ghost Mini (Fast) for double pass
+      const stealthPass = await llmHumanize(
+        text,
+        strength ?? 'medium',
+        true,
+        strict_meaning ?? true,
+        tone ?? 'academic',
+        no_contractions !== false,
+        enable_post_processing !== false,
+      );
+      humanized = humanize(stealthPass, {
+        mode: 'ghost_mini',
+        strength: strength ?? 'medium',
+        tone: tone ?? 'neutral',
+        strictMeaning: strict_meaning ?? false,
+        enablePostProcessing: enable_post_processing !== false,
+        stealth: true,
+      });
+    } else if (engine === 'ninja') {
       // Ninja: 3 LLM phases + rule-based + post-processing + detector feedback loop
       humanized = await llmHumanize(
         text,
@@ -38,12 +58,21 @@ export async function POST(req: Request) {
         enable_post_processing !== false,
       );
     } else if (engine === 'ghost_pro') {
-      // Ghost Pro: Deep LLM rewrite + signal-aware post-processing
-      humanized = await ghostProHumanize(text, {
+      // Ghost Pro: Deep LLM rewrite + signal-aware post-processing + Ghost Mini statistical finishing pass
+      const ghostProOutput = await ghostProHumanize(text, {
         strength: strength ?? 'medium',
         tone: tone ?? 'neutral',
         strictMeaning: strict_meaning ?? false,
         enablePostProcessing: enable_post_processing !== false,
+      });
+      // Run through Ghost Mini's detector-guided statistical pipeline as a finishing pass
+      humanized = humanize(ghostProOutput, {
+        mode: 'ghost_pro',
+        strength: strength ?? 'medium',
+        tone: tone ?? 'neutral',
+        strictMeaning: strict_meaning ?? false,
+        enablePostProcessing: enable_post_processing !== false,
+        stealth: true,
       });
     } else {
       // Ghost Mini: Statistical-only pipeline (no LLM)
@@ -56,6 +85,9 @@ export async function POST(req: Request) {
         stealth: true,
       });
     }
+
+    // Post-capitalization formatting — fix sentence casing for all engine outputs
+    humanized = fixCapitalization(humanized);
 
     // Detect output scores
     const outputAnalysis = detector.analyze(humanized);

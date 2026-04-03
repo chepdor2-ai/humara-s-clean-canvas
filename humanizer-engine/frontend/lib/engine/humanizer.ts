@@ -47,7 +47,8 @@ interface InputFeatures {
 
 function detectInputFeatures(text: string): InputFeatures {
   // Detect contractions: don't, can't, it's, they're, etc.
-  const hasContractions = /\b\w+'(?:t|s|re|ve|ll|d|m)\b/i.test(text);
+  // Uses explicit list to avoid false positives from possessives (e.g., "company's", "John's")
+  const hasContractions = /\b(?:can't|won't|don't|doesn't|didn't|isn't|aren't|wasn't|weren't|hasn't|haven't|hadn't|wouldn't|shouldn't|couldn't|mustn't|ain't|it's|that's|there's|here's|he's|she's|who's|what's|how's|where's|when's|why's|one's|let's|they're|we're|you're|I'm|they've|we've|you've|I've|they'll|we'll|you'll|I'll|he'll|she'll|it'll|they'd|we'd|you'd|he'd|she'd|I'd|who'd)\b/i.test(text);
 
   // Detect first-person pronouns (I, me, my, mine, myself, we, us, our, ours, ourselves)
   const hasFirstPerson = /\b(?:I|me|my|mine|myself|we|us|our|ours|ourselves)\b/.test(text);

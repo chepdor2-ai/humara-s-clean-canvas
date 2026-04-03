@@ -1,22 +1,23 @@
 ﻿'use client';
 import Link from 'next/link';
+import Image from 'next/image';
 import { usePathname } from 'next/navigation';
-import { LayoutDashboard, Edit3, FileText, BrainCircuit, Settings, LogOut, Menu, X, ArrowRight, ShieldCheck } from 'lucide-react';
+import { LayoutDashboard, Edit3, FileText, BrainCircuit, Settings, LogOut, Menu, X, ArrowRight, ShieldCheck, Sun, Moon } from 'lucide-react';
 import { useState, useEffect } from 'react';
+import { useTheme } from './ThemeProvider';
 
 const Logo = () => (
-  <div className="flex items-center space-x-2.5">
-      <div className="w-8 h-8 bg-brand-600 rounded-lg flex items-center justify-center">
-        <span className="text-white font-bold text-sm">H</span>
-      </div>
-      <Link href="/" className="text-xl font-semibold text-slate-900 tracking-tight">Humara</Link>
-  </div>
+  <Link href="/" className="flex items-center space-x-2.5">
+      <Image src="/logo.png" alt="Humara" width={32} height={32} className="w-8 h-8" />
+      <span className="text-xl font-semibold text-slate-900 dark:text-white tracking-tight">Humara</span>
+  </Link>
 );
 
 const APP_ROUTES = ['/app'];
 
 export default function RootLayoutClient({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const { theme, toggle: toggleTheme } = useTheme();
   const isAppRoute = APP_ROUTES.some((route) => pathname === route || pathname.startsWith(route + '/'));
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
@@ -29,7 +30,7 @@ export default function RootLayoutClient({ children }: { children: React.ReactNo
 
   const appLinks = [
     { name: 'Dashboard', href: '/app/dashboard', icon: LayoutDashboard },
-    { name: 'Editor', href: '/app', icon: Edit3 },
+    { name: 'Humanizer', href: '/app', icon: Edit3 },
     { name: 'Documents', href: '/app/docs', icon: FileText },
     { name: 'AI Detector', href: '/app/detector', icon: ShieldCheck },
     { name: 'Style Profiles', href: '/app/style', icon: BrainCircuit },
@@ -39,37 +40,44 @@ export default function RootLayoutClient({ children }: { children: React.ReactNo
   if (!isAppRoute) {
     return (
       <div className="min-h-screen flex flex-col bg-white">
-        <header className={`fixed w-full z-50 transition-all duration-300 ${scrolled ? 'glass-nav shadow-sm' : 'bg-white/80 backdrop-blur-sm border-b border-slate-100'}`}>
+        <header className={`fixed w-full z-50 transition-all duration-300 ${scrolled ? 'glass-nav shadow-sm' : 'bg-white/80 dark:bg-slate-950/80 backdrop-blur-sm border-b border-slate-100 dark:border-slate-800'}`}>
           <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="flex justify-between items-center h-16">
               <Logo />
 
               <nav className="hidden md:flex items-center space-x-8">
-                <Link href="/how-it-works" className="text-sm text-slate-600 hover:text-slate-900 font-medium transition-colors">How it Works</Link>
-                <Link href="/pricing" className="text-sm text-slate-600 hover:text-slate-900 font-medium transition-colors">Pricing</Link>
-                <Link href="/about" className="text-sm text-slate-600 hover:text-slate-900 font-medium transition-colors">About</Link>
-                <Link href="/detector" className="text-sm text-slate-600 hover:text-slate-900 font-medium transition-colors">AI Detector</Link>
+                <Link href="/how-it-works" className="text-sm text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white font-medium transition-colors">How it Works</Link>
+                <Link href="/pricing" className="text-sm text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white font-medium transition-colors">Pricing</Link>
+                <Link href="/about" className="text-sm text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white font-medium transition-colors">About</Link>
+                <Link href="/detector" className="text-sm text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white font-medium transition-colors">AI Detector</Link>
               </nav>
 
               <div className="hidden md:flex items-center space-x-3">
-                <Link href="/login" className="text-sm text-slate-600 hover:text-slate-900 font-medium transition-colors px-4 py-2">Log In</Link>
+                <button onClick={toggleTheme} className="p-2 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors" title="Toggle theme">
+                  {theme === 'dark' ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+                </button>
+                <Link href="/login" className="text-sm text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white font-medium transition-colors px-4 py-2">Log In</Link>
                 <Link href="/signup" className="bg-brand-600 hover:bg-brand-700 text-white px-5 py-2 rounded-lg text-sm font-medium transition-colors">Get Started</Link>
               </div>
 
-              <button className="md:hidden p-2 text-slate-700 hover:text-slate-900" onClick={() => setMobileMenuOpen(!mobileMenuOpen)}>
+              <button className="md:hidden p-2 text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white" onClick={() => setMobileMenuOpen(!mobileMenuOpen)}>
                 {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
               </button>
             </div>
           </div>
 
           {mobileMenuOpen && (
-            <div className="md:hidden bg-white border-b border-slate-100 px-6 py-6 flex flex-col gap-4 absolute top-full left-0 w-full shadow-lg">
-              <Link href="/how-it-works" onClick={() => setMobileMenuOpen(false)} className="text-sm font-medium text-slate-700 py-1">How it Works</Link>
-              <Link href="/pricing" onClick={() => setMobileMenuOpen(false)} className="text-sm font-medium text-slate-700 py-1">Pricing</Link>
-              <Link href="/about" onClick={() => setMobileMenuOpen(false)} className="text-sm font-medium text-slate-700 py-1">About</Link>
-              <Link href="/detector" onClick={() => setMobileMenuOpen(false)} className="text-sm font-medium text-slate-700 py-1">AI Detector</Link>
-              <div className="h-px bg-slate-100 my-1"></div>
-              <Link href="/login" onClick={() => setMobileMenuOpen(false)} className="text-sm font-medium text-slate-700 py-1">Log In</Link>
+            <div className="md:hidden bg-white dark:bg-slate-900 border-b border-slate-100 dark:border-slate-800 px-6 py-6 flex flex-col gap-4 absolute top-full left-0 w-full shadow-lg">
+              <Link href="/how-it-works" onClick={() => setMobileMenuOpen(false)} className="text-sm font-medium text-slate-700 dark:text-slate-200 py-1">How it Works</Link>
+              <Link href="/pricing" onClick={() => setMobileMenuOpen(false)} className="text-sm font-medium text-slate-700 dark:text-slate-200 py-1">Pricing</Link>
+              <Link href="/about" onClick={() => setMobileMenuOpen(false)} className="text-sm font-medium text-slate-700 dark:text-slate-200 py-1">About</Link>
+              <Link href="/detector" onClick={() => setMobileMenuOpen(false)} className="text-sm font-medium text-slate-700 dark:text-slate-200 py-1">AI Detector</Link>
+              <div className="h-px bg-slate-100 dark:bg-slate-800 my-1"></div>
+              <button onClick={() => { toggleTheme(); setMobileMenuOpen(false); }} className="text-sm font-medium text-slate-700 dark:text-slate-200 py-1 text-left flex items-center gap-2">
+                {theme === 'dark' ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+                {theme === 'dark' ? 'Light Mode' : 'Dark Mode'}
+              </button>
+              <Link href="/login" onClick={() => setMobileMenuOpen(false)} className="text-sm font-medium text-slate-700 dark:text-slate-200 py-1">Log In</Link>
               <Link href="/signup" onClick={() => setMobileMenuOpen(false)} className="text-sm font-medium text-brand-600 py-1">Get Started</Link>
             </div>
           )}
@@ -79,7 +87,7 @@ export default function RootLayoutClient({ children }: { children: React.ReactNo
           {children}
         </main>
 
-        <footer className="bg-slate-50 border-t border-slate-200 pt-12 pb-8">
+        <footer className="bg-slate-50 dark:bg-slate-950 border-t border-slate-200 dark:border-slate-800 pt-12 pb-8">
           <div className="max-w-6xl mx-auto px-6">
             <div className="grid grid-cols-1 md:grid-cols-12 gap-10 mb-12">
               <div className="md:col-span-4">
@@ -91,7 +99,7 @@ export default function RootLayoutClient({ children }: { children: React.ReactNo
               <div className="md:col-span-2 md:col-start-7">
                 <h4 className="text-xs font-semibold text-slate-900 uppercase tracking-wider mb-3">Product</h4>
                 <ul className="space-y-2 text-sm text-slate-500">
-                  <li><Link href="/app" className="hover:text-slate-900 transition-colors">Editor</Link></li>
+                  <li><Link href="/app" className="hover:text-slate-900 transition-colors">Humanizer</Link></li>
                   <li><Link href="/how-it-works" className="hover:text-slate-900 transition-colors">How it Works</Link></li>
                   <li><Link href="/pricing" className="hover:text-slate-900 transition-colors">Pricing</Link></li>
                 </ul>
@@ -123,8 +131,8 @@ export default function RootLayoutClient({ children }: { children: React.ReactNo
   }
 
   return (
-    <div className="flex h-screen bg-slate-50 overflow-hidden">
-      <aside className="w-60 bg-white border-r border-slate-200 flex flex-col py-5 shrink-0">
+    <div className="flex h-screen bg-slate-50 dark:bg-slate-950 overflow-hidden">
+      <aside className="w-60 bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 flex flex-col py-5 shrink-0">
         <div className="px-5 mb-6">
           <Logo />
         </div>
@@ -138,8 +146,8 @@ export default function RootLayoutClient({ children }: { children: React.ReactNo
                 href={link.href}
                 className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
                   isActive
-                    ? 'bg-brand-50 text-brand-700'
-                    : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+                    ? 'bg-brand-50 dark:bg-brand-950 text-brand-700 dark:text-brand-300'
+                    : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
                 }`}
               >
                 <Icon className={`w-[18px] h-[18px] ${isActive ? 'text-brand-600' : ''}`} />
@@ -148,18 +156,22 @@ export default function RootLayoutClient({ children }: { children: React.ReactNo
             );
           })}
         </nav>
-        <div className="px-3 pt-4 mt-4 border-t border-slate-100 space-y-0.5">
-          <Link href="/" className="flex items-center justify-between px-3 py-2.5 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors group">
+        <div className="px-3 pt-4 mt-4 border-t border-slate-100 dark:border-slate-800 space-y-0.5">
+          <button onClick={toggleTheme} className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white w-full transition-colors">
+            {theme === 'dark' ? <Sun className="w-[18px] h-[18px]" /> : <Moon className="w-[18px] h-[18px]" />}
+            {theme === 'dark' ? 'Light Mode' : 'Dark Mode'}
+          </button>
+          <Link href="/" className="flex items-center justify-between px-3 py-2.5 rounded-lg text-sm font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white transition-colors group">
             Back to Home <ArrowRight className="w-4 h-4 opacity-0 group-hover:opacity-100 group-hover:translate-x-0.5 transition-all" />
           </Link>
-          <button className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-slate-600 hover:bg-red-50 hover:text-red-600 w-full transition-colors">
+          <button className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-slate-600 dark:text-slate-400 hover:bg-red-50 dark:hover:bg-red-950 hover:text-red-600 w-full transition-colors">
             <LogOut className="w-[18px] h-[18px]" />
             Sign Out
           </button>
         </div>
       </aside>
 
-      <main className="flex-1 overflow-y-auto bg-slate-50">
+      <main className="flex-1 overflow-y-auto bg-slate-50 dark:bg-slate-950">
         <div className="max-w-7xl mx-auto p-6">
           {children}
         </div>
