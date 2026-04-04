@@ -28,6 +28,15 @@ const DOMAIN_TERMS: string[] = [
   "interest rate", "exchange rate", "balance of payments", "current account",
   "world health organization", "united nations", "world bank", "international monetary fund",
   "european union", "african union", "association of southeast asian nations",
+  // ── Statistics & Hypothesis Testing ──
+  "null hypothesis", "alternative hypothesis", "hypothesis testing", "significance level",
+  "type i error", "type ii error", "effect size", "statistical power",
+  "degrees of freedom", "chi-square", "p-value", "t-test", "z-score", "f-test",
+  "independent variable", "dependent variable", "control group", "experimental group",
+  "unexcused absences", "truancy intervention", "truancy prevention",
+  "parental involvement", "family involvement", "student attendance",
+  "research question", "empirical evidence", "statistical evidence",
+  "predetermined significance", "statistical test", "statistical analysis",
 ];
 
 const ALWAYS_PROTECT = new Set([
@@ -103,12 +112,32 @@ export function analyze(text: string): TextContext {
       domainBigrams.add(term);
       // Protect multi-word domain terms
       protectedTerms.add(term);
+      // Also protect individual words of multi-word terms
+      for (const w of term.split(/\s+/)) {
+        if (w.length >= 3) protectedTerms.add(w);
+      }
+    }
+  }
+
+  // Protect topic keywords that appear in the text
+  for (const [topic, keywords] of Object.entries(TOPIC_KEYWORDS)) {
+    if (topicScores[topic] && topicScores[topic] >= 2) {
+      for (const kw of keywords) {
+        if (lower.includes(kw)) protectedTerms.add(kw);
+      }
     }
   }
 
   // Frequency-based protection (words appearing 3+ times)
   for (const [w, count] of wordFreq) {
     if (count >= 3 && w.length > 4) {
+      protectedTerms.add(w);
+    }
+  }
+
+  // Protect words appearing 2+ times that are 6+ chars (likely domain-specific)
+  for (const [w, count] of wordFreq) {
+    if (count >= 2 && w.length >= 6) {
       protectedTerms.add(w);
     }
   }

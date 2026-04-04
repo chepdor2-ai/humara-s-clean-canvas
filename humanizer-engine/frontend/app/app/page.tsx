@@ -14,6 +14,7 @@ interface HumanizeResponse {
   engine_used: string; meaning_preserved: boolean; meaning_similarity: number;
   input_detector_results: { overall: number; detectors: DetectorScore[] };
   output_detector_results: { overall: number; detectors: DetectorScore[] };
+  sentence_alternatives?: Record<string, { text: string; score: number }[]>;
   error?: string;
 }
 interface SynonymOption { word: string; isOriginal: boolean; }
@@ -135,12 +136,12 @@ const splitSentences = (text: string): { text: string; start: number; end: numbe
 
 /* ── Constants ──────────────────────────────────────────────────────────── */
 const ENGINES = [
-  { id: 'fast_v11', label: 'Humara 0', premium: true },
-  { id: 'humara', label: 'Humara v.1.1', premium: true },
-  { id: 'ghost_mini', label: 'Fast', premium: false },
-  { id: 'ghost_pro', label: 'Standard', premium: false },
-  { id: 'ninja', label: 'Stealth', premium: false },
-  { id: 'undetectable', label: 'Undetectable', premium: false },
+  { id: 'fast_v11', label: 'Humara 0', premium: true, desc: '15-phase pipeline: cleans, detects AI sentences, rewrites them with rules + optional LLM, injects rare vocabulary, restructures syntax, applies pre-2000 voice, breaks n-gram patterns, then runs deep AI-term kill, rhythm variance, aggressive post-processing, phrasal verb injection, and a final scorched-earth AI word sweep. Every sentence is processed individually — no merging or splitting.' },
+  { id: 'humara', label: 'Humara v.1.1', premium: true, desc: 'Dual-path engine: runs two independent humanization passes (v5 algorithmic + v2 backup), generates multiple candidates per sentence, scores each for naturalness and meaning preservation, picks the best, then applies the shared humanization layer (phrasal verbs, pre-1990 voice, AI-term kill, contraction expansion). Headings and short lines are preserved untouched.' },
+  { id: 'ghost_mini', label: 'Fast', premium: false, desc: 'Lightweight single-pass rewrite. Quick synonym swaps and basic restructuring. Best for short texts where speed matters more than depth.' },
+  { id: 'ghost_pro', label: 'Standard', premium: false, desc: 'Balanced rewrite engine with synonym replacement, sentence restructuring, and AI pattern removal. Good all-round choice for most texts.' },
+  { id: 'ninja', label: 'Stealth', premium: false, desc: 'Aggressive rewriting focused on beating AI detectors. Heavier synonym swaps, structural changes, and pattern-breaking at the cost of some meaning drift.' },
+  { id: 'undetectable', label: 'Undetectable', premium: false, desc: 'Maximum stealth mode. Deep multi-pass rewriting designed to push AI detection scores as low as possible.' },
 ];
 const STRENGTHS = [
   { id: 'light', label: 'Light' },
@@ -186,6 +187,7 @@ export default function EditorPage() {
   const [loadingPopup, setLoadingPopup] = useState(false);
   const [rehumanizing, setRehumanizing] = useState(false);
   const [iterationCount, setIterationCount] = useState(0);
+  const [preGeneratedAlts, setPreGeneratedAlts] = useState<Record<string, SentenceAlternative[]>>({});
 
   // Temporary history (auto-expires)
   const [history, setHistory] = useState<HistoryEntry[]>([]);
@@ -289,7 +291,7 @@ export default function EditorPage() {
   const handleHumanize = async () => {
     if (!text.trim()) return;
     if (inputWords < 10) { setError('Please enter at least 10 words.'); return; }
-    setLoading(true); setError(''); setResult(''); setOutputDetection(null); setMeaningScore(null); setIterationCount(0);
+    setLoading(true); setError(''); setResult(''); setOutputDetection(null); setMeaningScore(null); setIterationCount(0); setPreGeneratedAlts({});
     try {
       const res = await fetch('/api/humanize', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -299,6 +301,10 @@ export default function EditorPage() {
       if (!res.ok || data.error) throw new Error(data.error || 'Humanization failed');
       let currentResult = data.humanized;
       setResult(currentResult);
+      // Store pre-generated sentence alternatives
+      if (data.sentence_alternatives) {
+        setPreGeneratedAlts(data.sentence_alternatives);
+      }
       setMeaningScore(data.meaning_similarity);
       if (data.input_detector_results) {
         const d = data.input_detector_results;
@@ -326,6 +332,10 @@ export default function EditorPage() {
           if (!reRes.ok || reData.error || !reData.humanized) break;
           currentResult = reData.humanized;
           setResult(currentResult);
+          // Update pre-generated alternatives from re-iteration
+          if (reData.sentence_alternatives) {
+            setPreGeneratedAlts(reData.sentence_alternatives);
+          }
           if (reData.output_detector_results) {
             currentAi = reData.output_detector_results.overall;
             setOutputDetection({ overallAi: currentAi, overallHuman: 100 - currentAi, detectors: reData.output_detector_results.detectors });
@@ -353,6 +363,9 @@ export default function EditorPage() {
       const data: HumanizeResponse = await res.json();
       if (!res.ok || data.error) throw new Error(data.error || 'Rephrase failed');
       setResult(data.humanized);
+      if (data.sentence_alternatives) {
+        setPreGeneratedAlts(data.sentence_alternatives);
+      }
       setMeaningScore(data.meaning_similarity);
       if (data.output_detector_results) {
         const d = data.output_detector_results;
@@ -373,6 +386,7 @@ export default function EditorPage() {
     setText(''); setResult('');
     setInputDetection(null); setOutputDetection(null);
     setSentenceScores([]); setMeaningScore(null);
+    setPreGeneratedAlts({});
     setError(''); closePopup();
   };
 
@@ -512,6 +526,18 @@ export default function EditorPage() {
 
   const fetchSentenceAlternatives = async (sentence: string, count = 8) => {
     setPopupType('sentence'); setLoadingPopup(true); setSentenceAlternatives([]);
+
+    // Check pre-generated alternatives first (instant, no API call)
+    const preGenKey = Object.keys(preGeneratedAlts).find(
+      key => key.trim().toLowerCase() === sentence.trim().toLowerCase()
+    );
+    if (preGenKey && preGeneratedAlts[preGenKey]?.length > 0) {
+      setSentenceAlternatives(preGeneratedAlts[preGenKey]);
+      setLoadingPopup(false);
+      return;
+    }
+
+    // Fallback to API call if no pre-generated alternatives
     try {
       const r = await fetch('/api/alternatives', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sentence, engine, count }) });
       if (r.ok) { const d = await r.json(); setSentenceAlternatives(d.alternatives || []); }
@@ -605,7 +631,7 @@ export default function EditorPage() {
         </button>
       </div>
 
-      {/* Depth Note (simplified, no engine details) */}
+      {/* Depth Note + Engine Description */}
       <div className="flex flex-wrap gap-3">
         {strength === 'strong' && (
           <div className="flex items-start gap-1.5 px-3 py-2 bg-amber-50/60 dark:bg-amber-950/40 border border-amber-100 dark:border-amber-900 rounded-lg max-w-md">
@@ -615,6 +641,17 @@ export default function EditorPage() {
             </p>
           </div>
         )}
+        {premium && (() => {
+          const currentEngine = ENGINES.find(e => e.id === engine);
+          return currentEngine?.desc ? (
+            <div className="flex items-start gap-1.5 px-3 py-2 bg-indigo-50/60 dark:bg-indigo-950/30 border border-indigo-100 dark:border-indigo-900 rounded-lg w-full">
+              <Info className="w-3 h-3 text-indigo-500 mt-0.5 shrink-0" />
+              <p className="text-[11px] text-indigo-700 dark:text-indigo-300 leading-relaxed">
+                <span className="font-bold">{currentEngine.label}:</span> {currentEngine.desc}
+              </p>
+            </div>
+          ) : null;
+        })()}
       </div>
 
       {/* Editor Grid */}

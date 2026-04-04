@@ -21,6 +21,30 @@ function findDictDir(): string {
 
 const DICT_DIR = findDictDir();
 
+// ═══ ACADEMIC INPUT GUARD ═══
+// Words that must NEVER be replaced by thesaurus synonyms.
+const ACADEMIC_INPUT_GUARD = new Set([
+  "hypothesis", "hypotheses", "null", "alternative", "statistical", "statistically",
+  "significance", "significant", "mean", "median", "mode", "variance", "deviation",
+  "sample", "population", "parameter", "coefficient", "correlation", "regression",
+  "analysis", "analyze", "analyzed", "analyzing", "analytical",
+  "pair", "paired", "pairing", "pairs",
+  "parental", "maternal", "paternal", "familial",
+  "truancy", "truant", "absenteeism", "attendance",
+  "testing", "test", "tested", "examination", "examine",
+  "rate", "rates", "level", "levels", "group", "groups",
+  "relationship", "association", "comparison",
+  "difference", "different", "effect", "effects",
+  "measure", "measurement", "assessment", "evaluation",
+  "intervention", "prevention", "program", "curriculum",
+  "student", "teacher", "school", "district", "enrollment",
+  "clinical", "diagnosis", "treatment", "therapy", "patient",
+  "dissertation", "thesis", "abstract", "citation", "reference",
+  "equation", "formula", "function", "algorithm",
+  "data", "evidence", "methodology", "observation",
+  "validity", "reliability", "outcome", "criterion",
+]);
+
 interface ThesaurusEntry {
   word: string;
   synonyms: string[];
@@ -170,6 +194,9 @@ export class HumanizerDictionary {
     const lower = word.toLowerCase();
     const avoid = avoidWords ?? new Set<string>();
 
+    // ═══ ACADEMIC TERM GUARD ═══
+    if (ACADEMIC_INPUT_GUARD.has(lower)) return word;
+
     // Use getContextualSynonyms (matches Python: self.get_contextual_synonyms)
     const synonyms = this.getContextualSynonyms(lower, context, 5);
     if (synonyms.length === 0) return word;
@@ -203,6 +230,17 @@ export class HumanizerDictionary {
       "volunteer", "invite", "site", "scene", "domain", "devoid",
       "agitate", "bettor", "onetime", "diverge", "grooming",
       "coiffure", "focussed", "sizable", "overpopulated", "poll",
+      // Round 3: thesaurus wrong-sense synonyms
+      "psychoanalysis", "depth psychology", "analytic thinking",
+      "hooky", "nada", "zilch", "zippo", "naught", "nil", "nix",
+      "goose egg", "cipher", "cypher", "aught",
+      "mating", "copulate", "copulation", "mate", "intercourse",
+      "mingy", "miserly", "meanspirited", "bastardly", "beggarly",
+      "hateful", "ungenerous",
+      "supposition", "surmisal", "surmise", "hypothecate",
+      "enate", "enatic", "agnate", "agnatic",
+      "speculation", "conjecture", "guess", "guessing", "guesswork",
+      "screening", "appraisal",
     ]);
 
     // Filter out avoided words, multi-word synonyms, blocked words, and validate

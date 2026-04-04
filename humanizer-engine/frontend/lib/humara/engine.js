@@ -128,7 +128,7 @@ function isHeading(line) {
 // STAGE 2 — TOKEN SHIELDING
 // ═══════════════════════════════════════════
 
-const SHIELD_RE = /(\[[^\]]*\]|\([^)]*\)|\{[^}]*\}|\$\d{1,3}(?:,\d{3})*(?:\.\d+)?|\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+\.\d+%?|\d+%|\b\w+[-–]\w+(?:[-–]\w+)*\b)/g;
+const SHIELD_RE = /(\[[^\]]*\]|\([^)]*\)|\{[^}]*\}|\$\d{1,3}(?:,\d{3})*(?:\.\d+)?|\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+\.\d+%?|\.\d+%?|\d+%|[A-Za-z][₀₁₂₃₄₅₆₇₈₉]+|p\s*(?:[<>≤≥=]|less\s+than|greater\s+than)\s*\.?\d+|\b\w+[-–]\w+(?:[-–]\w+)*\b)/g;
 
 function shield(text) {
   const vault = [];
@@ -469,6 +469,9 @@ function replaceCollocations(text, usedSet) {
   let r = text;
   for (const { re, alts } of COLLOC_ENTRIES) {
     r = r.replace(re, match => {
+      // Academic term guard: if any word in the matched phrase is protected, skip
+      const words = match.toLowerCase().split(/\s+/);
+      if (words.some(w => NEVER_REPLACE_TERMS.has(w))) return match;
       const available = alts.filter(a => !usedSet.has(a));
       const pool = available.length > 0 ? available : alts;
       const pick = pool[Math.floor(Math.random() * pool.length)];
@@ -499,6 +502,9 @@ function compressPhrases(text) {
   let r = text;
   for (const { re, replacement } of COMPRESS_ENTRIES) {
     r = r.replace(re, (match) => {
+      // Academic term guard: if any word in the matched phrase is protected, skip
+      const words = match.toLowerCase().split(/\s+/);
+      if (words.some(w => NEVER_REPLACE_TERMS.has(w))) return match;
       // Support both string and array replacements (v2 phraseBank uses arrays)
       const pick = Array.isArray(replacement)
         ? replacement[Math.floor(Math.random() * replacement.length)]
@@ -2038,6 +2044,53 @@ const _GAP_FILL = {
 };
 for (const [k, v] of Object.entries(_GAP_FILL)) { if (!(k in SYN)) SYN[k] = v; }
 
+// ═══ ACADEMIC TERM GUARD ═══
+// Words that must NEVER be replaced by SYN dictionary — they are precise technical terms
+// whose thesaurus synonyms produce nonsensical output in academic contexts:
+//   hypothesis → guess, analysis → psychoanalysis, null → nada, pair → mating, etc.
+const NEVER_REPLACE_TERMS = new Set([
+  // Statistics & Research
+  'hypothesis', 'hypotheses', 'null', 'alternative', 'statistical', 'statistically',
+  'significance', 'significant', 'significantly', 'mean', 'median', 'mode', 'variance', 'deviation',
+  'sample', 'samples', 'population', 'parameter', 'parameters', 'coefficient', 'coefficients',
+  'correlation', 'correlations', 'regression', 'regressions',
+  'anova', 'confidence', 'interval', 'intervals', 'probability', 'distribution', 'distributions',
+  'independent', 'dependent', 'variable', 'variables', 'control', 'experimental',
+  'qualitative', 'quantitative', 'empirical', 'methodology', 'observation', 'observations',
+  'validity', 'reliability', 'sampling', 'inferential', 'descriptive',
+  'predictor', 'predictors', 'outcome', 'outcomes', 'criterion', 'covariate', 'confounding',
+  // Academic Writing
+  'dissertation', 'thesis', 'abstract', 'citation', 'citations', 'reference', 'references',
+  'scholarly', 'academic', 'premise', 'assertion', 'postulate',
+  'theorem', 'inference', 'deduction', 'induction',
+  // Terms producing wrong-sense synonyms
+  'analysis', 'analyses', 'analyze', 'analyzed', 'analyzing', 'analytical',
+  'pair', 'paired', 'pairing', 'pairs',
+  'parental', 'maternal', 'paternal', 'familial',
+  'truancy', 'truant', 'absenteeism', 'attendance',
+  'testing', 'test', 'tested', 'tests', 'examination', 'examine',
+  'rate', 'rates', 'level', 'levels', 'group', 'groups',
+  'relationship', 'relationships', 'association', 'comparison',
+  'difference', 'differences', 'different', 'effect', 'effects',
+  'measure', 'measures', 'measurement', 'measurements', 'assessment', 'evaluation',
+  'determination', 'identification', 'indication',
+  'involvement', 'requirement', 'requirements', 'intervention', 'interventions', 'prevention',
+  'program', 'programs', 'curriculum', 'data', 'evidence',
+  'student', 'students', 'teacher', 'teachers', 'school', 'schools', 'district', 'enrollment',
+  'participant', 'participants', 'respondent', 'respondents', 'survey', 'surveys',
+  'clinical', 'diagnosis', 'treatment', 'treatments', 'therapy', 'patient', 'patients',
+  'symptom', 'symptoms', 'pathology', 'epidemiology', 'prevalence', 'mortality',
+  'equation', 'equations', 'formula', 'function', 'algorithm',
+  'demographic', 'demographics', 'gender', 'whether',
+  // Formatting
+  'h₀', 'h₁', 'h₀₁', 'h₁₁', 'h₀₂', 'h₁₂',
+]);
+
+// Remove dangerous entries from SYN that should never be replaced
+for (const term of NEVER_REPLACE_TERMS) {
+  delete SYN[term];
+}
+
 // Pre-compile regexes sorted longest-first so multi-word phrases match first
 const SYN_ENTRIES = Object.entries(SYN)
   .sort((a, b) => b[0].length - a[0].length)
@@ -2062,6 +2115,7 @@ function injectSynonyms(text, aggr, keywords, usedSet, style) {
     while ((m = re.exec(text)) !== null) {
       const lower = m[0].toLowerCase();
       if (keywords.has(lower)) continue;
+      if (NEVER_REPLACE_TERMS.has(lower)) continue; // academic term guard
       if (usedSet.has(lower)) continue; // already a synonym output from a prior pass — don't re-replace
       if (Math.random() > rate) continue;
       let available = alts.filter(a => !usedSet.has(a.toLowerCase()));
@@ -2848,6 +2902,7 @@ const BACKUP_SYN_MAP = {
 };
 
 const BACKUP_ENTRIES = Object.entries(BACKUP_SYN_MAP)
+  .filter(([word]) => !NEVER_REPLACE_TERMS.has(word.toLowerCase()))
   .sort((a, b) => b[0].length - a[0].length)
   .map(([word, alts]) => ({
     re: new RegExp(`(?<![\\w-])${word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![\\w-])`, 'gi'),
@@ -2864,6 +2919,7 @@ function aggressiveWordChange(text, keywords, usedSet, style) {
     while ((m = re.exec(text)) !== null) {
       const lower = m[0].toLowerCase();
       if (keywords.has(lower)) continue;
+      if (NEVER_REPLACE_TERMS.has(lower)) continue; // academic term guard
       if (usedSet.has(lower)) continue;
       if (Math.random() > 0.85) continue;
       let available = alts.filter(a => !usedSet.has(a.toLowerCase()));

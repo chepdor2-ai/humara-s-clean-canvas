@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { Mail, MessageSquare, Building2, Clock } from 'lucide-react';
 import Link from 'next/link';
+import ContactForm from './ContactForm';
 
 export const metadata: Metadata = {
   title: 'Contact Us',
@@ -51,6 +52,13 @@ export default function ContactPage() {
               );
             })}
           </div>
+        </div>
+      </section>
+
+      {/* Contact Form */}
+      <section className="w-full py-16 bg-white dark:bg-zinc-950">
+        <div className="max-w-2xl mx-auto px-6">
+          <ContactForm />
         </div>
       </section>
 

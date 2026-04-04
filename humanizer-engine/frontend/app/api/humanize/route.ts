@@ -10,6 +10,9 @@ import { isMeaningPreserved } from '@/lib/engine/semantic-guard';
 import { fixCapitalization } from '@/lib/engine/shared-dictionaries';
 import { deduplicateRepeatedPhrases } from '@/lib/engine/premium-deep-clean';
 import { preserveInputStructure } from '@/lib/engine/structure-preserver';
+import { structuralPostProcess } from '@/lib/engine/structural-post-processor';
+import { generateCandidates, type ScoredCandidate } from '@/lib/candidate-generator';
+import { unifiedSentenceProcess } from '@/lib/sentence-processor';
 
 export const maxDuration = 120; // LLM engines need more time
 
@@ -106,6 +109,15 @@ export async function POST(req: Request) {
       });
     }
 
+    // ── Unified Sentence Processor ──────────────────────────────
+    // Every engine's output flows through per-sentence protection,
+    // humanization, 60%-change enforcement, and post-assembly AI
+    // flow cleaning.  Uses the input AI score for aggressiveness.
+    const FIRST_PERSON_RE_EARLY = /\b(I|me|my|mine|myself|we|us|our|ours|ourselves)\b/i;
+    const earlyFirstPerson = FIRST_PERSON_RE_EARLY.test(text);
+    const inputAiScore = inputAnalysis.summary.overall_ai_score;
+    humanized = unifiedSentenceProcess(humanized, earlyFirstPerson, inputAiScore);
+
     // Post-capitalization formatting — fix sentence casing for all engine outputs
     // Skip for humara engine: it has its own ContentProtection + grammar repair
     if (engine !== 'humara') {
@@ -123,14 +135,39 @@ export async function POST(req: Request) {
       humanized = deduplicateRepeatedPhrases(humanized);
     }
 
+    // Structural post-processing — attacks document-level statistical signals
+    // (spectral_flatness, burstiness, sentence_uniformity, readability_consistency, vocabulary_richness)
+    // Skip for humara engine: it has its own structural diversity layer
+    if (engine !== 'humara') {
+      humanized = structuralPostProcess(humanized);
+    }
+
     // Restore the original title/paragraph layout for every engine output.
-    humanized = preserveInputStructure(text, humanized);
+    // Skip for humara engine: it has its own structure-preserving pipeline
+    if (engine !== 'humara') {
+      humanized = preserveInputStructure(text, humanized);
+    }
 
-    // Detect output scores
-    const outputAnalysis = detector.analyze(humanized);
+    // Generate per-sentence alternatives (3 candidates each, best already picked by engines)
+    const FIRST_PERSON_RE = /\b(I|me|my|mine|myself|we|us|our|ours|ourselves)\b/i;
+    const inputHadFirstPerson = FIRST_PERSON_RE.test(text);
+    const sentenceAlternativesMap: Record<string, ScoredCandidate[]> = {};
+    // Split final humanized text into sentences and generate 2 extra candidates per sentence
+    const finalSentences = humanized.match(/[^.!?]+[.!?]+|[^.!?]+$/g) || [];
+    for (const sent of finalSentences) {
+      const trimmed = sent.trim();
+      if (!trimmed || trimmed.length < 15) continue;
+      const { alternatives } = generateCandidates(trimmed, inputHadFirstPerson, 3);
+      if (alternatives.length > 0) {
+        sentenceAlternativesMap[trimmed] = alternatives;
+      }
+    }
 
-    // Semantic guard check
-    const meaningCheck = await isMeaningPreserved(text, humanized, 0.88);
+    // Run output detection + semantic guard check in parallel
+    const [outputAnalysis, meaningCheck] = await Promise.all([
+      Promise.resolve(detector.analyze(humanized)),
+      isMeaningPreserved(text, humanized, 0.88),
+    ]);
 
     // Word counts
     const inputWords = text.trim().split(/\s+/).length;
@@ -140,6 +177,7 @@ export async function POST(req: Request) {
       success: true,
       original: text.substring(0, 200) + (text.length > 200 ? '...' : ''),
       humanized,
+      sentence_alternatives: sentenceAlternativesMap,
       word_count: outputWords,
       input_word_count: inputWords,
       engine_used: engine ?? 'ghost_mini',

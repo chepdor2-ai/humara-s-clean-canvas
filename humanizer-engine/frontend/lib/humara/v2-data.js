@@ -585,7 +585,108 @@ export const EXTRA_COLLOCATIONS = {};
 // PROTECTED_TERMS — Domain terms that must never be swapped
 // ═══════════════════════════════════════════════════════════════════
 
-export const PROTECTED_TERMS = [];
+export const PROTECTED_TERMS = [
+  // ── Statistics & Research Methodology ──
+  'hypothesis', 'null', 'alternative', 'null hypothesis', 'alternative hypothesis',
+  'statistical', 'statistically', 'significance', 'significant', 'insignificant',
+  'mean', 'median', 'mode', 'variance', 'deviation', 'standard deviation',
+  'sample', 'population', 'parameter', 'statistic', 'coefficient',
+  'correlation', 'regression', 'anova', 'chi-square', 'p-value', 'alpha',
+  'confidence', 'interval', 'margin', 'error', 'probability', 'distribution',
+  'normal', 'binomial', 't-test', 'z-score', 'f-test', 'degrees of freedom',
+  'independent', 'dependent', 'variable', 'control', 'experimental',
+  'randomized', 'controlled', 'trial', 'longitudinal', 'cross-sectional',
+  'qualitative', 'quantitative', 'mixed methods', 'meta-analysis',
+  'systematic review', 'peer review', 'peer-reviewed', 'empirical',
+  'methodology', 'method', 'research', 'study', 'finding', 'findings',
+  'data', 'dataset', 'observation', 'observational', 'theoretical',
+  'framework', 'paradigm', 'model', 'construct', 'validity', 'reliability',
+  'internal validity', 'external validity', 'generalizability', 'replicability',
+  'sampling', 'random', 'stratified', 'convenience', 'purposive',
+  'inferential', 'descriptive', 'exploratory', 'explanatory', 'causal',
+  'operationalize', 'operationalized', 'predictor', 'outcome', 'criterion',
+  'covariate', 'confounding', 'moderator', 'mediator', 'interaction',
+  'effect size', 'power', 'type I error', 'type II error', 'threshold',
+
+  // ── Academic Writing ──
+  'dissertation', 'thesis', 'abstract', 'introduction', 'literature review',
+  'discussion', 'conclusion', 'appendix', 'bibliography', 'citation',
+  'reference', 'et al', 'ibid', 'op cit', 'supra', 'manuscript',
+  'peer', 'journal', 'publication', 'scholarly', 'academic', 'corpus',
+  'discourse', 'premise', 'argument', 'proposition', 'assertion',
+  'postulate', 'axiom', 'theorem', 'corollary', 'lemma', 'proof',
+  'inference', 'deduction', 'induction', 'abduction', 'syllogism',
+
+  // ── Education & Social Science ──
+  'truancy', 'truant', 'absenteeism', 'attendance', 'enrollment',
+  'intervention', 'prevention', 'program', 'curriculum', 'pedagogy',
+  'parental', 'maternal', 'paternal', 'familial', 'guardian',
+  'socioeconomic', 'demographic', 'cohort', 'participant', 'respondent',
+  'survey', 'questionnaire', 'interview', 'focus group', 'ethnography',
+  'case study', 'grounded theory', 'phenomenology', 'action research',
+  'student', 'teacher', 'faculty', 'principal', 'counselor',
+  'school', 'district', 'classroom', 'achievement', 'performance',
+
+  // ── Health & Medicine ──
+  'clinical', 'diagnosis', 'prognosis', 'treatment', 'therapy',
+  'patient', 'symptom', 'syndrome', 'pathology', 'etiology',
+  'epidemiology', 'prevalence', 'incidence', 'morbidity', 'mortality',
+  'placebo', 'double-blind', 'dosage', 'contraindication', 'pharmacology',
+
+  // ── Law & Policy ──
+  'statute', 'legislation', 'regulation', 'ordinance', 'jurisdiction',
+  'compliance', 'mandate', 'provision', 'amendment', 'constitutional',
+  'defendant', 'plaintiff', 'prosecution', 'litigation', 'adjudication',
+
+  // ── Math & Science ──
+  'equation', 'formula', 'function', 'integral', 'derivative',
+  'algorithm', 'computation', 'iteration', 'convergence', 'divergence',
+  'vector', 'matrix', 'scalar', 'tensor', 'eigenvalue',
+  'molecule', 'atom', 'electron', 'neutron', 'proton',
+  'photosynthesis', 'metabolism', 'enzyme', 'protein', 'genome',
+
+  // ── Terms with dangerous thesaurus synonyms ──
+  'analysis', 'analyze', 'analyzed', 'analyzing', 'analytical',
+  'pair', 'paired', 'pairing', 'pairs',
+  'testing', 'test', 'tested', 'examine', 'examination',
+  'approach', 'approaches',
+  'evidence', 'evident',
+  'factor', 'factors',
+  'impact', 'impacts',
+  'rate', 'rates',
+  'level', 'levels',
+  'group', 'groups',
+  'type', 'types',
+  'relationship', 'association', 'correlation',
+  'comparison', 'compare', 'compared',
+  'difference', 'different', 'differ',
+  'effect', 'effects', 'effective', 'effectiveness',
+  'measure', 'measured', 'measurement',
+  'determine', 'determined', 'determination',
+  'assess', 'assessed', 'assessment',
+  'evaluate', 'evaluated', 'evaluation',
+  'identify', 'identified', 'identification',
+  'indicate', 'indicated', 'indication',
+  'involve', 'involved', 'involvement',
+  'require', 'required', 'requirement',
+  'suggest', 'suggested', 'suggestion',
+  'conclude', 'concluded', 'conclusion',
+  'contribute', 'contributed', 'contribution',
+  'demonstrate', 'demonstrated', 'demonstration',
+  'establish', 'established',
+  'provide', 'provided',
+  'support', 'supported',
+  'represent', 'represented', 'representation',
+  'define', 'defined', 'definition',
+  'select', 'selected', 'selection',
+  'reject', 'rejected', 'rejection',
+  'accept', 'accepted',
+  'predict', 'predicted', 'prediction',
+
+  // ── Formatting / Symbol terms ──
+  'H₀', 'H₁', 'H₀₁', 'H₁₁', 'H₀₂', 'H₁₂',
+  'α', 'β', 'p', 'n', 'r', 'χ²', 'F', 't', 'z',
+];
 
 
 // ═══════════════════════════════════════════════════════════════════

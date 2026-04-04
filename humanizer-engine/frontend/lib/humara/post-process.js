@@ -39,8 +39,8 @@ export function protectContent(text) {
 
   // Order matters: protect larger/more specific patterns first
 
-  // 1. Citations: (Author et al., YYYY), (Author, YYYY)
-  protect(/\([A-Z][a-zA-Z]*(?:\s+(?:et\s+al\.|&\s+[A-Z][a-zA-Z]*))*,\s*\d{4}[a-z]?\)/g);
+  // 1. Citations: (Author et al., YYYY), (Author, YYYY), (Author, n.d.)
+  protect(/\([A-Z][a-zA-Z]*(?:\s+(?:et\s+al\.|&\s+[A-Z][a-zA-Z]*))*,\s*(?:\d{4}[a-z]?|n\.d\.)\)/g);
 
   // 2. Bracketed content: [Client Name], [Appendix A], [Figure 1]
   protect(/\[[^\]]+\]/g);
@@ -50,6 +50,9 @@ export function protectContent(text) {
 
   // 4. Mathematical formulas with superscripts/subscripts
   protect(/[A-Za-z0-9]+[\u00B2\u00B3\u2074-\u2079\u2080-\u2089]+(?:\s*[+\-\u00D7\u00F7=]\s*[A-Za-z0-9\u00B2\u00B3\u2074-\u2079\u2080-\u2089]+)*/g);
+
+  // 4a. Hypothesis notation: H₀, H₁, H₀₁, etc.
+  protect(/[A-Za-z][\u2080-\u2089]+/g);
 
   // 5. Email addresses
   protect(/\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/g);
@@ -65,6 +68,9 @@ export function protectContent(text) {
 
   // 9. Decimal numbers: 3.14, 5.56
   protect(/\b\d+\.\d+\b/g);
+
+  // 9a. Statistical p-values: p < .05, p less than .05
+  protect(/\bp\s+less\s+than\s+\.?\d+/g);
 
   // 10. Large numbers with commas: 100,000
   protect(/\b\d{1,3}(?:,\d{3})+\b/g);
@@ -485,8 +491,8 @@ export function repairGrammar(text) {
   // Fix double spaces
   output = output.replace(/\s{2,}/g, ' ');
 
-  // Fix space before punctuation
-  output = output.replace(/\s+([.,;:!?])/g, '$1');
+  // Fix space before punctuation (but not before decimals like .05)
+  output = output.replace(/\s+([.,;:!?])(?!\d)/g, '$1');
 
   // ── Remove garbled short sentence fragments ──────────────────────
   // Catch tiny garbled sentences (< 8 words, no subject-verb structure)

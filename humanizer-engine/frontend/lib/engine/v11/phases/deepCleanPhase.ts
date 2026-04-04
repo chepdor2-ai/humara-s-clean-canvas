@@ -83,6 +83,14 @@ const FINAL_KILL_WORDS: Record<string, string[]> = {
   coherent: ['logical', 'consistent', 'unified', 'joined-up'],
 };
 
+// ── Pre-compiled FINAL_KILL_WORDS patterns (built once at module load) ──
+const COMPILED_FINAL_KILL: { word: string; rx: RegExp; replacements: string[] }[] =
+  Object.entries(FINAL_KILL_WORDS).map(([word, replacements]) => ({
+    word,
+    rx: new RegExp(`\\b${word}(s|es|ed|ing|ly)?\\b`, 'gi'),
+    replacements,
+  }));
+
 // ── TELL PATTERNS (specific phrases that are near-certain AI markers) ──
 const TELL_PATTERNS: [RegExp, string[]][] = [
   [/\bthis (?:is|was|remains) (?:a |an )?(?:testament|reflection|indication|manifestation) (?:of|to)\b/gi, [
@@ -222,9 +230,9 @@ export const deepCleanPhase: Phase = {
         let text = sentence.text;
 
         // Word-level kills (handle plurals and verb forms)
-        for (const [word, replacements] of Object.entries(FINAL_KILL_WORDS)) {
-          const regex = new RegExp(`\\b${word}(s|es|ed|ing|ly)?\\b`, 'gi');
-          const matches = text.match(regex);
+        for (const { word, rx, replacements } of COMPILED_FINAL_KILL) {
+          rx.lastIndex = 0;
+          const matches = text.match(rx);
           if (matches) {
             for (const m of matches) {
               const suffix = m.slice(word.length).toLowerCase();
@@ -270,7 +278,9 @@ export const deepCleanPhase: Phase = {
 
         // Tell pattern kills
         for (const [pattern, replacements] of TELL_PATTERNS) {
+          pattern.lastIndex = 0;
           if (pattern.test(text)) {
+            pattern.lastIndex = 0;
             text = text.replace(pattern, () => pickRandom(replacements));
             tellKills++;
           }

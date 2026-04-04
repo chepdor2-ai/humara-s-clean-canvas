@@ -1,18 +1,17 @@
 /**
- * Phase 6 — Rhythm
- * ==================
- * Target burstiness ≥ 0.7 by varying sentence lengths.
- * Human writing has natural length variation; AI writing is uniform.
+ * Phase 11 — Rhythm (Sentence-by-Sentence)
+ * ==========================================
+ * Achieve natural burstiness by varying sentence structure WITHIN each sentence.
+ * No splitting sentences into multiple. No inserting new sentences. No merging.
  *
- * Strategy:
- *   - Measure current burstiness (std dev / mean of sentence lengths)
- *   - If below target, split long sentences or merge short ones
- *   - Occasional very short sentences for emphasis
+ * Strategy per sentence:
+ *   - Reorder clauses within a sentence to vary its length/structure
+ *   - Front prepositional/adverbial phrases for variety
+ *   - Insert parenthetical asides within long sentences
+ *   - Measure and log burstiness for diagnostics
  */
 
 import type { DocumentState, Phase } from '../types';
-
-const BURSTINESS_TARGET = 0.85;
 
 /**
  * Calculate burstiness = stddev(lengths) / mean(lengths).
@@ -26,78 +25,56 @@ function calcBurstiness(lengths: number[]): number {
 }
 
 /**
- * Check if text fragment forms a complete sentence (has a subject-verb structure).
+ * Apply rhythm variation to a single sentence without changing sentence count.
+ * - Long sentences: internal restructuring (clause reorder, parenthetical insertion)
+ * - Medium sentences: occasional adverbial fronting
+ * - Short sentences: left as-is (they contribute to burstiness naturally)
  */
-function isCompleteSentence(text: string): boolean {
-  const trimmed = text.trim();
-  // Reject fragments starting with gerunds (participial phrases)
-  if (/^[A-Z]?\w+ing\b/.test(trimmed) && !/^(Being|Bring|King|Ring|Sing|String|Thing|Wing)\b/i.test(trimmed)) {
-    // Check if there's a main verb after the gerund phrase
-    const hasMainVerb = /,\s+\w+\s+(is|are|was|were|has|have|had|does|do|did|can|could|will|would)\b/i.test(trimmed);
-    if (!hasMainVerb) return false;
-  }
-  // Must contain at least one finite verb
-  const hasVerb = /\b(is|are|was|were|has|have|had|does|do|did|can|could|will|would|shall|should|may|might|must|seems?|appears?|remains?|becomes?|proves?|shows?|makes?|takes?|gives?|gets?)\b/i.test(trimmed);
-  return hasVerb;
-}
-
-/**
- * Try to split a long sentence at a natural point.
- */
-function trySplit(text: string): string[] {
+function applyRhythmToSentence(text: string): string {
   const words = text.split(/\s+/);
-  if (words.length < 15) return [text]; // Too short to split
+  const wordCount = words.length;
 
-  // Try comma + conjunction
-  for (let i = Math.floor(words.length * 0.35); i < Math.floor(words.length * 0.65); i++) {
-    const word = words[i].toLowerCase().replace(/[^a-z]/g, '');
-    if (['and', 'but', 'while', 'although', 'whereas', 'however', 'yet'].includes(word)) {
-      const first = words.slice(0, i).join(' ').replace(/,\s*$/, '.').trim();
-      let second = words.slice(i + (word === 'and' || word === 'but' ? 1 : 0)).join(' ').trim();
-      if (second.length > 5 && isCompleteSentence(second)) {
-        second = second[0].toUpperCase() + second.slice(1);
-        if (!/[.!?]$/.test(second)) second += '.';
-        return [first, second];
-      }
+  // Long sentences (>22 words): try to restructure internally
+  if (wordCount > 22) {
+    // Try fronting a trailing prepositional/adverbial phrase
+    const match = text.match(
+      /^(.{20,}?)\s+((?:during|throughout|within|across|despite|beyond|following|concerning|regarding|given)\s+[\w\s]{4,30})[.!?]$/i
+    );
+    if (match) {
+      const [, main, adv] = match;
+      const cleanMain = main.replace(/,\s*$/, '').trim();
+      const result = `${adv[0].toUpperCase()}${adv.slice(1)}, ${cleanMain[0].toLowerCase()}${cleanMain.slice(1)}.`;
+      return result;
     }
-    // Split at comma — only if second half is a complete sentence
-    if (words[i].endsWith(',') && i >= 5) {
-      const first = words.slice(0, i + 1).join(' ').replace(/,\s*$/, '.').trim();
-      let second = words.slice(i + 1).join(' ').trim();
-      if (second.length > 10 && isCompleteSentence(second)) {
-        second = second[0].toUpperCase() + second.slice(1);
-        if (!/[.!?]$/.test(second)) second += '.';
-        return [first, second];
-      }
-    }
-  }
 
-  return [text];
-}
-
-/**
- * Create emphasis by occasionally making a sentence very short.
- */
-function addEmphasis(sentences: string[], burstiness: number): string[] {
-  if (burstiness >= BURSTINESS_TARGET || sentences.length < 4) return sentences;
-
-  const result = [...sentences];
-  // Add a short emphatic sentence after a long one
-  for (let i = 0; i < result.length - 1; i++) {
-    const words = result[i].split(/\s+/);
-    if (words.length > 25 && Math.random() < 0.3) {
-      // Insert a short confirmatory sentence
-      const emphatics = [
-        'The evidence confirms this.',
-        'The data support this.', 'The pattern holds.',
-        'The distinction is real.', 'The implication is clear.',
+    // Try inserting a parenthetical aside after the first clause
+    const commaIdx = text.indexOf(',');
+    if (commaIdx > 15 && commaIdx < text.length * 0.6 && Math.random() < 0.25) {
+      const asides = [
+        ' — in practical terms —',
+        ' — from a broader perspective —',
+        ' — to be precise —',
+        ' — it should be noted —',
       ];
-      result.splice(i + 1, 0, emphatics[Math.floor(Math.random() * emphatics.length)]);
-      break; // Max one per paragraph
+      const aside = asides[Math.floor(Math.random() * asides.length)];
+      return text.slice(0, commaIdx + 1) + aside + text.slice(commaIdx + 1);
     }
   }
 
-  return result;
+  // Medium sentences (12–22 words): occasional clause reorder
+  if (wordCount >= 12 && wordCount <= 22 && Math.random() < 0.20) {
+    // Try moving a "because/since/as" clause to the front
+    const clauseMatch = text.match(
+      /^(.+?)\s+(because|since|as|given that|considering that)\s+(.+?)[.!?]$/i
+    );
+    if (clauseMatch) {
+      const [, mainClause, connector, reason] = clauseMatch;
+      const cleanMain = mainClause.replace(/,\s*$/, '').trim();
+      return `${connector[0].toUpperCase()}${connector.slice(1)} ${reason.replace(/[.!?]\s*$/, '')}, ${cleanMain[0].toLowerCase()}${cleanMain.slice(1)}.`;
+    }
+  }
+
+  return text;
 }
 
 export const rhythmPhase: Phase = {
@@ -106,42 +83,21 @@ export const rhythmPhase: Phase = {
     let adjustments = 0;
 
     for (const paragraph of state.paragraphs) {
-      let sentenceTexts = paragraph.sentences.map(s => s.text);
-      const lengths = sentenceTexts.map(s => s.split(/\s+/).length);
-      let burstiness = calcBurstiness(lengths);
-
-      if (burstiness < BURSTINESS_TARGET) {
-        // Try splitting the longest sentences
-        const newTexts: string[] = [];
-        for (const text of sentenceTexts) {
-          const words = text.split(/\s+/);
-          if (words.length > 20 && burstiness < BURSTINESS_TARGET) {
-            const splits = trySplit(text);
-            newTexts.push(...splits);
-            if (splits.length > 1) adjustments++;
-          } else {
-            newTexts.push(text);
-          }
-        }
-        sentenceTexts = newTexts;
-
-        // Recalculate and try emphasis
-        const newLengths = sentenceTexts.map(s => s.split(/\s+/).length);
-        burstiness = calcBurstiness(newLengths);
-        sentenceTexts = addEmphasis(sentenceTexts, burstiness);
+      // Process each sentence individually — no merging, splitting, or inserting
+      for (const sentence of paragraph.sentences) {
+        const original = sentence.text;
+        sentence.text = applyRhythmToSentence(sentence.text);
+        if (sentence.text !== original) adjustments++;
       }
-
-      // Rebuild sentences array
-      paragraph.sentences = sentenceTexts.map((text, i) => ({
-        id: paragraph.sentences[i]?.id ?? (paragraph.id * 1000 + i),
-        text,
-        originalText: paragraph.sentences[i]?.originalText ?? text,
-        flags: paragraph.sentences[i]?.flags ?? [],
-        score: paragraph.sentences[i]?.score ?? 0,
-      }));
     }
 
-    state.logs.push(`[rhythm] ${adjustments} sentence splits for burstiness`);
+    // Log burstiness for diagnostics (measurement only, not used to change structure)
+    const allLengths = state.paragraphs.flatMap(p =>
+      p.sentences.map(s => s.text.split(/\s+/).length)
+    );
+    const burstiness = calcBurstiness(allLengths);
+
+    state.logs.push(`[rhythm] ${adjustments} sentence-level rhythm adjustments, burstiness: ${burstiness.toFixed(2)}`);
     return state;
   },
 };

@@ -21,6 +21,51 @@ function findDictDir(): string {
 
 const DICT_DIR = findDictDir();
 
+// ═══ ACADEMIC INPUT GUARD ═══
+// Words that must NEVER be replaced by thesaurus synonyms.
+// The mega_thesaurus.jsonl is a raw WordNet dump that maps these to wrong senses:
+//   analysis → psychoanalysis, pair → mating, null → nada, truancy → hooky, etc.
+const ACADEMIC_INPUT_GUARD = new Set([
+  // Statistics & Research
+  "hypothesis", "hypotheses", "null", "alternative", "statistical", "statistically",
+  "significance", "significant", "mean", "median", "mode", "variance", "deviation",
+  "sample", "population", "parameter", "coefficient", "correlation", "regression",
+  "anova", "p-value", "alpha", "confidence", "interval", "probability", "distribution",
+  "independent", "dependent", "variable", "control", "experimental", "randomized",
+  "qualitative", "quantitative", "empirical", "methodology", "observation",
+  "validity", "reliability", "sampling", "inferential", "descriptive",
+  "predictor", "outcome", "criterion", "covariate", "confounding", "moderator",
+  "mediator", "effect", "power", "threshold", "operationalize",
+  // Academic Writing
+  "dissertation", "thesis", "abstract", "introduction", "conclusion",
+  "citation", "reference", "manuscript", "scholarly", "academic", "discourse",
+  "premise", "argument", "proposition", "assertion", "postulate", "axiom",
+  "theorem", "corollary", "inference", "deduction", "induction",
+  // Terms with dangerous thesaurus synonyms
+  "analysis", "analyze", "analyzed", "analyzing", "analytical",
+  "pair", "paired", "pairing", "pairs",
+  "parental", "maternal", "paternal", "familial",
+  "truancy", "truant", "absenteeism", "attendance",
+  "testing", "test", "tested", "examination", "examine",
+  "rate", "rates", "level", "levels", "group", "groups",
+  "relationship", "association", "comparison", "compare",
+  "difference", "different", "effect", "effects", "measure", "measurement",
+  "determine", "assessment", "evaluate", "evaluation", "identification",
+  "indicate", "indication", "involvement", "requirement",
+  "intervention", "prevention", "program", "curriculum",
+  // Education & Social Science
+  "student", "teacher", "faculty", "school", "district", "enrollment",
+  "participant", "respondent", "survey", "questionnaire",
+  "socioeconomic", "demographic", "cohort",
+  // Health
+  "clinical", "diagnosis", "prognosis", "treatment", "therapy",
+  "patient", "symptom", "pathology", "etiology", "epidemiology",
+  "prevalence", "incidence", "morbidity", "mortality", "placebo",
+  // Math & Science
+  "equation", "formula", "function", "algorithm", "computation",
+  "molecule", "atom", "electron", "protein", "genome",
+]);
+
 interface ThesaurusEntry {
   word: string;
   synonyms: string[];
@@ -170,6 +215,11 @@ export class HumanizerDictionary {
     const lower = word.toLowerCase();
     const avoid = avoidWords ?? new Set<string>();
 
+    // ═══ ACADEMIC TERM GUARD ═══
+    // These words must NEVER be replaced — thesaurus gives wrong-sense synonyms
+    // e.g., "analysis" → "psychoanalysis", "pair" → "mating", "null" → "nada"
+    if (ACADEMIC_INPUT_GUARD.has(lower)) return word;
+
     // Use getContextualSynonyms (matches Python: self.get_contextual_synonyms)
     const synonyms = this.getContextualSynonyms(lower, context, 5);
     if (synonyms.length === 0) return word;
@@ -203,6 +253,17 @@ export class HumanizerDictionary {
       "volunteer", "invite", "site", "scene", "domain", "devoid",
       "agitate", "bettor", "onetime", "diverge", "grooming",
       "coiffure", "focussed", "sizable", "overpopulated", "poll",
+      // Round 3: thesaurus wrong-sense synonyms caught in truancy paper
+      "psychoanalysis", "depth psychology", "analytic thinking",
+      "hooky", "nada", "zilch", "zippo", "naught", "nil", "nix",
+      "goose egg", "cipher", "cypher", "aught",
+      "mating", "copulate", "copulation", "mate", "intercourse",
+      "mingy", "miserly", "meanspirited", "bastardly", "beggarly",
+      "hateful", "ungenerous",
+      "supposition", "surmisal", "surmise", "hypothecate",
+      "enate", "enatic", "agnate", "agnatic",
+      "speculation", "conjecture", "guess", "guessing", "guesswork",
+      "screening", "appraisal",
     ]);
 
     // Filter out avoided words, multi-word synonyms, blocked words, and validate

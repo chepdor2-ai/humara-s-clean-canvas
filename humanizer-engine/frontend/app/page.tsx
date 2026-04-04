@@ -14,16 +14,16 @@ export default function Home() {
   return (
     <div className="flex flex-col items-center">
       {/* Hero */}
-      <section className="w-full pt-20 pb-24 bg-white">
+      <section className="w-full pt-20 pb-24 bg-white dark:bg-zinc-950">
         <div className="max-w-4xl mx-auto px-6 text-center">
           <div className="inline-flex items-center gap-2 py-1.5 px-3 rounded-full bg-brand-50 text-brand-700 text-xs font-medium mb-8 border border-brand-200">
             <Sparkles className="w-3.5 h-3.5" /> V3 Engine — Now Available
           </div>
-          <h1 className="text-4xl md:text-6xl font-semibold text-slate-900 tracking-tight leading-[1.1] mb-6">
+          <h1 className="text-4xl md:text-6xl font-semibold text-slate-900 dark:text-white tracking-tight leading-[1.1] mb-6">
             Make AI-generated text<br />
-            <span className="text-brand-600">undetectable</span>
+            <span className="text-brand-600 dark:text-brand-400">undetectable</span>
           </h1>
-          <p className="max-w-2xl mx-auto text-lg text-slate-500 mb-10 leading-relaxed">
+          <p className="max-w-2xl mx-auto text-lg text-slate-500 dark:text-zinc-400 mb-10 leading-relaxed">
             HumaraGPT structurally rewrites your content to bypass Turnitin, Originality.AI, and GPTZero while preserving your original meaning.
           </p>
           <div className="flex flex-col sm:flex-row justify-center items-center gap-3">
@@ -43,7 +43,7 @@ export default function Home() {
       </section>
 
       {/* Trust bar */}
-      <section className="py-8 bg-slate-50 border-y border-slate-100 w-full">
+      <section className="py-8 bg-slate-50 dark:bg-zinc-900 border-y border-slate-100 dark:border-zinc-800 w-full">
         <div className="max-w-4xl mx-auto px-6 text-center">
           <p className="text-xs font-medium text-slate-400 uppercase tracking-wider mb-4">Bypasses leading AI detectors</p>
           <div className="flex flex-wrap justify-center gap-8 text-slate-400">
@@ -57,18 +57,18 @@ export default function Home() {
       </section>
 
       {/* Free Trial Humanizer */}
-      <section className="py-20 bg-white w-full">
+      <section className="py-20 bg-white dark:bg-zinc-950 w-full">
         <div className="max-w-5xl mx-auto px-6">
           <div className="text-center mb-10">
-            <h2 className="text-3xl font-semibold text-slate-900 mb-3">Try it now — free</h2>
-            <p className="text-slate-500 max-w-xl mx-auto">Paste up to 250 words and see the magic. 2 free attempts, no account needed.</p>
+            <h2 className="text-3xl font-semibold text-slate-900 dark:text-white mb-3">Try it now — free</h2>
+            <p className="text-slate-500 dark:text-zinc-400 max-w-xl mx-auto">Paste up to 250 words and see the magic. 2 free attempts, no account needed.</p>
           </div>
           <FreeTrial />
         </div>
       </section>
 
       {/* Services */}
-      <section className="py-20 bg-white w-full">
+      <section className="py-20 bg-white dark:bg-zinc-950 w-full">
         <div className="max-w-5xl mx-auto px-6">
           <div className="text-center mb-14">
             <h2 className="text-3xl font-semibold text-slate-900 mb-3">Our services</h2>

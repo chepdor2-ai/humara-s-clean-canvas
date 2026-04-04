@@ -578,27 +578,36 @@ const ALL_PHRASE_DICTS: Record<string, string[]>[] = [
 /**
  * Apply all phrase-level dictionaries to a sentence.
  */
+// ── Pre-compiled phrase dictionary patterns (built once at module load) ──
+const COMPILED_PHRASE_SUBS: { rx: RegExp; alts: string[] }[] = SORTED_PHRASE_KEYS
+  .map(key => ({ rx: new RegExp(`\\b${escapeRegex(key)}\\b`, 'gi'), alts: PHRASE_SUBSTITUTIONS[key] }))
+  .filter(e => e.alts && e.alts.length > 0);
+
+const COMPILED_ALL_PHRASE_DICTS: { rx: RegExp; alts: string[] }[] = ALL_PHRASE_DICTS.flatMap(dict =>
+  Object.entries(dict).map(([phrase, alternatives]) => ({
+    rx: new RegExp(`\\b${escapeRegex(phrase)}\\b`, 'gi'),
+    alts: alternatives,
+  }))
+);
+
 function applyPhraseDictionaries(text: string): string {
   let result = text;
 
   // Apply the 300+ PHRASE_SUBSTITUTIONS (longest-first for greedy matching)
-  for (const key of SORTED_PHRASE_KEYS) {
-    const regex = new RegExp(`\\b${escapeRegex(key)}\\b`, 'gi');
-    if (regex.test(result)) {
-      const alts = PHRASE_SUBSTITUTIONS[key];
-      if (alts && alts.length > 0 && Math.random() < 0.85) {
-        result = result.replace(regex, () => pickRandom(alts));
-      }
+  for (const { rx, alts } of COMPILED_PHRASE_SUBS) {
+    rx.lastIndex = 0;
+    if (rx.test(result) && Math.random() < 0.85) {
+      rx.lastIndex = 0;
+      result = result.replace(rx, () => pickRandom(alts));
     }
   }
 
   // Apply all 9 swap dictionaries
-  for (const dict of ALL_PHRASE_DICTS) {
-    for (const [phrase, alternatives] of Object.entries(dict)) {
-      const regex = new RegExp(`\\b${escapeRegex(phrase)}\\b`, 'gi');
-      if (regex.test(result) && Math.random() < 0.80) {
-        result = result.replace(regex, () => pickRandom(alternatives));
-      }
+  for (const { rx, alts } of COMPILED_ALL_PHRASE_DICTS) {
+    rx.lastIndex = 0;
+    if (rx.test(result) && Math.random() < 0.80) {
+      rx.lastIndex = 0;
+      result = result.replace(rx, () => pickRandom(alts));
     }
   }
 
@@ -677,8 +686,157 @@ function frontAdverbial(sent: string): string {
 }
 
 // ══════════════════════════════════════════════════════════════════
-// MAIN PHASE
+// MAIN PHASE — Sentence-by-Sentence Processing
 // ══════════════════════════════════════════════════════════════════
+
+/**
+ * Check if a sentence is clean enough for further transformation.
+ */
+function isSentenceClean(s: string): boolean {
+  const hasVerb = /\b(is|are|was|were|has|have|had|does|do|did|will|would|could|should|can|may|might|shall|must|being|been|makes|takes|gives|shows|suggests|provides|requires|involves|enables|supports|leads|creates|produces|allows|helps|means|needs|works|uses|finds|forms|offers|reflects|determines|presents|considers|applies|improved|transformed|enhanced|enabled|facilitated|altered|changed|increased|decreased|affected|generated|identified|implemented|integrated|leveraged|utilized|addressed|established|maintained|achieved|demonstrated|indicated|conducted|reported|observed|examined|evaluated|analyzed|compared|developed|designed|proposed|introduced|suggested|recommended|concluded|revealed|confirmed|discussed|explored|investigated|highlighted|illustrated|emphasized|explained|described|defined|classified|categorized|assessed|measured|tested|verified|validated|reviewed|summarized|outlined|elaborated|clarified|distinguished|recognized|acknowledged|assumed|hypothesized|predicted|estimated|calculated|computed|simulated|optimized|maximized|minimized|resolved|solved|addressed|prevented|avoided|reduced|eliminated|mitigated|managed|controlled|monitored|regulated|supervised|coordinated|organized|structured|planned|executed|performed|conducted|implemented|delivered|completed|finished|accomplished|succeeded|failed|struggled|challenged|attempted|tried|ensured|guaranteed|secured|protected|preserved|maintained|sustained|supported|promoted|encouraged|motivated|inspired|influenced|impacted|shaped|formed|built|constructed|created|established|founded|initiated|launched|started|began|continued|proceeded|progressed|advanced|evolved|developed|grew|expanded|extended|broadened|deepened|strengthened|improved|enhanced|upgraded|refined|modified|adjusted|adapted|customized|tailored|configured|calibrated|tuned|aligned|integrated|incorporated|combined|merged|unified|consolidated|aggregated|compiled|collected|gathered|assembled|accumulated|stored|retained|saved|archived|recorded|documented|logged|tracked|monitored|reported|communicated|transmitted|distributed|disseminated|shared|published|released|disclosed|announced|declared|stated|expressed|articulated|conveyed|relayed|informed|notified|alerted|warned|cautioned|advised|recommended|suggested|proposed|offered|provided|supplied|delivered|served|contributed|aided|assisted|facilitated|supported|backed|endorsed|championed|advocated)\b/i;
+  if (!hasVerb.test(s)) return false;
+  const stripped = s.replace(/^(on reflection|in practice|examining deeper|what surfaces[^,]*,|[^,]{0,30},)\s*/i, '').trim();
+  if (stripped.split(/\s+/).length < 4) return false;
+  if (/\b(has|have|had|is|are|was|were)\s+(of\s+\w+\s+\w+)\.\s/i.test(s)) return false;
+  return true;
+}
+
+/**
+ * Apply all cleanup fixes to a single sentence.
+ */
+function cleanupSentence(s: string): string {
+  let result = s;
+  // Fix comma-broken compound words
+  result = result.replace(/\b(decision)[,\s]+(making)\b/gi, '$1-$2');
+  result = result.replace(/\b(problem)[,\s]+(solving)\b/gi, '$1-$2');
+  result = result.replace(/\b(well)[,\s]+(known|established|defined|being)\b/gi, '$1-$2');
+  result = result.replace(/\b(long)[,\s]+(term|standing|running|lasting)\b/gi, '$1-$2');
+  result = result.replace(/\b(short)[,\s]+(term|lived|sighted)\b/gi, '$1-$2');
+  result = result.replace(/\b(high)[,\s]+(quality|level|resolution|performance)\b/gi, '$1-$2');
+  result = result.replace(/\b(real)[,\s]+(time|world)\b/gi, '$1-$2');
+  result = result.replace(/\b(state)[,\s]+(of)[,\s]+(the)[,\s]+(art)\b/gi, '$1-$2-$3-$4');
+  result = result.replace(/\b(self)[,\s]+(driving|learning|aware|sufficient)\b/gi, '$1-$2');
+  result = result.replace(/\b(data)[,\s]+(driven)\b/gi, '$1-$2');
+  result = result.replace(/\b(evidence)[,\s]+(based)\b/gi, '$1-$2');
+  result = result.replace(/\b(cross)[,\s]+(sectional|disciplinary|cultural)\b/gi, '$1-$2');
+  // Fix orphaned adverbs
+  result = result.replace(/,\s*partly,/gi, ',');
+  result = result.replace(/\bpartly,\s*and\b/gi, 'and');
+  // Fix capitalization after restructuring
+  result = result.replace(/([.!?])\s+([a-z])/g, (_m, p, l) => `${p} ${l.toUpperCase()}`);
+  // Fix double spaces
+  result = result.replace(/ {2,}/g, ' ');
+  // Fix space before punctuation
+  result = result.replace(/\s+([.,;:!?])/g, '$1');
+  // Fix broken "a/an" agreement
+  result = result.replace(/\b(a|an)\s+(\w+)/gi, (_match, article, word) => {
+    const vowelStart = /^[aeiou]/i.test(word) && !/^(uni|one|once|use[ds]?|usu|ura|eur)/i.test(word);
+    const hStart = /^(hour|honest|honor|heir|herb)/i.test(word);
+    const shouldBeAn = vowelStart || hStart;
+    const correct = shouldBeAn ? 'an' : 'a';
+    const final = /^A/.test(article) ? correct.charAt(0).toUpperCase() + correct.slice(1) : correct;
+    return `${final} ${word}`;
+  });
+  // Fix AI capitalization
+  result = result.replace(/\bai-(\w)/gi, (_m, c) => `AI-${c}`);
+  result = result.replace(/\bai\b/g, 'AI');
+  // Double prepositions from synonym stacking
+  result = result.replace(/\b(of|to|in|for|on|at|by|with|from|as|is|the|a|an) \1\b/gi, '$1');
+  // Final compound word repair
+  result = result.replace(/\bdecision[,\s]+making\b/gi, 'decision-making');
+  result = result.replace(/\bproblem[,\s]+solving\b/gi, 'problem-solving');
+  result = result.replace(/\bwell[,\s]+(known|established|defined|being)\b/gi, 'well-$1');
+  result = result.replace(/\blong[,\s]+(term|standing|running|lasting)\b/gi, 'long-$1');
+  result = result.replace(/\bshort[,\s]+(term|lived|sighted)\b/gi, 'short-$1');
+  result = result.replace(/\breal[,\s]+(time|world)\b/gi, 'real-$1');
+  result = result.replace(/\bdata[,\s]+driven\b/gi, 'data-driven');
+  result = result.replace(/\bevidence[,\s]+based\b/gi, 'evidence-based');
+  // Capitalize first letter
+  if (result.length > 0 && /[a-z]/.test(result[0])) {
+    result = result[0].toUpperCase() + result.slice(1);
+  }
+  return result.trim();
+}
+
+/**
+ * Process a single sentence through all aggressive post-processing passes.
+ */
+// ── Pre-compiled verb/modifier swap patterns for processOneSentence ──
+const COMPILED_VERB_PHRASE_SWAPS: { rx: RegExp; alts: string[] }[] =
+  Object.entries(VERB_PHRASE_SWAPS).map(([phrase, alts]) => ({
+    rx: new RegExp(`\\b${escapeRegex(phrase)}\\b`, 'gi'),
+    alts,
+  }));
+
+const COMPILED_MODIFIER_SWAPS: { rx: RegExp; alts: string[] }[] =
+  Object.entries(MODIFIER_SWAPS).map(([phrase, alts]) => ({
+    rx: new RegExp(`\\b${escapeRegex(phrase)}\\b`, 'gi'),
+    alts,
+  }));
+
+function processOneSentence(
+  sentenceText: string,
+  originalSentenceText: string,
+  ctx: TextContext,
+  usedReplacements: Set<string>,
+): { text: string; wasRestructured: boolean } {
+  let s = sentenceText;
+  const clean = isSentenceClean(s);
+  let wasRestructured = false;
+
+  // PASS 1: AI Vocabulary Kill
+  if (clean) s = finalAIKill(s);
+
+  // PASS 2: Targeted phrase-level substitutions
+  for (const { rx, alts } of COMPILED_VERB_PHRASE_SWAPS) {
+    rx.lastIndex = 0;
+    if (rx.test(s) && Math.random() < 0.75) {
+      rx.lastIndex = 0;
+      s = s.replace(rx, () => pickRandom(alts));
+    }
+  }
+  for (const { rx, alts } of COMPILED_MODIFIER_SWAPS) {
+    rx.lastIndex = 0;
+    if (rx.test(s) && Math.random() < 0.75) {
+      rx.lastIndex = 0;
+      s = s.replace(rx, () => pickRandom(alts));
+    }
+  }
+
+  // PASS 3: Connector naturalization
+  s = naturalizeConnectors(s);
+
+  // PASS 4: Deep sentence restructuring
+  if (clean && wordCount(s) >= 8 && Math.random() < 0.55) {
+    const result = restructureSentence(s);
+    if (result !== s) {
+      s = result;
+      wasRestructured = true;
+    } else {
+      const fronted = frontAdverbial(s);
+      if (fronted !== s) {
+        s = fronted;
+        wasRestructured = true;
+      }
+    }
+  }
+
+  // PASS 5: Aggressive synonym swap
+  if (clean) s = aggressiveSynonymSwap(s, ctx, usedReplacements);
+
+  // PASS 5b: Revert if garbled
+  const hasVerb = /\b(is|are|was|were|has|have|had|does|do|did|will|would|could|should|can|may|must)\b/i.test(s);
+  const hasGarble = /\b(\w+)\s+\1\b/i.test(s) || /[A-Z][a-z]+\s+[A-Z][a-z]+\s+[A-Z][a-z]+\s+[A-Z]/.test(s);
+  const tooShort = s.split(/\s+/).length < 3;
+  if ((!hasVerb && s.length > 20) || hasGarble || tooShort) {
+    s = originalSentenceText;
+  }
+
+  // PASS 7: Per-sentence cleanup
+  s = cleanupSentence(s);
+
+  return { text: s, wasRestructured };
+}
 
 export const aggressivePostProcessPhase: Phase = {
   name: 'aggressivePostProcess',
@@ -692,208 +850,70 @@ export const aggressivePostProcessPhase: Phase = {
 
     // Track the original text for change-rate measurement
     const originalText = text;
-
-    // Split into sentences
-    let sentences = splitSentences(text);
-
-    // Pre-check: identify sentences that are already garbled from earlier phases
-    // and should not be further modified (protect from cascading damage)
-    const sentenceIsClean = sentences.map(s => {
-      // Must have at least one verb
-      const hasVerb = /\b(is|are|was|were|has|have|had|does|do|did|will|would|could|should|can|may|might|shall|must|being|been|makes|takes|gives|shows|suggests|provides|requires|involves|enables|supports|leads|creates|produces|allows|helps|means|needs|works|uses|finds|forms|offers|reflects|determines|presents|considers|applies|improved|transformed|enhanced|enabled|facilitated|altered|changed|increased|decreased|affected|generated|identified|implemented|integrated|leveraged|utilized|addressed|established|maintained|achieved|demonstrated|indicated|conducted|reported|observed|examined|evaluated|analyzed|compared|developed|designed|proposed|introduced|suggested|recommended|concluded|revealed|confirmed|discussed|explored|investigated|highlighted|illustrated|emphasized|explained|described|defined|classified|categorized|assessed|measured|tested|verified|validated|reviewed|summarized|outlined|elaborated|clarified|distinguished|recognized|acknowledged|assumed|hypothesized|predicted|estimated|calculated|computed|simulated|optimized|maximized|minimized|resolved|solved|addressed|prevented|avoided|reduced|eliminated|mitigated|managed|controlled|monitored|regulated|supervised|coordinated|organized|structured|planned|executed|performed|conducted|implemented|delivered|completed|finished|accomplished|succeeded|failed|struggled|challenged|attempted|tried|ensured|guaranteed|secured|protected|preserved|maintained|sustained|supported|promoted|encouraged|motivated|inspired|influenced|impacted|shaped|formed|built|constructed|created|established|founded|initiated|launched|started|began|continued|proceeded|progressed|advanced|evolved|developed|grew|expanded|extended|broadened|deepened|strengthened|improved|enhanced|upgraded|refined|modified|adjusted|adapted|customized|tailored|configured|calibrated|tuned|aligned|integrated|incorporated|combined|merged|unified|consolidated|aggregated|compiled|collected|gathered|assembled|accumulated|stored|retained|saved|archived|recorded|documented|logged|tracked|monitored|reported|communicated|transmitted|distributed|disseminated|shared|published|released|disclosed|announced|declared|stated|expressed|articulated|conveyed|relayed|informed|notified|alerted|warned|cautioned|advised|recommended|suggested|proposed|offered|provided|supplied|delivered|served|contributed|aided|assisted|facilitated|supported|backed|endorsed|championed|advocated)\b/i;
-      if (!hasVerb.test(s)) return false;
-      // Fragment check: sentence too short after stripping connectors
-      const stripped = s.replace(/^(on reflection|in practice|examining deeper|what surfaces[^,]*,|[^,]{0,30},)\s*/i, '').trim();
-      if (stripped.split(/\s+/).length < 4) return false;
-      // No orphaned phrases like "of distinct note."
-      if (/\b(has|have|had|is|are|was|were)\s+(of\s+\w+\s+\w+)\.\s/i.test(s)) return false;
-      return true;
-    });
-
-    // ── PASS 1: AI Vocabulary Kill (clean sentences only) ──
-    sentences = sentences.map((s, i) => sentenceIsClean[i] ? finalAIKill(s) : s);
-
-    // ── PASS 2: Targeted phrase-level substitutions (safe subset only) ──
-    // Full applyPhraseDictionaries is too destructive on already-processed text.
-    // Apply only VERB_PHRASE_SWAPS and MODIFIER_SWAPS which are word/phrase level
-    // and less likely to garble sentence structure.
-    sentences = sentences.map(s => {
-      let r = s;
-      for (const [phrase, alts] of Object.entries(VERB_PHRASE_SWAPS)) {
-        const regex = new RegExp(`\\b${escapeRegex(phrase)}\\b`, 'gi');
-        if (regex.test(r) && Math.random() < 0.75) {
-          r = r.replace(regex, () => pickRandom(alts));
-        }
-      }
-      for (const [phrase, alts] of Object.entries(MODIFIER_SWAPS)) {
-        const regex = new RegExp(`\\b${escapeRegex(phrase)}\\b`, 'gi');
-        if (regex.test(r) && Math.random() < 0.75) {
-          r = r.replace(regex, () => pickRandom(alts));
-        }
-      }
-      return r;
-    });
-
-    // ── PASS 3: Connector naturalization (70% of applicable sentences) ──
-    sentences = sentences.map(s => naturalizeConnectors(s));
-
-    // ── PASS 4: Deep sentence restructuring (~50% of eligible clean sentences) ──
     let restructured = 0;
-    sentences = sentences.map((sent, i) => {
-      if (!sentenceIsClean[i]) return sent; // Skip already garbled sentences
-      const words = wordCount(sent);
-      if (words >= 8 && Math.random() < 0.55) {
-        const result = restructureSentence(sent);
-        if (result !== sent) {
-          restructured++;
-          return result;
-        }
-        // Try adverbial fronting as fallback
-        const fronted = frontAdverbial(sent);
-        if (fronted !== sent) {
-          restructured++;
-          return fronted;
-        }
+    let totalSentences = 0;
+
+    // ── Process each sentence individually via paragraph structure ──
+    for (const paragraph of state.paragraphs) {
+      for (const sentence of paragraph.sentences) {
+        totalSentences++;
+        const prePhaseText = sentence.text;
+        const result = processOneSentence(
+          sentence.text,
+          prePhaseText,
+          ctx,
+          usedReplacements,
+        );
+        sentence.text = result.text;
+        if (result.wasRestructured) restructured++;
       }
-      return sent;
-    });
+    }
 
-    // ── PASS 5: Aggressive synonym swap (targets ~65% of content words) ──
-    sentences = sentences.map((s, i) => sentenceIsClean[i] ? aggressiveSynonymSwap(s, ctx, usedReplacements) : s);
-
-    // ── PASS 5b: Revert any sentence that became garbled ──
-    const origSentences = splitSentences(text);
-    sentences = sentences.map((s, i) => {
-      // Check for broken sentences: no verb, orphaned fragments, doubled words
-      const hasVerb = /\b(is|are|was|were|has|have|had|does|do|did|will|would|could|should|can|may|must)\b/i.test(s);
-      const hasGarble = /\b(\w+)\s+\1\b/i.test(s) || /[A-Z][a-z]+\s+[A-Z][a-z]+\s+[A-Z][a-z]+\s+[A-Z]/.test(s);
-      const tooShort = s.split(/\s+/).length < 3;
-      if ((!hasVerb && s.length > 20) || hasGarble || tooShort) {
-        // Revert to pre-Phase-13 version if available
-        return origSentences[i] ?? s;
+    // ── Reassemble from sentence structure ──
+    const paragraphTexts: string[] = [];
+    for (const paragraph of state.paragraphs) {
+      const liveSentences = paragraph.sentences.filter(
+        s => s.text.trim().length > 0 && !s.flags.includes('killed')
+      );
+      const assembled = liveSentences.map(s => s.text).join(' ');
+      paragraph.currentText = assembled;
+      if (assembled.trim()) {
+        paragraphTexts.push(assembled);
       }
-      return s;
-    });
+    }
+    let assembled = paragraphTexts.join('\n\n').replace(/ {2,}/g, ' ').trim();
 
-    // ── PASS 6: Check change rate, do extra pass if below 75% ──
-    let assembled = sentences.join(' ').replace(/ {2,}/g, ' ').trim();
+    // ── PASS 6: Check change rate, do extra synonym pass per-sentence if below 75% ──
     let changeRate = wordChangeFraction(originalText, assembled);
 
     if (changeRate < 0.75) {
-      // Extra aggressive synonym pass with higher probability
-      sentences = splitSentences(assembled);
-      sentences = sentences.map(sent => {
-        // Second synonym pass with 80% swap rate
-        const words = sent.split(/(\s+|[.,;:!?()\[\]"'])/);
-        const result: string[] = [];
-        for (const token of words) {
-          if (!token || /^[\s.,;:!?()\[\]"']+$/.test(token)) {
-            result.push(token);
-            continue;
-          }
-          const clean = token.replace(/[^a-zA-Z]/g, '');
-          if (!clean || clean.length < 3) {
-            result.push(token);
-            continue;
-          }
-          const lower = clean.toLowerCase();
-          if (PROTECTED_WORDS.has(lower) || SWAP_BLOCKLIST.has(lower) || isProtected(ctx, clean)) {
-            result.push(token);
-            continue;
-          }
-          if (spanOverlapsCompound(ctx, sent, clean, sent.indexOf(clean))) {
-            result.push(token);
-            continue;
-          }
-          let replacements = SYNONYM_BANK[lower] || DIVERSITY_SWAPS[lower];
-          let suffix = '';
-          if (!replacements) {
-            const stemmed = stemWord(lower);
-            if (stemmed) {
-              replacements = SYNONYM_BANK[stemmed.base] || DIVERSITY_SWAPS[stemmed.base];
-              suffix = stemmed.suffix;
-            }
-          }
-          if (replacements && replacements.length > 0 && Math.random() < 0.80) {
-            let replacement = pickRandom(replacements.filter(r => !usedReplacements.has(r.toLowerCase())) || replacements);
-            if (!replacement) replacement = pickRandom(replacements);
-            if (suffix) replacement = reInflect(replacement, suffix);
-            if (clean[0] === clean[0].toUpperCase()) {
-              replacement = replacement[0].toUpperCase() + replacement.slice(1);
-            }
-            const prefix = token.match(/^[^a-zA-Z]*/)?.[0] ?? '';
-            const trail = token.match(/[^a-zA-Z]*$/)?.[0] ?? '';
-            result.push(prefix + replacement + trail);
-            usedReplacements.add(replacement.toLowerCase());
-          } else {
-            result.push(token);
-          }
+      for (const paragraph of state.paragraphs) {
+        for (const sentence of paragraph.sentences) {
+          sentence.text = aggressiveSynonymSwap(sentence.text, ctx, usedReplacements, new Set<string>(), 0.80);
+          sentence.text = cleanupSentence(sentence.text);
         }
-        return result.join('');
-      });
-      assembled = sentences.join(' ').replace(/ {2,}/g, ' ').trim();
+      }
+      // Reassemble again
+      const updatedTexts: string[] = [];
+      for (const paragraph of state.paragraphs) {
+        const liveSentences = paragraph.sentences.filter(
+          s => s.text.trim().length > 0 && !s.flags.includes('killed')
+        );
+        const pText = liveSentences.map(s => s.text).join(' ');
+        paragraph.currentText = pText;
+        if (pText.trim()) updatedTexts.push(pText);
+      }
+      assembled = updatedTexts.join('\n\n').replace(/ {2,}/g, ' ').trim();
       changeRate = wordChangeFraction(originalText, assembled);
     }
 
-    // ── PASS 7: Final cleanup ──
-    // Fix comma-broken compound words (e.g., "decision, making" → "decision-making")
-    assembled = assembled.replace(/\b(decision)[,\s]+(making)\b/gi, '$1-$2');
-    assembled = assembled.replace(/\b(problem)[,\s]+(solving)\b/gi, '$1-$2');
-    assembled = assembled.replace(/\b(well)[,\s]+(known|established|defined|being)\b/gi, '$1-$2');
-    assembled = assembled.replace(/\b(long)[,\s]+(term|standing|running|lasting)\b/gi, '$1-$2');
-    assembled = assembled.replace(/\b(short)[,\s]+(term|lived|sighted)\b/gi, '$1-$2');
-    assembled = assembled.replace(/\b(high)[,\s]+(quality|level|resolution|performance)\b/gi, '$1-$2');
-    assembled = assembled.replace(/\b(real)[,\s]+(time|world)\b/gi, '$1-$2');
-    assembled = assembled.replace(/\b(state)[,\s]+(of)[,\s]+(the)[,\s]+(art)\b/gi, '$1-$2-$3-$4');
-    assembled = assembled.replace(/\b(self)[,\s]+(driving|learning|aware|sufficient)\b/gi, '$1-$2');
-    assembled = assembled.replace(/\b(data)[,\s]+(driven)\b/gi, '$1-$2');
-    assembled = assembled.replace(/\b(evidence)[,\s]+(based)\b/gi, '$1-$2');
-    assembled = assembled.replace(/\b(cross)[,\s]+(sectional|disciplinary|cultural)\b/gi, '$1-$2');
-    // Fix "partly ," and similar orphaned adverbs before commas  
-    assembled = assembled.replace(/,\s*partly,/gi, ',');
-    assembled = assembled.replace(/\bpartly,\s*and\b/gi, 'and');
-    // Fix capitalization after restructuring
-    assembled = assembled.replace(/([.!?])\s+([a-z])/g, (_m, p, l) => `${p} ${l.toUpperCase()}`);
-    // Fix double spaces
-    assembled = assembled.replace(/ {2,}/g, ' ');
-    // Fix space before punctuation
-    assembled = assembled.replace(/\s+([.,;:!?])/g, '$1');
-    // Fix missing space after punctuation
+    // Fix missing space after punctuation (cross-sentence boundary)
     assembled = assembled.replace(/([.!?])([A-Z])/g, '$1 $2');
-    // Fix broken "a/an" agreement
-    assembled = assembled.replace(/\b(a|an)\s+(\w+)/gi, (_match, article, word) => {
-      const vowelStart = /^[aeiou]/i.test(word) && !/^(uni|one|once|use[ds]?|usu|ura|eur)/i.test(word);
-      const hStart = /^(hour|honest|honor|heir|herb)/i.test(word);
-      const shouldBeAn = vowelStart || hStart;
-      const correct = shouldBeAn ? 'an' : 'a';
-      const final = /^A/.test(article) ? correct.charAt(0).toUpperCase() + correct.slice(1) : correct;
-      return `${final} ${word}`;
-    });
-    // Capitalize first letter
-    if (assembled.length > 0 && /[a-z]/.test(assembled[0])) {
-      assembled = assembled[0].toUpperCase() + assembled.slice(1);
-    }
-    // Fix AI capitalization
-    assembled = assembled.replace(/\bai-(\w)/gi, (_m, c) => `AI-${c}`);
-    assembled = assembled.replace(/\bai\b/g, 'AI');
-
-    // Double prepositions from synonym stacking
-    assembled = assembled.replace(/\b(of|to|in|for|on|at|by|with|from|as|is|the|a|an) \1\b/gi, '$1');
-
-    // Final compound word repair (belt-and-suspenders — also runs above but some passes may re-break)
-    assembled = assembled.replace(/\bdecision[,\s]+making\b/gi, 'decision-making');
-    assembled = assembled.replace(/\bproblem[,\s]+solving\b/gi, 'problem-solving');
-    assembled = assembled.replace(/\bwell[,\s]+(known|established|defined|being)\b/gi, 'well-$1');
-    assembled = assembled.replace(/\blong[,\s]+(term|standing|running|lasting)\b/gi, 'long-$1');
-    assembled = assembled.replace(/\bshort[,\s]+(term|lived|sighted)\b/gi, 'short-$1');
-    assembled = assembled.replace(/\breal[,\s]+(time|world)\b/gi, 'real-$1');
-    assembled = assembled.replace(/\bdata[,\s]+driven\b/gi, 'data-driven');
-    assembled = assembled.replace(/\bevidence[,\s]+based\b/gi, 'evidence-based');
 
     state.currentText = assembled;
     state.logs.push(
       `[aggressivePostProcess] Change rate: ${(changeRate * 100).toFixed(1)}%, ` +
-      `restructured: ${restructured}/${splitSentences(originalText).length} sentences, ` +
+      `restructured: ${restructured}/${totalSentences} sentences, ` +
       `synonym pool: ${usedReplacements.size} unique replacements used`
     );
 

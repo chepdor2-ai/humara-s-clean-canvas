@@ -22,6 +22,9 @@ import {
   parseStructuredBlocks,
   reflowParagraphToOriginalLines,
 } from '../engine/structure-preserver';
+import {
+  humanizeSentence,
+} from '../humanize-transforms';
 
 export interface HumaraOptions {
   strength?: 'light' | 'medium' | 'heavy';
@@ -172,45 +175,18 @@ function humanizeBlock(text: string, options: Required<HumaraOptions>): string {
   if (!input) return text;
   if (looksLikeHeading(input) || countWords(input) <= 5) return input;
 
-  const inputHadFirstPerson = FIRST_PERSON_RE.test(input);
   const style = TONE_TO_STYLE[options.tone] ?? 'academic';
   const requestedAggr = STRENGTH_TO_AGGR[options.strength] ?? 6;
   const aggr = options.strictMeaning ? Math.min(requestedAggr, 5) : requestedAggr;
 
-  let primary = input;
+  let output = input;
   try {
-    primary = runPrimaryPass(input, style, aggr);
+    output = runPrimaryPass(input, style, aggr);
   } catch {
-    primary = input;
+    output = input;
   }
 
-  let backup = input;
-  try {
-    backup = backupHumaraHumanize(input, {
-      strength: options.strength,
-      tone: TONE_TO_BACKUP[options.tone] ?? 'neutral',
-      strictMeaning: options.strictMeaning,
-    });
-  } catch {
-    backup = input;
-  }
-
-  const originalSentences = splitSentences(input);
-  if (originalSentences.length === 0) return input;
-
-  const primarySentences = enforceSentenceCount(splitSentences(primary), originalSentences.length, originalSentences);
-  const backupSentences = enforceSentenceCount(splitSentences(backup), originalSentences.length, originalSentences);
-
-  const merged = originalSentences.map((originalSentence, index) => {
-    const conservative = buildConservativeFallback(originalSentence, inputHadFirstPerson);
-    return chooseBestSentence(
-      originalSentence,
-      [primarySentences[index], backupSentences[index], conservative],
-      inputHadFirstPerson,
-    );
-  });
-
-  let output = applyCoherenceFixes(merged.join(' '));
+  // Light grammar/coherence cleanup (no sentence splitting to avoid citation breakage)
   output = repairGrammar(output);
   output = output.replace(/\s{2,}/g, ' ').trim();
 

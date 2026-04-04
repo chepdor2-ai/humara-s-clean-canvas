@@ -374,11 +374,24 @@ export class TextSignals {
 
     if (vectors.length < 3) return 55.0;
 
-    // Mean pairwise cosine similarity
+    // Sample-based pairwise cosine similarity (cap at 50 pairs to avoid O(S²))
     let total_sim = 0.0;
     let pair_count = 0;
-    for (let i = 0; i < vectors.length; i++) {
-      for (let j = i + 1; j < vectors.length; j++) {
+    const maxPairs = 50;
+    if (vectors.length <= 15) {
+      // Small enough for full pairwise
+      for (let i = 0; i < vectors.length; i++) {
+        for (let j = i + 1; j < vectors.length; j++) {
+          total_sim += cosineSim(vectors[i], vectors[j]);
+          pair_count++;
+        }
+      }
+    } else {
+      // Sample random pairs
+      for (let p = 0; p < maxPairs; p++) {
+        const i = Math.floor(Math.random() * vectors.length);
+        let j = Math.floor(Math.random() * (vectors.length - 1));
+        if (j >= i) j++;
         total_sim += cosineSim(vectors[i], vectors[j]);
         pair_count++;
       }
@@ -695,12 +708,15 @@ export class TextSignals {
     if (N < 6) return 45;
     const mu = mean(signal);
     const centered = signal.map((s) => s - mu);
+    // Use only first 16 DFT bins (enough for flatness estimate, avoids O(N²))
+    const maxK = Math.min(Math.floor(N / 2), 16);
     const power: number[] = [];
-    for (let k = 1; k <= Math.floor(N / 2); k++) {
+    for (let k = 1; k <= maxK; k++) {
       let re = 0, im = 0;
       for (let n = 0; n < N; n++) {
-        re += centered[n] * Math.cos((2 * Math.PI * k * n) / N);
-        im -= centered[n] * Math.sin((2 * Math.PI * k * n) / N);
+        const angle = (2 * Math.PI * k * n) / N;
+        re += centered[n] * Math.cos(angle);
+        im -= centered[n] * Math.sin(angle);
       }
       power.push(Math.max(re ** 2 + im ** 2, 1e-12));
     }

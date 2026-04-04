@@ -2,7 +2,7 @@
 import Link from 'next/link';
 import Image from 'next/image';
 import { usePathname } from 'next/navigation';
-import { LayoutDashboard, Edit3, FileText, BrainCircuit, Settings, LogOut, Menu, X, ArrowRight, ShieldCheck, Sun, Moon } from 'lucide-react';
+import { LayoutDashboard, Edit3, FileText, BrainCircuit, Settings, LogOut, Menu, X, ArrowRight, ShieldCheck, Sun, Moon, FlaskConical, BookOpen } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useTheme } from './ThemeProvider';
 import { useAuth } from './AuthProvider';
@@ -33,9 +33,11 @@ export default function RootLayoutClient({ children }: { children: React.ReactNo
   const appLinks = [
     { name: 'Dashboard', href: '/app/dashboard', icon: LayoutDashboard },
     { name: 'Humanizer', href: '/app', icon: Edit3 },
-    { name: 'Documents', href: '/app/docs', icon: FileText },
+    { name: 'Documents', href: '/app/documents', icon: FileText },
     { name: 'AI Detector', href: '/app/detector', icon: ShieldCheck },
     { name: 'Style Profiles', href: '/app/style', icon: BrainCircuit },
+    { name: 'Advanced', href: '/app/advanced', icon: FlaskConical },
+    { name: 'Docs', href: '/app/docs', icon: BookOpen },
     { name: 'Settings', href: '/app/settings', icon: Settings },
   ];
 
@@ -132,13 +134,32 @@ export default function RootLayoutClient({ children }: { children: React.ReactNo
     );
   }
 
+  const [appMenuOpen, setAppMenuOpen] = useState(false);
+
   return (
     <div className="flex h-screen bg-slate-50 dark:bg-zinc-950 overflow-hidden">
-      <aside className="w-60 bg-white dark:bg-zinc-900 border-r border-slate-200 dark:border-zinc-800 flex flex-col py-5 shrink-0">
-        <div className="px-5 mb-6">
+      {/* Mobile top bar for app routes */}
+      <div className="md:hidden fixed top-0 left-0 right-0 z-50 bg-white dark:bg-zinc-900 border-b border-slate-200 dark:border-zinc-800 flex items-center justify-between px-4 h-14">
+        <Logo />
+        <button onClick={() => setAppMenuOpen(!appMenuOpen)} className="p-2 text-slate-700 dark:text-zinc-300">
+          {appMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+        </button>
+      </div>
+
+      {/* Mobile overlay */}
+      {appMenuOpen && (
+        <div className="md:hidden fixed inset-0 z-40 bg-black/30" onClick={() => setAppMenuOpen(false)} />
+      )}
+
+      {/* Sidebar */}
+      <aside className={`fixed md:static z-50 md:z-auto top-0 left-0 h-full w-60 bg-white dark:bg-zinc-900 border-r border-slate-200 dark:border-zinc-800 flex flex-col py-5 shrink-0 transition-transform duration-200 ${appMenuOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}`}>
+        <div className="px-5 mb-6 hidden md:block">
           <Logo />
         </div>
-        <nav className="flex-1 px-3 space-y-0.5">
+        <div className="px-5 mb-6 md:hidden h-14 flex items-center">
+          <Logo />
+        </div>
+        <nav className="flex-1 px-3 space-y-0.5 overflow-y-auto">
           {appLinks.map((link) => {
             const isActive = pathname === link.href;
             const Icon = link.icon;
@@ -146,6 +167,7 @@ export default function RootLayoutClient({ children }: { children: React.ReactNo
               <Link
                 key={link.name}
                 href={link.href}
+                onClick={() => setAppMenuOpen(false)}
                 className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
                   isActive
                     ? 'bg-brand-50 dark:bg-brand-950 text-brand-700 dark:text-brand-300'
@@ -173,8 +195,8 @@ export default function RootLayoutClient({ children }: { children: React.ReactNo
         </div>
       </aside>
 
-      <main className="flex-1 overflow-y-auto bg-slate-50 dark:bg-zinc-950">
-        <div className="max-w-7xl mx-auto p-6">
+      <main className="flex-1 overflow-y-auto bg-slate-50 dark:bg-zinc-950 pt-14 md:pt-0">
+        <div className="max-w-7xl mx-auto p-4 sm:p-6">
           {children}
         </div>
       </main>
