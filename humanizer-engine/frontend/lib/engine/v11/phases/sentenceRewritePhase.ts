@@ -147,7 +147,7 @@ export const sentenceRewritePhase: Phase = {
 
         // 5. Sentence starter variation for medium-AI and high-AI sentences
         if ((sentence.flags.includes('high-ai') || sentence.flags.includes('medium-ai'))
-            && Math.random() < 0.4
+            && Math.random() < 0.12
             && !sentence.flags.includes('struct-mod')) {
           const starter = await getRandomStarter();
           // Only prepend if sentence doesn't already start with a similar transition

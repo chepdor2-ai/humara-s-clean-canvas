@@ -176,7 +176,7 @@ const EXPANSION_STARTERS: string[] = [
 function addAcademicExpansion(sentence: string, changeRatio: number): string {
   // Only expand if change ratio is still below 30% and sentence is long enough
   if (changeRatio >= 0.30 || sentence.split(/\s+/).length < 12) return sentence;
-  if (Math.random() > 0.25) return sentence;
+  if (Math.random() > 0.10) return sentence;
   
   const starter = pick(EXPANSION_STARTERS);
   // Lowercase first letter of sentence after prepending

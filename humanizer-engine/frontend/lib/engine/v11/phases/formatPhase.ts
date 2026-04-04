@@ -182,23 +182,10 @@ function fixTransformArtifacts(text: string): string {
     result = result.replace(pattern, replacement);
   }
 
-  // ── EM-DASH LIMIT (max 2 per 1000 words) ──
-  const wordCount = result.split(/\s+/).length;
-  const maxEmDashes = Math.max(2, Math.floor((wordCount / 1000) * 2));
-  const emDashMatches = [...result.matchAll(/\s*—\s*/g)];
-  if (emDashMatches.length > maxEmDashes) {
-    // Keep the first maxEmDashes, convert the rest to commas
-    let removed = 0;
-    const positions = emDashMatches.map(m => ({ index: m.index!, length: m[0].length }));
-    // Process from end to preserve indices
-    for (let i = positions.length - 1; i >= 0; i--) {
-      if (i >= maxEmDashes) {
-        const pos = positions[i];
-        result = result.slice(0, pos.index) + ', ' + result.slice(pos.index + pos.length);
-        removed++;
-      }
-    }
-  }
+  // ── EM-DASH REMOVAL (zero em-dashes policy) ──
+  // Replace ALL em-dashes with commas
+  result = result.replace(/ — /g, ', ').replace(/—/g, ', ');
+  result = result.replace(/ – /g, ', ').replace(/–/g, ', ');
 
   // Double spaces
   result = result.replace(/ {2,}/g, ' ');
@@ -217,8 +204,7 @@ function fixTransformArtifacts(text: string): string {
   // Capitalize after sentence endings
   result = result.replace(/([.!?])\s+([a-z])/g, (_m, p, l) => `${p} ${l.toUpperCase()}`);
 
-  // Fix lowercase at start after em-dash: "— i submit" → "— I submit"
-  result = result.replace(/—\s+([a-z])/g, (_m, l) => `— ${l.toUpperCase()}`);
+  // Em-dash cleanup no longer needed (zero em-dashes policy)
 
   // Fix lowercase standalone "i" 
   result = result.replace(/\bi\b(?=[^a-zA-Z])/g, 'I');

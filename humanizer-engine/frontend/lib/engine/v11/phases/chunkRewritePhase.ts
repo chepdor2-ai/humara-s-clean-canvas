@@ -54,7 +54,7 @@ async function ruleBasedSentenceRewrite(sentence: string): Promise<string> {
   }
 
   // Vary sentence starters for short sentences
-  if (words.length >= 4 && words.length < 10 && Math.random() < 0.4) {
+  if (words.length >= 4 && words.length < 10 && Math.random() < 0.10) {
     const starters = ['In fact, ', 'Indeed, ', 'Notably, ', 'In particular, '];
     const starter = pickRandom(starters);
     // Only add if sentence doesn't already start with a connector

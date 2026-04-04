@@ -432,8 +432,8 @@ function phase3_eliminateRepetitions(sentences) {
     // Track starter frequency
     starterCounts[starter] = (starterCounts[starter] || 0) + 1;
 
-    // If this starter appeared 2+ times already, vary it
-    if (starterCounts[starter] > 2) {
+    // If this starter appeared 3+ times already, vary it (raised from 2 to reduce fillers)
+    if (starterCounts[starter] > 3) {
       const alts = ['In fact,', 'Notably,', 'Here,', 'At this point,', 'As seen,', 'Put differently,'];
       const alt = alts[Math.floor(Math.random() * alts.length)];
       // Replace first word if sentence starts with "The", "This", "These", "It", "They"
@@ -571,7 +571,7 @@ function phase5_improveFlow(sentences) {
     const prevWords = prev.split(/\s+/).length;
     const currWords = curr.split(/\s+/).length;
 
-    if (prevWords < 12 && currWords < 12 && i > 1 && Math.random() < 0.25) {
+    if (prevWords < 12 && currWords < 12 && i > 1 && Math.random() < 0.10) {
       // Expand the shorter sentence slightly
       if (currWords < 8) {
         // Add a clarifying tail

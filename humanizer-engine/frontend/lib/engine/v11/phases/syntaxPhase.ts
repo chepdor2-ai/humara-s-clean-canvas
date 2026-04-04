@@ -257,8 +257,8 @@ export const syntaxPhase: Phase = {
         // Cleft constructions DISABLED — they compound with Phase 13 synonym swaps
         // producing garbled outputs like "The actual discovering is that"
 
-        if (roll < 0.14 && i > 0) {
-          // 5% chance: fronted adverbial (reduced from 14%)
+        if (roll < 0.12 && i > 0) {
+          // 3% chance: fronted adverbial (reduced from 5%)
           const adverb = pickRandom(ADVERB_FRONTS);
           sentence.text = adverb + sentence.text[0].toLowerCase() + sentence.text.slice(1);
           sentence.flags.push('struct-mod');
@@ -266,7 +266,7 @@ export const syntaxPhase: Phase = {
           continue;
         }
 
-        if (roll < 0.17 && words.length > 10 && i > 0 && i < len - 1) {
+        if (roll < 0.15 && words.length > 10 && i > 0 && i < len - 1) {
           // 3% chance: appositive insertion (reduced from 10%)
           sentence.text = insertAppositive(sentence.text);
           sentence.flags.push('struct-mod');
