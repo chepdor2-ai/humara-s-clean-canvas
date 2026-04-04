@@ -349,17 +349,6 @@ function injectBurstiness(sentences: string[]): string[] {
       }
     }
 
-    // Every 5th sentence: extend with a natural prepositional intro
-    if (i % 5 === 2 && words.length >= 8 && words.length <= 14) {
-      const extenders = [
-        "At that point, ", "By then, ", "As it turned out, ",
-        "From that angle, ", "In real terms, ",
-      ];
-      const ext = extenders[i % extenders.length];
-      final.push(ext + s[0].toLowerCase() + s.slice(1));
-      continue;
-    }
-
     final.push(s);
   }
 
@@ -375,6 +364,7 @@ function diversifySentenceStructure(sentences: string[]): string[] {
 
   const result = [...sentences];
   let lastStartCategory = "";
+  let consecutiveCount = 0;
 
   for (let i = 0; i < result.length; i++) {
     const sent = result[i].trim();
@@ -387,23 +377,24 @@ function diversifySentenceStructure(sentences: string[]): string[] {
     else if (/^(it|they|he|she|we|there)$/i.test(startWord)) category = "pronoun";
     else if (/^[A-Z][a-z]+$/.test(sent.split(/\s+/)[0] ?? "")) category = "proper";
 
-    // If two consecutive sentences start the same way, restructure the second
+    // If two consecutive sentences start the same way, try to restructure
     if (category === lastStartCategory && category !== "other") {
-      // Try prepositional fronting
-      const prepFronters = [
-        "In this case, ",
-        "At that stage, ",
-        "For that reason, ",
-        "Along those lines, ",
-        "From that angle, ",
-        "Under those conditions, ",
-        "By that measure, ",
-        "On that score, ",
-      ];
-      const fronter = prepFronters[i % prepFronters.length];
-      // Lowercase the first letter of the original
-      const lowered = sent[0].toLowerCase() + sent.slice(1);
-      result[i] = fronter + lowered;
+      consecutiveCount++;
+      // Only restructure every other duplicate to avoid over-processing
+      if (consecutiveCount % 2 === 1) {
+        const words = sent.split(/\s+/);
+        // Try moving a mid-sentence clause to the front instead of injecting new text
+        const commaIdx = sent.indexOf(",");
+        if (commaIdx > 10 && commaIdx < sent.length * 0.6) {
+          const before = sent.slice(0, commaIdx).trim();
+          const after = sent.slice(commaIdx + 1).trim();
+          if (after.split(/\s+/).length >= 4 && before.split(/\s+/).length >= 3) {
+            result[i] = after[0].toUpperCase() + after.slice(1).replace(/\.$/, "") + ", " + before[0].toLowerCase() + before.slice(1) + ".";
+          }
+        }
+      }
+    } else {
+      consecutiveCount = 0;
     }
 
     lastStartCategory = category;
@@ -531,7 +522,7 @@ const DEEP_CONNECTOR_MAP: Record<string, string[]> = {
   "Nevertheless,": ["Still,", "Even so,", "All the same,"],
   "Consequently,": ["So,", "Because of that,", "As a result,"],
   "Subsequently,": ["Then,", "After that,", "Later,"],
-  "Therefore,": ["So,", "For that reason,"],
+  "Therefore,": ["So,", "Because of this,"],
   "Thus,": ["So,", "In this way,"],
   "Hence,": ["So,", "That is why,"],
   "Indeed,": ["In fact,", "Sure enough,", "Really,"],
@@ -842,6 +833,135 @@ export interface DeepCleanResult {
   wordChangePercent: number;
 }
 
+// ══════════════════════════════════════════════════════════════════════════
+// CROSS-SENTENCE REPETITION DEDUPLICATOR
+// ══════════════════════════════════════════════════════════════════════════
+
+const PHRASE_ALTERNATIVES: Record<string, string[]> = {
+  "each month": ["monthly", "every month", "on a monthly basis", "per month"],
+  "per month": ["monthly", "every month", "each month", "a month"],
+  "every month": ["monthly", "on a monthly basis", "per month", "a month"],
+  "a month": ["monthly", "per month", "each month"],
+  "set aside": ["put away", "earmarked", "reserved", "allocated", "budgeted"],
+  "i have allocated": ["i assigned", "i directed", "i put", "i reserved", "i earmarked"],
+  "i have set": ["i placed", "i directed", "i put", "i designated"],
+  "have been updated": ["were adjusted", "were revised", "were modified", "got changed"],
+  "have been revised": ["were adjusted", "were updated", "were modified", "got changed"],
+  "have been adjusted": ["were revised", "were updated", "were modified", "got changed"],
+  "has been included": ["was added", "is part of the plan", "is factored in", "was built in"],
+  "has been allocated": ["was set aside", "was directed", "was assigned", "was reserved"],
+  "has been set": ["was placed", "was put", "was designated", "was established"],
+  "in this case": ["here", "in this situation", "under these circumstances"],
+  "at that stage": ["by that point", "at that time", "then"],
+  "for that reason": ["because of this", "so", "that is why"],
+  "along those lines": ["similarly", "in a similar way", "likewise"],
+  "from that angle": ["seen that way", "looked at like that", "from that perspective"],
+  "under those conditions": ["given that", "in that scenario", "with those factors"],
+  "by that measure": ["on that basis", "judged that way", "by that standard"],
+  "on that score": ["in that regard", "on that front", "there"],
+  "at that point": ["by then", "at that time", "when that happens"],
+  "as it turned out": ["in the end", "ultimately", "as it happened"],
+  "in real terms": ["practically", "effectively", "in practice"],
+  "can help": ["may aid", "supports", "goes a long way toward", "is useful for"],
+  "cut down on": ["reduce", "lower", "trim", "decrease"],
+  "set away": ["set aside", "put away", "reserved", "earmarked"],
+  "put away": ["set aside", "reserved", "earmarked", "saved"],
+  "it is important": ["it matters", "it helps", "it counts"],
+  "on the other hand": ["then again", "conversely", "at the same time"],
+  "in addition to": ["beyond", "apart from", "on top of"],
+  "in order to": ["to", "so as to", "for the purpose of"],
+  "is an important": ["is a key", "is a meaningful", "is a valuable", "matters as a"],
+  "with that in mind": ["keeping that in view", "bearing that in mind", "considering that"],
+  "on a related note": ["relatedly", "along similar lines", "connected to this"],
+  "to that end": ["with that goal", "toward that aim", "for that purpose"],
+  "in that regard": ["on that front", "in that respect", "there"],
+};
+
+export function deduplicateRepeatedPhrases(text: string): string {
+  const words = text.split(/\s+/);
+  const phraseCounts: Record<string, number> = {};
+
+  for (let n = 2; n <= 5; n++) {
+    for (let i = 0; i <= words.length - n; i++) {
+      const phrase = words.slice(i, i + n).join(" ").toLowerCase().replace(/[^a-z\s'$%]/g, "").trim();
+      if (phrase.length < 4) continue;
+      if (/^\$?\d/.test(phrase)) continue;
+      phraseCounts[phrase] = (phraseCounts[phrase] || 0) + 1;
+    }
+  }
+
+  const repeatedPhrases = Object.entries(phraseCounts)
+    .filter(([_, count]) => count >= 3)
+    .sort((a, b) => b[0].length - a[0].length);
+
+  if (repeatedPhrases.length === 0) return text;
+
+  let result = text;
+
+  for (const [phrase, count] of repeatedPhrases) {
+    const alternatives = PHRASE_ALTERNATIVES[phrase];
+    if (!alternatives || alternatives.length === 0) continue;
+
+    let occurrenceIdx = 0;
+    const regex = new RegExp(phrase.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
+
+    result = result.replace(regex, (match) => {
+      occurrenceIdx++;
+      if (occurrenceIdx <= 1) return match;
+      const alt = alternatives[(occurrenceIdx - 2) % alternatives.length];
+      if (match[0] === match[0].toUpperCase()) {
+        return alt[0].toUpperCase() + alt.slice(1);
+      }
+      return alt;
+    });
+  }
+
+  const knownPrepends = [
+    /^(In this case|At that stage|For that reason|Along those lines|From that angle|Under those conditions|By that measure|On that score|At that point|By then|As it turned out|In real terms|Practically speaking|On closer inspection|In practice|By that point|As things stood|On the ground|Behind the scenes|With that shift|Looking closer|Broadly speaking),\s*/i,
+  ];
+
+  const paragraphs = result.split(/\n\s*\n/);
+  const cleanedParas = paragraphs.map(para => {
+    const sentences = robustSentenceSplit(para.trim());
+    const starterCounts: Record<string, number> = {};
+
+    for (const sent of sentences) {
+      for (const re of knownPrepends) {
+        const m = sent.match(re);
+        if (m) {
+          const key = m[1].toLowerCase();
+          starterCounts[key] = (starterCounts[key] || 0) + 1;
+        }
+      }
+    }
+
+    const repeatedStarters = new Set(
+      Object.entries(starterCounts).filter(([_, c]) => c >= 2).map(([k]) => k)
+    );
+
+    if (repeatedStarters.size === 0) return para;
+
+    const cleaned = sentences.map(sent => {
+      for (const re of knownPrepends) {
+        const m = sent.match(re);
+        if (m && repeatedStarters.has(m[1].toLowerCase())) {
+          const after = sent.slice(m[0].length).trim();
+          if (after.length > 0) {
+            return after[0].toUpperCase() + after.slice(1);
+          }
+        }
+      }
+      return sent;
+    });
+
+    return cleaned.join(" ");
+  });
+
+  result = cleanedParas.join("\n\n");
+
+  return result;
+}
+
 export async function premiumDeepClean(
   text: string,
   maxPasses = 3,
@@ -894,11 +1014,15 @@ export async function premiumDeepClean(
       // Phase 4d: Clean sentence starters
       sentences = cleanSentenceStarters(sentences);
 
-      // Phase 4e: Burstiness injection (aggressive — actually splits/merges)
-      sentences = injectBurstiness(sentences);
+      // Phase 4e: Burstiness injection — only on first pass to avoid compounding
+      if (pass === 0) {
+        sentences = injectBurstiness(sentences);
+      }
 
-      // Phase 4f: Structure diversification
-      sentences = diversifySentenceStructure(sentences);
+      // Phase 4f: Structure diversification — only on first pass to avoid compounding
+      if (pass === 0) {
+        sentences = diversifySentenceStructure(sentences);
+      }
 
       // Phase 4g: Punctuation diversification
       sentences = diversifyPunctuation(sentences);
@@ -939,7 +1063,12 @@ export async function premiumDeepClean(
 
   // Calculate word change percentage
   const finalWords = result.split(/\s+/);
-  const finalWordSet = new Set(finalWords.map(w => w.toLowerCase().replace(/[^a-z']/g, "")));
+
+  // ═══════ Final Phase: Cross-Sentence Repetition Cleanup ═══════
+  result = deduplicateRepeatedPhrases(result);
+
+  const finalWordsCleaned = result.split(/\s+/);
+  const finalWordSet = new Set(finalWordsCleaned.map(w => w.toLowerCase().replace(/[^a-z']/g, "")));
   let unchangedCount = 0;
   for (const w of finalWordSet) {
     if (originalWordSet.has(w)) unchangedCount++;

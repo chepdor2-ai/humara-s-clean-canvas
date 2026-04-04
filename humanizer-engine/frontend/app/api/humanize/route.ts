@@ -3,9 +3,13 @@ import { humanize } from '@/lib/engine/humanizer';
 import { ghostProHumanize } from '@/lib/engine/ghost-pro';
 import { llmHumanize } from '@/lib/engine/llm-humanizer';
 import { premiumHumanize } from '@/lib/engine/premium-humanizer';
+import { humanizeV11 } from '@/lib/engine/v11';
+import { humaraHumanize } from '@/lib/humara';
 import { getDetector } from '@/lib/engine/multi-detector';
 import { isMeaningPreserved } from '@/lib/engine/semantic-guard';
 import { fixCapitalization } from '@/lib/engine/shared-dictionaries';
+import { deduplicateRepeatedPhrases } from '@/lib/engine/premium-deep-clean';
+import { preserveInputStructure } from '@/lib/engine/structure-preserver';
 
 export const maxDuration = 120; // LLM engines need more time
 
@@ -28,7 +32,14 @@ export async function POST(req: Request) {
 
     let humanized: string;
 
-    if (premium) {
+    if (engine === 'humara') {
+      // Humara: Independent humanizer engine — phrase-level, strategy-diverse
+      humanized = humaraHumanize(text, {
+        strength: strength === 'high' ? 'heavy' : strength === 'low' ? 'light' : (strength ?? 'medium'),
+        tone: tone ?? 'neutral',
+        strictMeaning: strict_meaning ?? false,
+      });
+    } else if (premium) {
       // Premium: Purely AI-driven per-sentence pipeline
       humanized = await premiumHumanize(
         text,
@@ -67,6 +78,14 @@ export async function POST(req: Request) {
         no_contractions !== false,
         enable_post_processing !== false,
       );
+    } else if (engine === 'fast_v11') {
+      // Fast V1.1: 7-phase pipeline (non-LLM primary, LLM optional for chunk rewrite)
+      const v11Result = await humanizeV11(text, {
+        strength: strength ?? 'medium',
+        tone: tone ?? 'neutral',
+        strictMeaning: strict_meaning ?? false,
+      });
+      humanized = v11Result.humanized;
     } else if (engine === 'ghost_pro') {
       // Ghost Pro: Single LLM rewrite + signal-aware post-processing
       humanized = await ghostProHumanize(text, {
@@ -88,7 +107,24 @@ export async function POST(req: Request) {
     }
 
     // Post-capitalization formatting — fix sentence casing for all engine outputs
-    humanized = fixCapitalization(humanized);
+    // Skip for humara engine: it has its own ContentProtection + grammar repair
+    if (engine !== 'humara') {
+      humanized = fixCapitalization(humanized);
+    }
+
+    // Fix AI/ai capitalization that fixCapitalization may lowercase
+    humanized = humanized
+      .replace(/\bai-(\w)/gi, (_m: string, c: string) => `AI-${c}`)
+      .replace(/\bai\b/g, 'AI');
+
+    // Cross-sentence repetition cleanup — deduplicates phrases repeated across sentences
+    // Skip for humara engine: it has its own coherence layer
+    if (engine !== 'humara') {
+      humanized = deduplicateRepeatedPhrases(humanized);
+    }
+
+    // Restore the original title/paragraph layout for every engine output.
+    humanized = preserveInputStructure(text, humanized);
 
     // Detect output scores
     const outputAnalysis = detector.analyze(humanized);

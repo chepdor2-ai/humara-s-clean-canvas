@@ -135,10 +135,12 @@ const splitSentences = (text: string): { text: string; start: number; end: numbe
 
 /* ── Constants ──────────────────────────────────────────────────────────── */
 const ENGINES = [
-  { id: 'ghost_mini', label: 'Fast', note: 'Bypasses most detectors quickly — best for speed.' },
-  { id: 'ghost_pro', label: 'Standard', note: 'Most reliable across many detectors — balanced.' },
-  { id: 'ninja', label: 'Stealth', note: 'Best balance between quality and beating detectors.' },
-  { id: 'undetectable', label: 'Undetectable', note: 'Comprehensive deep process — may not work for every topic.' },
+  { id: 'fast_v11', label: 'Humara 0', premium: true },
+  { id: 'humara', label: 'Humara v.1.1', premium: true },
+  { id: 'ghost_mini', label: 'Fast', premium: false },
+  { id: 'ghost_pro', label: 'Standard', premium: false },
+  { id: 'ninja', label: 'Stealth', premium: false },
+  { id: 'undetectable', label: 'Undetectable', premium: false },
 ];
 const STRENGTHS = [
   { id: 'light', label: 'Light' },
@@ -196,6 +198,16 @@ export default function EditorPage() {
 
   const inputWords = useMemo(() => (text.trim() ? text.trim().split(/\s+/).length : 0), [text]);
   const outputWords = useMemo(() => (result.trim() ? result.trim().split(/\s+/).length : 0), [result]);
+
+  // Handle premium toggle - switch to non-premium engine if current is premium
+  useEffect(() => {
+    const currentEngine = ENGINES.find(e => e.id === engine);
+    if (!premium && currentEngine?.premium) {
+      // Switch to first non-premium engine
+      const fallbackEngine = ENGINES.find(e => !e.premium);
+      if (fallbackEngine) setEngine(fallbackEngine.id);
+    }
+  }, [premium, engine]);
 
   const inputAvgAi = useMemo(() => {
     if (!inputDetection) return 0;
@@ -542,14 +554,12 @@ export default function EditorPage() {
       >
         <div className="flex items-center gap-2">
           <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Mode</span>
-          <div className="flex bg-slate-100 dark:bg-zinc-800 rounded-lg p-0.5">
-            {ENGINES.map(e => (
-              <button key={e.id} onClick={() => setEngine(e.id)}
-                className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-all ${engine === e.id ? 'bg-white dark:bg-zinc-700 text-slate-900 dark:text-white shadow-sm' : 'text-slate-500 dark:text-zinc-400 hover:text-slate-700 dark:hover:text-white'}`}>
-                {e.label}
-              </button>
+          <select value={engine} onChange={(e) => setEngine(e.target.value)} title="Engine Mode"
+            className="bg-white dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-slate-700 dark:text-zinc-300 outline-none focus:border-brand-400">
+            {ENGINES.filter(e => premium || !e.premium).map(e => (
+              <option key={e.id} value={e.id}>{e.label}</option>
             ))}
-          </div>
+          </select>
         </div>
         <div className="w-px h-5 bg-slate-200 dark:bg-slate-700 hidden sm:block" />
         <div className="flex items-center gap-2">
@@ -582,7 +592,7 @@ export default function EditorPage() {
         <div className="w-px h-5 bg-slate-200 dark:bg-zinc-700 hidden sm:block" />
         <label className="flex items-center gap-2 cursor-pointer select-none">
           <span className="text-[11px] font-semibold text-amber-500 dark:text-amber-400 uppercase tracking-wider">Premium</span>
-          <button onClick={() => setPremium(!premium)} title={premium ? 'Premium ON — all stages via AI' : 'Premium OFF — standard pipeline'}
+          <button onClick={() => setPremium(!premium)} title={premium ? 'Premium Engines Enabled' : 'Standard Engines Only'}
             className={`w-8 h-[18px] rounded-full transition-all relative ${premium ? 'bg-amber-500' : 'bg-slate-200 dark:bg-zinc-600'}`}>
             <div className={`w-3 h-3 bg-white rounded-full absolute top-[3px] transition-all shadow-sm ${premium ? 'left-[15px]' : 'left-[3px]'}`} />
           </button>
@@ -595,15 +605,8 @@ export default function EditorPage() {
         </button>
       </div>
 
-      {/* Engine & Depth Notes */}
+      {/* Depth Note (simplified, no engine details) */}
       <div className="flex flex-wrap gap-3">
-        <div className="flex items-start gap-1.5 px-3 py-2 bg-brand-50/60 dark:bg-brand-950/40 border border-brand-100 dark:border-brand-900 rounded-lg max-w-md">
-          <Info className="w-3 h-3 text-brand-500 mt-0.5 shrink-0" />
-          <p className="text-[11px] text-brand-700 dark:text-brand-300 leading-relaxed">
-            <span className="font-bold">{ENGINES.find(e => e.id === engine)?.label}:</span>{' '}
-            {ENGINES.find(e => e.id === engine)?.note}
-          </p>
-        </div>
         {strength === 'strong' && (
           <div className="flex items-start gap-1.5 px-3 py-2 bg-amber-50/60 dark:bg-amber-950/40 border border-amber-100 dark:border-amber-900 rounded-lg max-w-md">
             <AlertTriangle className="w-3 h-3 text-amber-500 mt-0.5 shrink-0" />
@@ -612,7 +615,6 @@ export default function EditorPage() {
             </p>
           </div>
         )}
-
       </div>
 
       {/* Editor Grid */}
