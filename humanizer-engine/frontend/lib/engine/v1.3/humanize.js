@@ -671,11 +671,11 @@ const RESTRUCTURE = [
       return `Take this case: ${m[2].charAt(0).toLowerCase() + m[2].slice(1)}`;
     }
   },
-  // 19. "X, such as Y" → "X — Y being a case in point" / "X (for instance, Y)"
+  // 19. "X, such as Y" → "X, including Y" / "X (for instance, Y)"
   {
     re: /(.+?),\s+such as\s+(.+)$/i,
     apply: (m) => {
-      if (Math.random() < 0.5) return `${m[1]} — ${m[2]} being a case in point`;
+      if (Math.random() < 0.5) return `${m[1]}, ${m[2]} being a case in point`;
       return `${m[1]}, including ${m[2]}`;
     }
   },
@@ -684,10 +684,10 @@ const RESTRUCTURE = [
     re: /^This is\s+(particularly|especially|notably)\s+true\s+(for|of|in|when)\s+(.+)$/i,
     apply: (m) => `${capFirst(stripPunct(m[3]))} especially fits this pattern${endPunct(m[3])}`
   },
-  // 21. "X, which is Y, Z" → "X — Y — Z" (relative clause → em-dash)
+  // 21. "X, which is Y, Z" → "X, Y, Z" (relative clause simplification, no em-dashes)
   {
     re: /^(.+?),\s+which\s+(?:is|are|was|were)\s+(.+?),\s+(.+)$/i,
-    apply: (m) => `${m[1]} — ${m[2]} — ${m[3]}`
+    apply: (m) => `${m[1]}, ${m[2]}, ${m[3]}`
   },
   // 22. "It should be noted that X" → "Notably, X" / just X
   {
@@ -2498,16 +2498,14 @@ function varyPunctuation(sent) {
       const afterClause = words.slice(i + 1, i + 5).join(' ');
       if (/\b(is|are|was|were|has|have|had|will|would|could|should|can|it|this|they|these|the)\b/i.test(afterClause)) {
         const roll = Math.random();
-        if (roll < 0.30) {
+        if (roll < 0.40) {
           words[i] = words[i].replace(/,$/, ';');
           changes++;
-        } else if (roll < 0.55) {
-          words[i] = words[i].replace(/,$/, ' —');
-          changes++;
-        } else if (roll < 0.70) {
+        } else if (roll < 0.60) {
           words[i] = words[i].replace(/,$/, ':');
           changes++;
         }
+        // Em-dash variation removed — no em-dashes policy
       }
     }
   }
@@ -2875,8 +2873,8 @@ function injectDiscourseMarker(sent) {
   // Only fire on sentences ≥10 words with no existing parenthetical or em-dash
   const words = sent.split(/\s+/);
   if (words.length < 10 || sent.includes('—') || /,\s*\w+\s*,/.test(sent)) return sent;
-  // ~25% chance to inject
-  if (Math.random() > 0.25) return sent;
+  // ~8% chance to inject (reduced from 25% to avoid over-fillering)
+  if (Math.random() > 0.08) return sent;
   const marker = DISCOURSE_MARKERS[Math.floor(Math.random() * DISCOURSE_MARKERS.length)];
   // Insert after first comma if there is one, otherwise after word 3-4
   // Find first comma that is NOT inside a number (not followed by digits)

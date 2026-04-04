@@ -513,7 +513,7 @@ function phase4_injectStarters(sentences) {
 
     // Inject starter for sentences with citations
     if (/\([A-Z][a-zA-Z]*(?:\s+et\s+al\.?)?,\s*\d{4}\)/.test(sent) || /\u27E8v\d+\u27E9/.test(sent)) {
-      if (Math.random() < 0.4 && i > 0) {
+      if (Math.random() < 0.15 && i > 0) {
         const starter = pickUnused(CITATION_STARTERS, usedStarters);
         if (starter && !sent.toLowerCase().startsWith(starter.toLowerCase().split(' ')[0])) {
           result[i] = `${starter} ${sent[0].toLowerCase()}${sent.slice(1)}`;
@@ -524,8 +524,8 @@ function phase4_injectStarters(sentences) {
     }
 
     // Selective injection — not every sentence gets a starter (natural)
-    // Only inject every 3-5 sentences to avoid over-transitioning
-    if (i > 0 && i % (3 + Math.floor(Math.random() * 3)) === 0) {
+    // Only inject every 6-9 sentences to avoid over-transitioning
+    if (i > 0 && i % (6 + Math.floor(Math.random() * 4)) === 0) {
       let pool;
       // Pick pool based on context
       if (i > result.length * 0.7) {
@@ -588,7 +588,7 @@ function phase5_improveFlow(sentences) {
 
     // Detect abrupt topic shifts (prev talks about X, curr about Y with no link)
     // If two sentences share very few words, add a transition
-    if (i > 0 && Math.random() < 0.15) {
+    if (i > 0 && Math.random() < 0.06) {
       const prevContent = new Set(prev.toLowerCase().split(/\s+/).filter(w => w.length > 5));
       const currContent = curr.toLowerCase().split(/\s+/).filter(w => w.length > 5);
       const overlap = currContent.filter(w => prevContent.has(w)).length;
@@ -655,16 +655,8 @@ function phase6_deepHumanize(sentence) {
     out = out.replace(pattern, replacer);
   }
 
-  // 4. Inject slight imperfections (human-like)
-  // Occasionally use a dash for a parenthetical instead of commas
-  if (Math.random() < 0.12) {
-    out = out.replace(/,\s*(\w+(?:\s+\w+){1,4})\s*,/, (m, clause) => {
-      if (clause.split(/\s+/).length <= 5) {
-        return ` \u2014 ${clause} \u2014`;
-      }
-      return m;
-    });
-  }
+  // 4. Dash parenthetical DISABLED — no em-dashes policy
+  // if (Math.random() < 0.12) { ... }
 
   // 5. Vary hedging language
   out = out.replace(/\b(may|might|could)\s+(potentially|possibly|conceivably)\b/gi,
@@ -686,6 +678,10 @@ function phase6_deepHumanize(sentence) {
 
 function phase7_finalPolish(sentence) {
   let out = sentence;
+
+  // 0. Remove all em-dashes — no em-dashes policy
+  out = out.replace(/ — /g, ', ').replace(/—/g, ', ');
+  out = out.replace(/ – /g, ', ').replace(/–/g, ', ');
 
   // 1. Fix double spaces
   out = out.replace(/\s{2,}/g, ' ');
