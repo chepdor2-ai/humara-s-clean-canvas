@@ -156,28 +156,11 @@ const BANNED_WORDS = new Set([
   "utilize", "utilise", "facilitate", "leverage", "comprehensive",
   "multifaceted", "paramount", "furthermore", "moreover", "additionally",
   "consequently", "subsequently", "nevertheless", "notwithstanding",
-  "aforementioned", "paradigm", "trajectory", "discourse", "dichotomy",
-  "conundrum", "ramification", "underpinning", "synergy", "robust",
-  "nuanced", "salient", "ubiquitous", "pivotal", "intricate",
-  "meticulous", "profound", "inherent", "overarching", "substantive",
-  "efficacious", "holistic", "transformative", "innovative",
-  "groundbreaking", "noteworthy", "proliferate", "exacerbate",
-  "ameliorate", "engender", "delineate", "elucidate", "illuminate",
-  "necessitate", "perpetuate", "underscore", "exemplify", "encompass",
-  "bolster", "catalyze", "streamline", "optimize", "mitigate",
-  "navigate", "prioritize", "articulate", "substantiate", "corroborate",
-  "disseminate", "cultivate", "ascertain", "endeavor", "delve",
-  "embark", "foster", "harness", "spearhead", "unravel", "unveil",
-  "tapestry", "cornerstone", "bedrock", "linchpin", "nexus", "spectrum",
-  "myriad", "plethora", "multitude", "landscape", "realm", "culminate",
-  "enhance", "crucial", "vital", "imperative", "notable", "significant",
-  "substantial", "remarkable", "considerable", "unprecedented",
-  "methodology", "framework", "implication", "implications",
-  "impactful", "actionable", "scalable", "stakeholders", "stakeholder",
-  "ecosystem", "proactive", "seamless", "optimal", "empower",
-  "narrative", "disruptive", "benchmark", "interplay", "diverse",
-  "dynamic", "implement", "pertaining", "integral", "demonstrate",
-  "ensure", "aspect", "notion",
+  "aforementioned", "paradigm", "trajectory", "discourse",
+  "nuanced", "pivotal", "intricate", "meticulous", "profound",
+  "overarching", "transformative", "noteworthy", "elucidate",
+  "delve", "embark", "foster", "harness", "tapestry",
+  "cornerstone", "myriad", "plethora", "landscape", "realm", "culminate",
 ]);
 
 const BANNED_STARTERS = new Set([
@@ -272,8 +255,8 @@ function verifySentenceOutput(
     issues.push(`HALLUCINATION: input ${origWords} words → output ${newWords} words`);
   }
 
-  // 6. Check contraction constraint
-  if (!features.hasContractions) {
+  // 6. Check contraction constraint — always enforce zero contractions
+  {
     const contractionRe =
       /\b(can't|won't|don't|doesn't|didn't|isn't|aren't|wasn't|weren't|hasn't|haven't|hadn't|wouldn't|shouldn't|couldn't|mustn't|it's|that's|there's|here's|he's|she's|they're|we're|you're|I'm|they've|we've|you've|I've|they'll|we'll|you'll|I'll|he'll|she'll|it'll|let's|who's|what's)\b/gi;
     if (contractionRe.test(rewritten)) issues.push("CONTRACTION_INJECTED");
@@ -322,18 +305,18 @@ function getModeConfig(engine: string, strength: string): ModeConfig {
         "Moderately rephrase and restructure. Change vocabulary, clause ordering, and sentence openings actively. Create a clearly distinct version from the input.",
     },
     ninja: {
-      temperatureBase: 0.85,
-      maxRetries: 3,
+      temperatureBase: 0.80,
+      maxRetries: 1,
       aggressiveness: "strong",
       strengthInstruction:
-        "Aggressively restructure and rephrase. Substantially change sentence structure, vocabulary, and clause ordering. Push hard for maximum variation from the original while preserving meaning.",
+        "Restructure and rephrase clearly. Change vocabulary, clause ordering, and sentence openings. Create a distinct version while keeping natural flow.",
     },
     undetectable: {
-      temperatureBase: 0.90,
-      maxRetries: 3,
+      temperatureBase: 0.85,
+      maxRetries: 1,
       aggressiveness: "extreme",
       strengthInstruction:
-        "Maximum restructuring. Completely rephrase every sentence with radically different structure, vocabulary, and flow. The output must read as if written by a completely different person. Preserve only the core meaning and facts.",
+        "Rephrase every sentence with different structure, vocabulary, and flow. The output should read as written by a different person. Preserve core meaning and facts.",
     },
   };
 
@@ -356,9 +339,7 @@ function getModeConfig(engine: string, strength: string): ModeConfig {
 // ══════════════════════════════════════════════════════════════════════════
 
 function getPhaseASystemPrompt(features: InputFeatures, config: ModeConfig): string {
-  const contractionRule = features.hasContractions
-    ? "You MAY use contractions naturally."
-    : "STRICT: Do NOT use ANY contractions. Write all words fully (do not, cannot, will not, it is, that is, etc.). This is non-negotiable.";
+  const contractionRule = "STRICT: Do NOT use ANY contractions. Write all words fully (do not, cannot, will not, it is, that is, etc.). This is non-negotiable.";
 
   const firstPersonRule = features.hasFirstPerson
     ? "First-person pronouns (I, we, me, us, my, our) are OK where appropriate."
@@ -368,7 +349,7 @@ function getPhaseASystemPrompt(features: InputFeatures, config: ModeConfig): str
     ? "Rhetorical questions OK sparingly."
     : "STRICT: Do NOT add ANY sentences ending with question marks. Use declarative statements ONLY. This is non-negotiable.";
 
-  return `You are rewriting a SINGLE sentence to make it sound like a real human from the mid-1990s wrote it — before AI existed. You are performing a deep structural rewrite combined with humanization in one pass.
+  return `You are rewriting a SINGLE sentence to sound like a real human wrote it — natural, clear, and academically competent. You are performing a deep structural rewrite combined with humanization in one pass.
 
 ABSOLUTE RULES (violation = failure):
 
@@ -395,7 +376,7 @@ ABSOLUTE RULES (violation = failure):
    - "use" not "utilize", "help" not "facilitate", "big" not "significant"
    - "show" not "demonstrate", "part" not "aspect", "idea" not "notion"
    - Use phrasal verbs naturally: look into, carry out, bring about, figure out, deal with, end up, turn out, stand out
-   - Write like a real person from the 1990s — no corporate speak, no tech buzzwords
+   - Write like a real person — no corporate speak, no tech buzzwords
 
 10. STRUCTURAL VARIATION:
     - Do NOT always use Subject-Verb-Object order
@@ -462,9 +443,7 @@ SENTENCE: ${sentence}`;
 // ══════════════════════════════════════════════════════════════════════════
 
 function getPhaseCSystemPrompt(features: InputFeatures): string {
-  const contractionRule = features.hasContractions
-    ? "Contractions are OK."
-    : "STRICT: NO contractions allowed.";
+  const contractionRule = "STRICT: NO contractions allowed.";
 
   const firstPersonRule = features.hasFirstPerson
     ? "First-person OK."
@@ -817,76 +796,11 @@ export async function premiumHumanize(
   console.log(`  [Premium] Phase B complete: ${purgedCount} sentences purged`);
 
   // ═══════════════════════════════════════════
-  // PHASE C: Per-Sentence Final Stealth Polish (LLM)
+  // PHASE C: DISABLED — unnecessary LLM pass that over-polishes output
+  // The LLM rewrite in Phase A already handles naturalness
   // ═══════════════════════════════════════════
-  console.log("  [Premium] Phase C: Per-sentence stealth polish...");
-
-  const phaseCSystem = getPhaseCSystemPrompt(features);
-  const phaseCParagraphs = result
-    .split(/\n\s*\n/)
-    .filter((p) => p.trim());
-  let polishedCount = 0;
-
-  const polishedParagraphs = await Promise.all(
-    phaseCParagraphs.map(async (para) => {
-      const trimmedPara = para.trim();
-      if (isTitleOrHeading(trimmedPara)) return trimmedPara;
-
-      const sentences = robustSentenceSplit(trimmedPara);
-      if (sentences.length === 0) return trimmedPara;
-
-      const results = await Promise.all(
-        sentences.map(async (sent) => {
-          const trimmed = sent.trim();
-          if (!trimmed || trimmed.split(/\s+/).length < 3) return trimmed;
-
-          // Only polish sentences that have formal starters or sound stilted
-          const needsPolish = hasBannedStarter(trimmed) ||
-            /^(?:In\s+(?:the|this|a)\s+|The\s+(?:fact|notion|aspect)\s)/i.test(trimmed);
-
-          if (!needsPolish) return trimmed;
-
-          const userPrompt = buildPhaseCUserPrompt(
-            placeholdersToLLMFormat(trimmed),
-          );
-          const sentMaxTokens = Math.max(
-            256,
-            Math.ceil(trimmed.split(/\s+/).length * 2.5),
-          );
-
-          try {
-            let polished = llmFormatToPlaceholders(
-              await llmCall(phaseCSystem, userPrompt, 0.35, sentMaxTokens),
-            );
-            if (!polished || polished.trim().length < trimmed.length * 0.3)
-              return trimmed;
-
-            const sents = robustSentenceSplit(polished.trim());
-            if (sents.length > 1) {
-              polished =
-                sents
-                  .map((s, i) =>
-                    i === 0
-                      ? s.replace(/\.\s*$/, "")
-                      : s[0]?.toLowerCase() + s.slice(1),
-                  )
-                  .join(", ") +
-                (sents[sents.length - 1].match(/[.!?]$/) ? "" : ".");
-            }
-
-            polishedCount++;
-            return polished.trim();
-          } catch {
-            return trimmed;
-          }
-        }),
-      );
-
-      return results.join(" ");
-    }),
-  );
-
-  result = polishedParagraphs.join("\n\n");
+  console.log("  [Premium] Phase C: SKIPPED (disabled to preserve natural output)");
+  const polishedCount = 0;
   console.log(
     `  [Premium] Phase C complete: ${polishedCount} sentences polished`,
   );
@@ -989,8 +903,8 @@ export async function premiumHumanize(
   // ═══════════════════════════════════════════
   console.log("  [Premium] Enforcing constraints...");
 
-  // Contraction expansion (LLM-based)
-  if (!features.hasContractions) {
+  // Contraction expansion — always enforce (zero tolerance)
+  {
     const contractionRe =
       /\b(can't|won't|don't|doesn't|didn't|isn't|aren't|wasn't|weren't|hasn't|haven't|hadn't|wouldn't|shouldn't|couldn't|mustn't|it's|that's|there's|here's|he's|she's|they're|we're|you're|I'm|they've|we've|you've|I've|they'll|we'll|you'll|I'll|he'll|she'll|it'll|let's|who's|what's)\b/gi;
     if (contractionRe.test(result)) {

@@ -136,12 +136,12 @@ const splitSentences = (text: string): { text: string; start: number; end: numbe
 
 /* ── Constants ──────────────────────────────────────────────────────────── */
 const ENGINES = [
-  { id: 'fast_v11', label: 'Humara 0', premium: true, desc: '15-phase pipeline: cleans, detects AI sentences, rewrites them with rules + optional LLM, injects rare vocabulary, restructures syntax, applies pre-2000 voice, breaks n-gram patterns, then runs deep AI-term kill, rhythm variance, aggressive post-processing, phrasal verb injection, and a final scorched-earth AI word sweep. Every sentence is processed individually — no merging or splitting.' },
-  { id: 'humara', label: 'Humara v.1.1', premium: true, desc: 'Dual-path engine: runs two independent humanization passes (v5 algorithmic + v2 backup), generates multiple candidates per sentence, scores each for naturalness and meaning preservation, picks the best, then applies the shared humanization layer (phrasal verbs, pre-1990 voice, AI-term kill, contraction expansion). Headings and short lines are preserved untouched.' },
-  { id: 'ghost_mini', label: 'Fast', premium: false, desc: 'Lightweight single-pass rewrite. Quick synonym swaps and basic restructuring. Best for short texts where speed matters more than depth.' },
-  { id: 'ghost_pro', label: 'Standard', premium: false, desc: 'Balanced rewrite engine with synonym replacement, sentence restructuring, and AI pattern removal. Good all-round choice for most texts.' },
-  { id: 'ninja', label: 'Stealth', premium: false, desc: 'Aggressive rewriting focused on beating AI detectors. Heavier synonym swaps, structural changes, and pattern-breaking at the cost of some meaning drift.' },
-  { id: 'undetectable', label: 'Undetectable', premium: false, desc: 'Maximum stealth mode. Deep multi-pass rewriting designed to push AI detection scores as low as possible.' },
+  { id: 'ghost_mini', label: 'Ghost Mini', subtitle: 'Statistical', premium: false, desc: 'Pure statistical engine — zero LLM calls. Multi-iteration synonym replacement, AI word kill (120+ banned words), 500K+ phrase variations, clause restructuring, and detector feedback loop. Fastest option.' },    { id: 'ghost_mini_v1_2', label: 'Ghost Mini v1.2', subtitle: 'Academic Statistical', premium: false, desc: 'Enhanced Ghost Mini specifically calibrated for pre-2000 academic prose. Employs semicolons strictly, blocks em-dashes, and maintains rigid structural syntax.' },  { id: 'ghost_pro', label: 'Ghost Pro', subtitle: 'Hybrid', premium: false, desc: 'LLM full-text rewrite (GPT-4o-mini) with pre-2000 style constraints, followed by aggressive statistical post-processing targeting 20 detector signals. Balanced quality and cost.' },
+  { id: 'ninja', label: 'Ninja', subtitle: '4-Layer Hybrid', premium: false, desc: '4-layer pipeline: sentence-level LLM (structural rewrite + humanization + polish), rule-based AI vocabulary kill, statistical tweaks (burstiness, punctuation), and a 22-detector feedback loop. Supports style memory.' },
+  { id: 'undetectable', label: 'Undetectable', subtitle: 'Double Pass', premium: false, desc: 'Maximum stealth — runs full Ninja pipeline first, then passes output through Ghost Mini statistical scrubbing. Double processing for the lowest possible AI detection scores.' },
+  { id: 'fast_v11', label: 'V1.1', subtitle: '15-Phase Pipeline', premium: true, desc: '15 sequential phases: clean, detect, sentence rewrite, optional LLM for high-AI sentences, perplexity injection, syntax restructuring, pre-2000 voice, anti-pattern breaking, deep AI kill, rhythm variance, aggressive post-processing, and final scorched-earth sweep.' },
+  { id: 'humara', label: 'Humara', subtitle: 'Independent Stealth', premium: true, desc: '3-layer sentence pipeline with 4000+ dictionary entries: structural rewriting (clause repositioning, voice switching), controlled rephrasing (context-aware synonyms, 421 phrase compressions), and flow adjustment. Zero LLM calls, instant processing.' },
+  { id: 'humara_v1_3', label: 'Humara v1.3', subtitle: 'Stealth Engine v5', premium: true, desc: '8-stage non-LLM pipeline: structure parsing, token shielding, 300+ phrase compressions, 42 sentence restructuring patterns, 1500+ synonyms, 150+ AI phrase kills, discourse markers, and 3-pass retry loop. Zero LLM calls, instant processing.' },
 ];
 const STRENGTHS = [
   { id: 'light', label: 'Light' },
@@ -164,7 +164,8 @@ export default function EditorPage() {
   const [error, setError] = useState('');
   const [rephrasing, setRephrasing] = useState(false);
 
-  const [engine, setEngine] = useState('ghost_pro');
+  const [engine, setEngine] = useState('ghost_mini');
+  const [engineDropdownOpen, setEngineDropdownOpen] = useState(false);
   const [strength, setStrength] = useState('medium');
   const [tone, setTone] = useState('academic');
   const [strictMeaning, setStrictMeaning] = useState(true);
@@ -578,14 +579,44 @@ export default function EditorPage() {
         className={`flex flex-wrap items-center gap-x-5 gap-y-2 bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-700 rounded-xl px-4 py-2.5 ${planColor ? 'plan-glow' : ''}`}
         style={planColor ? { '--plan-color': planColor } as React.CSSProperties : undefined}
       >
-        <div className="flex items-center gap-2">
-          <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Mode</span>
-          <select value={engine} onChange={(e) => setEngine(e.target.value)} title="Engine Mode"
-            className="bg-white dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-slate-700 dark:text-zinc-300 outline-none focus:border-brand-400">
-            {ENGINES.filter(e => premium || !e.premium).map(e => (
-              <option key={e.id} value={e.id}>{e.label}</option>
-            ))}
-          </select>
+        <div className="flex items-center gap-2 relative">
+          <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Engine</span>
+          <div className="relative group">
+            <button
+              type="button"
+              onClick={() => setEngineDropdownOpen(!engineDropdownOpen)}
+              className="flex items-center gap-2 bg-white dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-lg px-3 py-1.5 text-xs font-semibold text-slate-700 dark:text-zinc-300 outline-none focus:border-brand-400 hover:border-brand-300 transition-colors min-w-[160px]"
+            >
+              <span>{ENGINES.find(e => e.id === engine)?.label}</span>
+              <span className="text-[10px] font-normal text-slate-400 dark:text-zinc-500">
+                {ENGINES.find(e => e.id === engine)?.subtitle}
+              </span>
+              <svg className={`ml-auto w-3.5 h-3.5 text-slate-400 transition-transform ${engineDropdownOpen ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+            </button>
+            {engineDropdownOpen && (
+              <>
+                <div className="fixed inset-0 z-40" onClick={() => setEngineDropdownOpen(false)} />
+                <div className="absolute left-0 top-full mt-1 z-50 w-[340px] bg-white dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-xl shadow-xl overflow-hidden animate-in fade-in slide-in-from-top-1 duration-150">
+                  {ENGINES.filter(e => premium || !e.premium).map(e => (
+                    <button
+                      key={e.id}
+                      type="button"
+                      onClick={() => { setEngine(e.id); setEngineDropdownOpen(false); }}
+                      className={`w-full text-left px-4 py-3 hover:bg-slate-50 dark:hover:bg-zinc-700/50 transition-colors border-b border-slate-100 dark:border-zinc-700/50 last:border-b-0 ${engine === e.id ? 'bg-brand-50 dark:bg-brand-900/20' : ''}`}
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-semibold text-slate-800 dark:text-zinc-200">{e.label}</span>
+                        <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-slate-100 dark:bg-zinc-700 text-slate-500 dark:text-zinc-400">{e.subtitle}</span>
+                        {e.premium && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400">PRO</span>}
+                        {engine === e.id && <svg className="ml-auto w-4 h-4 text-brand-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>}
+                      </div>
+                      <p className="text-[11px] text-slate-400 dark:text-zinc-500 mt-1 leading-relaxed line-clamp-2">{e.desc}</p>
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
         </div>
         <div className="w-px h-5 bg-slate-200 dark:bg-slate-700 hidden sm:block" />
         <div className="flex items-center gap-2">
@@ -641,7 +672,7 @@ export default function EditorPage() {
             </p>
           </div>
         )}
-        {premium && (() => {
+        {(() => {
           const currentEngine = ENGINES.find(e => e.id === engine);
           return currentEngine?.desc ? (
             <div className="flex items-start gap-1.5 px-3 py-2 bg-indigo-50/60 dark:bg-indigo-950/30 border border-indigo-100 dark:border-indigo-900 rounded-lg w-full">

@@ -327,7 +327,7 @@ function aggressiveSynonymSwap(
   ctx: TextContext,
   usedReplacements: Set<string>,
   protectedTerms: Set<string> = new Set<string>(),
-  swapRate = 0.65
+  swapRate = 0.20
 ): string {
   // Protect hyphenated compound words by replacing with placeholders
   const hyphenatedWords: string[] = [];
@@ -883,13 +883,13 @@ export const aggressivePostProcessPhase: Phase = {
     }
     let assembled = paragraphTexts.join('\n\n').replace(/ {2,}/g, ' ').trim();
 
-    // ── PASS 6: Check change rate, do extra synonym pass per-sentence if below 75% ──
+    // ── PASS 6: Check change rate, do extra synonym pass per-sentence if below 30% ──
     let changeRate = wordChangeFraction(originalText, assembled);
 
-    if (changeRate < 0.75) {
+    if (changeRate < 0.30) {
       for (const paragraph of state.paragraphs) {
         for (const sentence of paragraph.sentences) {
-          sentence.text = aggressiveSynonymSwap(sentence.text, ctx, usedReplacements, new Set<string>(), 0.80);
+          sentence.text = aggressiveSynonymSwap(sentence.text, ctx, usedReplacements, new Set<string>(), 0.30);
           sentence.text = cleanupSentence(sentence.text);
         }
       }

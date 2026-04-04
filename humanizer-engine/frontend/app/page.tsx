@@ -140,9 +140,10 @@ export default function Home() {
             <h2 className="text-3xl font-semibold text-slate-900 mb-3">Multiple engine modes</h2>
             <p className="text-slate-500 max-w-xl mx-auto">Choose the right balance of speed and stealth for your content.</p>
           </div>
-          <div className="grid md:grid-cols-4 gap-6">
+            <div className="grid md:grid-cols-5 gap-6">
             {[
               { name: 'Ghost Mini', tag: 'Fast', desc: 'Quick rewrites for everyday content — emails, blog posts, casual writing.' },
+              { name: 'Ghost Mini v1.2', tag: 'Academic', desc: 'Enhanced Ghost Mini structured perfectly for academic prose.' },
               { name: 'Ghost Pro', tag: 'Balanced', desc: 'Deep structural rewriting with style preservation. Ideal for professional use.' },
               { name: 'Ninja Stealth', tag: 'Maximum', desc: 'Multi-pass LLM pipeline for critical academic submissions.' },
               { name: 'Undetectable', tag: 'Extreme', desc: 'Our most aggressive mode. Passes the strictest detectors consistently.' },

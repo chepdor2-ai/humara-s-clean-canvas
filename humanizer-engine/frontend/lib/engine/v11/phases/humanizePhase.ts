@@ -34,14 +34,14 @@ export const humanizePhase: Phase = {
       for (const sentence of paragraph.sentences) {
         const before = sentence.text;
 
-        // Layer 1: Phrasal verb injection
+        // Layer 1: Phrasal verb injection (keep — adds natural human texture)
         sentence.text = injectPhrasalVerbs(sentence.text);
 
-        // Layer 2: Pre-1990 voice injection (guaranteed)
-        sentence.text = injectPre1990Voice(sentence.text);
+        // Layer 2: Pre-1990 voice — DISABLED (creates old-fashioned phrasing)
+        // sentence.text = injectPre1990Voice(sentence.text);
 
-        // Layer 3: Aggressive rephrasing (adverbs, passives, transitions)
-        sentence.text = aggressiveRephrase(sentence.text);
+        // Layer 3: Aggressive rephrasing — DISABLED (over-processes)
+        // sentence.text = aggressiveRephrase(sentence.text);
 
         // Layer 4: Contraction expansion
         sentence.text = expandContractions(sentence.text);

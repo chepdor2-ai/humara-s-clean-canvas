@@ -99,7 +99,7 @@ function detectInputFeatures(text: string): InputFeatures {
 }
 
 // ══════════════════════════════════════════════════════════════════════════
-// PASS 1: LLM DEEP REWRITE — Tuned to produce pre-2000 human-style prose
+// PASS 1: LLM DEEP REWRITE — Natural human-style prose
 // ══════════════════════════════════════════════════════════════════════════
 
 function getSystemPrompt(tone: string, wordCount?: number): string {
@@ -163,10 +163,10 @@ ABSOLUTE REQUIREMENTS — these are non-negotiable:
 
 ${burstinessRule}
 
-2. ABSOLUTELY BANNED VOCABULARY — if you use ANY of these words, the output fails:
-   utilize, facilitate, leverage, comprehensive, multifaceted, paramount, furthermore, moreover, additionally, consequently, subsequently, nevertheless, notwithstanding, aforementioned, paradigm, trajectory, discourse, dichotomy, conundrum, ramification, underpinning, synergy, robust, nuanced, salient, ubiquitous, pivotal, intricate, meticulous, profound, inherent, overarching, substantive, efficacious, holistic, transformative, innovative, groundbreaking, noteworthy, proliferate, exacerbate, ameliorate, engender, delineate, elucidate, illuminate, necessitate, perpetuate, underscore, exemplify, encompass, bolster, catalyze, streamline, optimize, mitigate, navigate, prioritize, articulate, substantiate, corroborate, disseminate, cultivate, ascertain, endeavor, delve, embark, foster, harness, spearhead, unravel, unveil, tapestry, cornerstone, bedrock, linchpin, nexus, spectrum, myriad, plethora, multitude, landscape, realm, culminate
+2. BANNED VOCABULARY — these are the most commonly flagged AI words:
+   utilize, facilitate, leverage, comprehensive, multifaceted, paramount, furthermore, moreover, additionally, consequently, subsequently, nevertheless, notwithstanding, aforementioned, paradigm, trajectory, discourse, nuanced, pivotal, intricate, meticulous, profound, overarching, transformative, noteworthy, elucidate, delve, embark, foster, harness, tapestry, cornerstone, myriad, plethora, landscape, realm, culminate
 
-   Also BANNED phrases: "it is important to note", "it should be noted", "plays a crucial role", "in today's world", "in today's society", "a wide range of", "due to the fact that", "first and foremost", "each and every", "not only...but also", "serves as a testament", "in light of", "with that in mind", "having said that", "that being said", "it is worth noting", "on the other hand", "in conclusion", "in summary", "as a result", "for example,", "for instance,", "there are several", "there are many", "it is clear that", "when it comes to", "given that", "moving forward"
+   Also BANNED phrases: "it is important to note", "plays a crucial role", "in today's world", "a wide range of", "first and foremost", "serves as a testament", "it is worth noting", "it is clear that", "when it comes to", "moving forward"
 
 3. SENTENCE STARTERS — vary them dramatically:
    - Start some sentences with the subject directly ("The economy grew...")
@@ -218,9 +218,7 @@ function buildUserPrompt(text: string, features: InputFeatures, tone: string): s
       toneGuide = "Write like a confident college student explaining this topic to a peer — natural, clear, occasionally conversational.";
   }
 
-  const contractionRule = features.hasContractions
-    ? "You MAY use contractions naturally."
-    : "Do NOT use contractions. Write all words fully (do not, cannot, will not, etc.).";
+  const contractionRule = "Do NOT use contractions under any circumstances. Write all words fully (do not, cannot, will not, it is, etc.).";
 
   const firstPersonRule = features.hasFirstPerson
     ? "You may use first-person pronouns where appropriate."
@@ -309,9 +307,7 @@ function buildSentenceUserPrompt(
   nextSentence: string | null,
   features: InputFeatures,
 ): string {
-  const contractionRule = features.hasContractions
-    ? "You MAY use contractions."
-    : "Do NOT use contractions.";
+  const contractionRule = "Do NOT use contractions.";
   const firstPersonRule = features.hasFirstPerson
     ? "First-person pronouns OK."
     : "No first-person pronouns (I, we, me, us, my, our).";
@@ -640,11 +636,8 @@ function humanizePunctuation(text: string, features: InputFeatures): string {
     return processed.join(" ");
   }).filter(Boolean).join("\n\n");
 
-  // Handle contractions
-  if (!features.hasContractions) {
-    return removeContractions(result);
-  }
-  return result;
+  // Handle contractions — always expand (zero tolerance)
+  return removeContractions(result);
 }
 
 // ── Contraction handling ──
@@ -1385,8 +1378,8 @@ function postProcessSingleSentence(sent: string, features: InputFeatures, streng
     }
   }
 
-  // 11. Dictionary-enhanced synonym swap (per-sentence) — aggressive rate for deep AI killing
-  const synonymRate = strength === "strong" ? 0.16 : strength === "medium" ? 0.12 : 0.08;
+  // 11. Dictionary-enhanced synonym swap (per-sentence) — moderate rate
+  const synonymRate = strength === "strong" ? 0.08 : strength === "medium" ? 0.06 : 0.05;
   const dict = getDictionary();
   const currentWords = result.split(/\s+/);
   if (currentWords.length >= 5) {
@@ -1422,23 +1415,23 @@ function postProcessSingleSentence(sent: string, features: InputFeatures, streng
     result = newWords.join(" ");
   }
 
-  // 12. Syntactic template — moderate application for structural variation
-  {
-    const templateProb = strength === "strong" ? 0.35 : strength === "medium" ? 0.25 : 0.15;
-    const rWords = result.split(/\s+/);
-    if (rWords.length >= 12 && Math.random() < templateProb) {
-      result = applySyntacticTemplate(result);
-    }
-  }
+  // 12. Syntactic template — DISABLED (LLM already handles structure)
+  // applySyntacticTemplate creates detectable patterns when combined with LLM output
+  // {
+  //   const templateProb = strength === "strong" ? 0.35 : strength === "medium" ? 0.25 : 0.15;
+  //   const rWords = result.split(/\s+/);
+  //   if (rWords.length >= 12 && Math.random() < templateProb) {
+  //     result = applySyntacticTemplate(result);
+  //   }
+  // }
 
-  // 12a. Burstiness injection — break AI-typical sentence length uniformity
-  // Real detectors (GPTZero, Pangram) flag sentences in the 15-25 word "AI sweet spot"
+  // 12a. Burstiness injection — only for sentences >28 words in the AI sweet spot
   {
     const words = result.split(/\s+/);
     const wc = words.length;
-    if (wc >= 16 && wc <= 24) {
+    if (wc >= 28) {
       const roll = Math.random();
-      if (roll < 0.25) {
+      if (roll < 0.10) {
         // Shorten: remove a non-essential adverb or qualifier
         const adverbKill = /\b(very|really|quite|rather|somewhat|fairly|extremely|particularly|especially|significantly|substantially|generally|typically|essentially|fundamentally|relatively|primarily|largely|mainly)\s+/i;
         const before = result;
@@ -1485,63 +1478,28 @@ function postProcessSingleSentence(sent: string, features: InputFeatures, streng
     }
   }
 
-  // 12d. Deep cleaning — eliminate residual AI structural patterns
-  {
-    const deepCleaned = deepCleaningPass([result]);
-    if (deepCleaned.length > 0 && deepCleaned[0].trim()) {
-      result = deepCleaned[0];
-    }
-  }
+  // 12d. Deep cleaning — DISABLED (over-cleans and creates unnatural uniformity)
+  // {
+  //   const deepCleaned = deepCleaningPass([result]);
+  //   if (deepCleaned.length > 0 && deepCleaned[0].trim()) {
+  //     result = deepCleaned[0];
+  //   }
+  // }
 
-  // 12e. Pre-1990 naturalness — replace modern collocations with older phrasing
-  result = result.replace(/\bin terms of\b/gi, "regarding");
-  result = result.replace(/\bat the end of the day\b/gi, "when all is said and done");
-  result = result.replace(/\bmoving forward\b/gi, "from here on");
-  result = result.replace(/\bgame[- ]changer\b/gi, "turning point");
-  result = result.replace(/\bimpact(?:s|ed|ing)? on\b/gi, (m) => m.replace(/impact/i, "effect"));
-  result = result.replace(/\bfocus(?:es|ed|ing)? on\b/gi, (m) => m.replace(/focus/i, "center"));
-  result = result.replace(/\bdriven by\b/gi, "caused by");
-  result = result.replace(/\bengage(?:s|d|ment)? with\b/gi, (m) => m.replace(/engage/i, "deal"));
-  result = result.replace(/\baddress(?:es|ed|ing)?\b(?!\s+(?:book|number|line|bar))/gi, (m) => m.replace(/address/i, "handle"));
-  result = result.replace(/\bgoing forward\b/gi, "from now on");
-  result = result.replace(/\bkey factor\b/gi, "main cause");
-  result = result.replace(/\bplayed a role\b/gi, "mattered");
-  result = result.replace(/\bplays a role\b/gi, "matters");
-  result = result.replace(/\bdue to\b/gi, "because of");
-  result = result.replace(/\bas well as\b/gi, "and");
+  // 12e. Pre-1990 naturalness — DISABLED (creates unnatural old-fashioned phrasing)
+  // Keep language modern and natural
 
-  // 12f. N-gram pattern breaking — Pangram and Copyleaks use n-gram frequency analysis
-  // These are the most common AI bigram/trigram patterns that flag text as AI-generated
+  // 12f. N-gram pattern breaking — only the most flagged AI patterns
   result = result.replace(/\bplays a crucial role\b/gi, "matters a great deal");
   result = result.replace(/\bplay a crucial role\b/gi, "matter a great deal");
-  result = result.replace(/\bplays an important role\b/gi, "carries real weight");
   result = result.replace(/\bit is worth noting\b/gi, "note that");
   result = result.replace(/\bit is important to\b/gi, "one must");
-  result = result.replace(/\bit is essential to\b/gi, "one must");
   result = result.replace(/\bin order to\b/gi, "to");
-  result = result.replace(/\bthe ability to\b/gi, "a way to");
   result = result.replace(/\ba wide range of\b/gi, "many");
-  result = result.replace(/\ba wide variety of\b/gi, "many kinds of");
-  result = result.replace(/\bon the other hand\b/gi, "then again");
-  result = result.replace(/\bin this context\b/gi, "here");
-  result = result.replace(/\bin this regard\b/gi, "in that respect");
-  result = result.replace(/\bin the context of\b/gi, "within");
-  result = result.replace(/\bwith regard to\b/gi, "about");
-  result = result.replace(/\bwith respect to\b/gi, "about");
-  result = result.replace(/\bin the case of\b/gi, "for");
-  result = result.replace(/\bserves as a\b/gi, "works as a");
-  result = result.replace(/\baims to\b/gi, "tries to");
-  result = result.replace(/\bseeks to\b/gi, "tries to");
-  result = result.replace(/\bhas the potential to\b/gi, "could");
   result = result.replace(/\bthe fact that\b/gi, "that");
-  result = result.replace(/\bby means of\b/gi, "through");
+  result = result.replace(/\bhas the potential to\b/gi, "could");
   result = result.replace(/\bin light of\b/gi, "given");
   result = result.replace(/\btake into account\b/gi, "consider");
-  result = result.replace(/\btaken into account\b/gi, "considered");
-  result = result.replace(/\bgive rise to\b/gi, "cause");
-  result = result.replace(/\bas a result of\b/gi, "from");
-  result = result.replace(/\bas a consequence of\b/gi, "from");
-  result = result.replace(/\bon the basis of\b/gi, "based on");
 
   // 13. Constraint enforcement per sentence
   if (!features.hasContractions) {

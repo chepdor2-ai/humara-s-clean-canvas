@@ -52,7 +52,7 @@ import { getDictionary } from "./dictionary";
 // ── Config ──
 
 const LLM_MODEL = process.env.LLM_MODEL ?? "gpt-4o-mini";
-const MAX_FEEDBACK_ITERATIONS_MAP: Record<string, number> = { light: 1, medium: 1, strong: 2 };
+const MAX_FEEDBACK_ITERATIONS_MAP: Record<string, number> = { light: 0, medium: 1, strong: 1 };
 const TARGET_AI_SCORE = 5.0;
 
 // ── OpenAI client singleton ──
@@ -165,9 +165,7 @@ STRICT PRESERVATION:
 - Return ONLY the rewritten text`;
 
 function buildPhase1Prompt(text: string, features: InputFeatures): string {
-  const contractionRule = features.hasContractions
-    ? "You MAY use contractions naturally."
-    : "Do NOT use contractions. Write all words fully.";
+  const contractionRule = "Do NOT use contractions under any circumstances. Write all words fully (e.g. 'do not' instead of 'don\'t', 'it is' instead of 'it\'s').";
 
   const firstPersonRule = features.hasFirstPerson
     ? "You may use first-person pronouns where appropriate."
@@ -195,9 +193,7 @@ ${text}`;
 // Role: Add natural irregularities, vary rhythm, reduce predictability
 
 function buildPhase2System(profile: import("./style-memory").StyleProfile, gapInstr: string, features: InputFeatures): string {
-  const contractionConstraint = features.hasContractions
-    ? "- You MAY use contractions naturally"
-    : "- Do NOT use contractions";
+  const contractionConstraint = "- Do NOT use contractions under any circumstances. Write all words fully (do not, it is, they are, etc.)";
   const firstPersonConstraint = features.hasFirstPerson
     ? "- You may use first-person pronouns where appropriate"
     : "- Do NOT use first-person pronouns (I, we, me, us, my, our)";
@@ -283,9 +279,7 @@ ${text}`;
 // Role: Enforce rules (sentence count, tone, no AI smoothness), final cleanup
 
 function buildPhase3System(features: InputFeatures): string {
-  const contractionConstraint = features.hasContractions
-    ? "- You MAY use contractions naturally"
-    : "- Do NOT use contractions";
+  const contractionConstraint = "- Do NOT use contractions under any circumstances. Write all words fully (do not, it is, they are, etc.)";
   const firstPersonConstraint = features.hasFirstPerson
     ? "- You may use first-person pronouns where appropriate"
     : "- Do NOT use first-person pronouns (I, we, me, us, my, our)";
@@ -331,9 +325,7 @@ ${text}`;
 // ══════════════════════════════════════════════════════════════════════════
 
 function getNinjaSentenceSystemPrompt(features: InputFeatures): string {
-  const contractionConstraint = features.hasContractions
-    ? "You MAY use contractions naturally."
-    : "Do NOT use contractions. Write all words fully.";
+  const contractionConstraint = "Do NOT use contractions under any circumstances. Write all words fully (do not, it is, they are, etc.).";
   const firstPersonConstraint = features.hasFirstPerson
     ? "First-person pronouns OK where appropriate."
     : "Do NOT use first-person pronouns (I, we, me, us, my, our).";
@@ -1149,7 +1141,7 @@ function injectWordDiversity(text: string): string {
 // ── Dictionary-Enhanced Contextual Synonym Replacement ──
 // Uses 619K+ word validity dictionary + curated synonyms + mega thesaurus
 
-function ninjaDictionarySynonymSwap(text: string, intensity: number = 0.10): string {
+function ninjaDictionarySynonymSwap(text: string, intensity: number = 0.06): string {
   const dict = getDictionary();
   const paragraphs = text.split(/\n\s*\n/);
   const usedReplacements = new Set<string>();
@@ -1218,7 +1210,7 @@ function ninjaSyntacticTemplatePass(text: string): string {
       const s = sent.trim();
       if (!s) continue;
 
-      if (budget > 0 && s.split(/\s+/).length >= 15 && Math.random() < 0.35) {
+      if (budget > 0 && s.split(/\s+/).length >= 20 && Math.random() < 0.08) {
         const transformed = applySyntacticTemplate(s);
         if (transformed !== s) {
           result.push(transformed);
@@ -1282,8 +1274,8 @@ function stealthProcessSingleSentence(sent: string, features: InputFeatures, str
     }
   }
 
-  // 5. Dictionary-enhanced synonym swap (per-sentence) — rate scales with strength
-  const synonymRate = strength === "strong" ? 0.22 : strength === "medium" ? 0.16 : 0.12;
+  // 5. Dictionary-enhanced synonym swap (per-sentence) — moderate rate
+  const synonymRate = strength === "strong" ? 0.08 : strength === "medium" ? 0.06 : 0.05;
   const dict = getDictionary();
   const words = result.split(/\s+/);
   if (words.length >= 6) {
@@ -1315,24 +1307,17 @@ function stealthProcessSingleSentence(sent: string, features: InputFeatures, str
     result = swapped.join(" ");
   }
 
-  // 6. Syntactic template — probability scales with strength
-  const templateProb = strength === "strong" ? 0.55 : strength === "medium" ? 0.42 : 0.35;
-  if (result.split(/\s+/).length >= 15 && Math.random() < templateProb) {
+  // 6. Syntactic template — low probability to avoid detectable patterns
+  const templateProb = 0.08;
+  if (result.split(/\s+/).length >= 20 && Math.random() < templateProb) {
     const transformed = applySyntacticTemplate(result);
     if (transformed !== result) result = transformed;
   }
 
-  // 7. Word diversity swaps (overused common words)
-  for (const [common, alternatives] of Object.entries(SHARED_DIVERSITY_SWAPS)) {
-    const regex = new RegExp(`\\b${common}\\b`, "gi");
-    if (regex.test(result) && Math.random() < 0.5) {
-      const alt = alternatives[Math.floor(Math.random() * alternatives.length)];
-      result = result.replace(regex, (match) => {
-        if (match[0] === match[0].toUpperCase()) return alt[0].toUpperCase() + alt.slice(1);
-        return alt;
-      });
-    }
-  }
+  // 7. Word diversity swaps — DISABLED (creates unnatural synonym drift)
+  // for (const [common, alternatives] of Object.entries(SHARED_DIVERSITY_SWAPS)) {
+  //   ...
+  // }
 
   // 8. Pre-2000 era naturalness: kill modern buzzwords
   result = killModernBuzzwords(result);
@@ -1661,7 +1646,7 @@ export async function llmHumanize(
   console.log(`  [Ninja] LLM done: ${result.split(/\s+/).length} words (${totalSentencesProcessed} sentences processed independently)`);
 
   // ── Constraint enforcement after LLM (rule-based only, no extra LLM calls) ──
-  if (!features.hasContractions) result = removeContractions(result);
+  result = removeContractions(result);
   if (!features.hasFirstPerson) result = removeFirstPerson(result);
   if (!features.hasRhetoricalQuestions) result = removeRhetoricalQuestions(result);
 
@@ -1732,7 +1717,7 @@ export async function llmHumanize(
   // ═══════════════════════════════════════════
   // FINAL: Strict constraint enforcement (catch anything the feedback loop re-introduced)
   // ═══════════════════════════════════════════
-  if (!features.hasContractions) bestResult = removeContractions(bestResult);
+  bestResult = removeContractions(bestResult);
   if (!features.hasFirstPerson) bestResult = removeFirstPerson(bestResult);
   if (!features.hasRhetoricalQuestions) bestResult = removeRhetoricalQuestions(bestResult);
 

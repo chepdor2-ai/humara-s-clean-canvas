@@ -1,10 +1,8 @@
-// V2 data — 421 phrase compressions, 100+ AI signature replacements, 40+ extra transitions
+import { rejectMethod, corsHeaders } from './_shared.js';
 import {
-  PHRASE_COMPRESS, EXTRA_SYN, EXTRA_COLLOCATIONS,
-  EXTRA_TRANSITIONS, PROTECTED_TERMS, NATURAL_PAIRS
-} from './v2-data.js';
-const rejectMethod = () => {};
-const corsHeaders = () => {};
+  PHRASE_COMPRESS, EXTRA_SYN, EXTRA_COLLOCATIONS, EXTRA_TRANSITIONS,
+  PROTECTED_TERMS, NATURAL_PAIRS,
+} from './_humanize-dict.js';
 
 /*  ═══════════════════════════════════════════════════════════════════
     STEALTH HUMANIZER ENGINE v5 — PURE NON-LLM / PRO-LEVEL
@@ -128,7 +126,7 @@ function isHeading(line) {
 // STAGE 2 — TOKEN SHIELDING
 // ═══════════════════════════════════════════
 
-const SHIELD_RE = /(\[[^\]]*\]|\([^)]*\)|\{[^}]*\}|\$\d{1,3}(?:,\d{3})*(?:\.\d+)?|\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+\.\d+%?|\.\d+%?|\d+%|[A-Za-z][₀₁₂₃₄₅₆₇₈₉]+|p\s*(?:[<>≤≥=]|less\s+than|greater\s+than)\s*\.?\d+|\b\w+[-–]\w+(?:[-–]\w+)*\b)/g;
+const SHIELD_RE = /(\[[^\]]*\]|\([^)]*\)|\{[^}]*\}|\$\d{1,3}(?:,\d{3})*(?:\.\d+)?|\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+\.\d+%?|\d+%|\b\w+[-–]\w+(?:[-–]\w+)*\b)/g;
 
 function shield(text) {
   const vault = [];
@@ -364,7 +362,7 @@ const COLLOCATIONS = {
   'depend on':['rely on','hinge on','rest on','turn on'],
   'result in':['lead to','cause','produce','bring'],
   'focus on':['center on','zero in on','concentrate on','target'],
-  'account for':['address','cover'],
+  'account for':['explain','represent','cover','address'],
   'stem from':['come from','originate in','arise from','grow out of'],
   'contribute to':['add to','feed into','boost','support'],
   'lead to':['result in','cause','bring about','trigger'],
@@ -377,7 +375,7 @@ const COLLOCATIONS = {
   'for example':['for instance','to illustrate','such as','say'],
   'in particular':['especially','specifically','above all','notably'],
   'in fact':['actually','really','as it turns out','truth is'],
-  'as well as':['along with','together with','in addition to'],
+  'as well as':['along with','together with','in addition to','coupled with','paired with'],
   'as well':['in addition','on top of that','besides','similarly'],
   'so far':['up to now','to this point','until now','thus far'],
   'at least':['no less than','a minimum of','not under'],
@@ -469,9 +467,6 @@ function replaceCollocations(text, usedSet) {
   let r = text;
   for (const { re, alts } of COLLOC_ENTRIES) {
     r = r.replace(re, match => {
-      // Academic term guard: if any word in the matched phrase is protected, skip
-      const words = match.toLowerCase().split(/\s+/);
-      if (words.some(w => NEVER_REPLACE_TERMS.has(w))) return match;
       const available = alts.filter(a => !usedSet.has(a));
       const pool = available.length > 0 ? available : alts;
       const pick = pool[Math.floor(Math.random() * pool.length)];
@@ -502,18 +497,11 @@ function compressPhrases(text) {
   let r = text;
   for (const { re, replacement } of COMPRESS_ENTRIES) {
     r = r.replace(re, (match) => {
-      // Academic term guard: if any word in the matched phrase is protected, skip
-      const words = match.toLowerCase().split(/\s+/);
-      if (words.some(w => NEVER_REPLACE_TERMS.has(w))) return match;
-      // Support both string and array replacements (v2 phraseBank uses arrays)
-      const pick = Array.isArray(replacement)
-        ? replacement[Math.floor(Math.random() * replacement.length)]
-        : replacement;
       // Preserve capitalization for sentence-start replacements
       if (match[0] === match[0].toUpperCase() && match[0] !== match[0].toLowerCase()) {
-        return pick.charAt(0).toUpperCase() + pick.slice(1);
+        return replacement.charAt(0).toUpperCase() + replacement.slice(1);
       }
-      return pick;
+      return replacement;
     });
   }
   return r;
@@ -595,18 +583,14 @@ const RESTRUCTURE = [
     re: /(.+?),\s+which\s+(leads?|causes?|results?|creates?|makes?|gives?|provides?|shows?|indicates?|suggests?|demonstrates?|enables?|allows?|helps?|requires?|involves?|includes?)\s+(.+)$/i,
     apply: (m) => `${m[1]}, ${toGerund(m[2])} ${m[3]}`
   },
-  // 8. "The X of Y" → "Y's X" (possessive) — skip gerunds, pronouns, compound nouns
+  // 8. "The X of Y" → "Y's X" (possessive) — skip gerunds and pronouns
   {
     re: /^The\s+(\w+)\s+of\s+(?:the\s+)?(\w+)(\s+.+)?$/i,
     apply: (m) => {
       // Don't possessivize gerunds (-ing), pronouns, or very short words
       if (/ing$/i.test(m[2]) || m[2].length < 4 || /^(this|that|these|those|them|they|what|which|each|some|many|most|such|both|all)$/i.test(m[2])) return null;
       const rest = m[3] || '';
-      // Skip if rest starts with a content word (likely compound noun: "climate science", "data analysis")
-      if (/^\s+[a-z]{3,}/i.test(rest) && !/^\s+(and|or|is|are|was|were|has|have|had|can|will|would|should|could|may|might|in|on|at|to|for|from|with|by|of|the|a|an|that|which|who)\b/i.test(rest)) return null;
-      // Words ending in 's' use apostrophe only (no extra 's')
-      const possessive = /s$/i.test(m[2]) ? `${capFirst(m[2])}'` : `${capFirst(m[2])}'s`;
-      return `${possessive} ${m[1].toLowerCase()}${rest}`;
+      return `${capFirst(m[2])}'s ${m[1].toLowerCase()}${rest}`;
     }
   },
   // 9. "X can be seen/viewed/considered as Y" → "Many view X as Y"
@@ -637,17 +621,14 @@ const RESTRUCTURE = [
   },
   // 12. "X and Y" → "X along with Y" (noun-phrase coordination only)
   {
-    re: /^(.{20,}?)\s+and\s+(.{20,})$/i,
+    re: /^(.{15,}?)\s+and\s+(.{15,})$/i,
     apply: (m) => {
       // Don't rewrite verb-phrase coordination or parallel infinitives ("X and to Y")
-      // Also skip gerund-starting second clauses ("and threatening", "and causing")
-      if (/^(to\b|\w+ing\b|reduce|improve|increase|decrease|enhance|ensure|provide|create|support|maintain|build|develop|prevent|promote|address|establish|identify|manage|achieve|protect|allow|enable|make|find|keep|give|take|require|demand|need|determine|analyze|assess|evaluate|examine|understand|implement|apply|execute|use|offer|deliver|design|produce|generate|measure|test|consider|handle|plan|prepare|review|study|set|run|place|form|hold)/i.test(m[2].trim())) return null;
-      // Skip if "and" coordinates adjectives/nouns (not clauses): no finite verb in first 4 words of second half
-      const firstFewWords = m[2].trim().split(/\s+/).slice(0, 4).join(' ');
-      if (!/\b(?:is|are|was|were|has|have|had|will|would|could|should|can|do|does|did|must|shall|may|might)\b/i.test(firstFewWords)) return null;
+      if (/^(to\b|reduce|improve|increase|decrease|enhance|ensure|provide|create|support|maintain|build|develop|prevent|promote|address|establish|identify|manage|achieve|protect|allow|enable|make|find|keep|give|take|require|demand|need|determine|analyze|assess|evaluate|examine|understand|implement|apply|execute|use|offer|deliver|design|produce|generate|measure|test|consider|handle|plan|prepare|review|study|set|run|place|form|hold)/i.test(m[2].trim())) return null;
       const alts = [
         `${m[1]} along with ${m[2]}`,
-        `${m[1]} as well as ${m[2]}`,
+        `${m[1]}, coupled with ${m[2]}`,
+        `${m[1]}, besides ${m[2]}`,
       ];
       return alts[Math.floor(Math.random() * alts.length)];
     }
@@ -948,9 +929,6 @@ function genericRestructure(sent) {
     if (commaPos > 12 && commaPos < sent.length - 15) {
       const first = sent.substring(0, commaPos);
       const second = sent.substring(commaPos + 2).trim();
-      // First part must be a real clause (at least 4 words), not just an adverb or short phrase
-      const firstWordCount = first.trim().split(/\s+/).length;
-      if (firstWordCount < 4) continue;
       if (/\b(?:is|are|was|were|has|have|had|will|would|could|should|can|do|does|did)\b/i.test(second) &&
           !/^(?:which|that|who|whom|whose|where|when|although|though|because|since|if|unless|while|whereas|however|including|such|especially|particularly|and|but|or|yet|so|nor|reflecting|showing|representing|depicting|symbolizing|covering|involving|spanning|supporting|revealing|mirroring|displaying|indicating)\b/i.test(second)) {
         const p = endPunct(sent);
@@ -960,39 +938,25 @@ function genericRestructure(sent) {
     }
   }
 
-  // Strategy 3: "the X of (the) Y Z" → "Y Z's X" anywhere in sentence (~40%)
+  // Strategy 3: "the X of (the) Y Z" → "Y Z's X" anywhere in sentence
   // Match up to 2 words for Y to handle multi-word noun phrases ("capital investment")
   const ofMatch = sent.match(/\bthe\s+(\w{3,})\s+of\s+(?:the\s+)?(\w{3,}(?:\s+\w{3,})?)/i);
-  if (ofMatch && Math.random() < 0.40 && !/^(how|why|what|when|where|who|which|that|this|these|those|it|its|they|them|their)$/i.test(ofMatch[2].split(/\s+/)[0])) {
+  if (ofMatch && !/^(how|why|what|when|where|who|which|that|this|these|those|it|its|they|them|their)$/i.test(ofMatch[2].split(/\s+/)[0])) {
     // Verify last word of Y is a noun/adjective (not a verb/preposition)
     const yWords = ofMatch[2].split(/\s+/);
     const lastY = yWords[yWords.length - 1].toLowerCase();
-    // Skip multi-word noun phrases that aren't proper nouns (creates awkward possessives)
-    if (yWords.length > 1 && /^[a-z]/.test(ofMatch[2])) {
-      // skip — "climate science's intersection" is awkward
-    } else if (!/^(is|are|was|were|has|have|had|will|would|could|should|can|do|does|did|in|on|at|to|for|by|with|from|and|but|or|that|which|who)$/.test(lastY) && !/s$/.test(lastY)) {
+    if (!/^(is|are|was|were|has|have|had|will|would|could|should|can|do|does|did|in|on|at|to|for|by|with|from|and|but|or|that|which|who)$/.test(lastY)) {
       const replacement = ofMatch[2] + "'s " + ofMatch[1].toLowerCase();
       const result = sent.replace(ofMatch[0], replacement);
       if (!createdMultipleSentences(result)) candidates.push(capFirst(result));
     }
   }
 
-  // Shared verb check regex for strategy 4 & 9 — verbs should NOT appear in prepositional phrases
-  const VERB_CHECK = /^(is|are|was|were|has|have|had|will|would|could|should|can|do|does|did|may|might|shall|make|makes|made|take|takes|took|give|gives|gave|show|shows|keep|keeps|find|finds|lead|leads|hold|holds|seem|seems|help|helps|pose|poses|yield|yields|create|creates|cause|causes|drive|drives|shape|shapes|require|requires|suggest|suggests|indicate|indicates|provide|provides|support|supports|include|includes|involve|involves|facilitate|produce|trigger|generate|establish|contribute|affect|remain|become|enable|allow|maintain|represent|determine|address|achieve|prevent|manage|improve|enhance|reduce|increase|explore|examine|develop|implement|apply|deliver|offer|promote|ensure|solve|describe|measure|assess|evaluate|consider|demonstrate|reveal|identify|transform|strengthen)$/;
-
   // Strategy 4: Move trailing prepositional phrase to front (expanded to 1-5 words)
-  // BUG FIX: Added verb check — the regex can accidentally capture verb phrases
-  // as part of the prepositional phrase (e.g., "in machine learning facilitate solutions"
-  // would wrongly treat "facilitate solutions" as part of the prep phrase)
   const trailingPrep = sent.match(/^(.{15,}?)\s+((?:in|on|at|during|throughout|within|across|through|over|among|between|under|before|after)\s+(?:the\s+|a\s+|an\s+)?(?:\w+\s*){1,5}\w+)\s*([.!?])$/i);
   if (trailingPrep) {
-    // Reject if the matched prep phrase contains any common verb forms
-    const prepWords = trailingPrep[2].toLowerCase().split(/\s+/).slice(1); // skip the preposition itself
-    const prepHasVerb = prepWords.some(w => VERB_CHECK.test(w.replace(/[,;:.!?]/g, '')));
-    if (!prepHasVerb) {
-      const result = capFirst(trailingPrep[2]) + ', ' + trailingPrep[1].charAt(0).toLowerCase() + trailingPrep[1].slice(1) + trailingPrep[3];
-      if (!createdMultipleSentences(result)) candidates.push(result);
-    }
+    const result = capFirst(trailingPrep[2]) + ', ' + trailingPrep[1].charAt(0).toLowerCase() + trailingPrep[1].slice(1) + trailingPrep[3];
+    if (!createdMultipleSentences(result)) candidates.push(result);
   }
 
   // Strategy 5: Rearrange around "and"/"but"/"yet" conjunction
@@ -1015,9 +979,7 @@ function genericRestructure(sent) {
     }
   }
 
-  // Strategy 6: DISABLED — copula inversion creates unnatural phrasing
-  // "X is Y" → "Y characterizes X" sounds forced in academic writing
-  /*
+  // Strategy 6: "X is/are Y" → "Y characterizes X"
   const copulaMatch = sent.match(/^((?:\w+\s+){1,4})(is|are)\s+((?:a|an|the)\s+.{8,})([.!?])$/i);
   if (copulaMatch) {
     const subject = copulaMatch[1].trim();
@@ -1027,51 +989,32 @@ function genericRestructure(sent) {
     const result = capFirst(complement) + ' ' + verb + ' ' + subject.charAt(0).toLowerCase() + subject.slice(1) + copulaMatch[4];
     if (!createdMultipleSentences(result)) candidates.push(result);
   }
-  */
 
-  // Strategy 7: DISABLED — active→passive creates detectable patterns
-  /*
+  // Strategy 7: Active → Passive — "Subject verb Object" → "Object is verb-ed by Subject"
   const activeMatch = sent.match(/^((?:[A-Z]\w*\s+){0,3}[A-Z]\w+)\s+(examines|investigates|explores|analyzes|demonstrates|reveals|identifies|determines|addresses|establishes|produces|highlights|illustrates|measures|describes|considers|discusses|evaluates|assesses|generates|supports|provides|presents|requires|creates|maintains|promotes|employs|predicts|confirms|involves|suggests|indicates|shows|proves|affects|influences|shapes|transforms|enables|notes|utilizes|strengthens)\s+(.{12,})$/i);
   if (activeMatch) {
     const subj = activeMatch[1].trim();
     const verb = activeMatch[2].toLowerCase();
     const obj = stripPunct(activeMatch[3]);
     const p = endPunct(sent);
-    // Skip passive transformation when object starts with "that" clause — creates extremely awkward fronted subordinate clauses
-    if (/^that\b/i.test(obj.trim())) {
-      // Don't add this candidate
-    } else {
-      const ppMap = {examines:'examined',investigates:'investigated',explores:'explored',analyzes:'analyzed',demonstrates:'demonstrated',reveals:'revealed',identifies:'identified',determines:'determined',addresses:'addressed',establishes:'established',produces:'produced',highlights:'highlighted',illustrates:'illustrated',measures:'measured',describes:'described',considers:'considered',discusses:'discussed',evaluates:'evaluated',assesses:'assessed',generates:'generated',supports:'supported',provides:'provided',presents:'presented',requires:'required',creates:'created',maintains:'maintained',promotes:'promoted',employs:'employed',predicts:'predicted',confirms:'confirmed',involves:'involved',suggests:'suggested',indicates:'indicated',shows:'shown',proves:'proven',affects:'affected',influences:'influenced',shapes:'shaped',transforms:'transformed',enables:'enabled',notes:'noted',utilizes:'utilized',strengthens:'strengthened'};
-      const pp = ppMap[verb] || verb + 'ed';
-      const result = capFirst(obj) + ' is ' + pp + ' by ' + subj.charAt(0).toLowerCase() + subj.slice(1) + p;
-      if (!createdMultipleSentences(result)) candidates.push(result);
-    }
+    const ppMap = {examines:'examined',investigates:'investigated',explores:'explored',analyzes:'analyzed',demonstrates:'demonstrated',reveals:'revealed',identifies:'identified',determines:'determined',addresses:'addressed',establishes:'established',produces:'produced',highlights:'highlighted',illustrates:'illustrated',measures:'measured',describes:'described',considers:'considered',discusses:'discussed',evaluates:'evaluated',assesses:'assessed',generates:'generated',supports:'supported',provides:'provided',presents:'presented',requires:'required',creates:'created',maintains:'maintained',promotes:'promoted',employs:'employed',predicts:'predicted',confirms:'confirmed',involves:'involved',suggests:'suggested',indicates:'indicated',shows:'shown',proves:'proven',affects:'affected',influences:'influenced',shapes:'shaped',transforms:'transformed',enables:'enabled',notes:'noted',utilizes:'utilized',strengthens:'strengthened'};
+    const pp = ppMap[verb] || verb + 'ed';
+    const result = capFirst(obj) + ' is ' + pp + ' by ' + subj.charAt(0).toLowerCase() + subj.slice(1) + p;
+    if (!createdMultipleSentences(result)) candidates.push(result);
   }
-  */
 
   // Strategy 8 removed — discourse markers are handled by injectDiscourseMarker()
   // which has proper shielding to prevent synonym corruption
 
-  // Strategy 9: DISABLED — mid-sentence prep phrase fronting causes garbled output
-  // when the regex splits multi-word noun phrases (e.g., "in the modern digital landscape"
-  // captures only "in the modern digital", orphaning "landscape" after the verb)
-  // Other strategies provide sufficient structural variety.
-  /*
+  // Strategy 9: Fronted prepositional phrase from MIDDLE of sentence
   const midPrepMatch = sent.match(/^(.{8,}?)\s+(in\s+(?:the|this|a|an|each|every|any)\s+\w+(?:\s+(?!to\b|which\b|that\b|where\b|who\b|when\b|and\b|but\b|or\b)\w+){0,2})\s+(.{8,})$/i);
   if (midPrepMatch) {
-    // Verify the matched phrase is a true prepositional phrase (no verbs)
-    const midPrepWords = midPrepMatch[2].toLowerCase().split(/\s+/).slice(1);
-    const midPrepHasVerb = midPrepWords.some(w => VERB_CHECK.test(w.replace(/[,;:.!?]/g, '')));
-    if (!midPrepHasVerb) {
-      const p = endPunct(sent);
-      const result = capFirst(midPrepMatch[2]) + ', ' + midPrepMatch[1].charAt(0).toLowerCase() + midPrepMatch[1].slice(1) + ' ' + stripPunct(midPrepMatch[3]) + p;
-      if (!createdMultipleSentences(result)) candidates.push(result);
-    }
+    const p = endPunct(sent);
+    const result = capFirst(midPrepMatch[2]) + ', ' + midPrepMatch[1].charAt(0).toLowerCase() + midPrepMatch[1].slice(1) + ' ' + stripPunct(midPrepMatch[3]) + p;
+    if (!createdMultipleSentences(result)) candidates.push(result);
   }
-  */
 
-  // Strategy 10: DISABLED — em-dash injection creates detectable patterns
-  /*
+  // Strategy 10: Em-dash injection before conjunction (breaks monotone token flow)
   if (words.length >= 10 && !sent.includes('—') && !sent.includes('–')) {
     for (let i = 4; i < words.length - 3; i++) {
       const w = words[i].toLowerCase().replace(/,$/, '');
@@ -1084,17 +1027,15 @@ function genericRestructure(sent) {
       }
     }
   }
-  */
 
-  // Strategy 11: DISABLED — cleft sentences create unnatural academic phrasing
-  /*
+  // Strategy 11: Cleft sentence — "X is/are Y" → "What X is/are is Y"
   // Require 2+ word subject to avoid ugly "What X is is Y" with single-word subjects
   const cleftMatch = sent.match(/^((?:\w+\s+){2,3})(is|are|was|were)\s+(.{8,})([.!?])$/i);
   if (cleftMatch && !sent.includes(',') && words.length <= 18) {
     const subj = cleftMatch[1].trim();
     const be = cleftMatch[2].toLowerCase();
     // Reject if the cleft would create "was is" or "were is" (copula doubling)
-    if (be === 'was' || be === 'were') { // skip cleft for past tense copula }
+    if (be === 'was' || be === 'were') { /* skip cleft for past tense copula */ }
     else {
       const rest = cleftMatch[3];
       const p = cleftMatch[4];
@@ -1102,7 +1043,6 @@ function genericRestructure(sent) {
       if (!createdMultipleSentences(result)) candidates.push(result);
     }
   }
-  */
 
   // Pick one candidate at random — gives every strategy a fair chance
   if (candidates.length > 0) return candidates[Math.floor(Math.random() * candidates.length)];
@@ -1121,14 +1061,14 @@ const SYN = {
   'significant':   ['notable','meaningful','substantial','marked','considerable'],
   'various':       ['different','diverse','several','multiple','assorted'],
   'specific':      ['particular','certain','distinct','precise','exact'],
-  'different':     ['distinct','varied','diverse','alternative'],
+  'different':     ['distinct','varied','separate','divergent','alternative'],
   'effective':     ['successful','productive','functional','practical','working'],
   'essential':     ['necessary','vital','required','needed','indispensable'],
   'primary':       ['main','chief','principal','central','leading'],
   'major':         ['large','big','substantial','considerable','principal'],
   'current':       ['present','existing','ongoing','prevailing'],
   'relevant':      ['related','applicable','appropriate','connected','germane'],
-  'potential':     ['possible','prospective','expected','anticipated','projected'],
+  'potential':     ['possible','likely','prospective','feasible','probable'],
   'complex':       ['complicated','intricate','involved','elaborate','layered'],
   'notable':       ['remarkable','striking','impressive','noteworthy','distinctive'],
   'clear':         ['obvious','apparent','evident','plain','unmistakable'],
@@ -1154,14 +1094,14 @@ const SYN = {
   'inherent':      ['built-in','intrinsic','innate','natural','ingrained'],
   'robust':        ['strong','solid','sturdy','resilient','durable'],
   'comprehensive': ['thorough','complete','full','all-encompassing','detailed'],
-  'pivotal':       ['key','central','decisive','critical','defining'],
+  'pivotal':       ['key','central','decisive','turning-point','defining'],
   'multifaceted':  ['complex','varied','many-sided','diverse','layered'],
   'profound':      ['deep','intense','far-reaching','sweeping','powerful'],
 
   // ── Verbs ──
   'demonstrate':   ['show','illustrate','display','reveal','exhibit'],
   'indicate':      ['show','suggest','point to','signal','reflect'],
-  'suggest':       ['imply','indicate','propose','point to'],
+  'suggest':       ['imply','hint','point to','propose'],
   'provide':       ['give','offer','supply','deliver','present'],
   'require':       ['need','demand','call for','involve','take'],
   'establish':     ['set up','create','build','found','form'],
@@ -1177,7 +1117,7 @@ const SYN = {
   'develop':       ['create','build','form','design','grow'],
   'enhance':       ['improve','boost','strengthen','elevate','raise'],
   'influence':     ['affect','shape','sway','guide','alter'],
-  'implement':     ['carry out','apply','introduce'],
+  'implement':     ['carry out','execute','apply','put into practice','introduce'],
   'generate':      ['produce','create','yield','bring about','trigger'],
   'conduct':       ['carry out','perform','run','do','execute'],
   'ensure':        ['make sure','guarantee','secure','confirm','verify'],
@@ -1185,7 +1125,7 @@ const SYN = {
   'highlight':     ['emphasize','underline','stress','feature','foreground'],
   'involve':       ['include','require','entail','encompass','mean'],
   'occur':         ['happen','take place','arise','come about','unfold'],
-  'remain':        ['stay','continue','persist'],
+  'remain':        ['stay','continue','persist','last','endure'],
   'reveal':        ['show','uncover','expose','disclose','bring to light'],
   'utilize':       ['use','employ','apply','draw on','work with'],
   'facilitate':    ['help','enable','support','ease','make possible'],
@@ -1194,16 +1134,16 @@ const SYN = {
   'encompass':     ['include','cover','span','embrace','contain'],
 
   // ── Nouns ──
-  'approach':      ['method','strategy','framework','technique'],
+  'approach':      ['method','strategy','way','technique','tactic'],
   'aspect':        ['part','element','side','feature','dimension'],
   'challenge':     ['difficulty','obstacle','hurdle','problem','issue'],
   'concept':       ['idea','notion','principle','theory','thought'],
   'factor':        ['element','component','aspect','influence','driver'],
-  'framework':     ['structure','system','model','outline'],
+  'framework':     ['structure','system','model','setup','outline'],
   'outcome':       ['result','consequence','effect','end product','finding'],
   'perspective':   ['view','angle','standpoint','outlook','lens'],
   'process':       ['procedure','method','system','operation','practice'],
-  'evidence':      ['proof','data','indication','findings','documentation'],
+  'evidence':      ['proof','data','indication','sign','support'],
   'strategy':      ['plan','approach','tactic','scheme','method'],
   'context':       ['setting','background','situation','environment','circumstances'],
   'environment':   ['setting','surroundings','conditions','situation','backdrop'],
@@ -1238,9 +1178,9 @@ const SYN = {
   // ── Common phrases → simpler forms ──
   'a number of':       ['several','some','a few','many','a handful of'],
   // ── Protect multi-word phrases from partial sub-phrase matching ──
-  'in addition to':['besides','along with','on top of'],
-  'together with':['along with','paired with','combined with'],
-  'along with':['together with','in tandem with','paired with'],
+  'in addition to':['besides','along with','on top of','coupled with'],
+  'together with':['along with','coupled with','paired with','combined with'],
+  'along with':['together with','coupled with','in tandem with','paired with'],
   'on top of that':['besides','apart from that','plus','what is more'],
   'in addition':       ['also','besides','on top of that','plus','alongside this'],
   'on the other hand': ['by contrast','then again','alternatively','at the same time','conversely'],
@@ -1254,7 +1194,7 @@ const SYN = {
   'therefore':         ['so','because of this','for this reason','this means'],
   'although':          ['though','even though','while'],
   'despite':           ['in spite of','regardless of','even with','for all'],
-  'regarding':         ['about','concerning'],
+  'regarding':         ['about','concerning','on the topic of','as for'],
   'in order to':       ['to','so as to','aiming to','with the goal of'],
   'pertaining to':     ['about','related to','concerning','on','regarding'],
 
@@ -1372,7 +1312,7 @@ const SYN = {
   'depict':['show','portray','illustrate','represent','describe'],
   'derive':['get','draw','obtain','extract','take'],
   'designate':['name','appoint','assign','label','mark'],
-  'detect':['find','spot','identify','discover','uncover'],
+  'detect':['find','spot','notice','identify','discover'],
   'diminish':['reduce','lessen','decrease','shrink','weaken'],
   'disclose':['reveal','show','expose','make known','share'],
   'dismiss':['reject','ignore','discard','rule out','set aside'],
@@ -1382,7 +1322,7 @@ const SYN = {
   'dominate':['control','lead','rule','overshadow','prevail over'],
   'eliminate':['remove','cut','get rid of','wipe out','do away with'],
   'embrace':['accept','adopt','welcome','take on','support'],
-  'enable':['allow','permit','make possible','empower','support'],
+  'enable':['allow','let','permit','make possible','empower'],
   'encounter':['meet','face','come across','run into','experience'],
   'endorse':['support','back','approve','recommend','champion'],
   'enforce':['apply','impose','carry out','uphold','implement'],
@@ -1433,7 +1373,7 @@ const SYN = {
   'regulate':['control','manage','govern','oversee','monitor'],
   'reject':['turn down','refuse','dismiss','decline','deny'],
   'replicate':['copy','repeat','reproduce','duplicate','mirror'],
-  'represent':['symbolize','show','reflect','embody'],
+  'represent':['stand for','symbolize','show','reflect','depict'],
   'resolve':['settle','fix','solve','work out','clear up'],
   'restrict':['limit','constrain','confine','curb','cap'],
   'retain':['keep','hold','maintain','preserve','save'],
@@ -1445,14 +1385,14 @@ const SYN = {
   'suppress':['hold back','restrain','contain','stifle','block'],
   'sustain':['maintain','keep up','support','uphold','preserve'],
   'terminate':['end','stop','close','finish','conclude'],
-  'transform':['change','reshape','overhaul'],
+  'transform':['change','convert','reshape','overhaul','remake'],
   'transmit':['send','pass','relay','transfer','convey'],
   'trigger':['cause','spark','set off','prompt','start'],
   'undermine':['weaken','damage','sabotage','erode','hurt'],
   'verify':['confirm','check','validate','prove','test'],
 
   // ── Extended Nouns ──
-  'accuracy':['precision','correctness','reliability'],
+  'accuracy':['precision','correctness','exactness','reliability','fidelity'],
   'alternative':['option','choice','substitute','replacement','other route'],
   'assumption':['belief','premise','expectation','supposition','guess'],
   'awareness':['knowledge','understanding','recognition','consciousness','grasp'],
@@ -1538,7 +1478,7 @@ const SYN = {
   'explicitly':['clearly','directly','plainly','openly','specifically'],
   'extensively':['widely','broadly','thoroughly','greatly','at length'],
   'frequently':['often','regularly','commonly','repeatedly','routinely'],
-  'fundamentally':['essentially','basically','deeply','profoundly'],
+  'fundamentally':['basically','at its core','essentially','at root'],
   'gradually':['slowly','step by step','bit by bit','steadily','over time'],
   'ideally':['preferably','in a perfect world','at best','optimally'],
   'implicitly':['indirectly','tacitly','by implication','subtly'],
@@ -1626,7 +1566,7 @@ const _GAP_FILL = {
   'case':['instance','scenario','situation','occurrence'],
   'area':['field','domain','sector','sphere'],
   'part':['portion','segment','section','piece'],
-  'role':['function','position','capacity','part'],
+  'role':['function','position','capacity','purpose'],
   'view':['perspective','outlook','stance','angle'],
   'fact':['reality','truth','detail','actuality'],
   'idea':['notion','thought','theory','proposition'],
@@ -1659,11 +1599,11 @@ const _GAP_FILL = {
   'increases':['raises','boosts','elevates','amplifies','heightens'],
   'increased':['raised','boosted','elevated','amplified','heightened'],
   'includes':['covers','contains','encompasses','features','incorporates'],
-  'including':['involving'],
+  'including':['such as','covering','spanning','involving'],
   'involves':['entails','requires','encompasses','demands'],
   'allows':['enables','permits','empowers','gives the ability to'],
   'causes':['triggers','produces','brings about','prompts','sparks'],
-  'remains':['stays','persists'],
+  'remains':['stays','persists','continues','endures'],
   'provides':['offers','delivers','supplies','furnishes'],
   'supports':['backs','reinforces','bolsters','sustains'],
   'reduces':['cuts','lowers','lessens','diminishes','decreases'],
@@ -1687,26 +1627,26 @@ const _GAP_FILL = {
   'services':['offerings','provisions','functions','operations'],
   'resource':['asset','supply','means','reserve'],
   'resources':['assets','supplies','means','reserves','provisions'],
-  'pattern':['trend','tendency','model','form'],
-  'patterns':['trends','tendencies','models'],
+  'pattern':['trend','tendency','behavior','configuration'],
+  'patterns':['trends','tendencies','behaviors','configurations'],
   'strategy':['approach','plan','tactic','method','scheme'],
   'strategies':['approaches','plans','tactics','methods','schemes'],
   'performance':['results','output','effectiveness','efficiency'],
-  'system':['framework','structure','network'],
-  'systems':['frameworks','structures','networks'],
+  'system':['framework','structure','network','setup'],
+  'systems':['frameworks','structures','networks','setups'],
   'population':['group','segment','demographic','cohort'],
   'populations':['groups','segments','demographics','cohorts'],
   'administration':['management','governance','oversight','leadership'],
   'pathway':['route','track','channel','course'],
   'pathways':['routes','tracks','channels','courses'],
-  'outcome':['result','effect'],
-  'outcomes':['results','effects'],
+  'outcome':['result','consequence','effect','end product'],
+  'outcomes':['results','consequences','effects','end products'],
   'individual':['person','subject','participant','member'],
   'individuals':['persons','subjects','participants','members'],
   'symptom':['sign','indicator','signal','marker'],
   'symptoms':['signs','indicators','signals','markers'],
-  'patient':['patient'],
-  'treatment':['care','therapy','intervention','procedure'],
+  'patient':['person','individual','subject','case'],
+  'treatment':['care','therapy','intervention','remedy'],
   'testing':['screening','evaluation','assessment','analysis'],
   'admission':['entry','intake','enrollment','acceptance'],
   'admissions':['entries','intakes','enrollments','acceptances'],
@@ -1717,7 +1657,7 @@ const _GAP_FILL = {
   'practical':['hands-on','applied','real-world','functional','actionable'],
   'younger':['junior','less experienced','newer','early-stage'],
   'older':['senior','more experienced','veteran','later-stage'],
-  'comprehensive':['thorough','complete','full'],
+  'comprehensive':['thorough','complete','full','all-encompassing','exhaustive'],
   'specific':['particular','targeted','exact','precise','defined'],
   'chronic':['long-standing','persistent','ongoing','enduring','recurring'],
   'acute':['sharp','sudden','severe','intense','critical'],
@@ -1732,7 +1672,7 @@ const _GAP_FILL = {
   'frequently':['often','regularly','routinely','repeatedly'],
   'typically':['usually','normally','generally','ordinarily'],
   'particularly':['especially','above all','chiefly','mainly'],
-  'between':['among'],
+  'between':['among','across','amid','spanning'],
   'primarily':['mainly','chiefly','largely','mostly'],
   'generally':['normally','usually','broadly','largely'],
   'commonly':['often','widely','ordinarily','frequently'],
@@ -1747,12 +1687,12 @@ const _GAP_FILL = {
   // Base forms exist in SYN/EXTRA_SYN but regex requires exact match
   // ═══════════════════════════════════════════════════════════════
   'examines':['studies','reviews','inspects','analyzes','investigates'],
-  'suggests':['implies','indicates','signals','points to'],
+  'suggests':['implies','hints','indicates','signals','points to'],
   'indicates':['shows','signals','suggests','reveals','points to'],
   'reveals':['shows','uncovers','demonstrates','displays','exposes'],
   'demonstrates':['shows','proves','illustrates','displays','establishes'],
   'involves':['entails','requires','encompasses','demands','includes'],
-  'represents':['constitutes','symbolizes','reflects','embodies'],
+  'represents':['stands for','symbolizes','reflects','depicts','embodies'],
   'establishes':['sets up','creates','builds','forms','determines'],
   'addresses':['tackles','handles','deals with','confronts','manages'],
   'contributes':['adds','gives','supplies','offers','feeds into'],
@@ -1830,7 +1770,7 @@ const _GAP_FILL = {
   'confirmed':['verified','validated','proved','backed up','supported'],
   'observed':['noticed','saw','watched','noted','spotted'],
   'conducted':['carried out','ran','performed','executed','completed'],
-  'developed':['advanced'],
+  'developed':['built','crafted','created','advanced','shaped'],
   'discovered':['found','uncovered','identified','detected','spotted'],
   'reported':['documented','noted','recorded','described','detailed'],
   'established':['created','set up','built','formed','founded'],
@@ -1859,7 +1799,7 @@ const _GAP_FILL = {
   'revealing':['showing','uncovering','demonstrating','displaying','exposing'],
   'demonstrating':['showing','proving','illustrating','displaying','establishing'],
   'involving':['entailing','requiring','encompassing','demanding','including'],
-  'representing':['symbolizing','showing','reflecting','embodying'],
+  'representing':['standing for','symbolizing','showing','reflecting','depicting'],
   'establishing':['setting up','creating','building','forming','founding'],
   'addressing':['tackling','handling','dealing with','confronting','managing'],
   'contributing':['adding','providing','supplying','offering','feeding into'],
@@ -1876,7 +1816,7 @@ const _GAP_FILL = {
   'implementing':['applying','carrying out','putting in place','executing','enacting'],
   'promoting':['encouraging','supporting','boosting','advancing','fostering'],
   'conducting':['carrying out','running','performing','executing','completing'],
-  'developing':['developing'],
+  'developing':['building','crafting','creating','advancing','shaping'],
 
   // ═══════════════════════════════════════════════════════════════
   // COMPARATIVE & SUPERLATIVE ADJECTIVES
@@ -1904,11 +1844,11 @@ const _GAP_FILL = {
   // MISSING COMMON NOUNS — high-frequency academic vocabulary
   // ═══════════════════════════════════════════════════════════════
   'analysis':['examination','review','evaluation','assessment','study'],
-  'data':['information','figures','records'],
+  'data':['information','evidence','figures','records','findings'],
   'study':['research','investigation','examination','inquiry','review'],
   'studies':['research','investigations','examinations','inquiries','reviews'],
   'result':['finding','outcome','consequence','product','conclusion'],
-  'results':['findings','outcomes'],
+  'results':['findings','outcomes','consequences','products','conclusions'],
   'method':['approach','technique','procedure','way','practice'],
   'methods':['approaches','techniques','procedures','ways','practices'],
   'value':['worth','importance','significance'],
@@ -1917,9 +1857,9 @@ const _GAP_FILL = {
   'level':['degree','extent','amount','tier','stage'],
   'levels':['degrees','extents','amounts','tiers','stages'],
   'rate':['pace','speed','frequency','tempo','ratio'],
-  'rates':['levels','ratios'],
+  'rates':['paces','speeds','frequencies','ratios','levels'],
   'effect':['impact','influence','consequence','result','outcome'],
-  'effects':['impacts','influences','outcomes'],
+  'effects':['impacts','influences','consequences','results','outcomes'],
   'factor':['element','aspect','component','variable','driver'],
   'factors':['elements','aspects','components','variables','drivers'],
   'process':['procedure','operation','method','mechanism','course'],
@@ -1929,7 +1869,7 @@ const _GAP_FILL = {
   'degree':['extent','level','measure','amount','stage'],
   'period':['span','stretch','phase','interval','window'],
   'response':['reaction','reply','answer','feedback','return'],
-  'approach':['method','strategy','framework','technique'],
+  'approach':['method','way','strategy','tactic','technique'],
   'structure':['framework','arrangement','setup','configuration','form'],
   'feature':['trait','characteristic','quality','attribute','property'],
   'features':['traits','characteristics','qualities','attributes','properties'],
@@ -1942,14 +1882,14 @@ const _GAP_FILL = {
   'demand':['need','call','request','requirement','pressure'],
   'supply':['provision','stock','reserve','inventory','store'],
   'income':['earnings','revenue','pay','salary','compensation'],
-  'cost':['expense','price'],
+  'cost':['expense','price','charge','outlay','expenditure'],
   'element':['part','component','piece','factor','ingredient'],
   'sector':['area','field','branch','segment','division'],
   'output':['product','result','yield','production','return'],
   'index':['indicator','measure','gauge','marker','benchmark'],
   'ratio':['proportion','fraction','share','percentage','balance'],
   'standard':['benchmark','norm','criterion','measure','baseline'],
-  'framework':['structure','model','system'],
+  'framework':['structure','model','system','scaffold','outline'],
 
   // ═══════════════════════════════════════════════════════════════
   // MISSING DOMAIN-SPECIFIC WORDS — statistics, economics, etc.
@@ -1980,7 +1920,7 @@ const _GAP_FILL = {
   'overall':['general','total','complete','aggregate','collective'],
   'current':['present','existing','ongoing','prevailing','active'],
   'similar':['comparable','like','alike','analogous','parallel'],
-  'different':['distinct','varied','diverse'],
+  'different':['distinct','varied','diverse','unlike','separate'],
   'various':['several','diverse','different','assorted','multiple'],
   'certain':['specific','particular','definite','given','set'],
   'strong':['powerful','robust','firm','solid','potent'],
@@ -1992,7 +1932,7 @@ const _GAP_FILL = {
   'minor':['small','slight','trivial','secondary','lesser'],
   'likely':['probable','expected','anticipated','plausible','possible'],
   'unlikely':['improbable','doubtful','unexpected','remote','questionable'],
-  'potential':['possible','prospective','expected','anticipated','projected'],
+  'potential':['possible','prospective','likely','would-be','latent'],
   'essential':['vital','key','critical','core','necessary'],
   'common':['widespread','frequent','typical','prevalent','usual'],
   'rare':['uncommon','scarce','unusual','infrequent','exceptional'],
@@ -2052,53 +1992,6 @@ const _GAP_FILL = {
 };
 for (const [k, v] of Object.entries(_GAP_FILL)) { if (!(k in SYN)) SYN[k] = v; }
 
-// ═══ ACADEMIC TERM GUARD ═══
-// Words that must NEVER be replaced by SYN dictionary — they are precise technical terms
-// whose thesaurus synonyms produce nonsensical output in academic contexts:
-//   hypothesis → guess, analysis → psychoanalysis, null → nada, pair → mating, etc.
-const NEVER_REPLACE_TERMS = new Set([
-  // Statistics & Research
-  'hypothesis', 'hypotheses', 'null', 'alternative', 'statistical', 'statistically',
-  'significance', 'significant', 'significantly', 'mean', 'median', 'mode', 'variance', 'deviation',
-  'sample', 'samples', 'population', 'parameter', 'parameters', 'coefficient', 'coefficients',
-  'correlation', 'correlations', 'regression', 'regressions',
-  'anova', 'confidence', 'interval', 'intervals', 'probability', 'distribution', 'distributions',
-  'independent', 'dependent', 'variable', 'variables', 'control', 'experimental',
-  'qualitative', 'quantitative', 'empirical', 'methodology', 'observation', 'observations',
-  'validity', 'reliability', 'sampling', 'inferential', 'descriptive',
-  'predictor', 'predictors', 'outcome', 'outcomes', 'criterion', 'covariate', 'confounding',
-  // Academic Writing
-  'dissertation', 'thesis', 'abstract', 'citation', 'citations', 'reference', 'references',
-  'scholarly', 'academic', 'premise', 'assertion', 'postulate',
-  'theorem', 'inference', 'deduction', 'induction',
-  // Terms producing wrong-sense synonyms
-  'analysis', 'analyses', 'analyze', 'analyzed', 'analyzing', 'analytical',
-  'pair', 'paired', 'pairing', 'pairs',
-  'parental', 'maternal', 'paternal', 'familial',
-  'truancy', 'truant', 'absenteeism', 'attendance',
-  'testing', 'test', 'tested', 'tests', 'examination', 'examine',
-  'rate', 'rates', 'level', 'levels', 'group', 'groups',
-  'relationship', 'relationships', 'association', 'comparison',
-  'difference', 'differences', 'different', 'effect', 'effects',
-  'measure', 'measures', 'measurement', 'measurements', 'assessment', 'evaluation',
-  'determination', 'identification', 'indication',
-  'involvement', 'requirement', 'requirements', 'intervention', 'interventions', 'prevention',
-  'program', 'programs', 'curriculum', 'data', 'evidence',
-  'student', 'students', 'teacher', 'teachers', 'school', 'schools', 'district', 'enrollment',
-  'participant', 'participants', 'respondent', 'respondents', 'survey', 'surveys',
-  'clinical', 'diagnosis', 'treatment', 'treatments', 'therapy', 'patient', 'patients',
-  'symptom', 'symptoms', 'pathology', 'epidemiology', 'prevalence', 'mortality',
-  'equation', 'equations', 'formula', 'function', 'algorithm',
-  'demographic', 'demographics', 'gender', 'whether',
-  // Formatting
-  'h₀', 'h₁', 'h₀₁', 'h₁₁', 'h₀₂', 'h₁₂',
-]);
-
-// Remove dangerous entries from SYN that should never be replaced
-for (const term of NEVER_REPLACE_TERMS) {
-  delete SYN[term];
-}
-
 // Pre-compile regexes sorted longest-first so multi-word phrases match first
 const SYN_ENTRIES = Object.entries(SYN)
   .sort((a, b) => b[0].length - a[0].length)
@@ -2108,8 +2001,8 @@ const SYN_ENTRIES = Object.entries(SYN)
   }));
 
 function injectSynonyms(text, aggr, keywords, usedSet, style) {
-  // Moderate rates: aggr 4→0.48, aggr 6→0.62, aggr 8→0.76
-  const rate = Math.min(0.80, 0.20 + aggr * 0.07);
+  // Aggressive rates: aggr 8→0.96, aggr 10→1.0, aggr 5→0.75
+  const rate = Math.min(1.0, 0.40 + aggr * 0.07);
 
   // ── Single-pass matching: prevents cascading synonym corruption ──
   // Collect ALL matches from the input text FIRST, then apply at once.
@@ -2123,7 +2016,6 @@ function injectSynonyms(text, aggr, keywords, usedSet, style) {
     while ((m = re.exec(text)) !== null) {
       const lower = m[0].toLowerCase();
       if (keywords.has(lower)) continue;
-      if (NEVER_REPLACE_TERMS.has(lower)) continue; // academic term guard
       if (usedSet.has(lower)) continue; // already a synonym output from a prior pass — don't re-replace
       if (Math.random() > rate) continue;
       let available = alts.filter(a => !usedSet.has(a.toLowerCase()));
@@ -2600,7 +2492,7 @@ function varyPunctuation(sent) {
       const nextWord = (words[i + 1] || '').toLowerCase();
       // NEVER replace commas before relative pronouns, subordinators, or list continuations
       // — semicolons/colons before these are grammatically invalid
-      if (/^(which|who|whom|whose|that|where|when|although|though|because|since|if|unless|while|whereas|however|including|such|especially|particularly|namely|specifically|for|in|and|or|nor|but|so|yet|both)$/.test(nextWord)) {
+      if (/^(which|who|whom|whose|that|where|when|although|though|because|since|if|unless|while|whereas|however|including|such|especially|particularly|namely|specifically|for|in)$/.test(nextWord)) {
         continue;
       }
       const afterClause = words.slice(i + 1, i + 5).join(' ');
@@ -2838,7 +2730,7 @@ const BACKUP_SYN_MAP = {
   'quite':['fairly','rather','somewhat','reasonably'],
   'rather':['somewhat','fairly','quite','to some extent'],
   'through':['via','by way of','by means of'],
-  'across':['throughout','over'],
+  'across':['throughout','over','spanning'],
   'around':['roughly','approximately','close to'],
   'within':['inside','in','during'],
   // More auxiliary verbs and common words for retry passes
@@ -2847,6 +2739,7 @@ const BACKUP_SYN_MAP = {
   'caused by':['driven by','resulting from','triggered by','stemming from'],
   'such as':['like','including','namely','among them'],
   'also':['further','likewise','too'],
+  'most':['nearly all','the majority of','the bulk of'],
   'many':['numerous','a range of','several','multiple'],
   'some':['several','a few','certain','various'],
   'allow':['enable','permit','let','empower'],
@@ -2860,7 +2753,7 @@ const BACKUP_SYN_MAP = {
   'present':['current','existing','ongoing','prevailing'],
   'clear':['plain','evident','obvious','apparent'],
   'study':['research','investigation','inquiry','review'],
-  'data':['information','figures','records'],
+  'data':['information','evidence','figures','records'],
   'results':['findings','outcomes','conclusions'],
   'method':['approach','technique','procedure','way'],
   'process':['procedure','operation','mechanism','course'],
@@ -2870,7 +2763,7 @@ const BACKUP_SYN_MAP = {
   'effect':['impact','influence','consequence','outcome'],
   'rate':['pace','frequency','speed','ratio'],
   'range':['span','spectrum','scope','spread'],
-  'point':['aspect','detail','feature','matter'],
+  'point':['aspect','detail','feature','element'],
   'impact':['effect','influence','consequence','bearing'],
   'factor':['element','aspect','component','driver'],
   'model':['framework','template','pattern','design'],
@@ -2879,8 +2772,8 @@ const BACKUP_SYN_MAP = {
   'support':['back','bolster','reinforce','sustain'],
   'analysis':['examination','review','evaluation','assessment'],
   'structure':['framework','arrangement','configuration','form'],
-  'approach':['method','strategy','framework','technique'],
-  'evidence':['proof','data','confirmation'],
+  'approach':['method','strategy','tactic','technique'],
+  'evidence':['proof','indication','sign','confirmation'],
   'research':['investigation','inquiry','study','exploration'],
   'income':['earnings','pay','compensation'],
   'technique':['method','approach','procedure','practice'],
@@ -2900,7 +2793,7 @@ const BACKUP_SYN_MAP = {
   'demonstrates':['shows','proves','illustrates','establishes'],
   'determines':['decides','establishes','shapes','governs'],
   'involves':['entails','requires','encompasses','demands'],
-  'represents':['reflects','embodies','constitutes'],
+  'represents':['stands for','reflects','embodies','depicts'],
   'establishes':['creates','builds','forms','sets up'],
   'maintains':['keeps','preserves','sustains','upholds'],
   'contributes':['adds','feeds into','supplies','offers'],
@@ -2910,7 +2803,6 @@ const BACKUP_SYN_MAP = {
 };
 
 const BACKUP_ENTRIES = Object.entries(BACKUP_SYN_MAP)
-  .filter(([word]) => !NEVER_REPLACE_TERMS.has(word.toLowerCase()))
   .sort((a, b) => b[0].length - a[0].length)
   .map(([word, alts]) => ({
     re: new RegExp(`(?<![\\w-])${word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![\\w-])`, 'gi'),
@@ -2927,7 +2819,6 @@ function aggressiveWordChange(text, keywords, usedSet, style) {
     while ((m = re.exec(text)) !== null) {
       const lower = m[0].toLowerCase();
       if (keywords.has(lower)) continue;
-      if (NEVER_REPLACE_TERMS.has(lower)) continue; // academic term guard
       if (usedSet.has(lower)) continue;
       if (Math.random() > 0.85) continue;
       let available = alts.filter(a => !usedSet.has(a.toLowerCase()));
@@ -2981,13 +2872,11 @@ const DISCOURSE_MARKERS = [
 ];
 
 function injectDiscourseMarker(sent) {
-  // Only fire on longer sentences with no existing parenthetical or em-dash
+  // Only fire on sentences ≥10 words with no existing parenthetical or em-dash
   const words = sent.split(/\s+/);
-  if (words.length < 14 || sent.includes('—') || /,\s*\w+\s*,/.test(sent)) return sent;
-  // Skip if sentence already starts with a transition word/adverb + comma
-  if (/^\w+ly,|^(?:However|Furthermore|Moreover|Additionally|Consequently|Fundamentally|Essentially|Notably|Importantly|Significantly|Critically|Broadly|Generally|Overall|Ultimately|Specifically|Increasingly|Alternatively|Primarily|Similarly|Accordingly|Evidently|Naturally|Clearly|Obviously|Remarkably|Interestingly|Crucially|Arguably|Undeniably|Conceivably|Admittedly)\s*,/i.test(sent)) return sent;
-  // ~5% chance to inject (reduced from 12% to avoid cluttering)
-  if (Math.random() > 0.05) return sent;
+  if (words.length < 10 || sent.includes('—') || /,\s*\w+\s*,/.test(sent)) return sent;
+  // ~25% chance to inject
+  if (Math.random() > 0.25) return sent;
   const marker = DISCOURSE_MARKERS[Math.floor(Math.random() * DISCOURSE_MARKERS.length)];
   // Insert after first comma if there is one, otherwise after word 3-4
   // Find first comma that is NOT inside a number (not followed by digits)
@@ -3003,8 +2892,14 @@ function injectDiscourseMarker(sent) {
     const after = sent.substring(commaIdx + 1).trimStart();
     const result = before + ' ' + marker + ', ' + after;
     if (!createdMultipleSentences(result)) return result;
+  } else {
+    // Insert after word 3 (after subject phrase)
+    const insertPos = Math.min(4, Math.floor(words.length / 3));
+    const before = words.slice(0, insertPos).join(' ');
+    const after = words.slice(insertPos).join(' ');
+    const result = before + ', ' + marker + ', ' + after;
+    if (!createdMultipleSentences(result)) return result;
   }
-  // If no suitable comma, skip injection — inserting mid-phrase splits compounds
   return sent;
 }
 
@@ -3017,19 +2912,17 @@ function processSentence(sent, style, aggr, usedSet, keywords, sentIndex, sentCo
 
   // ═══ LAYER 1: STRUCTURAL REWRITING ═══
   // Restructure FIRST — before compression/transforms alter the patterns the regexes match
-  // 50% of sentences get restructured (reduced from 90% to preserve original flow)
+  // 90% of sentences get restructured; first sentence in paragraph has 45% chance
   const isFirstInPara = sentIndex === 0;
-  const restructureProb = 0.50;
+  const restructureProb = isFirstInPara ? 0.45 : 0.90;
   let wasRestructured = false;
   if (Math.random() < restructureProb) {
     const before = result;
     result = restructureSentence(result);
     wasRestructured = result !== before;
   }
-  // Now compress wordy phrases (only for longer sentences to avoid over-processing)
-  if (result.split(/\s+/).length > 25) {
-    result = compressPhrases(result);
-  }
+  // Now compress wordy phrases (biggest single impact on word change)
+  result = compressPhrases(result);
   // Apply word-level transforms (nominalization reversal, verbose→concise)
   result = applyWordTransforms(result);
 
@@ -3242,8 +3135,14 @@ export function pipeline(input, style, aggr) {
     const sents = splitSentences(out);
     if (!sents.length) { outputParts.push(tok.text); continue; }
 
-    // Process the full paragraph as one block (not sentence-by-sentence)
-    const humanized = [processSentence(out, style, aggr, usedSet, keywords, 0, 1)];
+    const inputCount = sents.length;
+    const humanized = sents.map((s, idx) => processSentence(s, style, aggr, usedSet, keywords, idx, inputCount));
+
+    // ASSERT: sentence count preserved
+    if (humanized.length !== inputCount) {
+      outputParts.push(tok.text);
+      continue;
+    }
 
     const diversified = diversifyStarters(humanized);
     let para = diversified.join(' ');

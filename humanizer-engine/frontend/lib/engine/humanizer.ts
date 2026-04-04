@@ -32,8 +32,9 @@ import {
   fixPunctuation, cleanSentenceStarters, verifySentencePresence, deepCleaningPass, perSentenceAntiDetection,
 } from "./shared-dictionaries";
 import {
-  applyMicroNoiseToText,
+  applyMicroNoiseToText, humanNoiseInjection,
 } from "./anti-ai-patterns";
+import { slidingWindowProcess } from "./sliding-window-processor";
 
 // ── Input Feature Detection ──
 // These detect whether the ORIGINAL input uses contractions, first-person, or rhetorical questions.
@@ -464,9 +465,9 @@ export function buildSettings(opts: {
 
   if (mode === "ghost_mini") {
     targetScore = strengthMap3(15.0, 10.0, 5.0);
-    maxIterations = strengthMap3(2, 3, 4);
-    baseIntensity = strengthMap3(4.0, 6.0, 8.5);
-    minChangeRatio = 0.75;
+    maxIterations = strengthMap3(1, 1, 2);
+    baseIntensity = strengthMap3(2.5, 4.0, 5.5);
+    minChangeRatio = 0.35;
     signalFixEnabled = true;
   } else if (mode === "ghost_pro") {
     targetScore = strengthMap3(5.0, 3.0, 1.0);
@@ -933,7 +934,9 @@ function cleanup(text: string, inputFeatures?: InputFeatures, properNouns?: Set<
         // Only replace dashes and certain punctuation in body paragraphs, not headings
         p = p.replace(/ — /g, ", ").replace(/—/g, ", ");
         p = p.replace(/ – /g, ", ").replace(/–/g, ", ");
-        p = p.replace(/ - (?=[A-Za-z])/g, ", ");
+        // Fix spaced-out hyphens in compound words BACK to proper hyphenation
+        // e.g. "game - changer" → "game-changer", "decision - making" → "decision-making"
+        p = p.replace(/(\w)\s+-\s+(\w)/g, "$1-$2");
       }
       p = p.replace(/,\s*,/g, ",");
       p = p.replace(/\(\s*\)/g, "");
@@ -972,10 +975,7 @@ function cleanup(text: string, inputFeatures?: InputFeatures, properNouns?: Set<
             }
           }
         }
-        // Only add contractions if the original input already used contractions
-        if (inputFeatures?.hasContractions) {
-          p = addContractions(p);
-        }
+        // Contractions DISABLED — zero-tolerance policy for academic output
         if (isHeading) return p.trim();
         const sentences = robustSentenceSplit(p);
       return sentences.map((s) => { s = s.trim(); return s ? s[0].toUpperCase() + s.slice(1) : s; }).filter(Boolean).join(" ");
@@ -1020,7 +1020,11 @@ function splitSentence(sent: string): string[] {
   const words = sent.split(/\s+/);
   if (words.length < 14) return [sent];
 
+  // Helper: check if a text fragment has a verb (i.e. is a clause, not a list item)
+  const hasVerb = (text: string) => /\b(?:is|are|was|were|has|have|had|do|does|did|will|would|could|should|shall|may|might|can|must|need|make|made|take|took|get|got|give|gave|lead|led|show|find|found|keep|say|said|know|knew|mean|meant|become|became|remain|run|seem|appear|include|provide|allow|help|create|cause|produce|affect|result|involve|require|suggest|indicate|demonstrate|reveal|exist|occur|happen|depend|contribute|continue|begin|began|start|play|serve|represent|support|develop|establish|change|move|work|turn|come|came|go|went|see|saw|think|thought|believe|argue|claim|prove|ensure|determine|consider|examine|discuss|increase|decrease|reduce|improve|reflect|prevent|enable|bring|brought|set|put)\b/i.test(text);
+
   // Try splitting at clause boundaries: ", and ", ", but ", ", which ", "; "
+  // Only split when both halves have a verb (form independent clauses).
   const clausePatterns = [
     /,\s+and\s+/i, /,\s+but\s+/i, /;\s+/,
     /,\s+which\s+/i, /,\s+while\s+/i, /,\s+although\s+/i,
@@ -1032,8 +1036,8 @@ function splitSentence(sent: string): string[] {
       const splitPos = match.index;
       const part1 = sent.slice(0, splitPos).trim();
       const part2 = sent.slice(splitPos + match[0].length).trim();
-      // Ensure both parts are substantial (at least 5 words)
-      if (part1.split(/\s+/).length >= 5 && part2.split(/\s+/).length >= 5) {
+      // Ensure both parts are substantial and both have verbs (are clauses, not list items)
+      if (part1.split(/\s+/).length >= 5 && part2.split(/\s+/).length >= 5 && hasVerb(part1) && hasVerb(part2)) {
         const p1 = part1.endsWith(".") ? part1 : part1 + ".";
         const p2 = part2[0]?.toUpperCase() + part2.slice(1);
         return [p1, p2];
@@ -1215,8 +1219,7 @@ function identifyWeakSignals(signals: Record<string, number>): [string, number][
 
 function fixLowPerplexity(sentences: string[], intensity: number, used: Set<string>, ctx: TextContext | null, dict: HumanizerDictionary, cw: Set<string>): string[] {
   return sentences.map((s) => {
-    s = synonymReplace(s, Math.min(intensity * 0.8, 4.0), used, ctx?.protectedTerms);
-    s = applyLargeDictionary(s, Math.min(intensity * 0.6, 3.5), used, ctx, "ghost_pro", dict, cw);
+    s = synonymReplace(s, Math.min(intensity * 0.3, 2.0), used, ctx?.protectedTerms);
     return s;
   });
 }
@@ -1281,8 +1284,7 @@ function fixAiPatterns(sentences: string[], _intensity: number): string[] {
 
 function fixLowVocabulary(sentences: string[], intensity: number, used: Set<string>, ctx: TextContext | null, dict: HumanizerDictionary, cw: Set<string>): string[] {
   return sentences.map((s) => {
-    s = synonymReplace(s, Math.min(intensity * 0.8, 4.0), used, ctx?.protectedTerms);
-    s = applyLargeDictionary(s, Math.min(intensity * 0.6, 3.5), used, ctx, "ghost_mini", dict, cw);
+    s = synonymReplace(s, Math.min(intensity * 0.3, 2.0), used, ctx?.protectedTerms);
     return s;
   });
 }
@@ -1363,16 +1365,15 @@ function fixPerSentenceAi(sentences: string[], intensity: number, used: Set<stri
     sent = replaceAiStarters(sent);
     sent = killModernBuzzwords(sent);
 
-    // Step 2: Restructure and vary
-    sent = phraseSubstitute(sent, Math.min(intensity, 4.0));
-    if (sent.split(/\s+/).length > 8) sent = deepRestructure(sent, Math.min(intensity * 0.8, 4.5));
+    // Step 2: Restructure and vary (only for longer sentences)
+    sent = phraseSubstitute(sent, Math.min(intensity, 3.0));
+    if (sent.split(/\s+/).length > 15) sent = deepRestructure(sent, Math.min(intensity * 0.6, 2.5));
 
-    // Step 3: Vocabulary enrichment
-    sent = synonymReplace(sent, Math.min(intensity * 0.7, 3.8), used, ctx?.protectedTerms);
-    sent = applyLargeDictionary(sent, Math.min(intensity * 0.5, 3.0), used, ctx, "ghost_pro", dict, cw);
+    // Step 3: Vocabulary — reduced synonym coverage (target ≈12%)
+    sent = synonymReplace(sent, Math.min(intensity * 0.3, 2.0), used, ctx?.protectedTerms);
 
-    // Step 4: Syntactic template for structural variation
-    if (Math.random() < 0.60 && sent.split(/\s+/).length >= 10) {
+    // Step 4: Syntactic template for structural variation — 8% probability, ≥20 words only
+    if (Math.random() < 0.08 && sent.split(/\s+/).length >= 20) {
       const templated = applySyntacticTemplate(sent);
       if (templated !== sent && containsNonsenseWords(templated).length === 0) sent = templated;
     }
@@ -1462,8 +1463,7 @@ function fixLowDependencyDepth(sentences: string[], intensity: number): string[]
 
 function fixLowShannonEntropy(sentences: string[], intensity: number, used: Set<string>, ctx: TextContext | null, dict: HumanizerDictionary, cw: Set<string>): string[] {
   return sentences.map((s) => {
-    s = synonymReplace(s, Math.min(intensity * 0.8, 4.0), used, ctx?.protectedTerms);
-    s = applyLargeDictionary(s, Math.min(intensity * 0.6, 3.5), used, ctx, "ghost_mini", dict, cw);
+    s = synonymReplace(s, Math.min(intensity * 0.3, 2.0), used, ctx?.protectedTerms);
     return s;
   });
 }
@@ -1523,8 +1523,7 @@ function fixTokenPredictability(sentences: string[], intensity: number, used: Se
       }
       s = words.join(" ");
     }
-    s = synonymReplace(s, Math.min(intensity * 0.7, 3.8), used, ctx?.protectedTerms);
-    s = applyLargeDictionary(s, Math.min(intensity * 0.5, 3.0), used, ctx, "ghost_mini", dict, cw);
+    s = synonymReplace(s, Math.min(intensity * 0.3, 2.0), used, ctx?.protectedTerms);
     return s;
   });
 }
@@ -1781,12 +1780,7 @@ function humanizeSingleSentence(
   // ── Step 5: AI starter replacement ──
   result = replaceAiStarters(result);
 
-  // ── Step 6: Deep restructuring ──
-  // Skip for topic sentences to preserve paragraph opening
-  if (!isFirstInParagraph && result.split(/\s+/).length > 6) {
-    const deep = deepRestructure(result, intensity * 1.5);
-    if (containsNonsenseWords(deep).length === 0) result = deep;
-  }
+  // ── Step 6: Deep restructuring — DISABLED (compounds with step 3, over-mutates) ──
 
   // ── Step 7: VERB_PHRASE_SWAPS — 100+ academic passive→active rewrites ──
   for (const [pattern, replacements] of Object.entries(VERB_PHRASE_SWAPS)) {
@@ -1831,13 +1825,11 @@ function humanizeSingleSentence(
     }
   }
 
-  // ── Step 12: Connector naturalization (shared + local) ──
+  // ── Step 12: Connector naturalization — single pass ──
   result = applyConnectorNaturalization(result);
-  result = varyConnectors(result);
-  result = naturalizeConnectors(result);
 
-  // ── Step 13: Syntactic template restructuring — 40% probability, skip topic sentences ──
-  if (!isFirstInParagraph && Math.random() < 0.40 && result.split(/\s+/).length >= 12) {
+  // ── Step 13: Syntactic template restructuring — 8% probability, ≥20 words, skip topic sentences ──
+  if (!isFirstInParagraph && Math.random() < 0.08 && result.split(/\s+/).length >= 20) {
     const templated = applySyntacticTemplate(result);
     if (templated !== result && containsNonsenseWords(templated).length === 0) {
       result = templated;
@@ -1853,33 +1845,36 @@ function humanizeSingleSentence(
 
   // ── Step 14b: Natural phrase variation (not just synonym swaps) ──
   // Sparingly rephrase common sentence constructions to increase diversity
-  if (Math.random() < 0.35) {
+  if (Math.random() < 0.15) {
     result = applyNaturalPhraseVariation(result);
   }
 
-  // ── Step 15: Synonym replacement — single pass, 25% coverage ──
-  result = synonymReplace(result, intensity * 1.5, usedWords, ctx?.protectedTerms);
+  // ── Step 15: Synonym replacement — single pass, reduced coverage (≈12%) ──
+  result = synonymReplace(result, intensity * 0.5, usedWords, ctx?.protectedTerms);
 
-  // ── Step 16: Large dictionary intelligence pass ──
-  result = applyLargeDictionary(result, intensity * 1.4, usedWords, ctx, settings.mode, dict, commonWords);
+  // ── Step 16: Large dictionary — disabled (creates crazy phrases) ──
+  // applyLargeDictionary DISABLED — thesaurus swaps introduce unnatural vocabulary
 
-  // ── Step 17: Another clause restructuring pass — skip for topic sentences ──
-  if (!isFirstInParagraph) {
-    result = restructureSentence(result, intensity * 1.2);
-  }
+  // ── Step 17: Additional clause restructuring — DISABLED (3rd pass, over-mutates) ──
 
-  // ── Step 18: Kill formal starters (e.g., "Moreover,", "Furthermore,") ──
+  // ── Step 18: Formal starter replacement (not deletion — keep sentence coherent) ──
   const commaIdx = result.indexOf(",");
   if (commaIdx > 0 && commaIdx < 25) {
     const before = result.slice(0, commaIdx).trim().toLowerCase();
-    const formalStarters = ["moreover", "furthermore", "additionally", "consequently",
-      "subsequently", "nevertheless", "notwithstanding", "accordingly", "henceforth",
-      "conversely", "notably", "significantly", "importantly", "interestingly",
-      "fundamentally", "essentially", "ultimately", "undoubtedly", "evidently",
-      "remarkably", "inherently", "indeed"];
-    if (formalStarters.includes(before)) {
-      result = result.slice(commaIdx + 1).trim();
-      if (result && /^[a-z]/.test(result)) result = result[0].toUpperCase() + result.slice(1);
+    const starterReplacements: Record<string, string> = {
+      "moreover": "Also,",
+      "furthermore": "Also,",
+      "additionally": "Also,",
+      "consequently": "As a result,",
+      "subsequently": "Later,",
+      "nevertheless": "Still,",
+      "notwithstanding": "Still,",
+      "accordingly": "So,",
+      "henceforth": "From now on,",
+      "conversely": "On the flip side,",
+    };
+    if (starterReplacements[before]) {
+      result = starterReplacements[before] + result.slice(commaIdx + 1);
     }
   }
 
@@ -1888,12 +1883,10 @@ function humanizeSingleSentence(
     result = originalSent;
   }
 
-  // ── Step 20: Kill modern buzzwords + final AI residue sweep ──
+  // ── Step 20: Kill modern buzzwords (but NOT a second full AI kill sweep) ──
   result = killModernBuzzwords(result);
-  result = applyAIWordKill(result);
 
-  // ── Step 22: Add contractions (enforce natural speech) ──
-  if (inputFeatures?.hasContractions) result = addContractions(result);
+  // ── Step 22: Contractions DISABLED — zero-tolerance policy for academic output ──
 
   // ── Step 23: Cleanup ──
   result = result.split(/\s+/).join(" ").trim();
@@ -2111,32 +2104,25 @@ export function humanize(
         if (iteration % 5 === 0) usedWords = new Set();
       }
 
-    // ── Sentence-by-sentence architecture ──
-    // Extract ALL sentences from ALL paragraphs, process each independently,
-    // then reassemble into original paragraph structure.
+    // ── Paragraph-level processing architecture ──
+    // Process each paragraph as a whole block (not sentence-by-sentence)
+    // for natural cross-sentence context and varied transformation patterns.
     const paragraphs = source.split(/\n\s*\n/).filter((p) => p.trim());
 
-    // Build flat sentence list with paragraph tracking
-    const sentenceItems: { text: string; paraIdx: number; isTitle: boolean; sentIdxInPara: number }[] = [];
+    // Build paragraph-level items
+    const chunkItems: { text: string; paraIdx: number; isTitle: boolean; chunkIdxInPara: number }[] = [];
     for (let pi = 0; pi < paragraphs.length; pi++) {
       const trimmedPara = paragraphs[pi].trim();
       if (isTitleOrHeading(trimmedPara)) {
-        sentenceItems.push({ text: trimmedPara, paraIdx: pi, isTitle: true, sentIdxInPara: 0 });
+        chunkItems.push({ text: trimmedPara, paraIdx: pi, isTitle: true, chunkIdxInPara: 0 });
         continue;
       }
-      const sents = robustSentenceSplit(trimmedPara);
-      let si = 0;
-      for (const s of sents) {
-        const t = s.trim();
-        if (t) {
-          sentenceItems.push({ text: t, paraIdx: pi, isTitle: false, sentIdxInPara: si });
-          si++;
-        }
-      }
+      // Process the entire paragraph as one block
+      chunkItems.push({ text: trimmedPara, paraIdx: pi, isTitle: false, chunkIdxInPara: 0 });
     }
 
-    // Process each sentence independently through the full pipeline
-    for (const item of sentenceItems) {
+    // Process each chunk through the full pipeline
+    for (const item of chunkItems) {
       if (item.isTitle) continue; // titles pass through unchanged
 
       // Skip very short fragments (< 3 words) — pass through as-is
@@ -2145,14 +2131,14 @@ export function humanize(
       const humanized = humanizeSingleSentence(
         item.text, intensity, usedWords, ctx, settings,
         dict, commonWords, inputFeatures, properNouns,
-        item.sentIdxInPara === 0, // isFirstInParagraph — skip heavy restructuring for topic sentences
+        item.chunkIdxInPara === 0, // isFirstInParagraph — skip heavy restructuring for topic sentences
       );
       if (humanized) {
-        // Per-sentence phrasal verb expansion
+        // Per-chunk phrasal verb expansion
         const expanded = expandWithPhrasalVerbs([humanized], intensity);
         let sent = expanded[0] || humanized;
 
-        // Per-sentence AI vocabulary sweep
+        // Per-chunk AI vocabulary sweep
         sent = applyAIWordKill(sent);
         sent = applyPhrasePatterns(sent);
         sent = applyConnectorNaturalization(sent);
@@ -2160,16 +2146,7 @@ export function humanize(
         sent = sent.replace(/ {2,}/g, " ").trim();
         if (sent && /^[a-z]/.test(sent)) sent = sent[0].toUpperCase() + sent.slice(1);
 
-        // Enforce 1-in=1-out: collapse multi-sentence outputs into a single sentence
-        const subSentences = robustSentenceSplit(sent);
-        if (subSentences.length > 1) {
-          sent = subSentences.map((s, i) => {
-            if (i === 0) return s.replace(/[.!?]\s*$/, "");
-            return s[0]?.toLowerCase() + s.slice(1);
-          }).join(", ") + (subSentences[subSentences.length - 1].match(/[.!?]$/) ? "" : ".");
-        }
-
-        // Ensure sentence ends with proper punctuation — prevents merge with next sentence on join
+        // Ensure chunk ends with proper punctuation
         if (sent && !/[.!?]$/.test(sent.trim())) {
           sent = sent.trim() + ".";
         }
@@ -2187,18 +2164,15 @@ export function humanize(
     const flushParagraph = () => {
       if (curSents.length === 0) return;
       if (curIsTitle) {
-        // Titles pass through without any cross-sentence polish
         processed.push(curSents[0]);
       } else {
-        // Sentences were already fully processed independently — just join them.
-        // No cross-sentence operations that could degrade individually-clean sentences.
         let joined = curSents.join(" ");
         joined = cleanup(joined, inputFeatures, properNouns);
         if (joined.trim()) processed.push(joined);
       }
     };
 
-    for (const item of sentenceItems) {
+    for (const item of chunkItems) {
       if (item.paraIdx !== curIdx) {
         flushParagraph();
         curIdx = item.paraIdx;
@@ -2212,7 +2186,7 @@ export function humanize(
     flushParagraph();
 
     let currentResult = processed.join("\n\n");
-        if (inputFeatures.hasContractions) currentResult = addContractions(currentResult);
+        // Contractions DISABLED — zero-tolerance policy for academic output
 
     if ((mode === "ghost_mini" || mode === "ghost_pro") && enablePostProcessing) {
       currentResult = postProcess(currentResult);
@@ -2250,7 +2224,7 @@ export function humanize(
         const weak = identifyWeakSignals(signals);
         if (weak.length > 0) {
             let fixed = applySignalFixes(bestResult, weak, intensity, usedWordsGlobal, ctx, settings, dict, commonWords, inputFeatures);
-              if (inputFeatures.hasContractions) fixed = addContractions(fixed);
+              // Contractions DISABLED — zero-tolerance policy for academic output
             fixed = cleanup(fixed, inputFeatures, properNouns);
           if (enablePostProcessing) fixed = postProcess(fixed);
 
@@ -2285,7 +2259,7 @@ export function humanize(
       const p2Cap = ({ light: 7.0, medium: 11.0, strong: 15.0 } as Record<string, number>)[strength] ?? 7.0;
       const intensity = Math.min(3.0 + ep * 0.25, p2Cap);
         let fixed = applySignalFixes(bestResult, weak, intensity, usedWordsGlobal, ctx, settings, dict, commonWords, inputFeatures);
-          if (inputFeatures.hasContractions) fixed = addContractions(fixed);
+          // Contractions DISABLED — zero-tolerance policy for academic output
           fixed = cleanup(fixed, inputFeatures, properNouns);
           // deduplicateSentences DISABLED — would alter sentence count
       if (enablePostProcessing) fixed = postProcess(fixed);
@@ -2303,6 +2277,16 @@ export function humanize(
     bestResult = cleanup(bestResult, inputFeatures, properNouns);
     // deduplicateSentences DISABLED — would alter sentence count
   }
+
+  // ── Phase X-1: Sentence Synonym Processor (light pass) ──
+  // Reduced from 50% to ~15% replacement to preserve quality.
+  bestResult = slidingWindowProcess(bestResult);
+
+  // ── Phase X-2: Human Noise Injection ──
+  // Introduces controlled human imperfections (5-12%): hedging asides,
+  // emphasis modifiers, punctuation variation, slight phrasing asymmetry.
+  // NOT errors — human-like irregularities.
+  bestResult = humanNoiseInjection(bestResult);
 
   // Final paragraph count enforcement
   bestResult = enforceParagraphCount(bestResult, inputParagraphCount);
@@ -2344,6 +2328,32 @@ export function humanize(
       console.warn(`  [GhostMini] Missing keywords: ${verification.missingKeywords.join(", ")}`);
     }
   }
+
+  // ── Final quality cleanup (after ALL transforms including slidingWindowProcess) ──
+  // Fix spaced-out hyphens in compound words: "game - changer" → "game-changer"
+  bestResult = bestResult.replace(/(\w)\s+-\s+(\w)/g, "$1-$2");
+  // Fix article agreement: "a" before vowel → "an"
+  bestResult = bestResult.replace(/\b(a)\s+([aeiouAEIOU]\w*)/g, (match, article, word) => {
+    if (/^(uni|use|usu|uter|one|once|eu)/i.test(word)) return match;
+    return article === "A" ? "An " + word : "an " + word;
+  });
+  // Fix reverse: "an" before consonant → "a"
+  bestResult = bestResult.replace(/\b(an)\s+([bcdfghjklmnpqrstvwxyzBCDFGHJKLMNPQRSTVWXYZ]\w*)/g, (match, article, word) => {
+    if (/^(ho(?:ur|nest|nour|norab))/i.test(word)) return match;
+    return article === "An" ? "A " + word : "a " + word;
+  });
+  // Fix double spaces
+  bestResult = bestResult.replace(/ {2,}/g, " ");
+
+  // Fix auxiliary + base verb form errors: "has create" → "has created", "have produce" → "have produced"
+  bestResult = bestResult.replace(
+    /\b(has|have|had)\s+(create|produce|generate|transform|establish|develop|evolve|emerge|become|arrive|achieve|contribute|demonstrate|integrate|incorporate|facilitate|utilize|enable|enhance|influence|trigger|spark|shape|alter|expand|improve|increase|raise|reduce|provide|indicate|require|involve|include|exclude|promote|migrate|operate|evaluate|analyze|accelerate|exacerbate|undermine|aggravate|form|yield|deliver|prompt|detect|diagnose|examine|observe|stimulate|illustrate)\b/gi,
+    (match, aux, verb) => {
+      const v = verb.toLowerCase();
+      if (v.endsWith("e")) return aux + " " + verb + "d";
+      return aux + " " + verb + "ed";
+    }
+  );
 
   return bestResult;
 }
@@ -2517,10 +2527,7 @@ export function extractStyleProfile(sampleText: string): WritingStyleProfile {
 export function applyStyleProfile(text: string, profile: WritingStyleProfile, inputFeatures?: InputFeatures): string {
     let result = text;
 
-    // Match contraction rate — only if original input already had contractions
-    if (profile.contractionRate > 0.02 && inputFeatures?.hasContractions) {
-      result = addContractions(result);
-    }
+    // Contractions DISABLED — zero-tolerance policy for academic output
 
     // Match first person usage — only if original input already used first-person
     if (profile.firstPersonRate > 0.01 && inputFeatures?.hasFirstPerson) {

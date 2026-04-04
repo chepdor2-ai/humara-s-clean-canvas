@@ -430,23 +430,42 @@ export function injectMicroNoise(
   const words = result.split(/\s+/).length;
 
   // Only inject noise in longer sentences and not too frequently
-  // Target: ~15-25% of sentences get some form of noise
+  // Target: ~8-15% of sentences get some form of noise
   const shouldInject = (sentenceIndex * 7 + 3) % 5 === 0; // deterministic, not random
-  if (!shouldInject || words < 12) return result;
+  if (!shouldInject || words < 10) return result;
 
-  const noiseType = sentenceIndex % 3;
+  const noiseType = sentenceIndex % 5;
 
   switch (noiseType) {
     case 0: {
-      // DISABLED — comma-hedge injection adds unnecessary fillers
+      // Comma-hedge injection — insert a short hedging aside at a natural break
+      if (words > 14) {
+        const hedge = _COMMA_HEDGES[(sentenceIndex * 3) % _COMMA_HEDGES.length];
+        // Insert after the first clause boundary (comma position in middle third)
+        const mid = Math.floor(result.length / 3);
+        const end2 = Math.floor((result.length * 2) / 3);
+        let insertAt = -1;
+        for (let i = mid; i < end2; i++) {
+          if (result[i] === ",") { insertAt = i + 1; break; }
+        }
+        if (insertAt > 0) {
+          result = result.slice(0, insertAt) + " " + hedge.trim() + result.slice(insertAt);
+        }
+      }
       break;
     }
     case 1: {
-      // DISABLED — emphasis redundancy adds unnecessary modifiers
+      // Emphasis modifier — add a natural-sounding intensifier before an adjective
+      for (const er of _EMPHASIS_REDUNDANCY) {
+        if (er.trigger.test(result)) {
+          result = result.replace(er.trigger, er.insert + "$1");
+          break; // only one per sentence
+        }
+      }
       break;
     }
     case 2: {
-      // Semicolon substitution for comma (human style) — no em-dashes
+      // Semicolon substitution for comma at a clause boundary (human style)
       if (words > 18) {
         const commaPositions: number[] = [];
         for (let i = 10; i < result.length - 10; i++) {
@@ -459,6 +478,32 @@ export function injectMicroNoise(
       }
       break;
     }
+    case 3: {
+      // Slight awkward phrasing — swap two adjacent content words (creates human-like mis-ordering)
+      if (words >= 12) {
+        const parts = result.split(/\s+/);
+        // Find two adjacent content words in the middle (skip first/last 3)
+        for (let i = 3; i < parts.length - 3; i++) {
+          const a = parts[i], b = parts[i + 1];
+          if (a && b && a.length > 3 && b.length > 3 &&
+              /^[a-z]/i.test(a) && /^[a-z]/i.test(b) &&
+              !/^(?:the|and|but|for|not|with|from|that|this|have|been|were|are|was|can|will)$/i.test(a) &&
+              !/^(?:the|and|but|for|not|with|from|that|this|have|been|were|are|was|can|will)$/i.test(b)) {
+            // Only swap adjective+noun-like pairs → slight emphasis shift, not a grammar error
+            parts[i] = b;
+            parts[i + 1] = a;
+            result = parts.join(" ");
+            break;
+          }
+        }
+      }
+      break;
+    }
+    case 4: {
+      // Uneven flow — drop a comma before "and" or "but" (natural casual punctuation)
+      result = result.replace(/, (and|but|or) /i, " $1 ");
+      break;
+    }
   }
 
   return result;
@@ -466,12 +511,57 @@ export function injectMicroNoise(
 
 /**
  * Apply micro-noise across all sentences in text.
- * Targets 15-25% of sentences for subtle human imperfection injection.
+ * Targets 8-15% of sentences for subtle human imperfection injection.
  *
  * @returns Array of sentences with controlled noise applied
  */
 export function applyMicroNoiseToText(sentences: string[]): string[] {
   return sentences.map((sent, i) => injectMicroNoise(sent, i, sentences.length));
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// 5b. HUMAN NOISE INJECTION (Full-Text Phase)
+//     Runs on complete paragraphed text AFTER all processing.
+//     Introduces controlled human imperfections at the document level.
+// ══════════════════════════════════════════════════════════════════════════
+
+/**
+ * Full-text human noise injection phase.
+ *
+ * What it does:
+ *   • 5-12% of sentences get a subtle imperfection (hedge, emphasis, word-swap, punctuation)
+ *   • Varies punctuation unpredictably (semicolons, dropped commas, hedging asides)
+ *   • Occasionally introduces slight emphasis redundancy ("really important")
+ *   • Creates uneven sentence flow by casual punctuation
+ *   • Never introduces actual grammar errors — only human-like irregularities
+ *
+ * @param text — full text with \\n\\n paragraph separators
+ * @returns text with controlled human noise injected
+ */
+export function humanNoiseInjection(text: string): string {
+  const paragraphs = text.split(/\n\s*\n/).filter(p => p.trim());
+  let globalIdx = 0;
+
+  const processed = paragraphs.map(para => {
+    const trimmed = para.trim();
+    // skip headings
+    const wc = trimmed.split(/\s+/).filter(Boolean).length;
+    if (wc <= 10 && !/[.!?]$/.test(trimmed)) return trimmed;
+    if (/^#{1,6}\s/.test(trimmed)) return trimmed;
+
+    // split into sentences
+    const sents = trimmed.match(/[^.!?]+[.!?]+/g) ?? [trimmed];
+
+    const noisified = sents.map(sent => {
+      const out = injectMicroNoise(sent.trim(), globalIdx, sents.length);
+      globalIdx++;
+      return out;
+    });
+
+    return noisified.join(" ");
+  });
+
+  return processed.join("\n\n");
 }
 
 // ══════════════════════════════════════════════════════════════════════════

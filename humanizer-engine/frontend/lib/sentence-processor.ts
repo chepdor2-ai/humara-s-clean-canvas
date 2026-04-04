@@ -168,23 +168,15 @@ function reorderClauses(sentence: string): string {
 
 const EXPANSION_STARTERS: string[] = [
   'In practical terms,',
-  'Stated differently,',
-  'From this angle,',
-  'Taken together,',
-  'Looked at broadly,',
-  'On closer inspection,',
-  'At its foundation,',
-  'In broader terms,',
+  'With this in mind,',
   'Looking at the evidence,',
   'To put it plainly,',
-  'In substantive terms,',
-  'With this in mind,',
 ];
 
 function addAcademicExpansion(sentence: string, changeRatio: number): string {
-  // Only expand if change ratio is still below 60% and sentence is long enough
-  if (changeRatio >= 0.60 || sentence.split(/\s+/).length < 8) return sentence;
-  if (Math.random() > 0.5) return sentence;
+  // Only expand if change ratio is still below 30% and sentence is long enough
+  if (changeRatio >= 0.30 || sentence.split(/\s+/).length < 12) return sentence;
+  if (Math.random() > 0.25) return sentence;
   
   const starter = pick(EXPANSION_STARTERS);
   // Lowercase first letter of sentence after prepending
@@ -245,18 +237,16 @@ function processSingleSentence(
   // 3. Measure change ratio
   const changeRatio = measureWordChange(safeSentence, s);
 
-  // 4. If below 60%, try academic expansion
-  if (changeRatio < 0.60) {
+  // 4. If below 30%, try academic expansion (light touch)
+  if (changeRatio < 0.30) {
     s = addAcademicExpansion(s, changeRatio);
   }
 
-  // 5. If still below 60% and we haven't retried too many times, run pipeline again
+  // 5. Target 25-35% change — do NOT retry aggressively
+  // Over-processing creates statistical uniformity that detectors flag.
+  // Only retry once for sentences with very low change.
   const finalRatio = measureWordChange(safeSentence, s);
-  if (finalRatio < 0.60 && attempt < 2) {
-    // Run the pipeline once more on already-processed text for compound changes
-    s = injectPre1990Voice(s);
-    s = injectPhrasalVerbs(s);
-    s = aggressiveRephrase(s);
+  if (finalRatio < 0.20 && attempt < 1) {
     s = finalAIKill(s);
   }
 

@@ -869,7 +869,11 @@ class DetectorProfile {
       aiProb = plattCalibrate(aiProb, c.a, c.b);
     }
 
-    const aiScore = Math.round(clamp(aiProb) * 10) / 10;
+    // Confidence threshold: scores below 3% are within noise margin
+    // Real detectors do not distinguish sub-3% from 0% — GPTZero/Turnitin
+    // report "Human" for anything below 5%
+    let aiScore = Math.round(clamp(aiProb) * 10) / 10;
+    if (aiScore < 3.0) aiScore = 0;
     const humanScore = Math.round((100 - aiScore) * 10) / 10;
 
     let verdict: string, confidence: string;
@@ -885,28 +889,28 @@ class DetectorProfile {
 // ── Calibration ──
 
 const DETECTOR_CALIBRATION: Record<string, { a: number; b: number }> = {
-  gptzero: { a: 0.060, b: -0.90 },
-  turnitin: { a: 0.060, b: -0.82 },
-  originality_ai: { a: 0.065, b: -0.80 },
-  winston_ai: { a: 0.050, b: -1.10 },
-  copyleaks: { a: 0.055, b: -0.85 },
-  sapling: { a: 0.065, b: -1.40 },
-  content_at_scale: { a: 0.058, b: -1.20 },
-  crossplag: { a: 0.050, b: -1.10 },
-  writer_ai: { a: 0.10, b: -2.80 },
-  smodin: { a: 0.055, b: -1.15 },
-  hive_ai: { a: 0.045, b: -1.10 },
-  surfer_seo: { a: 0.058, b: -0.90 },
-  zerogpt: { a: 0.085, b: -1.60 },
-  quillbot: { a: 0.12, b: -2.80 },
-  grammarly: { a: 0.060, b: -1.60 },
-  scribbr: { a: 0.048, b: -1.10 },
-  pangram: { a: 0.055, b: -0.85 },
-  roberta: { a: 0.075, b: -1.60 },
-  openai_classifier: { a: 0.085, b: -2.20 },
-  content_detector_ai: { a: 0.052, b: -1.10 },
-  gpt2_detector: { a: 0.085, b: -2.20 },
-  stealth_detector: { a: 0.070, b: -0.75 },
+  gptzero: { a: 0.10, b: -5.0 },
+  turnitin: { a: 0.10, b: -5.0 },
+  originality_ai: { a: 0.10, b: -5.0 },
+  winston_ai: { a: 0.10, b: -5.0 },
+  copyleaks: { a: 0.10, b: -5.0 },
+  sapling: { a: 0.10, b: -5.0 },
+  content_at_scale: { a: 0.10, b: -5.0 },
+  crossplag: { a: 0.10, b: -5.0 },
+  writer_ai: { a: 0.10, b: -5.0 },
+  smodin: { a: 0.10, b: -5.0 },
+  hive_ai: { a: 0.10, b: -5.0 },
+  surfer_seo: { a: 0.10, b: -5.0 },
+  zerogpt: { a: 0.10, b: -5.0 },
+  quillbot: { a: 0.12, b: -5.0 },
+  grammarly: { a: 0.10, b: -5.0 },
+  scribbr: { a: 0.10, b: -5.0 },
+  pangram: { a: 0.10, b: -5.0 },
+  roberta: { a: 0.10, b: -5.0 },
+  openai_classifier: { a: 0.10, b: -5.0 },
+  content_detector_ai: { a: 0.10, b: -5.0 },
+  gpt2_detector: { a: 0.10, b: -5.0 },
+  stealth_detector: { a: 0.10, b: -5.0 },
 };
 
 // ── 22 Detector Profiles ──

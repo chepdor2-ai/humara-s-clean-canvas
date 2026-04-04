@@ -80,24 +80,8 @@ function applyRhythmToSentence(text: string): string {
 export const rhythmPhase: Phase = {
   name: 'rhythm',
   async process(state: DocumentState): Promise<DocumentState> {
-    let adjustments = 0;
-
-    for (const paragraph of state.paragraphs) {
-      // Process each sentence individually — no merging, splitting, or inserting
-      for (const sentence of paragraph.sentences) {
-        const original = sentence.text;
-        sentence.text = applyRhythmToSentence(sentence.text);
-        if (sentence.text !== original) adjustments++;
-      }
-    }
-
-    // Log burstiness for diagnostics (measurement only, not used to change structure)
-    const allLengths = state.paragraphs.flatMap(p =>
-      p.sentences.map(s => s.text.split(/\s+/).length)
-    );
-    const burstiness = calcBurstiness(allLengths);
-
-    state.logs.push(`[rhythm] ${adjustments} sentence-level rhythm adjustments, burstiness: ${burstiness.toFixed(2)}`);
+    // DISABLED — rhythm manipulation creates detectable uniformity
+    state.logs.push('[rhythm] DISABLED — skipped to preserve natural sentence structure');
     return state;
   },
 };

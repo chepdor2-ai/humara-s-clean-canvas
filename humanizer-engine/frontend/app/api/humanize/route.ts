@@ -13,6 +13,7 @@ import { preserveInputStructure } from '@/lib/engine/structure-preserver';
 import { structuralPostProcess } from '@/lib/engine/structural-post-processor';
 import { generateCandidates, type ScoredCandidate } from '@/lib/candidate-generator';
 import { unifiedSentenceProcess } from '@/lib/sentence-processor';
+import { expandContractions } from '@/lib/humanize-transforms';
 
 export const maxDuration = 120; // LLM engines need more time
 
@@ -35,7 +36,11 @@ export async function POST(req: Request) {
 
     let humanized: string;
 
-    if (engine === 'humara') {
+    if (engine === 'humara_v1_3') {
+      // Humara v1.3: Stealth Humanizer Engine v5 from coursework-champ
+      const { pipeline } = await import('@/lib/engine/humara-v1-3');
+      humanized = pipeline(text, tone ?? 'academic', strength === 'strong' ? 10 : strength === 'light' ? 4 : 7);
+    } else if (engine === 'humara') {
       // Humara: Independent humanizer engine — phrase-level, strategy-diverse
       humanized = humaraHumanize(text, {
         strength: strength === 'high' ? 'heavy' : strength === 'low' ? 'light' : (strength ?? 'medium'),
@@ -52,24 +57,17 @@ export async function POST(req: Request) {
         strict_meaning ?? true,
       );
     } else if (engine === 'undetectable') {
-      // Undetectable: Ninja (Stealth) first, then Ghost Mini (Fast) for double pass
-      const stealthPass = await llmHumanize(
+      // Undetectable: Ninja (Stealth) only — second Ghost Mini pass removed
+      // The double pass was over-processing and creating unnaturally uniform text
+      humanized = await llmHumanize(
         text,
-        strength ?? 'medium',
+        strength ?? 'strong',
         true,
         strict_meaning ?? true,
         tone ?? 'academic',
         no_contractions !== false,
         enable_post_processing !== false,
       );
-      humanized = humanize(stealthPass, {
-        mode: 'ghost_mini',
-        strength: strength ?? 'medium',
-        tone: tone ?? 'neutral',
-        strictMeaning: strict_meaning ?? false,
-        enablePostProcessing: enable_post_processing !== false,
-        stealth: true,
-      });
     } else if (engine === 'ninja') {
       // Ninja: 3 LLM phases + rule-based + post-processing + detector feedback loop
       humanized = await llmHumanize(
@@ -89,6 +87,10 @@ export async function POST(req: Request) {
         strictMeaning: strict_meaning ?? false,
       });
       humanized = v11Result.humanized;
+    } else if (engine === 'ghost_mini_v1_2') {
+      // Ghost Min v1.2: Academic Prose optimized
+      const { ghostMiniV1_2 } = await import('@/lib/engine/ghost-mini-v1-2');
+      humanized = ghostMiniV1_2(text);
     } else if (engine === 'ghost_pro') {
       // Ghost Pro: Single LLM rewrite + signal-aware post-processing
       humanized = await ghostProHumanize(text, {
@@ -120,7 +122,7 @@ export async function POST(req: Request) {
 
     // Post-capitalization formatting — fix sentence casing for all engine outputs
     // Skip for humara engine: it has its own ContentProtection + grammar repair
-    if (engine !== 'humara') {
+    if (engine !== 'humara' && engine !== 'humara_v1_3') {
       humanized = fixCapitalization(humanized);
     }
 
@@ -131,22 +133,27 @@ export async function POST(req: Request) {
 
     // Cross-sentence repetition cleanup — deduplicates phrases repeated across sentences
     // Skip for humara engine: it has its own coherence layer
-    if (engine !== 'humara') {
+    if (engine !== 'humara' && engine !== 'humara_v1_3') {
       humanized = deduplicateRepeatedPhrases(humanized);
     }
 
     // Structural post-processing — attacks document-level statistical signals
     // (spectral_flatness, burstiness, sentence_uniformity, readability_consistency, vocabulary_richness)
     // Skip for humara engine: it has its own structural diversity layer
-    if (engine !== 'humara') {
+    if (engine !== 'humara' && engine !== 'humara_v1_3') {
       humanized = structuralPostProcess(humanized);
     }
 
     // Restore the original title/paragraph layout for every engine output.
     // Skip for humara engine: it has its own structure-preserving pipeline
-    if (engine !== 'humara') {
+    if (engine !== 'humara' && engine !== 'humara_v1_3') {
       humanized = preserveInputStructure(text, humanized);
     }
+
+    // ── FINAL SAFETY NET: Zero-contraction enforcement ──────────
+    // Expand any contractions that may have slipped through ANY engine
+    // or post-processing phase. This is the absolute last line of defense.
+    humanized = expandContractions(humanized);
 
     // Generate per-sentence alternatives (3 candidates each, best already picked by engines)
     const FIRST_PERSON_RE = /\b(I|me|my|mine|myself|we|us|our|ours|ourselves)\b/i;

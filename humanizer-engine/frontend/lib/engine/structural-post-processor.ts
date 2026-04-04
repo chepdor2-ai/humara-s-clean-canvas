@@ -77,7 +77,7 @@ const TEMPLATE_REWRITES: [RegExp, (m: RegExpExecArray, rng: () => number) => str
       const alts = [
         `When it comes to ${m[2].replace(/\.\s*$/, "")}, ${m[1].toLowerCase()} ${pickOne(["matter a great deal", "are at the center of it", "carry real weight", "stand out"], rng)}.`,
         `${m[2].replace(/\.\s*$/, "")} ${pickOne(["depends heavily on", "leans on", "rests on", "hinges on"], rng)} ${m[1].toLowerCase()}.`,
-        `Without ${m[1].toLowerCase()}, ${m[2].replace(/\.\s*$/, "")} ${pickOne(["would look very different", "wouldn't work the same way", "falls apart quickly"], rng)}.`,
+        `Without ${m[1].toLowerCase()}, ${m[2].replace(/\.\s*$/, "")} ${pickOne(["would look very different", "would not work the same way", "falls apart quickly"], rng)}.`,
       ];
       return pickOne(alts, rng);
     },
@@ -89,8 +89,8 @@ const TEMPLATE_REWRITES: [RegExp, (m: RegExpExecArray, rng: () => number) => str
     (m, rng) => {
       const verb = m[1].replace(/\.\s*$/, "");
       const alts = [
-        `One thing that can't be skipped: ${verb}.`,
-        `${verb[0].toUpperCase() + verb.slice(1)} — and there's no getting around it.`,
+        `One thing that cannot be skipped: ${verb}.`,
+        `${verb[0].toUpperCase() + verb.slice(1)} — and there is no getting around it.`,
         `The need to ${verb} is hard to overstate.`,
       ];
       return pickOne(alts, rng);
@@ -113,14 +113,14 @@ const TEMPLATE_REWRITES: [RegExp, (m: RegExpExecArray, rng: () => number) => str
 
   // "The [importance/significance/impact/role] of X cannot be overstated" → rewrite
   [
-    /^The\s+(?:importance|significance|impact|relevance|value|role|influence|effect)\s+of\s+(.+?)\s+(?:cannot|can't|should\s+not|shouldn't)\s+be\s+(?:overstated|underestimated|overlooked|ignored|denied)(.*)$/i,
+    /^The\s+(?:importance|significance|impact|relevance|value|role|influence|effect)\s+of\s+(.+?)\s+(?:cannot|can\s*not|should\s+not)\s+be\s+(?:overstated|underestimated|overlooked|ignored|denied)(.*)$/i,
     (m, rng) => {
       const topic = m[1].trim();
       const rest = m[2]?.trim() ?? "";
       const ending = rest ? ` ${rest}` : ".";
       const alts = [
-        `${topic[0].toUpperCase() + topic.slice(1)} matters — a lot${ending}`,
-        `It's hard to overstate how much ${topic} shapes outcomes${ending}`,
+        `${topic[0].toUpperCase() + topic.slice(1)} matters — a great deal${ending}`,
+        `It is difficult to overstate how much ${topic} shapes outcomes${ending}`,
         `Take away ${topic}, and the whole picture changes${ending}`,
       ];
       return pickOne(alts, rng);
@@ -266,12 +266,12 @@ const RHETORICAL_QUESTIONS = [
   "But how well does this work in reality?",
   "What happens when these systems fall short?",
   "Can the same be said across the board?",
-  "And yet — is the current approach working?",
-  "How do we know this isn't just wishful thinking?",
+  "And yet, is the current approach working?",
+  "How do we know this is not just wishful thinking?",
   "But where does the effort actually go?",
-  "What's missing from this picture?",
+  "What is missing from this picture?",
   "Does the evidence really back this up?",
-  "So why hasn't more progress been made?",
+  "So why has more progress not been made?",
   "Is this a realistic goal, or just an ideal?",
   "But who actually benefits from this?",
   "How sustainable is this in the long run?",
@@ -286,7 +286,7 @@ function injectQuestions(sentences: string[], rng: () => number): string[] {
   const maxQuestions = sentences.length >= 20 ? 3 : sentences.length >= 12 ? 2 : 1;
 
   // Identify good insertion points: after sentences making strong claims
-  const claimIndicators = /\b(?:important|essential|key|critical|significant|central|necessary|needed|required|effective|powerful|strong|major|clear|obvious|evident|must|should|cannot|can't)\b/i;
+  const claimIndicators = /\b(?:important|essential|key|critical|significant|central|necessary|needed|required|effective|powerful|strong|major|clear|obvious|evident|must|should|cannot)\b/i;
 
   const targetIndices = new Set<number>();
   for (let i = 2; i < sentences.length - 2; i++) {
@@ -337,17 +337,17 @@ function injectQuestions(sentences: string[], rng: () => number): string[] {
 const CONCESSIVE_STARTERS = [
   "Granted, not everyone sees it this way.",
   "Admittedly, this is easier said than done.",
-  "To be fair, the picture isn't entirely clear.",
+  "To be fair, the picture is not entirely clear.",
   "Of course, this comes with caveats.",
   "That said, there are real limits to this view.",
   "None of this is straightforward, though.",
-  "It's worth noting that opinions differ here.",
-  "This isn't without controversy, of course.",
+  "It is worth noting that opinions differ here.",
+  "This is not without controversy, of course.",
   "Some pushback on this point is fair.",
-  "There's a counterargument worth hearing.",
+  "There is a counterargument worth hearing.",
   "Not all experts agree on this, naturally.",
-  "Still, one shouldn't overstate the case.",
-  "Fair enough — the evidence isn't airtight.",
+  "Still, one should not overstate the case.",
+  "Fair enough, the evidence is not airtight.",
   "Then again, context shapes everything here.",
 ];
 
@@ -409,7 +409,7 @@ function disruptParagraphs(paragraphs: string[]): string[] {
           idx >= 2 &&
           idx < sentences.length - 1 &&
           s.split(/\s+/).length <= 18 &&
-          /\b(?:matters?|clear|key|critical|real|true|enough|gap|problem|challenge|need|must|should|cannot|can't)\b/i.test(s)
+          /\b(?:matters?|clear|key|critical|real|true|enough|gap|problem|challenge|need|must|should|cannot)\b/i.test(s)
       );
 
       if (emphasisIdx >= 2 && emphasisIdx < sentences.length - 1) {
@@ -449,12 +449,12 @@ const SHORT_OBSERVATIONS = [
   "The costs add up fast.",
   "Every situation is different.",
   "The evidence is hard to ignore.",
-  "It's a persistent problem.",
+  "It is a persistent problem.",
   "That alone is telling.",
-  "Some things don't scale easily.",
+  "Some things do not scale easily.",
   "And the window is narrowing.",
   "Nobody disputes that part.",
-  "That's only half the story.",
+  "That is only half the story.",
 ];
 
 function diversifyLengths(sentences: string[], rng: () => number): string[] {
@@ -661,53 +661,68 @@ function enrichVocabulary(sentences: string[], rng: () => number): string[] {
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// PHASE 9: AGGRESSIVE CONTRACTION INJECTION
+// PHASE 9: CONTRACTION EXPANSION (ENFORCE ZERO CONTRACTIONS)
 // ════════════════════════════════════════════════════════════════════════════
-// AI avoids contractions. Humans use them constantly.
-// Targets ~35% of eligible sentences.
+// Academic writing must NEVER contain contractions. This phase expands
+// any contractions that may have slipped through from other phases.
 
-const CONTRACTIONS: [RegExp, string][] = [
-  [/\bdo not\b/gi, "don't"],
-  [/\bdoes not\b/gi, "doesn't"],
-  [/\bcannot\b/gi, "can't"],
-  [/\bcan not\b/gi, "can't"],
-  [/\bwill not\b/gi, "won't"],
-  [/\bshould not\b/gi, "shouldn't"],
-  [/\bwould not\b/gi, "wouldn't"],
-  [/\bcould not\b/gi, "couldn't"],
-  [/\bis not\b/gi, "isn't"],
-  [/\bare not\b/gi, "aren't"],
-  [/\bhas not\b/gi, "hasn't"],
-  [/\bhave not\b/gi, "haven't"],
-  [/\bhad not\b/gi, "hadn't"],
-  [/\bit is\b/gi, "it's"],
-  [/\bthat is\b/gi, "that's"],
-  [/\bthey are\b/gi, "they're"],
-  [/\bwe are\b/gi, "we're"],
-  [/\bthere is\b/gi, "there's"],
-  [/\bwho is\b/gi, "who's"],
-  [/\bwhat is\b/gi, "what's"],
-  [/\bit will\b/gi, "it'll"],
-  [/\bthey will\b/gi, "they'll"],
-  [/\bthat would\b/gi, "that'd"],
-  [/\bwe have\b/gi, "we've"],
-  [/\bthey have\b/gi, "they've"],
+const CONTRACTION_EXPANSIONS: [RegExp, string][] = [
+  [/\bdon't\b/gi, "do not"],
+  [/\bdoesn't\b/gi, "does not"],
+  [/\bdidn't\b/gi, "did not"],
+  [/\bcannot\b/gi, "cannot"],
+  [/\bcan't\b/gi, "cannot"],
+  [/\bcan not\b/gi, "cannot"],
+  [/\bwon't\b/gi, "will not"],
+  [/\bwill not\b/gi, "will not"],
+  [/\bshouldn't\b/gi, "should not"],
+  [/\bwouldn't\b/gi, "would not"],
+  [/\bcouldn't\b/gi, "could not"],
+  [/\bisn't\b/gi, "is not"],
+  [/\baren't\b/gi, "are not"],
+  [/\bwasn't\b/gi, "was not"],
+  [/\bweren't\b/gi, "were not"],
+  [/\bhasn't\b/gi, "has not"],
+  [/\bhaven't\b/gi, "have not"],
+  [/\bhadn't\b/gi, "had not"],
+  [/\bmustn't\b/gi, "must not"],
+  [/\bneedn't\b/gi, "need not"],
+  [/\bit's\b/gi, "it is"],
+  [/\bthat's\b/gi, "that is"],
+  [/\bthey're\b/gi, "they are"],
+  [/\bwe're\b/gi, "we are"],
+  [/\bthere's\b/gi, "there is"],
+  [/\bwho's\b/gi, "who is"],
+  [/\bwhat's\b/gi, "what is"],
+  [/\bit'll\b/gi, "it will"],
+  [/\bthey'll\b/gi, "they will"],
+  [/\bthat'd\b/gi, "that would"],
+  [/\bwe've\b/gi, "we have"],
+  [/\bthey've\b/gi, "they have"],
+  [/\bthere're\b/gi, "there are"],
+  [/\byou're\b/gi, "you are"],
+  [/\byou've\b/gi, "you have"],
+  [/\byou'll\b/gi, "you will"],
+  [/\bhe's\b/gi, "he is"],
+  [/\bshe's\b/gi, "she is"],
+  [/\bhe'll\b/gi, "he will"],
+  [/\bshe'll\b/gi, "she will"],
+  [/\bI'm\b/g, "I am"],
+  [/\bI've\b/g, "I have"],
+  [/\bI'll\b/g, "I will"],
+  [/\bI'd\b/g, "I would"],
+  [/\blet's\b/gi, "let us"],
+  [/\bwhere's\b/gi, "where is"],
+  [/\bhow's\b/gi, "how is"],
+  [/\bwhen's\b/gi, "when is"],
+  [/\bhere's\b/gi, "here is"],
 ];
 
-function injectContractions(sentences: string[], rng: () => number): string[] {
-  let count = 0;
-  const max = Math.max(4, Math.floor(sentences.length * 0.35));
-
+function expandAllContractions(sentences: string[]): string[] {
   return sentences.map((sent) => {
-    if (count >= max || rng() > 0.45) return sent;
-
     let modified = sent;
-    for (const [pattern, replacement] of CONTRACTIONS) {
-      if (pattern.test(modified)) {
-        modified = modified.replace(pattern, replacement);
-        count++;
-        break;
-      }
+    for (const [pattern, replacement] of CONTRACTION_EXPANSIONS) {
+      modified = modified.replace(pattern, replacement);
     }
     return modified;
   });
@@ -837,23 +852,24 @@ export function structuralPostProcess(text: string): string {
     // Phase 2: Front trailing clauses
     sentences = frontClauses(sentences, rng);
 
-    // Phase 3: Inject rhetorical questions
-    sentences = injectQuestions(sentences, rng);
+    // Phase 3: Rhetorical questions — DISABLED to preserve 1:1 sentence mapping
+    // sentences = injectQuestions(sentences, rng);
 
-    // Phase 4: Inject concessives & hedging
-    sentences = injectConcessives(sentences, rng);
+    // Phase 4: Concessives & hedging — DISABLED to preserve 1:1 sentence mapping
+    // sentences = injectConcessives(sentences, rng);
 
-    // Phase 6: Sentence length diversification
-    sentences = diversifyLengths(sentences, rng);
+    // Phase 6: Sentence length diversification — DISABLED to preserve 1:1 sentence mapping
+    // (was adding short observations and merging sentences)
+    // sentences = diversifyLengths(sentences, rng);
 
-    // Phase 7: Split overly long sentences
-    sentences = splitLongSentences(sentences);
+    // Phase 7: Split overly long sentences — DISABLED to preserve 1:1 sentence mapping
+    // sentences = splitLongSentences(sentences);
 
     // Phase 8: Safe vocabulary enrichment
     sentences = enrichVocabulary(sentences, rng);
 
-    // Phase 9: Aggressive contraction injection
-    sentences = injectContractions(sentences, rng);
+    // Phase 9: Contraction expansion (enforce zero contractions)
+    sentences = expandAllContractions(sentences);
 
     // Phase 10: Punctuation + starter diversity
     sentences = diversifyPunctuation(sentences, rng);

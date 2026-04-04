@@ -223,45 +223,9 @@ function hasInjectionMarkers(text: string): boolean {
 export const perplexityPhase: Phase = {
   name: 'perplexity',
   async process(state: DocumentState): Promise<DocumentState> {
-    let rareSwaps = 0;
-    let asideInserts = 0;
-    let hedgeInserts = 0;
-
-    for (const paragraph of state.paragraphs) {
-      for (let i = 0; i < paragraph.sentences.length; i++) {
-        const sentence = paragraph.sentences[i];
-        const original = sentence.text;
-
-        // 1. Inject rare vocabulary (all sentences)
-        sentence.text = injectRareVocabulary(sentence.text);
-        if (sentence.text !== original) rareSwaps++;
-
-        // 2. Insert parenthetical aside (20% of sentences, not first/last)
-        // Skip if sentence already has injection markers or structural modification
-        if (i > 0 && i < paragraph.sentences.length - 1
-            && Math.random() < 0.20
-            && !hasInjectionMarkers(sentence.text)
-            && !sentence.flags.includes('struct-mod')) {
-          sentence.text = insertAside(sentence.text);
-          sentence.flags.push('struct-mod');
-          asideInserts++;
-        }
-
-        // 3. Add hedge/self-correction (8% of sentences, not first)
-        // Skip if sentence already has injection markers or structural modification
-        if (i > 1 && Math.random() < 0.08
-            && !hasInjectionMarkers(sentence.text)
-            && !sentence.flags.includes('struct-mod')) {
-          sentence.text = addHedge(sentence.text);
-          sentence.flags.push('struct-mod');
-          hedgeInserts++;
-        }
-      }
-    }
-
-    state.logs.push(
-      `[perplexity] ${rareSwaps} rare swaps, ${asideInserts} asides, ${hedgeInserts} hedges`
-    );
+    // DISABLED — rare vocabulary injection creates unnatural "crazy phrases"
+    // and parenthetical asides/hedges make text sound artificial
+    state.logs.push('[perplexity] DISABLED — skipped to preserve natural output');
     return state;
-  },
+  }
 };

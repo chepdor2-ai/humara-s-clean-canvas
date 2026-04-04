@@ -23,7 +23,7 @@
 export const AI_WORD_REPLACEMENTS: Record<string, string[]> = {
   // -- Academic / formal AI words → natural alternatives --
   utilize: ["use"], utilise: ["use"], leverage: ["use", "draw on", "rely on"],
-  facilitate: ["help", "support", "allow"], comprehensive: ["broad", "full", "thorough", "wide"],
+  facilitate: ["help", "support", "allow"], comprehensive: ["broad", "full", "thorough"],
   multifaceted: ["complex", "layered"], paramount: ["central", "most important", "top"],
   furthermore: ["also", "and", "on top of that"], moreover: ["also", "and", "plus"],
   additionally: ["also", "and", "on top of that"], consequently: ["so", "because of this", "this meant"],
@@ -66,9 +66,9 @@ export const AI_WORD_REPLACEMENTS: Record<string, string[]> = {
   realm: ["area", "field", "world"], culminate: ["end in", "lead to", "result in"],
   enhance: ["improve", "boost", "strengthen"], crucial: ["key", "important", "critical"],
   vital: ["key", "important", "essential"], imperative: ["necessary", "essential", "urgent"],
-  notable: ["interesting", "striking"], significant: ["important", "big", "major", "clear"],
+  notable: ["interesting", "striking"], significant: ["important", "major"],
   substantial: ["large", "big", "real", "major"], remarkable: ["striking", "unusual", "surprising"],
-  considerable: ["large", "big", "a good deal of"], unprecedented: ["never-before-seen", "new", "first-ever"],
+  considerable: ["large", "a good deal of"], unprecedented: ["never-before-seen", "first-ever"],
   methodology: ["method", "approach", "process"], framework: ["structure", "setup", "system"],
   implication: ["effect", "result", "what this means"], implications: ["effects", "results", "consequences"],
   notably: ["especially", "in particular"], specifically: ["in particular", "especially"],
@@ -633,7 +633,7 @@ export const SYNTACTIC_TEMPLATES: SyntacticTemplate[] = [
 
 export const DIVERSITY_SWAPS: Record<string, string[]> = {
   "big": ["sizable", "hefty", "sweeping"], "small": ["modest", "slight", "minor"],
-  "good": ["solid", "decent", "strong"], "bad": ["poor", "rough", "weak"],
+  "bad": ["poor", "rough", "weak"],
   "very": ["quite", "rather", "especially"], "many": ["plenty of", "a number of", "several"],
   "help": ["assist", "support", "aid"], "use": ["employ", "apply", "rely on"],
   "show": ["reveal", "indicate", "demonstrate"], "make": ["create", "produce", "generate"],
@@ -642,8 +642,8 @@ export const DIVERSITY_SWAPS: Record<string, string[]> = {
   "come": ["arrive", "emerge", "surface"], "go": ["proceed", "move", "shift"],
   "keep": ["retain", "maintain", "preserve"], "change": ["alter", "shift", "modify"],
   "grow": ["expand", "swell", "climb"], "move": ["shift", "transition", "migrate"],
-  "start": ["launch", "kick off", "initiate"], "work": ["function", "operate", "perform"],
-  "need": ["require", "demand", "call for"], "put": ["place", "position", "set"],
+  "start": ["launch", "kick off", "initiate"],
+  "put": ["place", "position", "set"],
   "run": ["operate", "manage", "oversee"], "try": ["attempt", "strive", "seek"],
   "think": ["consider", "believe", "reckon"], "find": ["discover", "uncover", "identify"],
   "look": ["examine", "glance", "inspect"], "want": ["desire", "seek", "aim for"],
@@ -651,7 +651,7 @@ export const DIVERSITY_SWAPS: Record<string, string[]> = {
   "just": ["merely", "simply", "only"], "world": ["globe", "planet", "sphere"],
   "way": ["manner", "approach", "route"], "part": ["portion", "segment", "piece"],
   "place": ["location", "site", "spot"], "problem": ["issue", "challenge", "difficulty"],
-  "people": ["individuals", "folks", "populations"], "same": ["identical", "equivalent", "matching"],
+  "people": ["individuals", "folks", "populations"],
   "new": ["fresh", "recent", "novel"], "old": ["former", "earlier", "longstanding"],
   "high": ["elevated", "steep", "lofty"], "low": ["minimal", "reduced", "meager"],
   "long": ["extended", "prolonged", "lengthy"], "things": ["aspects", "elements", "factors"],
@@ -1396,16 +1396,41 @@ export function perSentenceAntiDetection(sentences: string[], hasContractions: b
     // ═══════════════════════════════════════
 
     // Fix 1: Kill AI sentence starters (saves 0.20)
+    // Use replacements instead of deletion to preserve grammar
+    const STARTER_REPLACEMENTS: Record<string, string> = {
+      "one of the most": "Arguably the most",
+      "it is important": "It matters",
+      "it is crucial": "It matters a lot",
+      "it is essential": "It matters",
+      "it is worth noting": "Worth noting,",
+      "it should be noted": "Notably,",
+      "there are several": "Several",
+      "there are many": "Many",
+      "it can be seen": "We can see",
+      "it is clear": "Clearly,",
+      "in today's": "In today's",
+      "in the modern": "In the modern",
+    };
     if (hasAIStarter) {
       for (const starter of DETECTOR_AI_STARTERS) {
         if (lower.startsWith(starter)) {
-          const starterLen = starter.length;
-          let after = result.slice(starterLen).trim();
-          // Remove trailing comma after starter removal
-          if (after.startsWith(",")) after = after.slice(1).trim();
-          if (after.length > 10) {
-            result = after[0].toUpperCase() + after.slice(1);
-            score -= 0.20;
+          const replacement = STARTER_REPLACEMENTS[starter];
+          if (replacement) {
+            const starterLen = starter.length;
+            let after = result.slice(starterLen).trim();
+            if (after.startsWith(",")) after = after.slice(1).trim();
+            if (after.length > 10) {
+              result = replacement + " " + after;
+              score -= 0.20;
+            }
+          } else {
+            const starterLen = starter.length;
+            let after = result.slice(starterLen).trim();
+            if (after.startsWith(",")) after = after.slice(1).trim();
+            if (after.length > 10) {
+              result = after[0].toUpperCase() + after.slice(1);
+              score -= 0.20;
+            }
           }
           break;
         }

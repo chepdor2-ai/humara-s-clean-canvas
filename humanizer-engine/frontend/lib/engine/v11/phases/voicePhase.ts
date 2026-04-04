@@ -175,24 +175,11 @@ export const voicePhase: Phase = {
           }
         }
 
-        // 2. Apply literary devices (30% chance)
-        if (Math.random() < 0.30) {
-          for (const [pattern, replacements] of LITERARY_DEVICES) {
-            if (pattern.test(text)) {
-              text = text.replace(pattern, () => pickRandom(replacements));
-              literaryDevices++;
-              break;
-            }
-          }
-        }
+        // 2. Literary devices — DISABLED (creates unnatural phrasing)
+        // if (Math.random() < 0.30) { ... }
 
-        // 3. Authorial voice insertion (12% chance, not first sentence, not already structurally modified)
-        if (i > 0 && Math.random() < 0.12 && text.split(/\s+/).length > 8
-            && !sentence.flags.includes('struct-mod')) {
-          text = pickRandom(AUTHORIAL_INSERTIONS) + text[0].toLowerCase() + text.slice(1);
-          sentence.flags.push('struct-mod');
-          authorialInserts++;
-        }
+        // 3. Authorial voice insertion — DISABLED (creates unnatural phrases)
+        // if (i > 0 && Math.random() < 0.12 ...) { ... }
 
         // 4. Diversify punctuation (25% chance)
         if (Math.random() < 0.25) {

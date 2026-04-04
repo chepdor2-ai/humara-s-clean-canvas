@@ -54,7 +54,39 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" className={inter.variable} suppressHydrationWarning>
-      <body className="bg-white dark:bg-zinc-950 text-slate-900 dark:text-zinc-100 antialiased font-sans transition-colors duration-300">
+      <head>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              // Aggressively remove browser extension attributes before hydration
+              (function() {
+                var removeExtensionAttrs = function() {
+                  document.querySelectorAll('[bis_skin_checked]').forEach(function(el) {
+                    el.removeAttribute('bis_skin_checked');
+                  });
+                };
+                
+                // Run immediately
+                removeExtensionAttrs();
+                
+                // Watch for changes
+                var observer = new MutationObserver(removeExtensionAttrs);
+                observer.observe(document.documentElement, { 
+                  attributes: true, 
+                  attributeFilter: ['bis_skin_checked'],
+                  childList: true, 
+                  subtree: true 
+                });
+                
+                // Continuous cleanup before hydration
+                var interval = setInterval(removeExtensionAttrs, 10);
+                setTimeout(function() { clearInterval(interval); }, 1000);
+              })();
+            `,
+          }}
+        />
+      </head>
+      <body className="bg-white dark:bg-zinc-950 text-slate-900 dark:text-zinc-100 antialiased font-sans transition-colors duration-300" suppressHydrationWarning>
         <ThemeProvider>
           <AuthProvider>
             <RootLayoutClient>{children}</RootLayoutClient>

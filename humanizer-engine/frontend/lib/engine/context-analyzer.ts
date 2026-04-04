@@ -37,6 +37,16 @@ const DOMAIN_TERMS: string[] = [
   "parental involvement", "family involvement", "student attendance",
   "research question", "empirical evidence", "statistical evidence",
   "predetermined significance", "statistical test", "statistical analysis",
+  // ── Psychology, Special Education & Therapy ──
+  "autism spectrum disorder", "autism spectrum", "sensory integration",
+  "sensory processing", "sensory modulation", "sensory exploration",
+  "multi-sensory environment", "multi-sensory environments",
+  "occupational therapy", "special education", "emotional regulation",
+  "behavioral regulation", "self-regulation", "sensory stimuli",
+  "adaptive sensory processing", "neural processing",
+  "maladaptive behaviors", "social engagement", "behavioral stability",
+  "clinical intervention", "clinical evidence", "sensory integration therapy",
+  "proprioceptive stimuli", "self-stimulation",
 ];
 
 const ALWAYS_PROTECT = new Set([

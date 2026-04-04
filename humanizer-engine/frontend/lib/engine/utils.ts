@@ -364,6 +364,26 @@ export function synonymReplace(
 
     let replacement = valid[Math.floor(Math.random() * valid.length)];
 
+    // POS guard: skip replacement if POS category clearly mismatches
+    const origTag = tagMap.get(lower);
+    if (origTag && (origTag === "noun" || origTag === "verb")) {
+      const replDoc = nlp(replacement);
+      const replJson = replDoc.json();
+      if (replJson.length > 0 && replJson[0].terms?.length > 0) {
+        const replTags: string[] = replJson[0].terms[0].tags || [];
+        const replIsNoun = replTags.includes("Noun");
+        const replIsVerb = replTags.includes("Verb");
+        if (origTag === "noun" && replIsVerb && !replIsNoun) {
+          newTokens.push(tok);
+          continue;
+        }
+        if (origTag === "verb" && replIsNoun && !replIsVerb) {
+          newTokens.push(tok);
+          continue;
+        }
+      }
+    }
+
     // If lemma was used, re-inflect the replacement
     if (lemmaUsed) {
       const suffix = lower.endsWith("ing") ? "ing" : lower.endsWith("ed") ? "ed" :

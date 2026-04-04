@@ -80,7 +80,7 @@ async function applySynonyms(text: string): Promise<string> {
     }
 
     const syns = await getSynonyms(cleanWord);
-    if (syns.length > 0 && Math.random() < 0.80 && !SYNONYM_SKIP.has(cleanWord.toLowerCase())) {
+    if (syns.length > 0 && Math.random() < 0.20 && !SYNONYM_SKIP.has(cleanWord.toLowerCase())) {
       let replacement = pickRandom(syns);
       // Preserve surrounding punctuation
       const prefix = token.match(/^[^a-zA-Z]*/)?.[0] ?? '';

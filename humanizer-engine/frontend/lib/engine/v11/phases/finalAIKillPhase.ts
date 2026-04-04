@@ -33,11 +33,11 @@ export const finalAIKillPhase: Phase = {
       for (const sentence of paragraph.sentences) {
         const before = sentence.text;
 
-        // Scorched-earth AI term kill
+        // Light AI term kill (finalAIKill only, no aggressive rephrase)
         sentence.text = finalAIKill(sentence.text);
 
-        // Aggressive rephrasing pass (catch remaining AI patterns)
-        sentence.text = aggressiveRephrase(sentence.text);
+        // Aggressive rephrasing — DISABLED (over-processes and creates unnatural output)
+        // sentence.text = aggressiveRephrase(sentence.text);
 
         // Final contraction expansion (catch anything from earlier phases)
         sentence.text = expandContractions(sentence.text);

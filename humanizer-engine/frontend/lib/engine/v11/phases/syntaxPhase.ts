@@ -232,8 +232,8 @@ export const syntaxPhase: Phase = {
 
         // Each sentence gets at most ONE structural transform (to avoid chaos)
 
-        if (roll < 0.18) {
-          // 18% chance: subordinate reorder
+        if (roll < 0.06) {
+          // 6% chance: subordinate reorder (reduced from 18%)
           const reordered = reorderSubordinate(sentence.text);
           if (reordered) {
             sentence.text = reordered;
@@ -243,8 +243,8 @@ export const syntaxPhase: Phase = {
           }
         }
 
-        if (roll < 0.28 && i > 0 && i < len - 1) {
-          // 10% chance: rhetorical question (never first/last sentence)
+        if (roll < 0.09 && i > 0 && i < len - 1) {
+          // 3% chance: rhetorical question (reduced from 10%, never first/last sentence)
           const question = toRhetoricalQuestion(sentence.text);
           if (question) {
             sentence.text = question;
@@ -257,8 +257,8 @@ export const syntaxPhase: Phase = {
         // Cleft constructions DISABLED — they compound with Phase 13 synonym swaps
         // producing garbled outputs like "The actual discovering is that"
 
-        if (roll < 0.52 && i > 0) {
-          // 14% chance: fronted adverbial
+        if (roll < 0.14 && i > 0) {
+          // 5% chance: fronted adverbial (reduced from 14%)
           const adverb = pickRandom(ADVERB_FRONTS);
           sentence.text = adverb + sentence.text[0].toLowerCase() + sentence.text.slice(1);
           sentence.flags.push('struct-mod');
@@ -266,8 +266,8 @@ export const syntaxPhase: Phase = {
           continue;
         }
 
-        if (roll < 0.62 && words.length > 10 && i > 0 && i < len - 1) {
-          // 10% chance: appositive insertion
+        if (roll < 0.17 && words.length > 10 && i > 0 && i < len - 1) {
+          // 3% chance: appositive insertion (reduced from 10%)
           sentence.text = insertAppositive(sentence.text);
           sentence.flags.push('struct-mod');
           appositives++;

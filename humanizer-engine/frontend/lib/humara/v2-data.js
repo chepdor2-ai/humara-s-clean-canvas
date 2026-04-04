@@ -36,7 +36,7 @@ export const PHRASE_COMPRESS = {
   'have the potential to':['can','may well','hold the capacity to','are positioned to'],
   'has the ability to':['can','is able to','possesses the means to','is equipped to'],
   'on the other hand':['conversely','by contrast','then again','alternatively','at the same time'],
-  'in addition to':['besides','along with','beyond','on top of','coupled with'],
+  'in addition to':['besides','along with','beyond','on top of'],
   'in addition to this':['furthermore','what adds to this','building on this point','beyond this'],
   'as a result':['consequently','therefore','because of this','this led to','thus'],
   'as a result of':['because of','owing to','stemming from','on account of','arising from'],
@@ -164,7 +164,7 @@ export const PHRASE_COMPRESS = {
   'unprecedented':['extraordinary','remarkable','exceptional','unparalleled'],
   'aligns with':['matches','is consistent with','fits with','goes hand in hand with'],
   'is aligned with':['matches','is consistent with','corresponds to','goes along with'],
-  'coupled with':['together with','alongside','combined with'],
+
   'in conjunction with':['together with','alongside','in combination with','working with'],
   'in tandem with':['alongside','together with','working in step with'],
   'in the wake of':['following','after','in the aftermath of','coming after'],

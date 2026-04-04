@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Ghost Mini v1.2 - Browser Validation</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { 
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #f8fafb;
+      padding: 2rem;
+      line-height: 1.6;
+    }
+    .container { max-width: 1200px; margin: 0 auto; }
+    header {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      padding: 2rem;
+      border-radius: 10px;
+      margin-bottom: 2rem;
+    }
+    h1 { font-size: 2rem; margin-bottom: 0.5rem; }
+    .subtitle { opacity: 0.9; }
+    .panel {
+      background: white;
+      border-radius: 10px;
+      padding: 1.5rem;
+      margin-bottom: 1.5rem;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    textarea {
+      width: 100%;
+      min-height: 200px;
+      padding: 1rem;
+      border: 2px solid #e2e8f0;
+      border-radius: 8px;
+      font-family: 'Courier New', monospace;
+      font-size: 14px;
+      resize: vertical;
+    }
+    button {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      border: none;
+      padding: 12px 24px;
+      border-radius: 8px;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: transform 0.2s;
+    }
+    button:hover { transform: translateY(-2px); }
+    button:active { transform: translateY(0); }
+    .results {
+      background: #f8fafb;
+      border-left: 4px solid #667eea;
+      padding: 1rem;
+      border-radius: 4px;
+      margin-top: 1rem;
+      font-family: 'Courier New', monospace;
+      font-size: 14px;
+      white-space: pre-wrap;
+    }
+    .success { color: #10b981; font-weight: bold; }
+    .error { color: #ef4444; font-weight: bold; }
+    .info { color: #3b82f6; }
+    h2 { margin-bottom: 1rem; color: #333; }
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 1rem;
+      margin-top: 1rem;
+    }
+    .stat {
+      background: #f8fafb;
+      padding: 1rem;
+      border-radius: 8px;
+      border: 1px solid #e2e8f0;
+    }
+    .stat-label { font-size: 12px; color: #64748b; text-transform: uppercase; }
+    .stat-value { font-size: 24px; font-weight: bold; color: #667eea; margin-top: 0.25rem; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>🚀 Ghost Mini v1.2 - Browser Validation</h1>
+      <p class="subtitle">Sentence-by-sentence processing with structure preservation</p>
+    </header>
+
+    <div class="panel">
+      <h2>📝 Input Text</h2>
+      <textarea id="input" placeholder="Paste your academic text here...">Leadership and Emotional Intelligence
+
+Emotional intelligence has become a critical factor in modern leadership. I think leaders with high EI are more effective. We can't ignore this important aspect.
+
+Research shows several key components. These include self-awareness and empathy. Leaders who utilize emotional intelligence demonstrate better outcomes. They're able to make informed decisions.
+
+Key Principles:
+
+1. Self-awareness
+2. Social awareness
+3. Relationship management
+
+Practical Applications
+
+Organizations should look at implementing EI training programs. These programs need to be very comprehensive. We believe this approach will help develop future leaders — creating sustainable organizational cultures.
+
+Conclusion
+
+Leadership development isn't just about skills. Companies that don't invest in this area will find it hard to compete effectively.</textarea>
+      <div style="margin-top: 1rem;">
+        <button onclick="processText()">🔄 Process with Ghost Mini v1.2</button>
+      </div>
+    </div>
+
+    <div class="panel" id="outputPanel" style="display: none;">
+      <h2>✨ Processed Output</h2>
+      <textarea id="output" readonly></textarea>
+    </div>
+
+    <div class="panel" id="statsPanel" style="display: none;">
+      <h2>📊 Validation Results</h2>
+      <div class="stats">
+        <div class="stat">
+          <div class="stat-label">Paragraphs</div>
+          <div class="stat-value" id="paragraphStat">-</div>
+        </div>
+        <div class="stat">
+          <div class="stat-label">Structure Match</div>
+          <div class="stat-value" id="structureStat">-</div>
+        </div>
+        <div class="stat">
+          <div class="stat-label">Contractions</div>
+          <div class="stat-value" id="contractionStat">-</div>
+        </div>
+        <div class="stat">
+          <div class="stat-label">Em-dashes</div>
+          <div class="stat-value" id="dashStat">-</div>
+        </div>
+      </div>
+      <div class="results" id="results"></div>
+    </div>
+  </div>
+
+  <script type="module">
+    async function processText() {
+      const input = document.getElementById('input').value;
+      const outputPanel = document.getElementById('outputPanel');
+      const statsPanel = document.getElementById('statsPanel');
+      const results = document.getElementById('results');
+      
+      if (!input.trim()) {
+        alert('Please enter some text to process');
+        return;
+      }
+
+      results.innerHTML = '<span class="info">⏳ Processing...</span>';
+      outputPanel.style.display = 'block';
+      statsPanel.style.display = 'block';
+
+      try {
+        const response = await fetch('/api/humanize', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            text: input,
+            engine: 'ghost_mini_v1_2',
+            strength: 'medium',
+            tone: 'academic'
+          })
+        });
+
+        if (!response.ok) {
+          throw new Error(`API Error: ${response.status} ${response.statusText}`);
+        }
+
+        const data = await response.json();
+        const output = data.humanized;
+
+        // Display output
+        document.getElementById('output').value = output;
+
+        // Calculate validation metrics
+        const inputParas = input.split(/\n\n+/).length;
+        const outputParas = output.split(/\n\n+/).length;
+        const structureMatch = inputParas === outputParas;
+        
+        const hasContractions = /\b(can't|won't|don't|isn't|aren't|it's|they're|we're)\b/i.test(output);
+        const hasEmDashes = output.includes('—');
+
+        // Update stats
+        document.getElementById('paragraphStat').textContent = `${inputParas} → ${outputParas}`;
+        document.getElementById('structureStat').textContent = structureMatch ? '✅' : '❌';
+        document.getElementById('contractionStat').textContent = hasContractions ? '❌' : '✅';
+        document.getElementById('dashStat').textContent = hasEmDashes ? '❌' : '✅';
+
+        // Build results report
+        let report = `
+<span class="success">✅ Processing Complete!</span>
+
+<span class="info">📊 VALIDATION REPORT:</span>
+
+  Engine Used: ${data.engine_used}
+  Word Count: ${data.input_word_count} → ${data.word_count}
+  Meaning Preserved: ${data.meaning_preserved ? '✅' : '❌'} (${data.meaning_similarity})
+  
+  Structure Preservation:
+    Paragraph Count: ${inputParas} → ${outputParas} ${structureMatch ? '✅' : '❌'}
+    Structure Match: ${structureMatch ? '✅ PERFECT' : '❌ MISMATCH'}
+  
+  Transformations Applied:
+    Contractions Expanded: ${!hasContractions ? '✅' : '❌'}
+    Em-dashes Removed: ${!hasEmDashes ? '✅' : '❌'}
+    Academic Vocabulary: ${output.includes('examine') || output.includes('demonstrate') || output.includes('employ') ? '✅' : '➖'}
+    Formal Tone: ${!output.includes('I think') && !output.includes('We believe') ? '✅' : '➖'}
+
+<span class="${structureMatch && !hasContractions && !hasEmDashes ? 'success' : 'error'}">
+${structureMatch && !hasContractions && !hasEmDashes ? '✅ ALL VALIDATIONS PASSED' : '⚠️  REVIEW REQUIRED'}
+</span>
+`;
+        results.innerHTML = report;
+
+      } catch (error) {
+        results.innerHTML = `<span class="error">❌ Error: ${error.message}</span>
+
+Make sure:
+1. The Next.js dev server is running
+2. You're accessing this page through localhost:3000
+3. The API endpoint is working correctly`;
+      }
+    }
+
+    // Make function globally available
+    window.processText = processText;
+  </script>
+</body>
+</html>
