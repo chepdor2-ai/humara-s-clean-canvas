@@ -47,18 +47,8 @@ function applyRhythmToSentence(text: string): string {
       return result;
     }
 
-    // Try inserting a parenthetical aside after the first clause
-    const commaIdx = text.indexOf(',');
-    if (commaIdx > 15 && commaIdx < text.length * 0.6 && Math.random() < 0.25) {
-      const asides = [
-        ' — in practical terms —',
-        ' — from a broader perspective —',
-        ' — to be precise —',
-        ' — it should be noted —',
-      ];
-      const aside = asides[Math.floor(Math.random() * asides.length)];
-      return text.slice(0, commaIdx + 1) + aside + text.slice(commaIdx + 1);
-    }
+    // DISABLED: Parenthetical aside injection was creating unnatural em-dash asides
+    // ("to be precise", "it should be noted") that break natural flow
   }
 
   // Medium sentences (12–22 words): occasional clause reorder

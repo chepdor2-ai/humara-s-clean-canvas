@@ -137,6 +137,8 @@ const APPOSITIVES: string[] = [
  * Reorder subordinate clause to front of sentence.
  */
 function reorderSubordinate(text: string): string | null {
+  // Skip sentences that already start with a subordinating conjunction
+  if (/^(While|Although|Because|Since|Even though|Whereas|Unless|If)\b/i.test(text.trim())) return null;
   for (const [pattern, replacement] of SUBORDINATE_PATTERNS) {
     if (pattern.test(text)) {
       // Skip "such as" contexts — "such as" is not a subordinating conjunction
@@ -244,35 +246,15 @@ export const syntaxPhase: Phase = {
           }
         }
 
-        if (roll < 0.09 && i > 0 && i < len - 1) {
-          // 3% chance: rhetorical question (reduced from 10%, never first/last sentence)
-          const question = toRhetoricalQuestion(sentence.text);
-          if (question) {
-            sentence.text = question;
-            sentence.flags.push('struct-mod');
-            questions++;
-            continue;
-          }
-        }
+        // DISABLED: rhetorical question injection creates unnatural "But does X really Y?" patterns
 
         // Cleft constructions DISABLED — they compound with Phase 13 synonym swaps
         // producing garbled outputs like "The actual discovering is that"
 
-        if (roll < 0.12 && i > 0 && sentence.text.length > 0) {
-          // 3% chance: fronted adverbial (reduced from 5%)
-          const adverb = pickRandom(ADVERB_FRONTS);
-          sentence.text = adverb + sentence.text[0].toLowerCase() + sentence.text.slice(1);
-          sentence.flags.push('struct-mod');
-          fronts++;
-          continue;
-        }
+        // DISABLED: fronted adverbial injection ("At the risk of oversimplifying,"
+        // "In no uncertain terms," etc.) was creating unnatural register mixing
 
-        if (roll < 0.15 && words.length > 10 && i > 0 && i < len - 1) {
-          // 3% chance: appositive insertion (reduced from 10%)
-          sentence.text = insertAppositive(sentence.text);
-          sentence.flags.push('struct-mod');
-          appositives++;
-        }
+        // DISABLED: appositive insertion was adding unnatural parentheticals
       }
     }
 

@@ -213,29 +213,8 @@ export function combineShortSentences(s1: string, s2: string): string | null {
  * These add complexity and vary the sentence structure.
  */
 function addAcademicQualifier(sentence: string): string {
-  const words = sentence.split(/\s+/);
-  if (words.length < 8 || words.length > 30) return sentence;
-
-  const qualifiers = [
-    // Parenthetical qualifiers inserted after subject
-    { after: /^(The \w+(?:\s+\w+)?)\s+(is|are|was|were|has|have|had)\b/i,
-      inserts: [', as noted in the literature,', ', to varying degrees,', ', in the present context,'] },
-    // Hedging qualifiers
-    { after: /\b(suggest|indicate|demonstrate|show)\b/i,
-      inserts: [', at least in part,', ', to some extent,'] },
-  ];
-
-  // Only apply one qualifier per sentence, 25% chance
-  if (Math.random() > 0.25) return sentence;
-
-  const q = pick(qualifiers);
-  const m = sentence.match(q.after);
-  if (m && m.index !== undefined) {
-    const insertPoint = m.index + m[0].length;
-    const insert = pick(q.inserts);
-    return sentence.substring(0, insertPoint) + insert + sentence.substring(insertPoint);
-  }
-
+  // DISABLED: Was injecting unnatural parentheticals like "as noted in the literature",
+  // "at least in part", "to varying degrees" into clean sentences
   return sentence;
 }
 
@@ -276,33 +255,11 @@ const SHORT_ACADEMIC_INSERTS = [
 ];
 
 /**
- * Inject a short declarative sentence after a long one for burstiness.
- * Only fires occasionally to avoid pattern detection.
+ * Inject burstiness — DISABLED: injecting fabricated sentences destroys meaning fidelity.
+ * Sentence length variance should come from restructuring, not from adding content.
  */
 export function injectBurstiness(sentences: string[]): string[] {
-  if (sentences.length < 4) return sentences;
-
-  const result: string[] = [];
-  let longCount = 0;
-
-  for (let i = 0; i < sentences.length; i++) {
-    const s = sentences[i];
-    result.push(s);
-    const wordCount = s.split(/\s+/).length;
-
-    if (wordCount > 22) {
-      longCount++;
-      // After 2-3 consecutive long sentences, inject a short one (40% chance)
-      if (longCount >= 2 && Math.random() < 0.40) {
-        result.push(pick(SHORT_ACADEMIC_INSERTS));
-        longCount = 0;
-      }
-    } else if (wordCount < 10) {
-      longCount = 0;
-    }
-  }
-
-  return result;
+  return sentences;
 }
 
 // ══════════════════════════════════════════════════════════════════

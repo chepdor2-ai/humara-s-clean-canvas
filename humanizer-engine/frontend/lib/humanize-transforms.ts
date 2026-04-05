@@ -135,7 +135,15 @@ export function injectPhrasalVerbs(sentence: string): string {
       result = result.replace(sForm, () => {
         const pv = pick(phrasals);
         const parts = pv.split(' ');
-        parts[0] = parts[0] + 's';
+        // Proper third-person conjugation: consonant+y → ies, sibilant → es
+        const verb = parts[0];
+        if (/[^aeiou]y$/i.test(verb)) {
+          parts[0] = verb.slice(0, -1) + 'ies';
+        } else if (/[sxz]$/i.test(verb) || /[sc]h$/i.test(verb)) {
+          parts[0] = verb + 'es';
+        } else {
+          parts[0] = verb + 's';
+        }
         return parts.join(' ');
       });
       return result;
@@ -145,7 +153,18 @@ export function injectPhrasalVerbs(sentence: string): string {
       result = result.replace(edForm, () => {
         const pv = pick(phrasals);
         const parts = pv.split(' ');
-        parts[0] = parts[0].endsWith('e') ? parts[0] + 'd' : parts[0] + 'ed';
+        const verb = parts[0];
+        // Handle irregular verbs
+        const IRREG: Record<string, string> = { deal: 'dealt', carry: 'carried', put: 'put', cut: 'cut', set: 'set', get: 'got', keep: 'kept', hold: 'held', run: 'ran', go: 'went', come: 'came', take: 'took', give: 'gave', find: 'found', think: 'thought', bring: 'brought', buy: 'bought', catch: 'caught', fight: 'fought', seek: 'sought', teach: 'taught', lay: 'laid', pay: 'paid', say: 'said', send: 'sent', spend: 'spent', build: 'built', lend: 'lent', lose: 'lost', sit: 'sat', stand: 'stood', stick: 'stuck', tell: 'told', sell: 'sold', win: 'won', begin: 'began', break: 'broke', choose: 'chose', drive: 'drove', fall: 'fell', grow: 'grew', know: 'knew', rise: 'rose', speak: 'spoke', throw: 'threw', write: 'wrote', draw: 'drew' };
+        if (IRREG[verb.toLowerCase()]) {
+          parts[0] = IRREG[verb.toLowerCase()];
+        } else if (verb.endsWith('e')) {
+          parts[0] = verb + 'd';
+        } else if (/[^aeiou]y$/i.test(verb)) {
+          parts[0] = verb.slice(0, -1) + 'ied';
+        } else {
+          parts[0] = verb + 'ed';
+        }
         return parts.join(' ');
       });
       return result;

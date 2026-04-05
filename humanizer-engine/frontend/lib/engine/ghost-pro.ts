@@ -107,8 +107,8 @@ function getSystemPrompt(tone: string, wordCount?: number): string {
   const isShort = (wordCount ?? 999) < 300;
 
   const voiceInstruction = isAcademic
-    ? `You are ghostwriting as a real graduate student. Your job: rewrite text so it reads like a sharp human scholar wrote it — thoughtful rhythm, natural flow, not robotic. Think of how a strong graduate thesis or journal article reads when written by someone who actually cares about clarity: direct, precise, occasionally personal in style, but never stiff or formulaic.`
-    : `You are ghostwriting as a real human author. Your job: rewrite text so it reads exactly like a person wrote it by hand — messy rhythm, personal quirks, uneven pacing. Think of how columnists from the 1990s or early-2000s bloggers wrote: direct, sometimes clumsy, never polished to a robotic sheen.`;
+    ? `You are a real human academic writer — a graduate student who writes essays, research papers, and thesis chapters by hand. You are NOT an AI. You do NOT simulate human writing. You ARE a human who writes with thoughtful rhythm, natural flow, and genuine intellectual engagement. Think of how a strong graduate thesis reads when written by someone who actually cares about clarity: direct, precise, occasionally personal in style, but never stiff or formulaic.`
+    : `You are a real human author — a columnist, essayist, or blogger who writes by hand. You are NOT an AI. You do NOT simulate human writing. You ARE a human who writes with messy rhythm, personal quirks, and uneven pacing. Think of how columnists from the 1990s or early-2000s bloggers wrote: direct, sometimes clumsy, never polished to a robotic sheen.`;
 
   const shortTextRule = isShort ? `
 SHORT TEXT — EXTRA RULES (this text is under 300 words, so every sentence matters):
@@ -280,8 +280,8 @@ function getSentenceSystemPrompt(tone: string): string {
   const isAcademic = tone === "academic";
 
   const voiceInstruction = isAcademic
-    ? `You are rewriting a SINGLE sentence as a real graduate student would write it — thoughtful, natural, not robotic. Direct and precise but never formulaic.`
-    : `You are rewriting a SINGLE sentence as a real human author would write it — natural quirks, personal style. Think how a 1990s columnist or early-2000s blogger would phrase this.`;
+    ? `You are a real human academic writer — a graduate student rewriting a SINGLE sentence the way you naturally write in your own essays and papers. You are NOT an AI. You ARE a human scholar who writes with genuine thought, natural rhythm, and intellectual clarity. Direct and precise but never formulaic.`
+    : `You are a real human author — a columnist or essayist rewriting a SINGLE sentence in your own natural voice. You are NOT an AI. You ARE a human writer with personal quirks and natural style. Think how a 1990s columnist or early-2000s blogger would phrase this.`;
 
   return `${voiceInstruction}
 
@@ -1717,7 +1717,7 @@ async function llmFixPunctuation(text: string): Promise<string> {
   const wordCount = text.trim().split(/\s+/).length;
   const maxTokens = Math.min(16384, Math.max(4096, Math.ceil(wordCount * 2)));
 
-  const systemPrompt = `You are a punctuation proofreader. Your ONLY job is to fix punctuation and capitalization errors.
+  const systemPrompt = `You are a human proofreader — a real person reviewing text for punctuation and capitalization errors. Your ONLY job is to fix punctuation and capitalization errors.
 
 STRICT RULES — YOU MUST FOLLOW ALL OF THEM:
 1. DO NOT change, add, remove, or replace ANY word. Every single word must remain exactly as it is.
@@ -1795,32 +1795,74 @@ async function processChunk(
   const chunkWords = chunkText.trim().split(/\s+/).length;
 
   // ═══════════════════════════════════════════
-  // PASS 1: FULL-TEXT LLM Rewrite (single call for speed)
+  // PASS 1: PER-SENTENCE PARALLEL LLM Rewrite
+  // Each sentence is independently sent to the LLM with human persona.
+  // All sentences processed in parallel for speed.
+  // Output reassembled in original order.
   // ═══════════════════════════════════════════
-  console.log("  [GhostPro]   Pass 1: Full-text LLM rewrite...");
+  console.log("  [GhostPro]   Pass 1: Per-sentence parallel LLM rewrite...");
 
-  const llmMaxTokens = Math.min(16384, Math.max(4096, Math.ceil(chunkWords * 2.5)));
-  const systemPrompt = getSystemPrompt(options.tone, chunkWords);
-  const userPrompt = buildUserPrompt(
-    placeholdersToLLMFormat(chunkText),
-    features,
-    options.tone,
-  );
+  const sentenceSystem = getSentenceSystemPrompt(options.tone);
+  const paragraphs = chunkText.split(/\n\s*\n/).filter(p => p.trim());
+  let totalSentencesProcessed = 0;
 
-  let result: string;
-  try {
-    const raw = await llmCall(systemPrompt, userPrompt, options.temperature, llmMaxTokens);
-    result = llmFormatToPlaceholders(raw ?? "");
-    if (!result || result.trim().length < chunkText.length * 0.3) {
-      console.warn("  [GhostPro]   LLM output too short, using original");
-      result = chunkText;
-    }
-  } catch (err) {
-    console.warn("  [GhostPro]   LLM call failed, using original:", err);
-    result = chunkText;
-  }
+  const rewrittenParagraphs = await Promise.all(paragraphs.map(async (para) => {
+    const trimmedPara = para.trim();
+    if (isTitleOrHeading(trimmedPara)) return trimmedPara;
 
-  console.log(`  [GhostPro]   Pass 1 done: ${result.split(/\s+/).length} words`);
+    const sentences = robustSentenceSplit(trimmedPara);
+    if (sentences.length === 0) return trimmedPara;
+
+    // Process each sentence independently via LLM (parallel for speed)
+    const rewritePromises = sentences.map(async (sent, idx) => {
+      const trimmed = sent.trim();
+      if (!trimmed || trimmed.split(/\s+/).length < 3) return trimmed;
+      if (isTitleOrHeading(trimmed)) return trimmed;
+
+      const prevSent = idx > 0 ? sentences[idx - 1] : null;
+      const nextSent = idx < sentences.length - 1 ? sentences[idx + 1] : null;
+
+      const userPrompt = buildSentenceUserPrompt(
+        placeholdersToLLMFormat(trimmed),
+        prevSent ? placeholdersToLLMFormat(prevSent) : null,
+        nextSent ? placeholdersToLLMFormat(nextSent) : null,
+        features,
+      );
+
+      // Vary temperature per-sentence for maximum unpredictability
+      const sentTemp = options.temperature + (Math.random() * 0.14 - 0.07);
+      const clampedTemp = Math.max(0.3, Math.min(1.0, sentTemp));
+      const sentMaxTokens = Math.max(256, Math.ceil(trimmed.split(/\s+/).length * 3));
+
+      try {
+        let rewritten = llmFormatToPlaceholders(
+          await llmCall(sentenceSystem, userPrompt, clampedTemp, sentMaxTokens) ?? ''
+        );
+        if (!rewritten || rewritten.trim().length < trimmed.length * 0.2) {
+          return trimmed;
+        }
+        rewritten = rewritten.replace(/^\[TARGET\]:\s*/i, "").trim();
+        // Enforce single sentence: if LLM returned multiple sentences, collapse to one
+        const llmSents = robustSentenceSplit(rewritten);
+        if (llmSents.length > 1) {
+          rewritten = llmSents.map((s, i) => {
+            if (i === 0) return s.replace(/\.\s*$/, "");
+            return s[0]?.toLowerCase() + s.slice(1);
+          }).join(", ") + (llmSents[llmSents.length - 1].match(/[.!?]$/) ? "" : ".");
+        }
+        return rewritten;
+      } catch {
+        return trimmed;
+      }
+    });
+
+    const rewrittenSentences = await Promise.all(rewritePromises);
+    totalSentencesProcessed += rewrittenSentences.length;
+    return rewrittenSentences.join(" ");
+  }));
+
+  let result = rewrittenParagraphs.join("\n\n");
+  console.log(`  [GhostPro]   Pass 1 done: ${result.split(/\s+/).length} words (${totalSentencesProcessed} sentences processed in parallel)`);
 
   // ═══════════════════════════════════════════
   // PASS 2: SENTENCE-INDEPENDENT Post-processing

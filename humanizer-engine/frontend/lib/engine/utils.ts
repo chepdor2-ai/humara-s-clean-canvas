@@ -176,9 +176,64 @@ function isCVC(word: string): boolean {
   );
 }
 
+// Irregular verb forms — prevents "becomed", "goed", "runned", etc.
+const IRREGULAR_PAST: Record<string, string> = {
+  become: "became", come: "came", run: "ran", give: "gave", go: "went",
+  do: "did", see: "saw", take: "took", make: "made", get: "got",
+  have: "had", know: "knew", think: "thought", find: "found", tell: "told",
+  say: "said", speak: "spoke", write: "wrote", read: "read", begin: "began",
+  break: "broke", bring: "brought", build: "built", buy: "bought",
+  catch: "caught", choose: "chose", draw: "drew", drink: "drank",
+  drive: "drove", eat: "ate", fall: "fell", feel: "felt", fight: "fought",
+  fly: "flew", forget: "forgot", freeze: "froze", grow: "grew",
+  hang: "hung", hear: "heard", hide: "hid", hold: "held", keep: "kept",
+  lay: "laid", lead: "led", leave: "left", lend: "lent", let: "let",
+  lie: "lay", lose: "lost", mean: "meant", meet: "met", pay: "paid",
+  put: "put", ride: "rode", ring: "rang", rise: "rose", seek: "sought",
+  sell: "sold", send: "sent", set: "set", shake: "shook", shine: "shone",
+  shoot: "shot", show: "showed", shut: "shut", sing: "sang", sit: "sat",
+  sleep: "slept", slide: "slid", spend: "spent", stand: "stood",
+  steal: "stole", stick: "stuck", strike: "struck", swim: "swam",
+  swing: "swung", teach: "taught", tear: "tore", throw: "threw",
+  understand: "understood", wake: "woke", wear: "wore", win: "won",
+  withdraw: "withdrew",
+};
+
+const IRREGULAR_PARTICIPLE: Record<string, string> = {
+  become: "become", come: "come", run: "run", give: "given", go: "gone",
+  do: "done", see: "seen", take: "taken", make: "made", get: "gotten",
+  have: "had", know: "known", think: "thought", find: "found", tell: "told",
+  say: "said", speak: "spoken", write: "written", read: "read", begin: "begun",
+  break: "broken", bring: "brought", build: "built", buy: "bought",
+  catch: "caught", choose: "chosen", draw: "drawn", drink: "drunk",
+  drive: "driven", eat: "eaten", fall: "fallen", feel: "felt", fight: "fought",
+  fly: "flown", forget: "forgotten", freeze: "frozen", grow: "grown",
+  hang: "hung", hear: "heard", hide: "hidden", hold: "held", keep: "kept",
+  lay: "laid", lead: "led", leave: "left", lend: "lent", let: "let",
+  lie: "lain", lose: "lost", mean: "meant", meet: "met", pay: "paid",
+  put: "put", ride: "ridden", ring: "rung", rise: "risen", seek: "sought",
+  sell: "sold", send: "sent", set: "set", shake: "shaken", shine: "shone",
+  shoot: "shot", show: "shown", shut: "shut", sing: "sung", sit: "sat",
+  sleep: "slept", slide: "slid", spend: "spent", stand: "stood",
+  steal: "stolen", stick: "stuck", strike: "struck", swim: "swum",
+  swing: "swung", teach: "taught", tear: "torn", throw: "thrown",
+  understand: "understood", wake: "woken", wear: "worn", win: "won",
+  withdraw: "withdrawn",
+};
+
 export function reInflect(base: string, suffix: string): string {
   const lower = base.toLowerCase();
   if (!suffix) return base;
+
+  // Handle irregular verbs for past tense
+  if (suffix === "ed") {
+    const irregular = IRREGULAR_PAST[lower];
+    if (irregular) {
+      // Preserve original capitalization
+      if (base[0] === base[0].toUpperCase()) return irregular[0].toUpperCase() + irregular.slice(1);
+      return irregular;
+    }
+  }
 
   if (suffix === "s") {
     if (lower.endsWith("s") || lower.endsWith("x") || lower.endsWith("z") ||

@@ -378,7 +378,6 @@ const _COMMA_HEDGES = [
   ", though not always,",
   ", perhaps unsurprisingly,",
   ", in most cases,",
-  ", admittedly,",
   ", on the surface,",
   ", for better or worse,",
   ", rightly or wrongly,",
@@ -438,20 +437,8 @@ export function injectMicroNoise(
 
   switch (noiseType) {
     case 0: {
-      // Comma-hedge injection — insert a short hedging aside at a natural break
-      if (words > 14) {
-        const hedge = _COMMA_HEDGES[(sentenceIndex * 3) % _COMMA_HEDGES.length];
-        // Insert after the first clause boundary (comma position in middle third)
-        const mid = Math.floor(result.length / 3);
-        const end2 = Math.floor((result.length * 2) / 3);
-        let insertAt = -1;
-        for (let i = mid; i < end2; i++) {
-          if (result[i] === ",") { insertAt = i + 1; break; }
-        }
-        if (insertAt > 0) {
-          result = result.slice(0, insertAt) + " " + hedge.trim() + result.slice(insertAt);
-        }
-      }
+      // DISABLED: Comma-hedge injection was inserting unnatural parentheticals
+      // ("though not always", "in part", "to be precise") into clean sentences
       break;
     }
     case 1: {
@@ -465,38 +452,11 @@ export function injectMicroNoise(
       break;
     }
     case 2: {
-      // Semicolon substitution for comma at a clause boundary (human style)
-      if (words > 18) {
-        const commaPositions: number[] = [];
-        for (let i = 10; i < result.length - 10; i++) {
-          if (result[i] === "," && result[i - 1] !== ",") commaPositions.push(i);
-        }
-        if (commaPositions.length > 0) {
-          const pickIdx = commaPositions[sentenceIndex % commaPositions.length];
-          result = result.slice(0, pickIdx) + ";" + result.slice(pickIdx + 1);
-        }
-      }
+      // Semicolon substitution — DISABLED: breaks list commas and parallel structures
       break;
     }
     case 3: {
-      // Slight awkward phrasing — swap two adjacent content words (creates human-like mis-ordering)
-      if (words >= 12) {
-        const parts = result.split(/\s+/);
-        // Find two adjacent content words in the middle (skip first/last 3)
-        for (let i = 3; i < parts.length - 3; i++) {
-          const a = parts[i], b = parts[i + 1];
-          if (a && b && a.length > 3 && b.length > 3 &&
-              /^[a-z]/i.test(a) && /^[a-z]/i.test(b) &&
-              !/^(?:the|and|but|for|not|with|from|that|this|have|been|were|are|was|can|will)$/i.test(a) &&
-              !/^(?:the|and|but|for|not|with|from|that|this|have|been|were|are|was|can|will)$/i.test(b)) {
-            // Only swap adjective+noun-like pairs → slight emphasis shift, not a grammar error
-            parts[i] = b;
-            parts[i + 1] = a;
-            result = parts.join(" ");
-            break;
-          }
-        }
-      }
+      // Word swap — DISABLED: creates garbled text, not "human-like" mis-ordering
       break;
     }
     case 4: {

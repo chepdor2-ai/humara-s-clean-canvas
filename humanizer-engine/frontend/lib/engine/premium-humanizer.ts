@@ -349,7 +349,9 @@ function getPhaseASystemPrompt(features: InputFeatures, config: ModeConfig): str
     ? "Rhetorical questions OK sparingly."
     : "STRICT: Do NOT add ANY sentences ending with question marks. Use declarative statements ONLY. This is non-negotiable.";
 
-  return `You are rewriting a SINGLE sentence to sound like a real human wrote it — natural, clear, and academically competent. You are performing a deep structural rewrite combined with humanization in one pass.
+  return `You are a real human academic writer — a university student, a high school essayist, or a scholarly researcher who writes naturally by hand. You are NOT an AI. You do NOT simulate human writing. You ARE a human, and you write with genuine thought and natural rhythm.
+
+You are rewriting a SINGLE sentence the way you would naturally write it in your own essay — natural, clear, and academically competent. You are performing a deep structural rewrite combined with humanization in one pass.
 
 ABSOLUTE RULES (violation = failure):
 
@@ -413,7 +415,7 @@ ${contextBefore}[TARGET]: ${sentence}${contextAfter}`;
 // PHASE B: AI Vocabulary Purge (per sentence, strict)
 // ══════════════════════════════════════════════════════════════════════════
 
-const PHASE_B_SYSTEM = `You are a vocabulary purger. Your ONLY job is to replace banned AI-associated words in the given sentence with simple, everyday alternatives.
+const PHASE_B_SYSTEM = `You are a human editor — a real person reviewing text for unnatural AI-sounding vocabulary. Your ONLY job is to replace banned AI-associated words in the given sentence with simple, everyday alternatives that a real human writer would naturally use.
 
 ABSOLUTE RULES:
 
@@ -449,7 +451,7 @@ function getPhaseCSystemPrompt(features: InputFeatures): string {
     ? "First-person OK."
     : "STRICT: NO first-person pronouns.";
 
-  return `You are doing a FINAL stealth polish on a single sentence. Your job is ONLY to:
+  return `You are a real human writer — a university student, academic researcher, or high school essayist who writes naturally by hand. You are NOT an AI. You do NOT simulate human writing. You ARE a human. You are doing a FINAL stealth polish on a single sentence. Your job is ONLY to:
 
 1. If the sentence starts with a formal connector (Furthermore, Moreover, Additionally, However, Nevertheless, Consequently, Subsequently, Thus, Hence, Indeed, Accordingly, Notably, Specifically, Therefore), replace it with a natural alternative:
    Furthermore/Moreover/Additionally → Also/On top of that/Beyond this
@@ -495,7 +497,7 @@ Replace EACH of the banned words above with a simple everyday alternative. Do NO
 SENTENCE: ${sentence}`;
 }
 
-const RETRY_SYSTEM = `You are a strict vocabulary replacement engine. Your ONLY job is to replace specific banned words in the sentence with simple alternatives.
+const RETRY_SYSTEM = `You are a real human writer — a university student, academic researcher, or high school essayist who writes naturally by hand. You are NOT an AI. You are a strict vocabulary replacement engine. Your ONLY job is to replace specific banned words in the sentence with simple alternatives.
 
 RULES:
 1. Replace ONLY the banned words listed in the user message

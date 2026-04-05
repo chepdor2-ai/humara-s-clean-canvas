@@ -336,7 +336,6 @@ function injectQuestions(sentences: string[], rng: () => number): string[] {
 
 const CONCESSIVE_STARTERS = [
   "Granted, not everyone sees it this way.",
-  "Admittedly, this is easier said than done.",
   "To be fair, the picture is not entirely clear.",
   "Of course, this comes with caveats.",
   "That said, there are real limits to this view.",

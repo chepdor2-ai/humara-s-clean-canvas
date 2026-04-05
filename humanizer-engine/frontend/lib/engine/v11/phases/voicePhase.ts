@@ -128,19 +128,9 @@ const LITERARY_DEVICES: [RegExp, string[]][] = [
 
 // ── Punctuation diversification (pre-2000 used more varied punctuation) ──
 function diversifyPunctuation(text: string): string {
-  let result = text;
-
-  // Convert some "X, and Y" to "X; Y" (semicolons were common in older writing)
-  if (Math.random() < 0.25) {
-    result = result.replace(/,\s+and\s+/i, '; ');
-  }
-
-  // Em-dash for contrast removed — em-dash budget enforced in formatPhase
-
-  // Add colon for elaboration: "X. This means Y" → "X: Y"
-  result = result.replace(/\.\s+This (?:means|implies|suggests) that /i, ': ');
-
-  return result;
+  // DISABLED — semicolons replacing commas produce grammatically invalid structures.
+  // "X, and Y" → "X; Y" is only valid when both sides are independent clauses.
+  return text;
 }
 
 // ── Qualifier chain removal (AI loves "very significant strategic implications") ──

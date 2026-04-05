@@ -79,7 +79,7 @@ const FALLBACK_SYNONYMS: Record<string, string[]> = {
   effectively: ['well', 'successfully', 'capably', 'efficiently'],
   continuously: ['always', 'nonstop', 'steadily', 'without pause'],
   consistently: ['always', 'reliably', 'steadily', 'regularly'],
-  increasingly: ['more and more', 'progressively', 'ever more', 'steadily'],
+  increasingly: ['more and more', 'ever more', 'steadily'],
   extremely: ['very', 'highly', 'hugely', 'remarkably'],
   absolutely: ['completely', 'totally', 'entirely', 'fully'],
   undeniably: ['clearly', 'certainly', 'without doubt', 'plainly'],

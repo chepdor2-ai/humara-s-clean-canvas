@@ -860,20 +860,9 @@ function createdMultipleSentences(text) {
 }
 
 function restructureSentence(sent) {
-  const applicable = [];
-  for (const p of RESTRUCTURE) {
-    const m = sent.match(p.re);
-    if (m) applicable.push({ pattern: p, match: m });
-  }
-  if (applicable.length === 0) return genericRestructure(sent);
-  const chosen = applicable[Math.floor(Math.random() * applicable.length)];
-  try {
-    const result = chosen.pattern.apply(chosen.match);
-    if (result === null) return genericRestructure(sent); // pattern rejected input
-    // Safety: must still be exactly one sentence (abbreviation-aware)
-    if (createdMultipleSentences(result)) return sent;
-    return result;
-  } catch { return sent; }
+  // DISABLED: clause-swapping RESTRUCTURE patterns were scrambling sentences
+  // ("Although X, Y" → "Y, though X", prepositional fronting, etc.)
+  return sent;
 }
 
 // ═══════════════════════════════════════════
@@ -1236,7 +1225,7 @@ const SYN = {
   'inevitable':['unavoidable','certain','inescapable','sure','bound to happen'],
   'innovative':['new','creative','original','novel','fresh'],
   'intense':['strong','powerful','fierce','extreme','concentrated'],
-  'limited':['restricted','narrow','small','finite','constrained'],
+  'limited':['restricted','narrow','small','constrained'],
   'logical':['rational','reasonable','sound','sensible','coherent'],
   'massive':['huge','enormous','vast','large','immense'],
   'moderate':['reasonable','modest','mild','fair','medium'],
@@ -1562,7 +1551,7 @@ const _GAP_FILL = {
   'lead':['guide','direct','steer','drive'],
   'hold':['retain','bear','carry','sustain'],
   'seem':['appear','look','come across as'],
-  'work':['function','operate','perform','serve'],
+  'work':['function','operate','carry out'],
   'call':['refer to','term','deem','describe as'],
   'turn':['shift','convert','pivot','transition'],
   'come':['arrive','emerge','surface','originate'],
@@ -1572,7 +1561,7 @@ const _GAP_FILL = {
   'case':['instance','scenario','situation','occurrence'],
   'area':['field','domain','sector','sphere'],
   'part':['portion','segment','section','piece'],
-  'role':['function','position','capacity','purpose'],
+  'role':['function','position','part','purpose'],
   'view':['perspective','outlook','stance','angle'],
   'fact':['reality','truth','detail','actuality'],
   'idea':['notion','thought','theory','proposition'],
@@ -1648,7 +1637,7 @@ const _GAP_FILL = {
   'outcome':['result','consequence','effect','end product'],
   'outcomes':['results','consequences','effects','end products'],
   'individual':['person','subject','participant','member'],
-  'individuals':['persons','subjects','participants','members'],
+  'individuals':['persons','people','participants','members'],
   'symptom':['sign','indicator','signal','marker'],
   'symptoms':['signs','indicators','signals','markers'],
   // 'patient' — REMOVED: 'patient care' is a domain term; replacing 'patient' with
@@ -2466,26 +2455,8 @@ function diversifyStarters(sents) {
 function firstWord(s) { return (s || '').split(/\s/)[0]?.toLowerCase(); }
 
 function reorderSentence(s) {
-  const w = s.split(/\s+/);
-  if (w.length <= 5) return s;
-  const punct = endPunct(s);
-
-  // Strategy 1: Swap around a comma boundary (safe — natural clause split)
-  const commaPos = s.indexOf(',');
-  if (commaPos > 8 && commaPos < s.length - 15) {
-    const before = s.substring(0, commaPos);
-    const after = s.substring(commaPos + 1).trim();
-    // Never promote relative/dependent clauses, participles, or list items to sentence start
-    if (!/^(which|who|whom|whose|that|where|when|although|though|because|since|if|unless|while|whereas|however|but|and|or|yet|so|nor|including|such|especially|particularly|reflecting|showing|representing|depicting|symbolizing|covering|involving|spanning|supporting|revealing|mirroring|displaying|indicating)\b/i.test(after)) {
-      const cleanBefore = before.replace(/[.!?]$/, '');
-      const cleanAfter = after.replace(/[.!?]$/, '');
-      if (cleanBefore.split(/\s+/).length >= 3 && cleanAfter.split(/\s+/).length >= 3) {
-        return capFirst(cleanAfter) + ', ' + cleanBefore.charAt(0).toLowerCase() + cleanBefore.slice(1) + punct;
-      }
-    }
-  }
-
-  // Fallback: return unchanged — better to keep a repeated opener than create garbage
+  // DISABLED — clause reordering garbles sentence structure.
+  // "While X improved Y, Z" becomes "Z, while X improved Y" which destroys readability.
   return s;
 }
 
@@ -2690,8 +2661,8 @@ const BACKUP_SYN_MAP = {
   'leads':['guides','directs','steers','drives'],
   'holds':['retains','bears','carries','sustains'],
   'seems':['appears','looks','comes across as'],
-  'works':['functions','operates','performs','serves'],
-  'calls':['refers to','terms','deems','describes as'],
+  'works':['functions','operates','carries out'],
+  'calls':['names','labels','terms'],
   'turns':['shifts','switches','converts','transforms'],
   'comes':['arrives','emerges','surfaces','originates'],
   'given':['offered','supplied','presented','granted'],
@@ -2708,7 +2679,7 @@ const BACKUP_SYN_MAP = {
   'having':['possessing','holding','carrying','bearing'],
   'going':['proceeding','moving','heading','progressing'],
   'looking':['examining','inspecting','reviewing','surveying'],
-  'working':['functioning','operating','performing','serving'],
+  'working':['functioning','operating','carrying out'],
   'becoming':['turning into','growing into','evolving into'],
   'these':['such','those','the noted','the described'],
   'those':['such','the mentioned','the cited'],
@@ -2717,7 +2688,7 @@ const BACKUP_SYN_MAP = {
   'rather':['somewhat','fairly','quite','to some extent'],
   'through':['via','by way of','by means of'],
   'across':['throughout','over','spanning'],
-  'around':['roughly','approximately','close to'],
+  'around':['roughly','near','close to'],
   'within':['inside','in','during'],
   // More auxiliary verbs and common words for retry passes
   'highlights':['reveals','exposes','underscores','points out'],

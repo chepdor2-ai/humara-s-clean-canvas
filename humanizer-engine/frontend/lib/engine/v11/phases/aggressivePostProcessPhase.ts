@@ -283,6 +283,12 @@ function reInflect(replacement: string, suffix: string): string {
 
   // Handle 'ed' past tense
   if (suffix === 'ed') {
+    // Irregular verbs
+    const IRREG_PAST: Record<string, string> = { deal: 'dealt', put: 'put', cut: 'cut', set: 'set', get: 'got', keep: 'kept', hold: 'held', run: 'ran', go: 'went', come: 'came', take: 'took', give: 'gave', find: 'found', think: 'thought', bring: 'brought', buy: 'bought', catch: 'caught', fight: 'fought', seek: 'sought', teach: 'taught', lay: 'laid', pay: 'paid', say: 'said', send: 'sent', spend: 'spent', build: 'built', lend: 'lent', lose: 'lost', sit: 'sat', stand: 'stood', tell: 'told', sell: 'sold', win: 'won', begin: 'began', break: 'broke', choose: 'chose', drive: 'drove', fall: 'fell', grow: 'grew', know: 'knew', rise: 'rose', speak: 'spoke', throw: 'threw', write: 'wrote', draw: 'drew' };
+    const base = replacement.split(/\s+/)[0].toLowerCase();
+    if (IRREG_PAST[base]) {
+      return replacement.replace(new RegExp(`\\b${replacement.split(/\s+/)[0]}\\b`, 'i'), IRREG_PAST[base]);
+    }
     if (replacement.endsWith('e')) return replacement + 'd';
     if (/[^aeiou]y$/i.test(replacement)) return replacement.slice(0, -1) + 'ied';
     return replacement + 'ed';
@@ -350,8 +356,8 @@ function aggressiveSynonymSwap(
     }
 
     // Restore hyphenated compound placeholders
-    if (/^HYPHCOMP\d+$/.test(token)) {
-      const idx = parseInt(token.replace('HYPHCOMP', ''), 10);
+    if (/^HYPHCOMP\d+/i.test(token)) {
+      const idx = parseInt(token.replace(/^HYPHCOMP/i, '').replace(/[^0-9]/g, ''), 10);
       result.push(hyphenatedWords[idx] ?? token);
       continue;
     }
@@ -806,20 +812,8 @@ function processOneSentence(
   // PASS 3: Connector naturalization
   s = naturalizeConnectors(s);
 
-  // PASS 4: Deep sentence restructuring
-  if (clean && wordCount(s) >= 8 && Math.random() < 0.55) {
-    const result = restructureSentence(s);
-    if (result !== s) {
-      s = result;
-      wasRestructured = true;
-    } else {
-      const fronted = frontAdverbial(s);
-      if (fronted !== s) {
-        s = fronted;
-        wasRestructured = true;
-      }
-    }
-  }
+  // PASS 4: Deep sentence restructuring — DISABLED (clause reordering garbles structure)
+  // Adverbial fronting also disabled — it creates unnatural phrasing.
 
   // PASS 5: Aggressive synonym swap
   if (clean) s = aggressiveSynonymSwap(s, ctx, usedReplacements);
@@ -857,6 +851,10 @@ export const aggressivePostProcessPhase: Phase = {
     for (const paragraph of state.paragraphs) {
       for (const sentence of paragraph.sentences) {
         totalSentences++;
+        // Skip headings/titles — restructuring destroys them
+        if (isTitleOrHeading(sentence.text)) {
+          continue;
+        }
         const prePhaseText = sentence.text;
         const result = processOneSentence(
           sentence.text,
@@ -889,6 +887,8 @@ export const aggressivePostProcessPhase: Phase = {
     if (changeRate < 0.30) {
       for (const paragraph of state.paragraphs) {
         for (const sentence of paragraph.sentences) {
+          // Skip headings/titles — synonym swaps destroy them
+          if (isTitleOrHeading(sentence.text)) continue;
           sentence.text = aggressiveSynonymSwap(sentence.text, ctx, usedReplacements, new Set<string>(), 0.30);
           sentence.text = cleanupSentence(sentence.text);
         }

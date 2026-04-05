@@ -183,32 +183,10 @@ export function compressPhrases(text: string): string {
 // ══════════════════════════════════════════════════════════════════
 
 export function varyPunctuation(sentence: string): string {
-  const words = sentence.split(/\s+/);
-  if (words.length < 10) return sentence;
-  let changes = 0;
-  const maxChanges = words.length >= 20 ? 2 : 1;
-  for (let i = 3; i < words.length - 4; i++) {
-    if (changes >= maxChanges) break;
-    if (/,$/.test(words[i])) {
-      const nextWord = (words[i + 1] || '').toLowerCase();
-      // Never replace commas before relative pronouns, subordinators, or lists
-      if (/^(which|who|whom|whose|that|where|when|although|though|because|since|if|unless|while|whereas|however|including|such|especially|particularly|namely|specifically|for|in)$/.test(nextWord)) {
-        continue;
-      }
-      const afterClause = words.slice(i + 1, i + 5).join(' ');
-      if (/\b(is|are|was|were|has|have|had|will|would|could|should|can|it|this|they|these|the)\b/i.test(afterClause)) {
-        const roll = Math.random();
-        if (roll < 0.45) {
-          words[i] = words[i].replace(/,$/, ';');
-          changes++;
-        } else if (roll < 0.65) {
-          words[i] = words[i].replace(/,$/, ':');
-          changes++;
-        }
-      }
-    }
-  }
-  return words.join(' ');
+  // DISABLED — semicolons/colons replacing commas produce grammatically
+  // invalid structures. "efficiency, accessibility" becomes "efficiency; accessibility"
+  // which is wrong (semicolons require independent clauses on both sides).
+  return sentence;
 }
 
 // ══════════════════════════════════════════════════════════════════
@@ -294,19 +272,9 @@ const RESTRUCTURE_PATTERNS: RestructurePattern[] = [
 ];
 
 export function restructureSentence(sentence: string): string {
-  if (sentence.split(/\s+/).length < 8) return sentence;
-  // Try each pattern — use first match (50% chance to apply)
-  if (Math.random() > 0.50) return sentence;
-  for (const pattern of RESTRUCTURE_PATTERNS) {
-    const m = sentence.match(pattern.re);
-    if (m) {
-      const result = pattern.apply(m);
-      // Sanity: must have at least 5 words and end with punctuation
-      if (result.split(/\s+/).length >= 5 && /[.!?]$/.test(result)) {
-        return result;
-      }
-    }
-  }
+  // DISABLED — sentence inversion patterns (\"Although X, Y\" → \"Y, although X\")
+  // garble sentence structure and create unnatural text. StealthWriter-quality
+  // output requires preserving the original sentence flow.
   return sentence;
 }
 

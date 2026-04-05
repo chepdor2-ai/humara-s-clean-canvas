@@ -1223,7 +1223,7 @@ const SYN = {
   'essentially':   ['basically','fundamentally','at its core','in essence','mainly'],
   'primarily':     ['mainly','chiefly','largely','mostly','for the most part'],
   'generally':     ['usually','typically','broadly','mostly','on the whole'],
-  'increasingly':  ['more and more','progressively','steadily','gradually'],
+  'increasingly':  ['more and more','steadily','gradually'],
   'relatively':    ['fairly','somewhat','comparatively','moderately','reasonably'],
   'largely':       ['mostly','mainly','to a great extent','broadly','predominantly'],
   'ultimately':    ['in the end','eventually','finally','when all is said and done'],
@@ -1289,7 +1289,7 @@ const SYN = {
   'inevitable':['unavoidable','certain','inescapable','sure','bound to happen'],
   'innovative':['new','creative','original','novel','fresh'],
   'intense':['strong','powerful','fierce','extreme','concentrated'],
-  'limited':['restricted','narrow','small','finite','constrained'],
+  'limited':['restricted','narrow','small','constrained'],
   'logical':['rational','reasonable','sound','sensible','coherent'],
   'massive':['huge','enormous','vast','large','immense'],
   'moderate':['reasonable','modest','mild','fair','medium'],
@@ -1614,7 +1614,7 @@ const _GAP_FILL = {
   'lead':['guide','direct','steer','drive'],
   'hold':['retain','bear','carry','sustain'],
   'seem':['appear','look','come across as'],
-  'work':['function','operate','perform','serve'],
+  'work':['function','operate','carry out'],
   'call':['refer to','term','deem','describe as'],
   'turn':['shift','convert','pivot','transition'],
   'come':['arrive','emerge','surface','originate'],
@@ -1624,13 +1624,13 @@ const _GAP_FILL = {
   'case':['instance','scenario','situation','occurrence'],
   'area':['field','domain','sector','sphere'],
   'part':['portion','segment','section','piece'],
-  'role':['function','position','capacity','part'],
+  'role':['function','position','part'],
   'view':['perspective','outlook','stance','angle'],
   'fact':['reality','truth','detail','actuality'],
   'idea':['notion','thought','theory','proposition'],
   'type':['kind','sort','variety','class'],
   'form':['shape','variety','mode','format'],
-  'ways':['methods','means','approaches','avenues'],
+  'ways':['methods','means','approaches'],
   'step':['measure','action','stage','phase'],
   'link':['connection','tie','bond','association'],
   'base':['foundation','basis','ground','core'],
@@ -1700,7 +1700,7 @@ const _GAP_FILL = {
   'outcome':['result','effect'],
   'outcomes':['results','effects'],
   'individual':['person','subject','participant','member'],
-  'individuals':['persons','subjects','participants','members'],
+  'individuals':['persons','people','participants','members'],
   'symptom':['sign','indicator','signal','marker'],
   'symptoms':['signs','indicators','signals','markers'],
   'patient':['patient'],
@@ -2561,26 +2561,8 @@ function diversifyStarters(sents) {
 function firstWord(s) { return (s || '').split(/\s/)[0]?.toLowerCase(); }
 
 function reorderSentence(s) {
-  const w = s.split(/\s+/);
-  if (w.length <= 5) return s;
-  const punct = endPunct(s);
-
-  // Strategy 1: Swap around a comma boundary (safe — natural clause split)
-  const commaPos = s.indexOf(',');
-  if (commaPos > 8 && commaPos < s.length - 15) {
-    const before = s.substring(0, commaPos);
-    const after = s.substring(commaPos + 1).trim();
-    // Never promote relative/dependent clauses, participles, or list items to sentence start
-    if (!/^(which|who|whom|whose|that|where|when|although|though|because|since|if|unless|while|whereas|however|but|and|or|yet|so|nor|including|such|especially|particularly|reflecting|showing|representing|depicting|symbolizing|covering|involving|spanning|supporting|revealing|mirroring|displaying|indicating)\b/i.test(after)) {
-      const cleanBefore = before.replace(/[.!?]$/, '');
-      const cleanAfter = after.replace(/[.!?]$/, '');
-      if (cleanBefore.split(/\s+/).length >= 3 && cleanAfter.split(/\s+/).length >= 3) {
-        return capFirst(cleanAfter) + ', ' + cleanBefore.charAt(0).toLowerCase() + cleanBefore.slice(1) + punct;
-      }
-    }
-  }
-
-  // Fallback: return unchanged — better to keep a repeated opener than create garbage
+  // DISABLED — clause reordering garbles sentence structure.
+  // "While X improved Y, Z" becomes "Z, while X improved Y" which destroys readability.
   return s;
 }
 
@@ -2588,36 +2570,9 @@ function reorderSentence(s) {
 // Multiple replacements allowed for long sentences — this is the single strongest
 // perplexity spike because AI text almost never uses ; or : mid-sentence.
 function varyPunctuation(sent) {
-  const words = sent.split(/\s+/);
-  if (words.length < 10) return sent;
-  let changes = 0;
-  const maxChanges = words.length >= 20 ? 2 : 1;
-  for (let i = 3; i < words.length - 4; i++) {
-    if (changes >= maxChanges) break;
-    if (/,$/.test(words[i])) {
-      const nextWord = (words[i + 1] || '').toLowerCase();
-      // NEVER replace commas before relative pronouns, subordinators, or list continuations
-      // — semicolons/colons before these are grammatically invalid
-      if (/^(which|who|whom|whose|that|where|when|although|though|because|since|if|unless|while|whereas|however|including|such|especially|particularly|namely|specifically|for|in|and|or|nor|but|so|yet|both)$/.test(nextWord)) {
-        continue;
-      }
-      const afterClause = words.slice(i + 1, i + 5).join(' ');
-      if (/\b(is|are|was|were|has|have|had|will|would|could|should|can|it|this|they|these|the)\b/i.test(afterClause)) {
-        const roll = Math.random();
-        if (roll < 0.30) {
-          words[i] = words[i].replace(/,$/, ';');
-          changes++;
-        } else if (roll < 0.55) {
-          words[i] = words[i].replace(/,$/, ' —');
-          changes++;
-        } else if (roll < 0.70) {
-          words[i] = words[i].replace(/,$/, ':');
-          changes++;
-        }
-      }
-    }
-  }
-  return words.join(' ');
+  // DISABLED — semicolons/colons replacing commas produce grammatically
+  // invalid structures in academic text.
+  return sent;
 }
 
 // ═══════════════════════════════════════════
@@ -2810,8 +2765,8 @@ const BACKUP_SYN_MAP = {
   'leads':['guides','directs','steers','drives'],
   'holds':['retains','bears','carries','sustains'],
   'seems':['appears','looks','comes across as'],
-  'works':['functions','operates','performs','serves'],
-  'calls':['refers to','terms','deems','describes as'],
+  'works':['functions','operates','carries out'],
+  'calls':['names','labels','terms'],
   'turns':['shifts','switches','converts','transforms'],
   'comes':['arrives','emerges','surfaces','originates'],
   'given':['offered','supplied','presented','granted'],
@@ -2828,7 +2783,7 @@ const BACKUP_SYN_MAP = {
   'having':['possessing','holding','carrying','bearing'],
   'going':['proceeding','moving','heading','progressing'],
   'looking':['examining','inspecting','reviewing','surveying'],
-  'working':['functioning','operating','performing','serving'],
+  'working':['functioning','operating','carrying out'],
   'becoming':['turning into','growing into','evolving into'],
   'these':['such','those','the noted','the described'],
   'those':['such','the mentioned','the cited'],
@@ -2837,14 +2792,14 @@ const BACKUP_SYN_MAP = {
   'rather':['somewhat','fairly','quite','to some extent'],
   'through':['via','by way of','by means of'],
   'across':['throughout','over'],
-  'around':['roughly','approximately','close to'],
+  'around':['roughly','near','close to'],
   'within':['inside','in','during'],
   // More auxiliary verbs and common words for retry passes
   'highlights':['reveals','exposes','underscores','points out'],
   'caused':['driven','brought about','triggered','prompted'],
   'caused by':['driven by','resulting from','triggered by','stemming from'],
   'such as':['like','including','namely','among them'],
-  'also':['further','likewise','too'],
+  'also':['further','too','as well'],
   'many':['numerous','a range of','several','multiple'],
   'some':['several','a few','certain','various'],
   'allow':['enable','permit','let','empower'],

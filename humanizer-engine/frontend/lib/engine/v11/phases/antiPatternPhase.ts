@@ -95,20 +95,7 @@ const INFORMAL_INJECTIONS: [RegExp, string][] = [
 // ── 3. OPENING FORMULA BREAKERS ──
 // AI always starts paragraphs the same way. Pre-2000 writers started with variety.
 const PARAGRAPH_OPENERS: string[] = [
-  'Granted, ',
-  'The practical upshot: ',
   'On closer examination, ',
-  'Not all perspectives converge on this point. ',
-  'A qualification is in order. ',
-  'Viewed from a different angle, ',
-  'Against this backdrop, ',
-  'On paper, this looks straightforward. ',
-  'The underlying tension is worth noting. ',
-  'Setting aside assumptions, ',
-  'From a structural standpoint, ',
-  'A nuance often missed: ',
-  'At the empirical level, ',
-  'Beneath the surface, ',
   'On balance, ',
 ];
 
@@ -231,26 +218,17 @@ export const antiPatternPhase: Phase = {
           }
         }
 
-        // B. Register mixing (15% chance — slip to informal)
-        if (Math.random() < 0.15) {
-          for (const [pattern, replacement] of INFORMAL_INJECTIONS) {
-            if (pattern.test(text)) {
-              text = text.replace(pattern, replacement);
-              registerMixes++;
-              break;
-            }
-          }
-        }
+        // B. Register mixing — DISABLED (was replacing formal words with informal
+        // phrases like "on top of that", "even so", "and so" that break register)
 
-        // C. Break opening formula (first sentence of non-first paragraphs, 30%)
-        // Skip if sentence already has structural modifications
-        if (sIdx === 0 && !isFirst && Math.random() < 0.30
-            && !sentence.flags.includes('struct-mod') && text.length > 0) {
-          const opener = pickRandom(PARAGRAPH_OPENERS);
-          text = opener + text[0].toLowerCase() + text.slice(1);
-          sentence.flags.push('struct-mod');
-          openerChanges++;
-        }
+        // C. Break opening formula — DISABLED (injects unnatural openers like "On closer examination,")
+        // if (sIdx === 0 && !isFirst && Math.random() < 0.10
+        //     && !sentence.flags.includes('struct-mod') && text.length > 0) {
+        //   const opener = pickRandom(PARAGRAPH_OPENERS);
+        //   text = opener + text[0].toLowerCase() + text.slice(1);
+        //   sentence.flags.push('struct-mod');
+        //   openerChanges++;
+        // }
 
         // D. Break closing formula (last paragraph)
         if (isLast && sIdx === 0) {
@@ -269,18 +247,9 @@ export const antiPatternPhase: Phase = {
       // E. Reflective pauses DISABLED — these inject context-free orphan sentences
       // that break coherence (e.g. "A subtlety worth pausing over." with no referent).
 
-      // F. Inject sentence length variance
-      const texts = paragraph.sentences.map(s => s.text);
-      const varied = injectLengthVariance(texts);
-      if (varied.length !== texts.length) {
-        paragraph.sentences = varied.map((text, i) => ({
-          id: paragraph.sentences[i]?.id ?? (paragraph.id * 10000 + i),
-          text,
-          originalText: paragraph.sentences[i]?.originalText ?? '',
-          flags: paragraph.sentences[i]?.flags ?? ['injected'],
-          score: paragraph.sentences[i]?.score ?? 0,
-        }));
-      }
+      // F. DISABLED: injectLengthVariance was corrupting paragraph↔sentence mapping
+      // by inserting emphatic interjections and merging sentences with semicolons,
+      // causing sentences to cross paragraph boundaries
     }
 
     state.logs.push(

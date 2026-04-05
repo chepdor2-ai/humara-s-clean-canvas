@@ -109,7 +109,7 @@ export const PHRASE_COMPRESS = {
   'ultimately':['in the end','at the end of the day','when all is said and done','finally'],
   'essentially':['at its core','fundamentally','in basic terms','in essence'],
   'fundamentally':['at its foundation','at the most basic level','in essence','at the root'],
-  'increasingly':['more and more','to a growing extent','with growing frequency','at an accelerating pace'],
+  'increasingly':['more and more','ever more'],
   'particularly':['especially','above all','most notably','in particular'],
   'notably':['in particular','worth highlighting','especially','most strikingly'],
   'interestingly':['what stands out','a curious point is that','a noteworthy observation is that','of note'],

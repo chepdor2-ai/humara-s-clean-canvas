@@ -1242,8 +1242,9 @@ function _fixHighUniformity(sentences: string[], intensity: number): string[] {
   for (let i = 0; i < sentences.length; i++) {
     const wc = sentences[i].split(/\s+/).length;
     if (i % 3 === 0 && wc > 8) {
-      const r = deepRestructure(sentences[i], Math.min(intensity * 1.2, 2.5));
-      if (r !== sentences[i]) { result.push(r); continue; }
+      // deepRestructure DISABLED — clause reordering garbles sentence structure
+      // const r = deepRestructure(sentences[i], Math.min(intensity * 1.2, 2.5));
+      // if (r !== sentences[i]) { result.push(r); continue; }
     }
     if (i % 3 === 1 && wc >= 8 && wc <= 22) {
       const shifted = voiceShift(sentences[i], 0.35);
@@ -1367,7 +1368,8 @@ function fixPerSentenceAi(sentences: string[], intensity: number, used: Set<stri
 
     // Step 2: Restructure and vary (only for longer sentences)
     sent = phraseSubstitute(sent, Math.min(intensity, 3.0));
-    if (sent.split(/\s+/).length > 15) sent = deepRestructure(sent, Math.min(intensity * 0.6, 2.5));
+    // deepRestructure DISABLED — clause reordering garbles sentence structure
+    // if (sent.split(/\s+/).length > 15) sent = deepRestructure(sent, Math.min(intensity * 0.6, 2.5));
 
     // Step 3: Vocabulary — reduced synonym coverage (target ≈12%)
     sent = synonymReplace(sent, Math.min(intensity * 0.3, 2.0), used, ctx?.protectedTerms);
@@ -1378,9 +1380,7 @@ function fixPerSentenceAi(sentences: string[], intensity: number, used: Set<stri
       if (templated !== sent && containsNonsenseWords(templated).length === 0) sent = templated;
     }
 
-    // Step 5: Final AI residue sweep
-    sent = applyAIWordKill(sent);
-    sent = killModernBuzzwords(sent);
+    // Step 5: Capitalize sentence start if needed
     if (sent && /^[a-z]/.test(sent)) sent = sent[0].toUpperCase() + sent.slice(1);
     return sent;
   });
@@ -1538,7 +1538,7 @@ function fixLowStylometric(sentences: string[], intensity: number, inputFeatures
       ];
       const parentheticals = [
         ", at least in part,", ", though not always,", ", or so it appears,",
-        ", to some extent,", ", in most cases,", ", admittedly,",
+        ", to some extent,", ", in most cases,",
         ", to be precise,", ", roughly speaking,",
       ];
       const rhetoricalEndings = [
@@ -1581,21 +1581,8 @@ function fixLowStylometric(sentences: string[], intensity: number, inputFeatures
           pronounCount++;
         }
 
-        // Add comma-based hedging aside (no brackets) — rare, max 1 per text
-        if (parentheticalCount < 1 && Math.random() < 0.04 * intensity && words.length > 15) {
-          const commaPositions: number[] = [];
-          const w = result.split(/\s+/);
-          for (let j = 4; j < w.length - 3; j++) {
-            if (w[j].endsWith(",")) commaPositions.push(j);
-          }
-          if (commaPositions.length > 0) {
-            const pos = commaPositions[Math.floor(Math.random() * commaPositions.length)];
-            const aside = parentheticals[Math.floor(Math.random() * parentheticals.length)];
-            w.splice(pos + 1, 0, aside.trim());
-            result = w.join(" ");
-            parentheticalCount++;
-          }
-        }
+        // DISABLED: comma-based hedging aside injection was inserting unnatural parentheticals
+        // ("though not always", "or so it appears", "to be precise") into clean sentences
 
         // Add rhetorical question ONLY if the original input already contained questions
         if (inputFeatures?.hasRhetoricalQuestions && !rhetoricalDone && Math.random() < 0.08 * intensity && words.length > 15 && i > 2) {
@@ -1765,14 +1752,13 @@ function humanizeSingleSentence(
   // ── Step 2: Kill AI phrase patterns (500K+ variations) ──
   result = applyPhrasePatterns(result);
 
-  // ── Step 3: Clause restructuring — reorder clauses/phrases for variation ──
-  // Skip for topic sentences (first sentence of each paragraph) to preserve paragraph flow
-  if (!isFirstInParagraph && result.split(/\s+/).length > 6) {
-    const restructured = restructureSingleSentence(result, extractTopicKeywords([result]));
-    if (restructured !== result && containsNonsenseWords(restructured).length === 0) {
-      result = restructured;
-    }
-  }
+  // ── Step 3: Clause restructuring — DISABLED — reordering garbles structure ──
+  // if (!isFirstInParagraph && result.split(/\s+/).length > 6) {
+  //   const restructured = restructureSingleSentence(result, extractTopicKeywords([result]));
+  //   if (restructured !== result && containsNonsenseWords(restructured).length === 0) {
+  //     result = restructured;
+  //   }
+  // }
 
   // ── Step 4: Phrase substitutions ──
   result = phraseSubstitute(result, intensity);
@@ -2350,6 +2336,17 @@ export function humanize(
     /\b(has|have|had)\s+(create|produce|generate|transform|establish|develop|evolve|emerge|become|arrive|achieve|contribute|demonstrate|integrate|incorporate|facilitate|utilize|enable|enhance|influence|trigger|spark|shape|alter|expand|improve|increase|raise|reduce|provide|indicate|require|involve|include|exclude|promote|migrate|operate|evaluate|analyze|accelerate|exacerbate|undermine|aggravate|form|yield|deliver|prompt|detect|diagnose|examine|observe|stimulate|illustrate)\b/gi,
     (match, aux, verb) => {
       const v = verb.toLowerCase();
+      // Irregular past participles
+      const irregulars: Record<string, string> = {
+        become: "become", come: "come", run: "run", give: "given", go: "gone",
+        do: "done", see: "seen", take: "taken", make: "made", get: "gotten",
+        grow: "grown", arise: "arisen", drive: "driven", write: "written",
+        begin: "begun", break: "broken", speak: "spoken", choose: "chosen",
+        freeze: "frozen", hide: "hidden", shake: "shaken", steal: "stolen",
+        swim: "swum", throw: "thrown", tear: "torn", wear: "worn",
+        withdraw: "withdrawn", overcome: "overcome",
+      };
+      if (irregulars[v]) return aux + " " + irregulars[v];
       if (v.endsWith("e")) return aux + " " + verb + "d";
       return aux + " " + verb + "ed";
     }

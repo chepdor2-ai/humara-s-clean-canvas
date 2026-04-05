@@ -408,30 +408,8 @@ function diversifySentenceStructure(sentences: string[]): string[] {
 // ══════════════════════════════════════════════════════════════════════════
 
 function diversifyPunctuation(sentences: string[]): string[] {
-  if (sentences.length < 4) return sentences;
-
-  const result = [...sentences];
-  let semicolonCount = 0;
-
-  for (let i = 0; i < result.length; i++) {
-    const words = result[i].split(/\s+/);
-    if (words.length < 14) continue;
-
-    // Every ~6th long sentence: convert a mid-sentence comma to semicolon
-    if (i % 6 === 3 && semicolonCount < Math.ceil(result.length / 8)) {
-      const commaIdxs: number[] = [];
-      for (let j = Math.floor(result[i].length * 0.3); j < Math.floor(result[i].length * 0.7); j++) {
-        if (result[i][j] === ",") commaIdxs.push(j);
-      }
-      if (commaIdxs.length > 0) {
-        const pick = commaIdxs[Math.floor(commaIdxs.length / 2)];
-        result[i] = result[i].slice(0, pick) + ";" + result[i].slice(pick + 1);
-        semicolonCount++;
-      }
-    }
-  }
-
-  return result;
+  // DISABLED — comma-to-semicolon replacement creates grammatically invalid text.
+  return sentences;
 }
 
 // ══════════════════════════════════════════════════════════════════════════

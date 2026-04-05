@@ -169,53 +169,9 @@ function deduplicateStarters(sentences: { text: string; flags: string[] }[]): vo
  * If not, surgically add/split for variance.
  */
 function ensureBurstiness(sentences: string[], target: number = 0.75): string[] {
-  const lengths = sentences.map(s => s.split(/\s+/).length);
-  if (lengths.length < 2) return sentences;
-
-  const mean = lengths.reduce((a, b) => a + b, 0) / lengths.length;
-  const stddev = Math.sqrt(lengths.reduce((sum, l) => sum + (l - mean) ** 2, 0) / lengths.length);
-  const burstiness = mean > 0 ? stddev / mean : 0;
-
-  if (burstiness >= target) return sentences;
-
-  // Need more variance: find the most "average" sentence and split it
-  const result = [...sentences];
-  const diffs = lengths.map((l, i) => ({ idx: i, diff: Math.abs(l - mean) }));
-  diffs.sort((a, b) => a.diff - b.diff);
-
-  // Split the most average-length sentence
-  for (const { idx } of diffs.slice(0, 2)) {
-    const words = result[idx].split(/\s+/);
-    if (words.length > 14) {
-      // Find a natural split point (comma, conjunction) near mid
-      const mid = Math.floor(words.length * 0.45);
-      let splitAt = -1;
-      for (let j = mid - 3; j <= mid + 3 && j < words.length; j++) {
-        if (j < 2) continue;
-        const w = words[j].toLowerCase().replace(/[^a-z]/g, '');
-        if (words[j].endsWith(',') || ['and', 'but', 'which', 'while', 'however'].includes(w)) {
-          splitAt = j;
-          break;
-        }
-      }
-      // Only split at a natural break point, not mid-clause
-      if (splitAt > 0) {
-        const first = words.slice(0, splitAt + 1).join(' ').replace(/,\s*$/, '.');
-        let second = words.slice(splitAt + 1).join(' ');
-        // Validate: second half must have a verb (not a fragment)
-        const hasVerb = /\b(is|are|was|were|has|have|had|does|do|did|can|could|will|would|shall|should|may|might|must)\b/i.test(second);
-        const startsWithGerund = /^[A-Z]?\w+ing\b/.test(second.trim());
-        if (hasVerb && !startsWithGerund) {
-          second = second[0].toUpperCase() + second.slice(1);
-          if (!/[.!?]$/.test(second)) second += '.';
-          result.splice(idx, 1, first, second);
-          break;
-        }
-      }
-    }
-  }
-
-  return result;
+  // DISABLED: sentence splitting to increase burstiness was creating incomplete
+  // sentence fragments and breaking 1:1 sentence correspondence with input
+  return sentences;
 }
 
 export const deepCleanPhase: Phase = {

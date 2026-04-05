@@ -20,6 +20,23 @@ export function splitIntoParagraphs(text: string): string[] {
  * Split a paragraph into sentences using compromise.js with regex fallback.
  */
 export function splitIntoSentences(paragraph: string): string[] {
+  // Preserve heading lines — if a paragraph starts with a short title-like line
+  // (no period, under 80 chars) followed by body text, split them apart
+  const lines = paragraph.split(/\n/);
+  if (lines.length > 1) {
+    const firstLine = lines[0].trim();
+    // Detect title/heading lines: short, no period at end, not a full sentence
+    if (firstLine.length > 0 && firstLine.length < 80 && !/[.!?]$/.test(firstLine) && firstLine.split(/\s+/).length <= 12) {
+      // Keep heading separate, process rest as normal
+      const rest = lines.slice(1).join(' ').replace(/\s+/g, ' ').trim();
+      if (rest.length > 0) {
+        const restSentences = splitIntoSentences(rest);
+        return [firstLine, ...restSentences];
+      }
+      return [firstLine];
+    }
+  }
+
   // Normalize single linebreaks to spaces within a paragraph
   const normalized = paragraph
     .replace(/\n/g, ' ')

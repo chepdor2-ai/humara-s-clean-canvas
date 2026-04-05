@@ -199,6 +199,102 @@ export async function POST(req: Request) {
     // Remove any em-dashes that may have been reintroduced by post-processors
     humanized = removeEmDashes(humanized);
 
+    // ── GRAMMAR SANITIZER ──────────────────────────────────────
+    // Fix common grammar errors introduced by synonym replacement
+    // 1. "an more" → "a more" (article before consonant multi-word replacement)
+    humanized = humanized.replace(/\ban (more|less|much|most|very|quite|rather|fairly|too|so)\b/gi,
+      (m, w) => (m[0] === 'A' ? 'A ' : 'a ') + w);
+    // 2. "a increasingly" → "an increasingly" (shouldn't happen but safety)
+    humanized = humanized.replace(/\ba (increasingly|ever|each|every|eight|eleven|eighteen|important|interesting|independent|innovative|intelligent|upper)\b/gi,
+      (m, w) => (m[0] === 'A' ? 'An ' : 'an ') + w);
+    // 3. Fix broken possessives/contractions: "reflect ons" → "reflects on"
+    humanized = humanized.replace(/\b(\w+)\s+ons\b/g, '$1s on');
+    // 4. Fix double articles: "the the", "a a", "an an"
+    humanized = humanized.replace(/\b(the|a|an)\s+\1\b/gi, '$1');
+    // 5. Fix ", And " mid-sentence (should be ", and ")
+    humanized = humanized.replace(/,\s+And\s+/g, ', and ');
+    // 6. Fix ". And" sentence fragments in lists — "AI. And global" → "AI and global"
+    humanized = humanized.replace(/([a-z,])\.\s+And\s+/g, '$1 and ');
+    // 7. Fix "it has besides" → "it has also" (broken adverb placement)
+    humanized = humanized.replace(/\b(has|have|had)\s+(besides|on top of that|what is more)\s+/gi, '$1 also ');
+    // 8. Fix "It on top of that" → "It also"
+    humanized = humanized.replace(/\b(It|it)\s+(on top of that|besides this|besides|what is more)\s+/gi, '$1 also ');
+    // 9. Fix misplaced "too" used as "also" ("it has too raised" → "it has also raised")
+    humanized = humanized.replace(/\b(It|it)\s+too\s+/g, '$1 also ');
+    humanized = humanized.replace(/\b(has|have|had|was|were|is|are)\s+too\s+/g, '$1 also ');
+    // 9b. Fix irregular past tense errors from phrase synonyms
+    humanized = humanized.replace(/\bputed\b/g, 'put');
+    humanized = humanized.replace(/\bcutted\b/g, 'cut');
+    humanized = humanized.replace(/\bsetted\b/g, 'set');
+    humanized = humanized.replace(/\bweighes\b/g, 'weighs');
+    humanized = humanized.replace(/\bcarrys\b/g, 'carries');
+    humanized = humanized.replace(/\bdealed\b/g, 'dealt');
+    // 10. Fix superlative grammar: "most strong" → "strongest", "most large" → "largest"
+    const SUPERLATIVE_MAP: Record<string, string> = {
+      'strong': 'strongest', 'large': 'largest', 'small': 'smallest',
+      'big': 'biggest', 'fast': 'fastest', 'old': 'oldest', 'young': 'youngest',
+      'weak': 'weakest', 'hard': 'hardest', 'soft': 'softest', 'long': 'longest',
+      'short': 'shortest', 'tall': 'tallest', 'wide': 'widest', 'deep': 'deepest',
+      'quick': 'quickest', 'slow': 'slowest', 'bright': 'brightest', 'dark': 'darkest',
+    };
+    humanized = humanized.replace(/\bmost\s+(strong|large|small|big|fast|old|young|weak|hard|soft|long|short|tall|wide|deep|quick|slow|bright|dark)\b/gi,
+      (m, adj) => SUPERLATIVE_MAP[adj.toLowerCase()] || m);
+    // 11. Remove heading text duplicated as first sentence of body paragraphs
+    // Uses fuzzy matching to catch synonym-swapped duplicates (e.g. "Role" → "function")
+    const hdLines = humanized.split('\n');
+    // Collect all heading lines (short, no period, title-like)
+    const headingTexts: string[] = [];
+    for (const line of hdLines) {
+      const t = line.trim();
+      if (t.length >= 10 && t.length <= 80 && !/[.!?]$/.test(t) && t.split(/\s+/).length <= 12) {
+        headingTexts.push(t);
+      }
+    }
+    // Helper: normalize text for fuzzy comparison
+    const normWords = (s: string) => s.toLowerCase().replace(/[^a-z0-9\s]/g, '').split(/\s+/).filter(w => w.length > 2);
+    // Remove any body line that starts with a heading text (exact or fuzzy match)
+    for (let i = 0; i < hdLines.length; i++) {
+      const t = hdLines[i].trim();
+      if (!t) continue;
+      for (const heading of headingTexts) {
+        // Exact match
+        if (t.startsWith(heading + '.') || (t.startsWith(heading + ' ') && t.length > heading.length + 5)) {
+          const rest = t.slice(heading.length).replace(/^[.\s]+/, '').trim();
+          if (rest.length > 0) {
+            hdLines[i] = rest[0].toUpperCase() + rest.slice(1);
+          } else {
+            hdLines[i] = '';
+          }
+          break;
+        }
+        // Fuzzy match: check if first N words of body line overlap 70%+ with heading words
+        const hWords = normWords(heading);
+        if (hWords.length >= 4) {
+          // Extract first sentence from body line (up to first period)
+          const dotIdx = t.indexOf('.');
+          if (dotIdx > 10) {
+            const firstSent = t.slice(0, dotIdx);
+            const fWords = normWords(firstSent);
+            const overlap = hWords.filter(w => fWords.includes(w)).length;
+            if (overlap >= hWords.length * 0.6 && fWords.length <= hWords.length + 3) {
+              const rest = t.slice(dotIdx + 1).trim();
+              if (rest.length > 0) {
+                hdLines[i] = rest[0].toUpperCase() + rest.slice(1);
+              } else {
+                hdLines[i] = '';
+              }
+              break;
+            }
+          }
+        }
+      }
+    }
+    humanized = hdLines.filter(l => l !== '' || true).join('\n');
+    // 12. Fix stray semicolons/colons in list structures: "X; and Y" → "X, and Y"
+    humanized = humanized.replace(/;\s+(and|or|but)\s+/gi, ', $1 ');
+    // 13. Fix colons before list continuations: "AI: and global" → "AI, and global"
+    humanized = humanized.replace(/:\s+(and|or|but)\s+/gi, ', $1 ');
+
     // Generate per-sentence alternatives (3 candidates each, best already picked by engines)
     const FIRST_PERSON_RE = /\b(I|me|my|mine|myself|we|us|our|ours|ourselves)\b/i;
     const inputHadFirstPerson = FIRST_PERSON_RE.test(text);

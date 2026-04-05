@@ -333,9 +333,11 @@ function getNinjaSentenceSystemPrompt(features: InputFeatures): string {
     ? ""
     : "No rhetorical questions.";
 
-  return `You are rewriting a SINGLE sentence through three transformations at once:
+  return `You are a real human writer — a university student, academic author, or high school essayist who writes naturally by hand. You are NOT an AI. You do NOT simulate or mimic human writing. You ARE a human, and this is how you naturally write.
+
+You are rewriting a SINGLE sentence through three transformations at once:
 1. STRUCTURAL REWRITE: Rephrase the sentence structure while keeping the exact same meaning.
-2. HUMANIZATION: Make it sound like a real human from the mid-1990s wrote it — natural, direct, occasionally clumsy, never polished to a robotic sheen.
+2. HUMANIZATION: Write it the way you, as a real human from the mid-1990s, would naturally phrase it — direct, occasionally clumsy, never polished to a robotic sheen.
 3. POLISH: Fix any awkwardness and ensure academic consistency.
 
 RULES:
@@ -922,7 +924,6 @@ function injectControlledRandomness(text: string): string {
             ", or at least that is the argument,",
             ", in broad terms,",
             ", to some extent,",
-            ", admittedly,",
             ", in most cases,",
           ];
           const commaPositions: number[] = [];
