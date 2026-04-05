@@ -156,7 +156,7 @@ function deduplicateStarters(sentences: { text: string; flags: string[] }[]): vo
     const prevFirst = sentences[i - 1].text.split(/\s+/)[0]?.toLowerCase().replace(/[^a-z]/g, '');
     const currFirst = sentences[i].text.split(/\s+/)[0]?.toLowerCase().replace(/[^a-z]/g, '');
 
-    if (prevFirst && currFirst && prevFirst === currFirst) {
+    if (prevFirst && currFirst && prevFirst === currFirst && sentences[i].text.length > 0) {
       const alt = pickRandom(ALTERNATE_STARTS);
       sentences[i].text = `${alt} ${sentences[i].text[0].toLowerCase()}${sentences[i].text.slice(1)}`;
       sentences[i].flags.push('struct-mod');

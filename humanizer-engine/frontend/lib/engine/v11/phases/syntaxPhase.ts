@@ -175,6 +175,7 @@ function toRhetoricalQuestion(text: string): string | null {
  * Add a cleft construction to emphasize.
  */
 function toCleft(text: string): string {
+  if (!text || text.length === 0) return text;
   const starter = pickRandom(CLEFT_STARTERS);
   // Lowercase the first letter of the original
   return starter + text[0].toLowerCase() + text.slice(1);
@@ -257,7 +258,7 @@ export const syntaxPhase: Phase = {
         // Cleft constructions DISABLED — they compound with Phase 13 synonym swaps
         // producing garbled outputs like "The actual discovering is that"
 
-        if (roll < 0.12 && i > 0) {
+        if (roll < 0.12 && i > 0 && sentence.text.length > 0) {
           // 3% chance: fronted adverbial (reduced from 5%)
           const adverb = pickRandom(ADVERB_FRONTS);
           sentence.text = adverb + sentence.text[0].toLowerCase() + sentence.text.slice(1);

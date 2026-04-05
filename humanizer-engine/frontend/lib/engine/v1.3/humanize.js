@@ -3,6 +3,7 @@ import {
   PHRASE_COMPRESS, EXTRA_SYN, EXTRA_COLLOCATIONS, EXTRA_TRANSITIONS,
   PROTECTED_TERMS, NATURAL_PAIRS,
 } from './_humanize-dict.js';
+import { stealthRewrite } from './stealth-writer.js';
 
 /*  ═══════════════════════════════════════════════════════════════════
     STEALTH HUMANIZER ENGINE v5 — PURE NON-LLM / PRO-LEVEL
@@ -467,6 +468,8 @@ function replaceCollocations(text, usedSet) {
   let r = text;
   for (const { re, alts } of COLLOC_ENTRIES) {
     r = r.replace(re, match => {
+      // Skip if this phrase is a protected domain term
+      if (PROTECTED_TERMS.has(match.toLowerCase())) return match;
       const available = alts.filter(a => !usedSet.has(a));
       const pool = available.length > 0 ? available : alts;
       const pick = pool[Math.floor(Math.random() * pool.length)];
@@ -569,9 +572,15 @@ const RESTRUCTURE = [
     apply: (m) => `${capFirst(stripPunct(m[3]))} ${m[2]}${endPunct(m[3])}`
   },
   // 5. Prepositional front → back: "In X, Y." → "Y in X."
+  //    Guard: skip discourse transitions ("In addition", "In contrast", etc.)
   {
     re: /^(In|On|At|During|Throughout|Within|Across|Through|Over|Among|Between|Under|Before|After|By)\s+(.+?),\s+(.+)$/i,
-    apply: (m) => `${capFirst(stripPunct(m[3]))} ${m[1].toLowerCase()} ${m[2]}${endPunct(m[3])}`
+    apply: (m) => {
+      // Don't move discourse transitions to end of sentence
+      const phrase = (m[1] + ' ' + m[2]).toLowerCase();
+      if (/^(in addition|in contrast|in particular|in general|in summary|in conclusion|in practice|in effect|in turn|in fact|in other words|on the other hand|on balance|at the same time|by contrast|by extension|at this point)/.test(phrase)) return null;
+      return `${capFirst(stripPunct(m[3]))} ${m[1].toLowerCase()} ${m[2]}${endPunct(m[3])}`;
+    }
   },
   // 6. "not only X but also Y" → "both X and Y" (preserving prefix)
   {
@@ -620,19 +629,9 @@ const RESTRUCTURE = [
     }
   },
   // 12. "X and Y" → "X along with Y" (noun-phrase coordination only)
-  {
-    re: /^(.{15,}?)\s+and\s+(.{15,})$/i,
-    apply: (m) => {
-      // Don't rewrite verb-phrase coordination or parallel infinitives ("X and to Y")
-      if (/^(to\b|reduce|improve|increase|decrease|enhance|ensure|provide|create|support|maintain|build|develop|prevent|promote|address|establish|identify|manage|achieve|protect|allow|enable|make|find|keep|give|take|require|demand|need|determine|analyze|assess|evaluate|examine|understand|implement|apply|execute|use|offer|deliver|design|produce|generate|measure|test|consider|handle|plan|prepare|review|study|set|run|place|form|hold)/i.test(m[2].trim())) return null;
-      const alts = [
-        `${m[1]} along with ${m[2]}`,
-        `${m[1]}, coupled with ${m[2]}`,
-        `${m[1]}, besides ${m[2]}`,
-      ];
-      return alts[Math.floor(Math.random() * alts.length)];
-    }
-  },
+  // DISABLED: This pattern reliably garbles sentences by replacing coordinating "and"
+  // with "along with" / "coupled with", which then gets clause-swapped into nonsense.
+  // { ... }
   // 13. "X because Y" → "Given that Y, X"
   {
     re: /^(.+?)\s+(because|since)\s+(.+)$/i,
@@ -675,7 +674,7 @@ const RESTRUCTURE = [
   {
     re: /(.+?),\s+such as\s+(.+)$/i,
     apply: (m) => {
-      if (Math.random() < 0.5) return `${m[1]}, ${m[2]} being a case in point`;
+      // Only use "including" — "being a case in point" creates fragments in complex sentences
       return `${m[1]}, including ${m[2]}`;
     }
   },
@@ -758,14 +757,16 @@ const RESTRUCTURE = [
       return `${capFirst(m[1])} caused ${m[2].charAt(0).toLowerCase() + m[2].slice(1)}`;
     }
   },
-  // 31. "X enables Y to Z" → "X lets Y Z" / "Thanks to X, Y can Z"
-  {
-    re: /(.+?)\s+(?:enables?|allows?|permits?|empowers?)\s+(.+?)\s+to\s+(.+)$/i,
-    apply: (m) => {
-      if (Math.random() < 0.5) return `${m[1]} lets ${m[2]} ${m[3]}`;
-      return `Thanks to ${m[1].charAt(0).toLowerCase() + m[1].slice(1)}, ${m[2]} can ${m[3]}`;
-    }
-  },
+  // 31. "X enables Y to Z" — DISABLED: captures sentence starters ("Furthermore,")
+  //    as part of X, producing "Thanks to furthermore, AI-powered..." garble
+  //    Also "lets" is too informal for academic text
+  // {
+  //   re: /(.+?)\s+(?:enables?|allows?|permits?|empowers?)\s+(.+?)\s+to\s+(.+)$/i,
+  //   apply: (m) => {
+  //     if (Math.random() < 0.5) return `${m[1]} lets ${m[2]} ${m[3]}`;
+  //     return `Thanks to ${m[1].charAt(0).toLowerCase() + m[1].slice(1)}, ${m[2]} can ${m[3]}`;
+  //   }
+  // },
   // 32. "X, in turn, Y" → "X, and then Y" / reposition
   {
     re: /^(.+?),\s+in\s+turn,\s+(.+)$/i,
@@ -897,6 +898,10 @@ const MOVABLE_ADVERBS = new Set([
 ]);
 
 function genericRestructure(sent) {
+  // DISABLED: genericRestructure was destructively reordering clauses,
+  // creating garbled output. Only curated RESTRUCTURE patterns are used now.
+  return sent;
+
   const words = sent.split(/\s+/);
   if (words.length < 6) return sent;
 
@@ -1059,16 +1064,16 @@ const SYN = {
   // ── Adjectives ──
   'important':     ['significant','key','essential','critical','major','central'],
   'significant':   ['notable','meaningful','substantial','marked','considerable'],
-  'various':       ['different','diverse','several','multiple','assorted'],
+  'various':       ['different','diverse','several','multiple','numerous'],
   'specific':      ['particular','certain','distinct','precise','exact'],
   'different':     ['distinct','varied','separate','divergent','alternative'],
-  'effective':     ['successful','productive','functional','practical','working'],
+  'effective':     ['successful','productive','efficacious','valuable','capable'],
   'essential':     ['necessary','vital','required','needed','indispensable'],
   'primary':       ['main','chief','principal','central','leading'],
   'major':         ['large','big','substantial','considerable','principal'],
   'current':       ['present','existing','ongoing','prevailing'],
   'relevant':      ['related','applicable','appropriate','connected','germane'],
-  'potential':     ['possible','likely','prospective','feasible','probable'],
+  'potential':     ['possible','prospective','conceivable','plausible','anticipated'],
   'complex':       ['complicated','intricate','involved','elaborate','layered'],
   'notable':       ['remarkable','striking','impressive','noteworthy','distinctive'],
   'clear':         ['obvious','apparent','evident','plain','unmistakable'],
@@ -1090,7 +1095,7 @@ const SYN = {
   'consistent':    ['steady','uniform','stable','regular','constant'],
   'previous':      ['earlier','prior','past','former','preceding'],
   'unique':        ['distinctive','singular','one-of-a-kind','unusual','rare'],
-  'widespread':    ['common','prevalent','broad','pervasive','extensive'],
+  'widespread':    ['broad','pervasive','extensive','wide-ranging','general'],
   'inherent':      ['built-in','intrinsic','innate','natural','ingrained'],
   'robust':        ['strong','solid','sturdy','resilient','durable'],
   'comprehensive': ['thorough','complete','full','all-encompassing','detailed'],
@@ -1099,55 +1104,55 @@ const SYN = {
   'profound':      ['deep','intense','far-reaching','sweeping','powerful'],
 
   // ── Verbs ──
-  'demonstrate':   ['show','illustrate','display','reveal','exhibit'],
+  'demonstrate':   ['show','display','reveal','exhibit','indicate'],
   'indicate':      ['show','suggest','point to','signal','reflect'],
   'suggest':       ['imply','hint','point to','propose'],
-  'provide':       ['give','offer','supply','deliver','present'],
-  'require':       ['need','demand','call for','involve','take'],
-  'establish':     ['set up','create','build','found','form'],
-  'maintain':      ['keep','sustain','preserve','hold','uphold'],
-  'obtain':        ['get','gain','acquire','secure','receive'],
-  'achieve':       ['reach','attain','accomplish','realize','gain'],
-  'consider':      ['think about','examine','weigh','look at','reflect on'],
-  'determine':     ['find','identify','figure out','work out','pin down'],
-  'contribute':    ['add to','support','aid','help','boost'],
-  'address':       ['deal with','handle','tackle','cover','confront'],
-  'identify':      ['spot','recognize','pinpoint','detect','find'],
-  'examine':       ['study','investigate','analyze','inspect','look into'],
-  'develop':       ['create','build','form','design','grow'],
-  'enhance':       ['improve','boost','strengthen','elevate','raise'],
-  'influence':     ['affect','shape','sway','guide','alter'],
-  'implement':     ['carry out','execute','apply','put into practice','introduce'],
-  'generate':      ['produce','create','yield','bring about','trigger'],
-  'conduct':       ['carry out','perform','run','do','execute'],
-  'ensure':        ['make sure','guarantee','secure','confirm','verify'],
-  'emerge':        ['appear','arise','come up','surface','develop'],
-  'highlight':     ['emphasize','underline','stress','feature','foreground'],
+  'provide':       ['offer','supply','furnish','present','afford'],
+  'require':       ['necessitate','demand','call for','entail','presuppose'],
+  'establish':     ['found','institute','constitute','demonstrate','substantiate'],
+  'maintain':      ['sustain','preserve','uphold','retain','assert'],
+  'obtain':        ['acquire','secure','procure','gain','attain'],
+  'achieve':       ['attain','accomplish','realize','reach','secure'],
+  'consider':      ['examine','evaluate','contemplate','appraise','assess'],
+  'determine':     ['ascertain','establish','identify','discern','resolve'],
+  'contribute':    ['add','lend support','supplement','advance','aid'],
+  'address':       ['examine','attend to','consider','treat','engage with'],
+  'identify':      ['recognize','discern','ascertain','detect','distinguish'],
+  'examine':       ['investigate','analyze','scrutinize','inspect','appraise'],
+  'develop':       ['formulate','construct','elaborate','cultivate','advance'],
+  'enhance':       ['augment','strengthen','elevate','amplify','reinforce'],
+  'influence':     ['affect','shape','guide','alter','direct'],
+  'implement':     ['execute','apply','institute','enact','operationalize'],
+  'generate':      ['produce','yield','engender','elicit','give rise to'],
+  'conduct':       ['undertake','perform','execute','administer','carry out'],
+  'ensure':        ['guarantee','secure','ascertain','verify','safeguard'],
+  'emerge':        ['arise','surface','materialize','manifest','come to light'],
+  'highlight':     ['emphasize','underscore','accentuate','foreground','draw attention to'],
   'involve':       ['include','require','entail','encompass','mean'],
   'occur':         ['happen','take place','arise','come about','unfold'],
-  'remain':        ['stay','continue','persist','last','endure'],
-  'reveal':        ['show','uncover','expose','disclose','bring to light'],
-  'utilize':       ['use','employ','apply','draw on','work with'],
-  'facilitate':    ['help','enable','support','ease','make possible'],
+  'remain':        ['continue to be','stay','continue as','stand as','endure as'],
+  'reveal':        ['disclose','indicate','expose','demonstrate','elucidate'],
+  'utilize':       ['employ','apply','harness','make use of','avail oneself of'],
+  'facilitate':    ['enable','expedite','promote','foster','further'],
   'underscore':    ['stress','emphasize','reinforce','underline','accent'],
   'exemplify':     ['illustrate','represent','embody','typify','showcase'],
   'encompass':     ['include','cover','span','embrace','contain'],
 
   // ── Nouns ──
-  'approach':      ['method','strategy','way','technique','tactic'],
-  'aspect':        ['part','element','side','feature','dimension'],
-  'challenge':     ['difficulty','obstacle','hurdle','problem','issue'],
-  'concept':       ['idea','notion','principle','theory','thought'],
+  'approach':      ['method','strategy','technique','procedure','methodology'],
+  'aspect':        ['element','dimension','facet','feature','component'],
+  'challenge':     ['difficulty','obstacle','impediment','complication','limitation'],
+  'concept':       ['notion','principle','construct','postulate','formulation'],
   'factor':        ['element','component','aspect','influence','driver'],
-  'framework':     ['structure','system','model','setup','outline'],
-  'outcome':       ['result','consequence','effect','end product','finding'],
-  'perspective':   ['view','angle','standpoint','outlook','lens'],
+  'framework':     ['structure','model','schema','paradigm','system'],
+  'outcome':       ['result','consequence','effect','finding','upshot'],
+  'perspective':   ['viewpoint','standpoint','vantage point','position','orientation'],
   'process':       ['procedure','method','system','operation','practice'],
   'evidence':      ['proof','data','indication','sign','support'],
   'strategy':      ['plan','approach','tactic','scheme','method'],
   'context':       ['setting','background','situation','environment','circumstances'],
   'environment':   ['setting','surroundings','conditions','situation','backdrop'],
-  'individual':    ['person','someone','participant','member','subject'],
+  'individual':    ['person','participant','subject','respondent','actor'],
   'component':     ['part','element','piece','segment','section'],
   'methodology':   ['method','approach','procedure','technique','system'],
   'phenomenon':    ['event','occurrence','development','trend','pattern'],
@@ -1161,8 +1166,8 @@ const SYN = {
   'significantly': ['greatly','markedly','substantially','considerably','meaningfully'],
   'effectively':   ['successfully','well','efficiently','productively','capably'],
   'typically':     ['usually','normally','generally','commonly','often'],
-  'particularly':  ['especially','specifically','chiefly','mainly','above all'],
-  'essentially':   ['basically','fundamentally','at its core','in essence','mainly'],
+  'particularly':  ['especially','specifically','chiefly','notably','markedly'],
+  'essentially':   ['in essence','in effect','at its core','in substance','chiefly'],
   'primarily':     ['mainly','chiefly','largely','mostly','for the most part'],
   'generally':     ['usually','typically','broadly','mostly','on the whole'],
   'increasingly':  ['more and more','progressively','steadily','gradually'],
@@ -1194,7 +1199,7 @@ const SYN = {
   'therefore':         ['so','because of this','for this reason','this means'],
   'although':          ['though','even though','while'],
   'despite':           ['in spite of','regardless of','even with','for all'],
-  'regarding':         ['about','concerning','on the topic of','as for'],
+  'regarding':         ['about','with respect to','on the topic of','on the matter of'],
   'in order to':       ['to','so as to','aiming to','with the goal of'],
   'pertaining to':     ['about','related to','concerning','on','regarding'],
 
@@ -1238,7 +1243,7 @@ const SYN = {
   'mutual':['shared','joint','common','reciprocal','collective'],
   'narrow':['limited','restricted','slim','thin','tight'],
   'negative':['adverse','harmful','unfavorable','detrimental','bad'],
-  'objective':['unbiased','neutral','impartial','fair','factual'],
+  'objective':['unbiased','neutral','impartial','fair','balanced'],
   'obvious':['clear','plain','evident','apparent','unmistakable'],
   'ongoing':['continuing','current','active','in progress','persistent'],
   'optimal':['best','ideal','top','peak','most effective'],
@@ -1273,7 +1278,8 @@ const SYN = {
   'thorough':['complete','detailed','exhaustive','comprehensive','in-depth'],
   'tremendous':['huge','enormous','great','massive','remarkable'],
   'trivial':['minor','small','unimportant','negligible','insignificant'],
-  'underlying':['basic','fundamental','root','core','foundational'],
+  // 'underlying' REMOVED — functions as a participle that takes preposition 'in/of',
+  // cannot be swapped with adjectives without changing grammar
   'uniform':['consistent','even','regular','standard','identical'],
   'valid':['sound','legitimate','justified','reasonable','well-founded'],
   'variable':['changing','fluctuating','uneven','inconsistent','shifting'],
@@ -1312,7 +1318,7 @@ const SYN = {
   'depict':['show','portray','illustrate','represent','describe'],
   'derive':['get','draw','obtain','extract','take'],
   'designate':['name','appoint','assign','label','mark'],
-  'detect':['find','spot','notice','identify','discover'],
+  'detect':['notice','spot','recognize','identify','discover'],
   'diminish':['reduce','lessen','decrease','shrink','weaken'],
   'disclose':['reveal','show','expose','make known','share'],
   'dismiss':['reject','ignore','discard','rule out','set aside'],
@@ -1322,7 +1328,7 @@ const SYN = {
   'dominate':['control','lead','rule','overshadow','prevail over'],
   'eliminate':['remove','cut','get rid of','wipe out','do away with'],
   'embrace':['accept','adopt','welcome','take on','support'],
-  'enable':['allow','let','permit','make possible','empower'],
+  'enable':['allow','permit','empower','equip','support'],
   'encounter':['meet','face','come across','run into','experience'],
   'endorse':['support','back','approve','recommend','champion'],
   'enforce':['apply','impose','carry out','uphold','implement'],
@@ -1398,7 +1404,7 @@ const SYN = {
   'awareness':['knowledge','understanding','recognition','consciousness','grasp'],
   'barrier':['obstacle','hurdle','block','impediment','wall'],
   'boundary':['limit','edge','border','line','threshold'],
-  'capacity':['ability','power','potential','capability','room'],
+  'capacity':['ability','aptitude','potential','capability','competence'],
   'category':['group','class','type','kind','division'],
   'circumstance':['situation','condition','context','setting','scenario'],
   'collaboration':['teamwork','partnership','cooperation','joint effort','alliance'],
@@ -1409,7 +1415,7 @@ const SYN = {
   'criterion':['standard','measure','benchmark','yardstick','test'],
   'deficiency':['shortage','lack','gap','weakness','shortfall'],
   'dimension':['aspect','side','angle','facet','layer'],
-  'discourse':['discussion','debate','conversation','dialogue','talk'],
+  'discourse':['discussion','debate','dialogue','scholarship','literature'],
   'discrepancy':['gap','difference','mismatch','inconsistency','conflict'],
   'disposition':['tendency','inclination','temperament','attitude','leaning'],
   'distinction':['difference','contrast','separation','gap','divide'],
@@ -1422,13 +1428,13 @@ const SYN = {
   'evaluation':['assessment','review','appraisal','analysis','judgment'],
   'evolution':['development','change','growth','progress','advancement'],
   'exception':['outlier','anomaly','deviation','special case','irregularity'],
-  'exposure':['contact','experience','access','openness','visibility'],
+  'exposure':['introduction','access'],
   'facility':['building','center','site','venue','plant'],
   'foundation':['base','basis','groundwork','bedrock','root'],
   'hypothesis':['theory','assumption','idea','proposition','guess'],
   'incentive':['motivation','reward','encouragement','driver','spur'],
   'initiative':['effort','project','plan','program','step'],
-  'insight':['understanding','knowledge','awareness','perception','realization'],
+  'insight':['understanding','knowledge'],
   'instance':['case','example','occurrence','occasion','situation'],
   'magnitude':['size','scale','extent','degree','scope'],
   'mechanism':['process','system','method','means','device'],
@@ -1478,7 +1484,7 @@ const SYN = {
   'explicitly':['clearly','directly','plainly','openly','specifically'],
   'extensively':['widely','broadly','thoroughly','greatly','at length'],
   'frequently':['often','regularly','commonly','repeatedly','routinely'],
-  'fundamentally':['basically','at its core','essentially','at root'],
+  'fundamentally':['at its core','essentially','in fundamental ways','deeply'],
   'gradually':['slowly','step by step','bit by bit','steadily','over time'],
   'ideally':['preferably','in a perfect world','at best','optimally'],
   'implicitly':['indirectly','tacitly','by implication','subtly'],
@@ -1577,8 +1583,8 @@ const _GAP_FILL = {
   'link':['connection','tie','bond','association'],
   'base':['foundation','basis','ground','core'],
   'lack':['absence','shortage','deficit','dearth'],
-  'risk':['danger','threat','hazard','vulnerability'],
-  'goal':['objective','aim','target','ambition'],
+  'risk':['danger','threat','vulnerability','peril'],
+  'goal':['objective','aim','ambition','aspiration'],
   'task':['job','duty','assignment','undertaking'],
   'tool':['instrument','device','resource','mechanism'],
   'plan':['strategy','approach','blueprint','scheme'],
@@ -1599,7 +1605,7 @@ const _GAP_FILL = {
   'increases':['raises','boosts','elevates','amplifies','heightens'],
   'increased':['raised','boosted','elevated','amplified','heightened'],
   'includes':['covers','contains','encompasses','features','incorporates'],
-  'including':['such as','covering','spanning','involving'],
+  'including':['such as','among them','notably','among which are'],
   'involves':['entails','requires','encompasses','demands'],
   'allows':['enables','permits','empowers','gives the ability to'],
   'causes':['triggers','produces','brings about','prompts','sparks'],
@@ -1619,10 +1625,10 @@ const _GAP_FILL = {
 
   // ── Commonly missing content nouns ──
   'relationship':['connection','link','association','tie','bond'],
-  'influence':['effect','impact','bearing','sway','pull'],
+  'influence':['effect','impact','bearing','weight','reach'],
   'access':['entry','availability','reach','exposure'],
   'condition':['state','situation','circumstance','standing'],
-  'conditions':['states','circumstances','situations','settings'],
+  'conditions':['factors','requirements','parameters','variables'],
   'service':['offering','provision','support','facility'],
   'services':['offerings','provisions','functions','operations'],
   'resource':['asset','supply','means','reserve'],
@@ -1645,7 +1651,9 @@ const _GAP_FILL = {
   'individuals':['persons','subjects','participants','members'],
   'symptom':['sign','indicator','signal','marker'],
   'symptoms':['signs','indicators','signals','markers'],
-  'patient':['person','individual','subject','case'],
+  // 'patient' — REMOVED: 'patient care' is a domain term; replacing 'patient' with
+  // 'person'/'individual' breaks medical/clinical contexts
+  // 'patient':['person','individual','subject','case'],
   'treatment':['care','therapy','intervention','remedy'],
   'testing':['screening','evaluation','assessment','analysis'],
   'admission':['entry','intake','enrollment','acceptance'],
@@ -1671,15 +1679,17 @@ const _GAP_FILL = {
   'ultimately':['in the end','finally','at last','when all is considered'],
   'frequently':['often','regularly','routinely','repeatedly'],
   'typically':['usually','normally','generally','ordinarily'],
-  'particularly':['especially','above all','chiefly','mainly'],
+  'particularly':['especially','notably','chiefly','specifically'],
   'between':['among','across','amid','spanning'],
   'primarily':['mainly','chiefly','largely','mostly'],
   'generally':['normally','usually','broadly','largely'],
   'commonly':['often','widely','ordinarily','frequently'],
   'largely':['mostly','primarily','chiefly','to a great extent'],
-  'especially':['particularly','notably','above all','chiefly'],
+  'especially':['particularly','notably','specifically','chiefly'],
   'directly':['immediately','firsthand'],
-  'not only':['more than just','beyond merely'],
+  // 'not only' — REMOVED: replacements ('more than just','beyond merely') don't preserve
+  // the 'not only...but also' syntactic construction
+  // 'not only':['more than just','beyond merely'],
   'in contrast':['conversely','on the other hand','by comparison','alternatively'],
 
   // ═══════════════════════════════════════════════════════════════
@@ -1695,7 +1705,7 @@ const _GAP_FILL = {
   'represents':['stands for','symbolizes','reflects','depicts','embodies'],
   'establishes':['sets up','creates','builds','forms','determines'],
   'addresses':['tackles','handles','deals with','confronts','manages'],
-  'contributes':['adds','gives','supplies','offers','feeds into'],
+  'contributes':['adds','lends'],
   'identifies':['finds','spots','recognizes','pinpoints','detects'],
   'determines':['decides','establishes','shapes','settles','governs'],
   'produces':['generates','creates','yields','turns out','delivers'],
@@ -1721,7 +1731,7 @@ const _GAP_FILL = {
   'employs':['uses','applies','draws on','relies on','adopts'],
   'explores':['investigates','examines','studies','probes','looks into'],
   'generates':['creates','produces','yields','brings about','sparks'],
-  'measures':['gauges','assesses','evaluates','quantifies','calculates'],
+  'measures':['gauges','quantifies','appraises','calculates','tracks'],
   'notes':['observes','remarks','mentions','points out','records'],
   'obtains':['gets','gains','acquires','secures','achieves'],
   'outlines':['describes','sketches','summarizes','lists','details'],
@@ -1733,7 +1743,7 @@ const _GAP_FILL = {
   'sustains':['maintains','keeps up','supports','upholds','preserves'],
   'transforms':['changes','converts','reshapes','overhauls','remakes'],
   'varies':['differs','changes','shifts','fluctuates','ranges'],
-  'analyzes':['studies','examines','reviews','evaluates','assesses'],
+  'analyzes':['examines','reviews','investigates','scrutinizes','dissects'],
   'assesses':['evaluates','judges','reviews','measures','appraises'],
   'concludes':['finishes','ends','wraps up','determines','finds'],
   'displays':['shows','exhibits','presents','reveals','demonstrates'],
@@ -1802,7 +1812,7 @@ const _GAP_FILL = {
   'representing':['standing for','symbolizing','showing','reflecting','depicting'],
   'establishing':['setting up','creating','building','forming','founding'],
   'addressing':['tackling','handling','dealing with','confronting','managing'],
-  'contributing':['adding','providing','supplying','offering','feeding into'],
+  'contributing':['adding','lending'],
   'identifying':['finding','spotting','recognizing','pinpointing','detecting'],
   'determining':['deciding','establishing','settling','shaping','resolving'],
   'reflecting':['showing','mirroring','revealing','displaying','capturing'],
@@ -1816,7 +1826,7 @@ const _GAP_FILL = {
   'implementing':['applying','carrying out','putting in place','executing','enacting'],
   'promoting':['encouraging','supporting','boosting','advancing','fostering'],
   'conducting':['carrying out','running','performing','executing','completing'],
-  'developing':['building','crafting','creating','advancing','shaping'],
+  'developing':['contracting','acquiring','forming','getting','incurring'],
 
   // ═══════════════════════════════════════════════════════════════
   // COMPARATIVE & SUPERLATIVE ADJECTIVES
@@ -1828,7 +1838,7 @@ const _GAP_FILL = {
   'larger':['bigger','greater','more extensive','broader','wider'],
   'smaller':['lesser','more compact','reduced','narrower','tinier'],
   'greater':['larger','more substantial','bigger','higher','broader'],
-  'broader':['wider','more extensive','more expansive','more sweeping','larger'],
+  'broader':['wider','more extensive','more expansive','more comprehensive','larger'],
   'deeper':['more profound','more thorough','more intensive','richer'],
   'wider':['broader','more extensive','more expansive','more far-reaching'],
   'closer':['nearer','more intimate','tighter','more proximate'],
@@ -1850,7 +1860,7 @@ const _GAP_FILL = {
   'result':['finding','outcome','consequence','product','conclusion'],
   'results':['findings','outcomes','consequences','products','conclusions'],
   'method':['approach','technique','procedure','way','practice'],
-  'methods':['approaches','techniques','procedures','ways','practices'],
+  'methods':['approaches','techniques','procedures','methodologies','practices'],
   'value':['worth','importance','significance'],
   'values':['amounts','quantities','levels','figures','numbers'],
   'number':['count','quantity','total','figure','tally'],
@@ -1868,7 +1878,7 @@ const _GAP_FILL = {
   'range':['span','spectrum','scope','spread','extent'],
   'degree':['extent','level','measure','amount','stage'],
   'period':['span','stretch','phase','interval','window'],
-  'response':['reaction','reply','answer','feedback','return'],
+  'response':['reaction','reply','feedback','outcome','result'],
   'approach':['method','way','strategy','tactic','technique'],
   'structure':['framework','arrangement','setup','configuration','form'],
   'feature':['trait','characteristic','quality','attribute','property'],
@@ -1921,7 +1931,7 @@ const _GAP_FILL = {
   'current':['present','existing','ongoing','prevailing','active'],
   'similar':['comparable','like','alike','analogous','parallel'],
   'different':['distinct','varied','diverse','unlike','separate'],
-  'various':['several','diverse','different','assorted','multiple'],
+  'various':['several','diverse','different','numerous','multiple'],
   'certain':['specific','particular','definite','given','set'],
   'strong':['powerful','robust','firm','solid','potent'],
   'clear':['plain','evident','obvious','apparent','transparent'],
@@ -1932,7 +1942,7 @@ const _GAP_FILL = {
   'minor':['small','slight','trivial','secondary','lesser'],
   'likely':['probable','expected','anticipated','plausible','possible'],
   'unlikely':['improbable','doubtful','unexpected','remote','questionable'],
-  'potential':['possible','prospective','likely','would-be','latent'],
+  'potential':['possible','prospective','conceivable','plausible','latent'],
   'essential':['vital','key','critical','core','necessary'],
   'common':['widespread','frequent','typical','prevalent','usual'],
   'rare':['uncommon','scarce','unusual','infrequent','exceptional'],
@@ -1980,7 +1990,7 @@ const _GAP_FILL = {
   'emerged':['appeared','arose','surfaced','came about','developed'],
   'obtained':['got','gained','acquired','secured','achieved'],
 
-  'whether':['if','regardless of whether','no matter if'],
+  'whether':['if'],
   'therefore':['so','because of this','for this reason','accordingly'],
   'however':['but','yet','still','even so','that said'],
   'although':['though','even though','while'],
@@ -2001,8 +2011,9 @@ const SYN_ENTRIES = Object.entries(SYN)
   }));
 
 function injectSynonyms(text, aggr, keywords, usedSet, style) {
-  // Aggressive rates: aggr 8→0.96, aggr 10→1.0, aggr 5→0.75
-  const rate = Math.min(1.0, 0.40 + aggr * 0.07);
+  // Controlled rates: aggr 8→0.21, aggr 10→0.25, aggr 5→0.15
+  // Low rate preserves collocations; structural rewriting handles the rest
+  const rate = Math.min(0.25, 0.05 + aggr * 0.02);
 
   // ── Single-pass matching: prevents cascading synonym corruption ──
   // Collect ALL matches from the input text FIRST, then apply at once.
@@ -2417,12 +2428,12 @@ function diversifyStarters(sents) {
     }
   }
 
-  // Limit "The" openers to ~20%
+  // Limit "The" openers to ~45% — academic writing naturally uses "The" frequently
   const theIdxs = [];
   for (let i = 0; i < sents.length; i++) {
     if (/^the\b/i.test(sents[i])) theIdxs.push(i);
   }
-  const maxThe = Math.max(1, Math.floor(sents.length * 0.20));
+  const maxThe = Math.max(2, Math.ceil(sents.length * 0.45));
   let trimCount = theIdxs.length - maxThe;
   for (let k = 0; k < theIdxs.length && trimCount > 0; k++) {
     const idx = theIdxs[k];
@@ -2433,12 +2444,12 @@ function diversifyStarters(sents) {
     }
   }
 
-  // Limit "This" openers to ~20%
+  // Limit "This" openers to ~35% — common in academic prose for referencing prior statements
   const thisIdxs = [];
   for (let i = 0; i < sents.length; i++) {
     if (/^this\b/i.test(sents[i])) thisIdxs.push(i);
   }
-  const maxThis = Math.max(1, Math.floor(sents.length * 0.20));
+  const maxThis = Math.max(2, Math.ceil(sents.length * 0.35));
   let trimThis = thisIdxs.length - maxThis;
   for (let k = 0; k < thisIdxs.length && trimThis > 0; k++) {
     const idx = thisIdxs[k];
@@ -2482,34 +2493,11 @@ function reorderSentence(s) {
 // Multiple replacements allowed for long sentences — this is the single strongest
 // perplexity spike because AI text almost never uses ; or : mid-sentence.
 function varyPunctuation(sent) {
-  const words = sent.split(/\s+/);
-  if (words.length < 10) return sent;
-  let changes = 0;
-  const maxChanges = words.length >= 20 ? 2 : 1;
-  for (let i = 3; i < words.length - 4; i++) {
-    if (changes >= maxChanges) break;
-    if (/,$/.test(words[i])) {
-      const nextWord = (words[i + 1] || '').toLowerCase();
-      // NEVER replace commas before relative pronouns, subordinators, or list continuations
-      // — semicolons/colons before these are grammatically invalid
-      if (/^(which|who|whom|whose|that|where|when|although|though|because|since|if|unless|while|whereas|however|including|such|especially|particularly|namely|specifically|for|in)$/.test(nextWord)) {
-        continue;
-      }
-      const afterClause = words.slice(i + 1, i + 5).join(' ');
-      if (/\b(is|are|was|were|has|have|had|will|would|could|should|can|it|this|they|these|the)\b/i.test(afterClause)) {
-        const roll = Math.random();
-        if (roll < 0.40) {
-          words[i] = words[i].replace(/,$/, ';');
-          changes++;
-        } else if (roll < 0.60) {
-          words[i] = words[i].replace(/,$/, ':');
-          changes++;
-        }
-        // Em-dash variation removed — no em-dashes policy
-      }
-    }
-  }
-  return words.join(' ');
+  // DISABLED — semicolons/colons replacing commas produce grammatically
+  // wrong structures in academic text. "conditions, often surpassing" 
+  // becomes "conditions; routinely surpassing" which is invalid
+  // (semicolons must separate independent clauses).
+  return sent;
 }
 
 // ═══════════════════════════════════════════
@@ -2794,10 +2782,10 @@ const BACKUP_SYN_MAP = {
   'represents':['stands for','reflects','embodies','depicts'],
   'establishes':['creates','builds','forms','sets up'],
   'maintains':['keeps','preserves','sustains','upholds'],
-  'contributes':['adds','feeds into','supplies','offers'],
+  'contributes':['adds','supports','advances'],
   'positive':['favorable','constructive','beneficial','upward'],
   'negative':['adverse','unfavorable','detrimental','harmful'],
-  'whether':['if','regardless of whether'],
+  'whether':['if'],
 };
 
 const BACKUP_ENTRIES = Object.entries(BACKUP_SYN_MAP)
@@ -2870,34 +2858,9 @@ const DISCOURSE_MARKERS = [
 ];
 
 function injectDiscourseMarker(sent) {
-  // Only fire on sentences ≥10 words with no existing parenthetical or em-dash
-  const words = sent.split(/\s+/);
-  if (words.length < 10 || sent.includes('—') || /,\s*\w+\s*,/.test(sent)) return sent;
-  // ~8% chance to inject (reduced from 25% to avoid over-fillering)
-  if (Math.random() > 0.08) return sent;
-  const marker = DISCOURSE_MARKERS[Math.floor(Math.random() * DISCOURSE_MARKERS.length)];
-  // Insert after first comma if there is one, otherwise after word 3-4
-  // Find first comma that is NOT inside a number (not followed by digits)
-  let commaIdx = -1;
-  for (let ci = 0; ci < sent.length; ci++) {
-    if (sent[ci] === ',' && !/^\d/.test(sent.substring(ci + 1).trimStart())) {
-      commaIdx = ci;
-      break;
-    }
-  }
-  if (commaIdx > 8 && commaIdx < sent.length - 15) {
-    const before = sent.substring(0, commaIdx + 1);
-    const after = sent.substring(commaIdx + 1).trimStart();
-    const result = before + ' ' + marker + ', ' + after;
-    if (!createdMultipleSentences(result)) return result;
-  } else {
-    // Insert after word 3 (after subject phrase)
-    const insertPos = Math.min(4, Math.floor(words.length / 3));
-    const before = words.slice(0, insertPos).join(' ');
-    const after = words.slice(insertPos).join(' ');
-    const result = before + ', ' + marker + ', ' + after;
-    if (!createdMultipleSentences(result)) return result;
-  }
+  // DISABLED — discourse marker injection at comma boundaries corrupts
+  // already-clean academic text. The v1.3 pipeline's structural rewrites
+  // and synonym variation provide sufficient perplexity variance.
   return sent;
 }
 
@@ -2905,89 +2868,61 @@ function processSentence(sent, style, aggr, usedSet, keywords, sentIndex, sentCo
   const origHadFirstPerson = hasFirstPerson(sent);
   let result = sent;
 
-  // ── Aggressiveness-driven target: aggr 8 → 80% change, aggr 10 → 95%, aggr 5 → 50% ──
-  const targetChange = Math.min(0.95, aggr * 0.10);
+  // ── Aggressiveness-driven target: aggr 8 → 28% change, aggr 10 → 35%, aggr 5 → 20% ──
+  // Lower targets prevent forced bad substitutions; structural rewrites contribute to change
+  const targetChange = Math.min(0.35, 0.05 + aggr * 0.03);
 
-  // ═══ LAYER 1: STRUCTURAL REWRITING ═══
-  // Restructure FIRST — before compression/transforms alter the patterns the regexes match
-  // 90% of sentences get restructured; first sentence in paragraph has 45% chance
-  const isFirstInPara = sentIndex === 0;
-  const restructureProb = isFirstInPara ? 0.45 : 0.90;
-  let wasRestructured = false;
-  if (Math.random() < restructureProb) {
-    const before = result;
-    result = restructureSentence(result);
-    wasRestructured = result !== before;
-  }
-  // Now compress wordy phrases (biggest single impact on word change)
+  // ═══ STEALTH WRITER PHASES (PRIMARY) ═══
+  // Phrase-level paraphrasing, structural simplification, connector variation, register balancing
+  // This is the LEAD processing step — handles phrase-level academic paraphrasing
+  // Applied FIRST to capture multi-word expressions before word-level transforms break them up
+  result = stealthRewrite(result, usedSet);
+
+  // Measure how much stealth changed — if significant, reduce subsequent transforms
+  const stealthChange = measureChange(sent, result);
+
+  // ═══ LAYER 1: PHRASE COMPRESSION + WORD TRANSFORM (supplementary) ═══
+  // Compress wordy phrases (biggest single impact on word change)
   result = compressPhrases(result);
   // Apply word-level transforms (nominalization reversal, verbose→concise)
   result = applyWordTransforms(result);
 
-  // ═══ LAYER 2: CONTROLLED REPHRASING ═══
-  // Replace multi-word collocations (more natural than word-by-word)
-  result = replaceCollocations(result, usedSet);
-  // Inject synonyms — rate now scaled by aggressiveness
-  result = injectSynonyms(result, aggr, keywords, usedSet, style);
-
-  // ═══ LAYER 3: FLOW & RHYTHM ═══
-  // Kill AI-flagged phrases and transitions
-  result = killAIPhrases(result);
-
-  // Inject discourse markers for perplexity spikes (~25% of eligible sentences)
-  result = injectDiscourseMarker(result);
-
-  // Shield discourse markers from varyPunctuation and retry synonym passes
-  const dmShields = [];
-  for (const dm of DISCOURSE_MARKERS) {
-    const dmRe = new RegExp(`[,;:]\\s*${dm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*[,;:]`, 'gi');
-    result = result.replace(dmRe, (match) => {
-      const token = `\u00ABDM${dmShields.length}\u00BB`;
-      dmShields.push(match);
-      return token;
-    });
+  // ═══ LAYER 2: SUPPLEMENTARY REPHRASING ═══
+  // Structural rewriting — only if stealth didn't already change much
+  const isFirstInPara = sentIndex === 0;
+  let wasRestructured = false;
+  if (stealthChange < 0.12) {
+    const restructureProb = isFirstInPara ? 0.10 : 0.20;
+    if (Math.random() < restructureProb) {
+      const before = result;
+      result = restructureSentence(result);
+      wasRestructured = result !== before;
+    }
   }
 
-  // ── Punctuation variation (semicolons, em-dashes at clause boundaries) ──
-  // High rate is critical: varied punctuation is the #1 perplexity spike for detectors
-  if (Math.random() < 0.35) {
-    result = varyPunctuation(result);
+  // Collocations and synonyms — SKIP if stealth already achieved sufficient change
+  // Stealth's phrase-level paraphrasing is higher quality than word-level swaps
+  if (stealthChange < 0.15) {
+    result = replaceCollocations(result, usedSet);
+    result = injectSynonyms(result, aggr, keywords, usedSet, style);
   }
 
-  // ═══ RETRY LOOP: Achieve target change with escalating strategies ═══
-
+  // ═══ RETRY LOOP ═══
+  // Only apply retry if stealth didn't already achieve significant change
+  // This prevents aggressive restructuring from garbling stealth's clean output
   let change = measureChange(sent, result);
-  if (change < targetChange) {
-    // Pass 2: If restructure was skipped, try it now (safe — text hasn't been restructured yet)
+  if (stealthChange < 0.10 && change < targetChange) {
     if (!wasRestructured) {
       result = restructureSentence(result);
       wasRestructured = true;
     }
-    // Word transforms + max-aggression synonyms + collocations
     result = applyWordTransforms(result);
-    result = injectSynonyms(result, Math.min(10, aggr + 2), keywords, usedSet, style);
+    result = injectSynonyms(result, Math.min(10, aggr + 1), keywords, usedSet, style);
     result = compressPhrases(result);
     result = replaceCollocations(result, usedSet);
-    result = killAIPhrases(result);
     change = measureChange(sent, result);
   }
-  if (change < targetChange) {
-    // Pass 3: Aggressive backup dictionary (inflected forms, function words)
-    result = aggressiveWordChange(result, keywords, usedSet, style);
-    result = applyWordTransforms(result);
-    change = measureChange(sent, result);
-  }
-  if (change < targetChange) {
-    // Pass 4: Final push — full re-run on already-modified text
-    result = injectSynonyms(result, 10, keywords, usedSet, style);
-    result = aggressiveWordChange(result, keywords, usedSet, style);
-    result = replaceCollocations(result, usedSet);
-  }
-
-  // Restore shielded discourse markers
-  for (let i = 0; i < dmShields.length; i++) {
-    result = result.replace(`\u00ABDM${i}\u00BB`, dmShields[i]);
-  }
+  // Passes 3-4 removed: forced aggressive substitution destroys collocations and meaning
 
   // ═══ HARD RULES ENFORCEMENT ═══
   // 1. Expand any contractions (formal output, never introduce contractions)
@@ -3033,8 +2968,9 @@ function processSentence(sent, style, aggr, usedSet, keywords, sentIndex, sentCo
 function finalCleanup(text) {
   let r = text;
 
-  // Kill any remaining AI phrases
-  r = killAIPhrases(r);
+  // killAIPhrases DISABLED — its informal replacements destroy academic register
+  // The unified sentence processor handles AI patterns with formal alternatives
+  // r = killAIPhrases(r);
 
   // Final contraction expansion (catch any that slipped through)
   r = expandContractions(r);
@@ -3046,23 +2982,12 @@ function finalCleanup(text) {
   });
   // NOTE: "highly" and "profoundly" kept — legitimate in academic prose ("highly relevant", "profoundly shapes")
 
-  // ── Final AI-pattern regex sweep (patterns that survive dictionary) ──
-  // "Furthermore, " / "Moreover, " / "Additionally, " at sentence starts → swap to natural connectors
-  r = r.replace(/(?<=^|[.!?]\s+)(Furthermore|Moreover|Additionally),?\s+/gm, (m) => {
-    const alts = ['In addition, ','Also, ','Beyond this, ','What is more, ','Equally, '];
-    return alts[Math.floor(Math.random() * alts.length)];
-  });
-  // "Consequently" / "Subsequently" / "Hence" / "Thus" / "Therefore" → swap
-  r = r.replace(/(?<=^|[.!?]\s+)(Consequently|Subsequently|Hence|Thus|Therefore),?\s+/gm, (m) => {
-    const alts = ['As a result, ','Because of this, ','For that reason, ','This meant ','So, '];
-    return alts[Math.floor(Math.random() * alts.length)];
-  });
-  // "In conclusion," / "In summary," as sentence openers
-  r = r.replace(/(?<=^|[.!?]\s+)In\s+(conclusion|summary),?\s+/gim, (m, w) => {
-    const alts = ['Overall, ','On balance, ','Looking at the full picture, ','Altogether, '];
-    return alts[Math.floor(Math.random() * alts.length)];
-  });
-  // "It is [adj] to note that" anywhere
+  // ── Final AI-pattern regex sweep ──
+  // Only target genuinely AI-specific patterns, NOT standard academic transitions
+  // "Furthermore/Moreover/Additionally" are legitimate in academic writing — do NOT replace
+  // "Consequently/Hence/Thus/Therefore" are standard academic — do NOT replace with "So,"
+
+  // "It is [adj] to note that" — genuinely filler, safe to remove
   r = r.replace(/\bIt\s+is\s+\w+\s+to\s+note\s+that\s+/gi, '');
   // "this underscores/highlights/demonstrates the importance of"
   r = r.replace(/\bthis\s+(underscores|highlights|demonstrates|emphasizes|showcases|illustrates)\s+the\s+(importance|significance|need|necessity|value|role)\s+of\b/gi, 'this shows the value of');
@@ -3124,8 +3049,11 @@ export function pipeline(input, style, aggr) {
   for (const tok of tokens) {
     // Blank lines preserved exactly
     if (tok.type === 'blank') { outputParts.push(tok.text); continue; }
-    // Headings preserved exactly (no processing)
-    if (tok.type === 'h') { outputParts.push(tok.text); continue; }
+    // Headings: apply stealth phrase paraphrasing only (light touch)
+    if (tok.type === 'h') {
+      outputParts.push(stealthRewrite(tok.text, usedSet));
+      continue;
+    }
 
     // Paragraph processing
     const converted = convertFigures(tok.text);

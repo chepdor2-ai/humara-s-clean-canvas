@@ -690,13 +690,11 @@ const RESTRUCTURE = [
       return `Take this case: ${m[2].charAt(0).toLowerCase() + m[2].slice(1)}`;
     }
   },
-  // 19. "X, such as Y" → "X — Y being a case in point" / "X (for instance, Y)"
+  // 19. "X, such as Y" → "X, including Y"
+  // Only use "including" — "being a case in point" creates fragments in complex sentences
   {
     re: /(.+?),\s+such as\s+(.+)$/i,
-    apply: (m) => {
-      if (Math.random() < 0.5) return `${m[1]} — ${m[2]} being a case in point`;
-      return `${m[1]}, including ${m[2]}`;
-    }
+    apply: (m) => `${m[1]}, including ${m[2]}`
   },
   // 20. "This is particularly true for X" → "X especially fits this pattern"
   {

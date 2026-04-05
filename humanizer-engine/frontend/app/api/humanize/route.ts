@@ -14,6 +14,9 @@ import { structuralPostProcess } from '@/lib/engine/structural-post-processor';
 import { generateCandidates, type ScoredCandidate } from '@/lib/candidate-generator';
 import { unifiedSentenceProcess } from '@/lib/sentence-processor';
 import { expandContractions } from '@/lib/humanize-transforms';
+import { removeEmDashes } from '@/lib/engine/v13-shared-techniques';
+import { nuruHumanize } from '@/lib/engine/nuru-humanizer';
+import { omegaHumanize } from '@/lib/engine/omega-humanizer';
 
 export const maxDuration = 120; // LLM engines need more time
 
@@ -40,6 +43,20 @@ export async function POST(req: Request) {
       // Humara v1.3: Stealth Humanizer Engine v5 from coursework-champ
       const { pipeline } = await import('@/lib/engine/humara-v1-3');
       humanized = pipeline(text, tone ?? 'academic', strength === 'strong' ? 10 : strength === 'light' ? 4 : 7);
+    } else if (engine === 'omega') {
+      // Omega: Pure LLM per-sentence independent processing — each sentence gets its own API call
+      humanized = await omegaHumanize(
+        text,
+        strength ?? 'medium',
+        tone ?? 'academic',
+      );
+    } else if (engine === 'nuru') {
+      // Nuru: Pure non-LLM per-sentence independent processing with random strategy assignment
+      humanized = nuruHumanize(
+        text,
+        strength ?? 'medium',
+        tone ?? 'academic',
+      );
     } else if (engine === 'humara') {
       // Humara: Independent humanizer engine — phrase-level, strategy-diverse
       humanized = humaraHumanize(text, {
@@ -115,14 +132,19 @@ export async function POST(req: Request) {
     // Every engine's output flows through per-sentence protection,
     // humanization, 60%-change enforcement, and post-assembly AI
     // flow cleaning.  Uses the input AI score for aggressiveness.
+    // Skip for humara_v1_3: it has its own cleaned pipeline that
+    // produces academic prose — running unifiedSentenceProcess on
+    // top corrupts it (double restructuring, hedging injection, etc.)
     const FIRST_PERSON_RE_EARLY = /\b(I|me|my|mine|myself|we|us|our|ours|ourselves)\b/i;
     const earlyFirstPerson = FIRST_PERSON_RE_EARLY.test(text);
     const inputAiScore = inputAnalysis.summary.overall_ai_score;
-    humanized = unifiedSentenceProcess(humanized, earlyFirstPerson, inputAiScore);
+    if (engine !== 'humara' && engine !== 'humara_v1_3' && engine !== 'nuru' && engine !== 'omega') {
+      humanized = unifiedSentenceProcess(humanized, earlyFirstPerson, inputAiScore);
+    }
 
     // Post-capitalization formatting — fix sentence casing for all engine outputs
-    // Skip for humara engine: it has its own ContentProtection + grammar repair
-    if (engine !== 'humara' && engine !== 'humara_v1_3') {
+    // Skip for humara/nuru/omega: they have their own capitalization handling
+    if (engine !== 'humara' && engine !== 'humara_v1_3' && engine !== 'nuru' && engine !== 'omega') {
       humanized = fixCapitalization(humanized);
     }
 
@@ -133,20 +155,20 @@ export async function POST(req: Request) {
 
     // Cross-sentence repetition cleanup — deduplicates phrases repeated across sentences
     // Skip for humara engine: it has its own coherence layer
-    if (engine !== 'humara' && engine !== 'humara_v1_3') {
+    if (engine !== 'humara' && engine !== 'humara_v1_3' && engine !== 'nuru' && engine !== 'omega') {
       humanized = deduplicateRepeatedPhrases(humanized);
     }
 
     // Structural post-processing — attacks document-level statistical signals
     // (spectral_flatness, burstiness, sentence_uniformity, readability_consistency, vocabulary_richness)
     // Skip for humara engine: it has its own structural diversity layer
-    if (engine !== 'humara' && engine !== 'humara_v1_3') {
+    if (engine !== 'humara' && engine !== 'humara_v1_3' && engine !== 'nuru' && engine !== 'omega') {
       humanized = structuralPostProcess(humanized);
     }
 
     // Restore the original title/paragraph layout for every engine output.
     // Skip for humara engine: it has its own structure-preserving pipeline
-    if (engine !== 'humara' && engine !== 'humara_v1_3') {
+    if (engine !== 'humara' && engine !== 'humara_v1_3' && engine !== 'nuru' && engine !== 'omega') {
       humanized = preserveInputStructure(text, humanized);
     }
 
@@ -154,6 +176,10 @@ export async function POST(req: Request) {
     // Expand any contractions that may have slipped through ANY engine
     // or post-processing phase. This is the absolute last line of defense.
     humanized = expandContractions(humanized);
+
+    // ── FINAL SAFETY NET: Zero em-dash enforcement ──────────
+    // Remove any em-dashes that may have been reintroduced by post-processors
+    humanized = removeEmDashes(humanized);
 
     // Generate per-sentence alternatives (3 candidates each, best already picked by engines)
     const FIRST_PERSON_RE = /\b(I|me|my|mine|myself|we|us|our|ours|ourselves)\b/i;

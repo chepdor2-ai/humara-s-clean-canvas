@@ -1,5 +1,6 @@
 ﻿import type { Metadata } from 'next';
 import { Inter } from 'next/font/google';
+import Script from 'next/script';
 import './globals.css';
 import RootLayoutClient from './RootLayoutClient';
 import ThemeProvider from './ThemeProvider';
@@ -55,21 +56,18 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" className={inter.variable} suppressHydrationWarning>
       <head>
-        <script
+        <Script
+          id="remove-extension-attrs"
+          strategy="beforeInteractive"
           dangerouslySetInnerHTML={{
             __html: `
-              // Aggressively remove browser extension attributes before hydration
               (function() {
                 var removeExtensionAttrs = function() {
                   document.querySelectorAll('[bis_skin_checked]').forEach(function(el) {
                     el.removeAttribute('bis_skin_checked');
                   });
                 };
-                
-                // Run immediately
                 removeExtensionAttrs();
-                
-                // Watch for changes
                 var observer = new MutationObserver(removeExtensionAttrs);
                 observer.observe(document.documentElement, { 
                   attributes: true, 
@@ -77,8 +75,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                   childList: true, 
                   subtree: true 
                 });
-                
-                // Continuous cleanup before hydration
                 var interval = setInterval(removeExtensionAttrs, 10);
                 setTimeout(function() { clearInterval(interval); }, 1000);
               })();

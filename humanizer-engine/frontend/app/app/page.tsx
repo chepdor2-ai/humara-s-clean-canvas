@@ -136,12 +136,16 @@ const splitSentences = (text: string): { text: string; start: number; end: numbe
 
 /* ── Constants ──────────────────────────────────────────────────────────── */
 const ENGINES = [
-  { id: 'ghost_mini', label: 'Ghost Mini', subtitle: 'Statistical', premium: false, desc: 'Pure statistical engine — zero LLM calls. Multi-iteration synonym replacement, AI word kill (120+ banned words), 500K+ phrase variations, clause restructuring, and detector feedback loop. Fastest option.' },    { id: 'ghost_mini_v1_2', label: 'Ghost Mini v1.2', subtitle: 'Academic Statistical', premium: false, desc: 'Enhanced Ghost Mini specifically calibrated for pre-2000 academic prose. Employs semicolons strictly, blocks em-dashes, and maintains rigid structural syntax.' },  { id: 'ghost_pro', label: 'Ghost Pro', subtitle: 'Hybrid', premium: false, desc: 'LLM full-text rewrite (GPT-4o-mini) with pre-2000 style constraints, followed by aggressive statistical post-processing targeting 20 detector signals. Balanced quality and cost.' },
+  { id: 'omega', label: 'Omega', subtitle: 'Pure LLM Parallel', premium: false, desc: 'Every sentence extracted independently and sent to its own GPT-4o-mini API call in parallel. 10 distinct academic prompts assigned randomly. Pre-analysis detects structure, titles, and first-person usage. 60% word-change enforcement with retry. 40% statistical error injection. 7-phase AI-kill post-processing. No contractions. No first person unless in input.' },
+  { id: 'nuru', label: 'Nuru', subtitle: 'Non-LLM Parallel', premium: false, desc: 'Every sentence processed independently through 10 randomly assigned rule-based strategies. Pre-analysis extracts structure, titles, paragraphs, and detects first-person usage. 60% word-change enforcement. 40% academic error injection. 7-phase AI-kill post-processing. Zero LLM calls, instant processing. No contractions. No first person unless in input.' },
+  { id: 'humara_v1_3', label: 'Humara v1.3', subtitle: 'Stealth Engine v5', premium: false, desc: '8-stage non-LLM pipeline: structure parsing, token shielding, 300+ phrase compressions, 42 sentence restructuring patterns, 1500+ synonyms, 150+ AI phrase kills, discourse markers, and 3-pass retry loop. Zero LLM calls, instant processing.' },
+  { id: 'ghost_mini', label: 'Ghost Mini', subtitle: 'Statistical', premium: false, desc: 'Pure statistical engine — zero LLM calls. Multi-iteration synonym replacement, AI word kill (120+ banned words), 500K+ phrase variations, clause restructuring, and detector feedback loop. Fastest option.' },
+  { id: 'ghost_mini_v1_2', label: 'Ghost Mini v1.2', subtitle: 'Academic Statistical', premium: false, desc: 'Enhanced Ghost Mini specifically calibrated for pre-2000 academic prose. Employs semicolons strictly, blocks em-dashes, and maintains rigid structural syntax.' },
+  { id: 'ghost_pro', label: 'Ghost Pro', subtitle: 'Hybrid', premium: false, desc: 'LLM full-text rewrite (GPT-4o-mini) with pre-2000 style constraints, followed by aggressive statistical post-processing targeting 20 detector signals. Balanced quality and cost.' },
   { id: 'ninja', label: 'Ninja', subtitle: '4-Layer Hybrid', premium: false, desc: '4-layer pipeline: sentence-level LLM (structural rewrite + humanization + polish), rule-based AI vocabulary kill, statistical tweaks (burstiness, punctuation), and a 22-detector feedback loop. Supports style memory.' },
   { id: 'undetectable', label: 'Undetectable', subtitle: 'Double Pass', premium: false, desc: 'Maximum stealth — runs full Ninja pipeline first, then passes output through Ghost Mini statistical scrubbing. Double processing for the lowest possible AI detection scores.' },
   { id: 'fast_v11', label: 'V1.1', subtitle: '15-Phase Pipeline', premium: true, desc: '15 sequential phases: clean, detect, sentence rewrite, optional LLM for high-AI sentences, perplexity injection, syntax restructuring, pre-2000 voice, anti-pattern breaking, deep AI kill, rhythm variance, aggressive post-processing, and final scorched-earth sweep.' },
   { id: 'humara', label: 'Humara', subtitle: 'Independent Stealth', premium: true, desc: '3-layer sentence pipeline with 4000+ dictionary entries: structural rewriting (clause repositioning, voice switching), controlled rephrasing (context-aware synonyms, 421 phrase compressions), and flow adjustment. Zero LLM calls, instant processing.' },
-  { id: 'humara_v1_3', label: 'Humara v1.3', subtitle: 'Stealth Engine v5', premium: true, desc: '8-stage non-LLM pipeline: structure parsing, token shielding, 300+ phrase compressions, 42 sentence restructuring patterns, 1500+ synonyms, 150+ AI phrase kills, discourse markers, and 3-pass retry loop. Zero LLM calls, instant processing.' },
 ];
 const STRENGTHS = [
   { id: 'light', label: 'Light' },
@@ -164,7 +168,7 @@ export default function EditorPage() {
   const [error, setError] = useState('');
   const [rephrasing, setRephrasing] = useState(false);
 
-  const [engine, setEngine] = useState('ghost_mini');
+  const [engine, setEngine] = useState('humara_v1_3');
   const [engineDropdownOpen, setEngineDropdownOpen] = useState(false);
   const [strength, setStrength] = useState('medium');
   const [tone, setTone] = useState('academic');

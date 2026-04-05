@@ -56,14 +56,16 @@ function injectLengthVariance(sentences: string[]): string[] {
     // Occasionally concatenate two medium sentences with a semicolon
     if (i + 1 < sentences.length && words >= 8 && words <= 18 && Math.random() < 0.15) {
       const next = sentences[i + 1];
-      const nextWords = next.split(/\s+/).length;
-      if (nextWords >= 8 && nextWords <= 18) {
-        // Pop the last sentence we added and merge
-        result.pop();
-        const merged = sentences[i].replace(/[.!?]\s*$/, '') +
-          '; ' + next[0].toLowerCase() + next.slice(1);
-        result.push(merged);
-        i++; // skip next
+      if (next && next.length > 0) {
+        const nextWords = next.split(/\s+/).length;
+        if (nextWords >= 8 && nextWords <= 18) {
+          // Pop the last sentence we added and merge
+          result.pop();
+          const merged = sentences[i].replace(/[.!?]\s*$/, '') +
+            '; ' + next[0].toLowerCase() + next.slice(1);
+          result.push(merged);
+          i++; // skip next
+        }
       }
     }
   }
@@ -243,7 +245,7 @@ export const antiPatternPhase: Phase = {
         // C. Break opening formula (first sentence of non-first paragraphs, 30%)
         // Skip if sentence already has structural modifications
         if (sIdx === 0 && !isFirst && Math.random() < 0.30
-            && !sentence.flags.includes('struct-mod')) {
+            && !sentence.flags.includes('struct-mod') && text.length > 0) {
           const opener = pickRandom(PARAGRAPH_OPENERS);
           text = opener + text[0].toLowerCase() + text.slice(1);
           sentence.flags.push('struct-mod');

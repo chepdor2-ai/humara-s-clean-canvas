@@ -151,7 +151,7 @@ export const sentenceRewritePhase: Phase = {
             && !sentence.flags.includes('struct-mod')) {
           const starter = await getRandomStarter();
           // Only prepend if sentence doesn't already start with a similar transition
-          if (!/^(but|so|well|in fact|notably|look)/i.test(text)) {
+          if (text.length > 0 && !/^(but|so|well|in fact|notably|look)/i.test(text)) {
             text = `${starter} ${text[0].toLowerCase()}${text.slice(1)}`;
             sentence.flags.push('struct-mod');
           }

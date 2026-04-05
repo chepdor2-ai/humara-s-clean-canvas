@@ -23,6 +23,16 @@ import {
   finalAIKill,
   humanizeSentence,
 } from './humanize-transforms';
+import {
+  applyV13Techniques,
+  applyV13PostProcessing,
+  resetCollocationTracking,
+} from './engine/v13-shared-techniques';
+import {
+  academicRewrite,
+  academicPostProcess,
+  resetConnectorTracking,
+} from './engine/academic-rewriter';
 
 // ══════════════════════════════════════════════════════════════════
 // 1. CONTENT PROTECTION (sentence-level)
@@ -211,27 +221,25 @@ function processSingleSentence(
   // 2. Full humanization pipeline (all stages)
   let s = safeSentence;
 
-  // Layer 1: Pre-1990 academic voice restructuring
-  s = injectPre1990Voice(s);
+  // Layer 1: Academic sentence-level structural rewriting
+  // (Pattern-based rewrites, de-hedging, clause fronting, voice changes)
+  s = academicRewrite(s);
 
-  // Layer 2: Clause reorder (skip first sentence of paragraph)
+  // Layer 2: V1.3 stealth techniques (compression, collocation, restructure, punctuation)
+  s = applyV13Techniques(s);
+
+  // Layer 3: Clause reorder (skip first sentence of paragraph)
   if (!isFirstInParagraph && Math.random() < 0.45) {
     s = reorderClauses(s);
   }
 
-  // Layer 3: Phrasal verb injection (max 1 per sentence, ~40%)
-  s = injectPhrasalVerbs(s);
-
-  // Layer 4: Adverb/transition cleanup
-  s = aggressiveRephrase(s);
-
-  // Layer 5: Contraction expansion
+  // Layer 4: Contraction expansion
   s = expandContractions(s);
 
-  // Layer 6: First-person guard
+  // Layer 5: First-person guard
   s = guardFirstPerson(s, inputHadFirstPerson);
 
-  // Layer 7: AI term kill (catches everything)
+  // Layer 6: AI term kill (targeted academic register only)
   s = finalAIKill(s);
 
   // 3. Measure change ratio
@@ -281,31 +289,22 @@ function processSingleSentence(
 // that only appear when sentences sit together.
 
 // Pre-compiled AI flow patterns (document-level signals)
+// Only replace genuinely AI-specific patterns with formal academic alternatives
 const AI_FLOW_PATTERNS: { rx: RegExp; replacements: string[] }[] = [
-  // Repetitive formal connectors (AI tends to chain these)
-  { rx: /\bFurthermore,/gi, replacements: ['In addition,', 'Beyond that,', 'Added to this,'] },
-  { rx: /\bMoreover,/gi, replacements: ['On top of that,', 'What is more,', 'Also of note,'] },
-  { rx: /\bAdditionally,/gi, replacements: ['Also,', 'On top of this,', 'Besides this,'] },
-  { rx: /\bConsequently,/gi, replacements: ['As a result,', 'Because of this,', 'Following from this,'] },
-  { rx: /\bNevertheless,/gi, replacements: ['Even so,', 'All the same,', 'That said,'] },
-  { rx: /\bNotwithstanding,/gi, replacements: ['In spite of this,', 'For all that,'] },
-  { rx: /\bSubsequently,/gi, replacements: ['After that,', 'Later on,', 'In the time that followed,'] },
-  { rx: /\bSignificantly,/gi, replacements: ['In a telling way,', 'Notably,', 'Worth pointing out,'] },
-  // AI-typical assertion patterns
+  // AI-typical assertion patterns (these ARE AI-specific)
   { rx: /\bIt is (?:important|crucial|essential|imperative|vital|critical) to note that\b/gi, 
-    replacements: ['One should note that', 'Worth noting,', 'A point of interest:'] },
+    replacements: ['One observes that', 'It bears mention that', 'Of note,'] },
   { rx: /\bIt is worth (?:noting|mentioning|highlighting) that\b/gi,
-    replacements: ['One should be aware that', 'Worth pointing out,', 'To highlight,'] },
+    replacements: ['One may observe that', 'It is relevant that', 'Of significance,'] },
   { rx: /\bThis (?:highlights|underscores|emphasizes|demonstrates|illustrates) (?:the fact )?that\b/gi,
-    replacements: ['This shows that', 'This makes clear that', 'This reveals that'] },
+    replacements: ['This indicates that', 'This confirms that', 'This points to the conclusion that'] },
   { rx: /\bIn (?:today's|the modern|the current|the contemporary) (?:world|era|age|landscape|environment)\b/gi,
-    replacements: ['At present', 'In the current period', 'As things stand now'] },
+    replacements: ['In the present context', 'Under current conditions', 'In contemporary terms'] },
   { rx: /\bplays a (?:crucial|vital|pivotal|key|significant|important) role\b/gi,
-    replacements: ['is central to', 'matters greatly for', 'carries weight in'] },
+    replacements: ['is central', 'is integral', 'figures prominently'] },
   { rx: /\ba (?:wide|broad|vast|diverse) (?:range|array|spectrum|variety) of\b/gi,
-    replacements: ['many', 'numerous', 'a good number of', 'all sorts of'] },
-  { rx: /\bin order to\b/gi, replacements: ['so as to', 'to', 'with the aim of'] },
-  { rx: /\bdue to the fact that\b/gi, replacements: ['because', 'given that', 'seeing as'] },
+    replacements: ['numerous', 'various', 'a considerable number of'] },
+  { rx: /\bdue to the fact that\b/gi, replacements: ['because', 'given that', 'since'] },
 ];
 
 // Consecutive duplicate starters detection  
@@ -367,68 +366,9 @@ export function deepAIFlowClean(text: string, aiScore: number = 50): string {
   });
   result = cleanedParagraphs.join('\n\n');
 
-  // Pass 3: Kill remaining high-confidence AI words that slipped through
-  // Only activate for high AI scores
-  if (aiScore > 50) {
-    const FINAL_KILLS: [RegExp, string[]][] = [
-      [/\bcomprehensive\b/gi, ['thorough', 'complete', 'full']],
-      [/\binnovative\b/gi, ['novel', 'inventive', 'fresh']],
-      [/\bfacilitate\b/gi, ['make possible', 'help along', 'enable']],
-      [/\bseamlessly\b/gi, ['smoothly', 'without trouble', 'easily']],
-      [/\bseamless\b/gi, ['smooth', 'effortless', 'easy']],
-      [/\brobust\b/gi, ['solid', 'sturdy', 'dependable']],
-      [/\bholistic\b/gi, ['whole-picture', 'all-round', 'broad']],
-      [/\bparadigm\b/gi, ['model', 'pattern', 'framework']],
-      [/\bsynergy\b/gi, ['combined effect', 'teamwork', 'joint effort']],
-      [/\bnuanced\b/gi, ['layered', 'fine-grained', 'subtle']],
-      [/\btransformative\b/gi, ['powerful', 'sweeping', 'game-changing']],
-      [/\bpivotal\b/gi, ['deciding', 'key', 'turning-point']],
-      [/\bgroundbreaking\b/gi, ['pioneering', 'original', 'path-breaking']],
-      [/\bcutting-edge\b/gi, ['modern', 'up-to-date', 'advanced']],
-      [/\bleverage\b/gi, ['use', 'draw on', 'make use of']],
-      [/\bleveraging\b/gi, ['using', 'drawing on', 'making use of']],
-      [/\butilize\b/gi, ['use', 'employ', 'make use of']],
-      [/\butilizing\b/gi, ['using', 'employing', 'making use of']],
-      [/\boptimize\b/gi, ['refine', 'tune', 'improve']],
-      [/\boptimizing\b/gi, ['refining', 'tuning', 'improving']],
-      [/\bstreamline\b/gi, ['simplify', 'trim', 'clean up']],
-      [/\benhance\b/gi, ['strengthen', 'improve', 'sharpen']],
-      [/\benhancing\b/gi, ['strengthening', 'improving', 'sharpening']],
-      [/\bempower\b/gi, ['enable', 'equip', 'support']],
-      [/\bempowering\b/gi, ['enabling', 'equipping', 'supporting']],
-      [/\bfoster\b/gi, ['encourage', 'nurture', 'grow']],
-      [/\bfostering\b/gi, ['encouraging', 'nurturing', 'growing']],
-      [/\bnavigate\b/gi, ['work through', 'handle', 'manage']],
-      [/\bnavigating\b/gi, ['working through', 'handling', 'managing']],
-      [/\bencompass\b/gi, ['cover', 'include', 'take in']],
-      [/\bencompassing\b/gi, ['covering', 'including', 'taking in']],
-      [/\bunderscore\b/gi, ['stress', 'highlight', 'bring home']],
-      [/\bunderscores\b/gi, ['stresses', 'highlights', 'brings home']],
-      [/\bdelve\b/gi, ['dig', 'explore', 'probe']],
-      [/\bdelving\b/gi, ['digging', 'exploring', 'probing']],
-      [/\bmyriad\b/gi, ['many', 'countless', 'numerous']],
-      [/\bplethora\b/gi, ['wealth', 'abundance', 'plenty']],
-      [/\bubiquitous\b/gi, ['widespread', 'common', 'everywhere']],
-      [/\bparamount\b/gi, ['chief', 'top', 'most important']],
-      [/\bindispensable\b/gi, ['essential', 'vital', 'necessary']],
-      [/\bprofound\b/gi, ['deep', 'sweeping', 'far-reaching']],
-      [/\bprofoundly\b/gi, ['deeply', 'greatly', 'in a serious way']],
-    ];
-
-    for (const [rx, alts] of FINAL_KILLS) {
-      rx.lastIndex = 0;
-      if (rx.test(result)) {
-        rx.lastIndex = 0;
-        result = result.replace(rx, (match) => {
-          const replacement = pick(alts);
-          if (match[0] === match[0].toUpperCase()) {
-            return replacement[0].toUpperCase() + replacement.slice(1);
-          }
-          return replacement;
-        });
-      }
-    }
-  }
+  // Pass 3: Removed — standard academic vocabulary (comprehensive, facilitate,
+  // enhance, etc.) is preserved. Only genuinely AI-specific words are handled
+  // by the finalAIKill layer (Layer 6) in the per-sentence pipeline.
 
   // Pass 4: Fix double spaces and punctuation artifacts
   result = result.replace(/ {2,}/g, ' ');
@@ -463,6 +403,10 @@ export function unifiedSentenceProcess(
   aiScore: number = 50,
 ): string {
   if (!text || text.trim().length < 20) return text;
+
+  // Reset tracking for each new document
+  resetCollocationTracking();
+  resetConnectorTracking();
 
   // Split into paragraphs (preserve blank lines)
   const paragraphs = text.split(/\n\n+/);
@@ -508,6 +452,12 @@ export function unifiedSentenceProcess(
 
   // Deep AI flow clean on the combined output
   assembled = deepAIFlowClean(assembled, aiScore);
+
+  // V1.3 post-processing: fix out-of-context synonyms, remove em-dashes
+  assembled = applyV13PostProcessing(assembled);
+
+  // Academic post-processing: burstiness injection, cross-sentence coherence
+  assembled = academicPostProcess(assembled);
 
   return assembled;
 }

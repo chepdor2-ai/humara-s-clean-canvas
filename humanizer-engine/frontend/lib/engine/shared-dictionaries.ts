@@ -970,15 +970,11 @@ export function diversifyStarters(text: string): string {
     const p = para.trim();
     if (!p) return "";
 
-    // We operate on full paragraph text, treating each sentence boundary
-    // Split into sentences, process, rejoin
     const sentRegex = /(?<=[.!?])\s+(?=[A-Z])/;
     const sentences = p.split(sentRegex);
     if (sentences.length === 0) return "";
 
     const result: string[] = [];
-    const usedStarters = new Set<string>();
-    let rerouteIdx = 0;
 
     for (let i = 0; i < sentences.length; i++) {
       let sent = sentences[i].trim();
@@ -986,7 +982,7 @@ export function diversifyStarters(text: string): string {
 
       const firstWord = sent.split(/\s+/)[0]?.toLowerCase().replace(/[^a-z]/g, "") ?? "";
 
-      // Kill AI formal starters
+      // Kill AI formal starters — strip them entirely, no replacement
       if (AI_STARTER_WORDS.has(firstWord)) {
         const comma = sent.indexOf(",");
         if (comma > 0 && comma < 20) {
@@ -995,15 +991,7 @@ export function diversifyStarters(text: string): string {
         }
       }
 
-      // Check for duplicate starter
-      const currentStarter = sent.split(/\s+/)[0]?.toLowerCase().replace(/[^a-z]/g, "") ?? "";
-      if (usedStarters.has(currentStarter) && sent.split(/\s+/).length > 6) {
-        const reroute = NATURAL_REROUTES[rerouteIdx % NATURAL_REROUTES.length];
-        rerouteIdx++;
-        sent = reroute + " " + sent[0].toLowerCase() + sent.slice(1);
-      }
-
-      usedStarters.add(sent.split(/\s+/)[0]?.toLowerCase().replace(/[^a-z]/g, "") ?? "");
+      // Duplicate starters are fine — human writing naturally repeats starters
       result.push(sent);
     }
 
@@ -2105,20 +2093,8 @@ export function cleanSentenceStarters(sentences: string[]): string[] {
       }
     }
 
-    // Phase 2: Break consecutive identical starters using academic alternatives
-    if (i > 0) {
-      const prevFirst = result[result.length - 1]?.split(/\s+/)[0]?.toLowerCase().replace(/[^a-z]/g, "") ?? "";
-      const currFirst = sent.split(/\s+/)[0]?.toLowerCase().replace(/[^a-z]/g, "") ?? "";
-
-      if (prevFirst === currFirst && sent.split(/\s+/).length > 6) {
-        // Pick an academic starter based on sentence context
-        const starter = pickAcademicStarter(sent, usedStarters);
-        if (starter) {
-          sent = starter + " " + sent[0].toLowerCase() + sent.slice(1);
-          usedStarters.add(starter.split(/\s+/)[0]?.toLowerCase() ?? "");
-        }
-      }
-    }
+    // Phase 2: If consecutive sentences start with the same word, just leave them
+    // — human writing naturally has repeated starters, adding transitions is AI-detectable
 
     // Track starter for duplicate detection
     usedStarters.add(sent.split(/\s+/)[0]?.toLowerCase().replace(/[^a-z]/g, "") ?? "");

@@ -23,6 +23,7 @@ export default function RootLayoutClient({ children }: { children: React.ReactNo
   const isAppRoute = APP_ROUTES.some((route) => pathname === route || pathname.startsWith(route + '/'));
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
+  const [appMenuOpen, setAppMenuOpen] = useState(false);
 
   useEffect(() => {
     const handleScroll = () => setScrolled(window.scrollY > 20);
@@ -133,8 +134,6 @@ export default function RootLayoutClient({ children }: { children: React.ReactNo
       </div>
     );
   }
-
-  const [appMenuOpen, setAppMenuOpen] = useState(false);
 
   return (
     <div className="flex h-screen bg-slate-50 dark:bg-zinc-950 overflow-hidden">

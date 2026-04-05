@@ -16,8 +16,13 @@ export function pipeline(text, style, aggr) {
   // Step 2: Run core V1.3 engine
   let result = rawPipeline(sanitized, style, aggr);
 
-  // Step 3: Deep post-processing (7 phases, sentence-by-sentence)
-  result = deepPostProcess(result);
+  // Step 3: Deep post-processing — DISABLED
+  // The v1.3 pipeline already produces clean academic output.
+  // deepPostProcess's 7 phases (AI vocab purge, starter injection, flow
+  // bridges, passive→active, nominalization reduction) corrupt the output
+  // by replacing academic vocabulary with informal alternatives and
+  // injecting hedging phrases.
+  // result = deepPostProcess(result);
 
   // Step 4: Restore protected content
   result = restoreProtected(result, map);

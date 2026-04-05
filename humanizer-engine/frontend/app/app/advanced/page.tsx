@@ -163,11 +163,11 @@ export default function AdvancedPage() {
             <h2 className="text-sm font-semibold text-slate-900 dark:text-white">Upload Documents</h2>
             <div className="flex items-center gap-4">
               <select value={batchEngine} onChange={e => setBatchEngine(e.target.value)} title="Select engine" className="px-3 py-2.5 text-sm border border-slate-200 dark:border-zinc-700 rounded-lg bg-white dark:bg-zinc-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500">
-                <option value="ghost_pro">Standard</option>
-                <option value="ghost_mini">Fast</option>
-                <option value="ninja">Stealth</option>
-                <option value="humara">Humara v1.1</option>
-                <option value="fast_v11">Humara 0</option>
+                <option value="humara_v1_3">Humara v1.3 (Stealth)</option>
+                <option value="ghost_pro">Ghost Pro (Hybrid)</option>
+                <option value="ghost_mini">Ghost Mini (Fast)</option>
+                <option value="ninja">Ninja (4-Layer)</option>
+                <option value="fast_v11">V1.1 (15-Phase)</option>
               </select>
               <label className="flex items-center gap-2 px-4 py-2.5 bg-white dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-lg text-sm font-medium text-slate-700 dark:text-zinc-300 hover:bg-slate-50 dark:hover:bg-zinc-700 cursor-pointer transition-colors">
                 <Upload className="w-4 h-4" /> Upload .txt files
