@@ -2225,13 +2225,90 @@ function isProperOrAbbreviation(word: string): boolean {
 }
 
 /**
+ * Extract proper nouns from the original input text.
+ * A "proper noun" = a capitalized word (Uppercase + lowercase) that appears
+ * mid-sentence (not at the start of a sentence) in the original text.
+ * We also include ALL capitalized words that aren't common English words.
+ */
+function extractProperNouns(originalText: string): Set<string> {
+  const properNouns = new Set<string>();
+  if (!originalText) return properNouns;
+
+  // Common English words that may appear capitalized at sentence start
+  // but are NOT proper nouns
+  const COMMON_WORDS = new Set([
+    'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for',
+    'of', 'with', 'by', 'from', 'as', 'is', 'was', 'are', 'were', 'be',
+    'been', 'being', 'have', 'has', 'had', 'do', 'does', 'did', 'will',
+    'would', 'could', 'should', 'may', 'might', 'shall', 'can', 'this',
+    'that', 'these', 'those', 'it', 'its', 'they', 'them', 'their',
+    'he', 'she', 'him', 'her', 'his', 'we', 'us', 'our', 'my', 'me',
+    'you', 'your', 'who', 'which', 'what', 'when', 'where', 'how', 'why',
+    'if', 'then', 'than', 'so', 'not', 'no', 'nor', 'yet', 'also',
+    'just', 'only', 'very', 'most', 'more', 'much', 'many', 'some',
+    'any', 'all', 'each', 'every', 'both', 'few', 'several', 'such',
+    'about', 'after', 'before', 'between', 'through', 'during', 'into',
+    'over', 'under', 'above', 'below', 'up', 'down', 'out', 'off',
+    'here', 'there', 'now', 'still', 'again', 'even', 'however',
+    'although', 'because', 'since', 'while', 'until', 'unless',
+    'whether', 'though', 'despite', 'without', 'within', 'among',
+    'across', 'along', 'around', 'behind', 'beyond', 'toward',
+    'furthermore', 'moreover', 'therefore', 'thus', 'hence',
+    'nevertheless', 'nonetheless', 'meanwhile', 'subsequently',
+    'consequently', 'additionally', 'according', 'regarding',
+    'concerning', 'including', 'following', 'given', 'based',
+    'rather', 'instead', 'except', 'besides', 'unlike', 'like',
+    'often', 'always', 'never', 'sometimes', 'usually', 'perhaps',
+    'likely', 'probably', 'certainly', 'clearly', 'simply', 'merely',
+    'effectively', 'essentially', 'particularly', 'especially',
+    'specifically', 'generally', 'typically', 'primarily', 'largely',
+    'research', 'study', 'studies', 'data', 'results', 'analysis',
+    'evidence', 'findings', 'approach', 'method', 'process', 'system',
+    'development', 'understanding', 'significant', 'important', 'key',
+    'critical', 'essential', 'major', 'primary', 'central', 'main',
+    'various', 'different', 'similar', 'other', 'new', 'first', 'second',
+    'one', 'two', 'three', 'four', 'five', 'well', 'good', 'best',
+    'better', 'high', 'low', 'long', 'short', 'large', 'small', 'great',
+    'early', 'late', 'next', 'last', 'same', 'own', 'able', 'possible',
+    'certain', 'real', 'true', 'full', 'whole', 'entire', 'complete',
+  ]);
+
+  // Split into sentences (rough split)
+  const sentences = originalText.split(/(?<=[.!?])\s+/);
+  for (const sentence of sentences) {
+    const words = sentence.split(/\s+/);
+    for (let i = 0; i < words.length; i++) {
+      const word = words[i].replace(/[^a-zA-Z'-]/g, '');
+      if (!word || word.length < 2) continue;
+      // Capitalized word (Uppercase first letter + lowercase rest)
+      if (/^[A-Z][a-z]/.test(word)) {
+        if (i === 0) {
+          // First word of sentence: only add if it's NOT a common word
+          if (!COMMON_WORDS.has(word.toLowerCase())) {
+            properNouns.add(word);
+          }
+        } else {
+          // Mid-sentence capitalized word = definite proper noun
+          properNouns.add(word);
+        }
+      }
+    }
+  }
+  return properNouns;
+}
+
+/**
  * Fix capitalization for the entire output text.
  * - First letter of each sentence → uppercase
  * - All other letters → lowercase UNLESS proper noun, abbreviation, or acronym
  * - Preserves punctuation, numbers, and special characters
+ * - When originalText is provided, preserves proper nouns from the original
  */
-export function fixCapitalization(text: string): string {
+export function fixCapitalization(text: string, originalText?: string): string {
   if (!text?.trim()) return text;
+
+  // Extract proper nouns from the original text to preserve them
+  const properNouns = originalText ? extractProperNouns(originalText) : new Set<string>();
 
   // Process paragraph by paragraph to preserve structure
   return text.split(/(\n\s*\n)/).map(segment => {
@@ -2244,13 +2321,13 @@ export function fixCapitalization(text: string): string {
       /([^.!?]*[.!?]+)/g,
       (sentence) => {
         if (!sentence.trim()) return sentence;
-        return fixSentenceCapitalization(sentence);
+        return fixSentenceCapitalization(sentence, properNouns);
       }
     );
   }).join('');
 }
 
-function fixSentenceCapitalization(sentence: string): string {
+function fixSentenceCapitalization(sentence: string, properNouns: Set<string>): string {
   // Find the leading whitespace
   const leadMatch = sentence.match(/^(\s*)/);
   const lead = leadMatch ? leadMatch[1] : '';
@@ -2277,6 +2354,14 @@ function fixSentenceCapitalization(sentence: string): string {
     if (isProperOrAbbreviation(core)) {
       isFirstWord = false;
       return token; // preserve original casing
+    }
+
+    // Check if the word is a proper noun from the original input — preserve casing
+    // Match the core stripped of punctuation against proper nouns (case-insensitive lookup, case-preserving output)
+    const properNounMatch = [...properNouns].find(pn => pn.toLowerCase() === core.toLowerCase());
+    if (properNounMatch) {
+      isFirstWord = false;
+      return puncLead + properNounMatch + puncTrail;
     }
 
     // Check if it's a single capital letter like "I" — preserve

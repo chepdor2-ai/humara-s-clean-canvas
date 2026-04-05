@@ -37,29 +37,46 @@ export async function POST(req: Request) {
     const detector = getDetector();
     const inputAnalysis = detector.analyze(text);
 
+    // ── Heading normalization (shared preprocessing) ───────────
+    // Ensures headings separated by single \n from body text get
+    // double-newline separation so engines treat them as separate blocks.
+    // Without this, engines flatten "I. Introduction\nSuzanne..." into one paragraph.
+    let normalizedText = text;
+    // Step 1: Known heading patterns (Roman numerals, Part/Section/Chapter, markdown #)
+    normalizedText = normalizedText.replace(
+      /^((?:#{1,6}\s.+|[IVXLCDM]+\.\s.+|(?:Part|Section|Chapter)\s+\d+.*))\n(?!\n)/gim,
+      "$1\n\n"
+    );
+    // Step 2: Short non-punctuated lines followed by a line starting with uppercase
+    // (likely titles/headings) — ensure double-newline separation
+    normalizedText = normalizedText.replace(
+      /^([^\n]{1,80}[^.!?\n])\n(?!\n)(?=[A-Z])/gm,
+      "$1\n\n"
+    );
+
     let humanized: string;
 
     if (engine === 'humara_v1_3') {
       // Humara v1.3: Stealth Humanizer Engine v5 from coursework-champ
       const { pipeline } = await import('@/lib/engine/humara-v1-3');
-      humanized = pipeline(text, tone ?? 'academic', strength === 'strong' ? 10 : strength === 'light' ? 4 : 7);
+      humanized = pipeline(normalizedText, tone ?? 'academic', strength === 'strong' ? 10 : strength === 'light' ? 4 : 7);
     } else if (engine === 'omega') {
       // Omega: Pure LLM per-sentence independent processing — each sentence gets its own API call
       humanized = await omegaHumanize(
-        text,
+        normalizedText,
         strength ?? 'medium',
         tone ?? 'academic',
       );
     } else if (engine === 'nuru') {
       // Nuru: Pure non-LLM per-sentence independent processing with random strategy assignment
       humanized = nuruHumanize(
-        text,
+        normalizedText,
         strength ?? 'medium',
         tone ?? 'academic',
       );
     } else if (engine === 'humara') {
       // Humara: Independent humanizer engine — phrase-level, strategy-diverse
-      humanized = humaraHumanize(text, {
+      humanized = humaraHumanize(normalizedText, {
         strength: strength === 'high' ? 'heavy' : strength === 'low' ? 'light' : (strength ?? 'medium'),
         tone: tone ?? 'neutral',
         strictMeaning: strict_meaning ?? false,
@@ -67,7 +84,7 @@ export async function POST(req: Request) {
     } else if (premium) {
       // Premium: Purely AI-driven per-sentence pipeline
       humanized = await premiumHumanize(
-        text,
+        normalizedText,
         engine ?? 'ghost_pro',
         strength ?? 'medium',
         tone ?? 'neutral',
@@ -77,7 +94,7 @@ export async function POST(req: Request) {
       // Undetectable: Ninja (Stealth) only — second Ghost Mini pass removed
       // The double pass was over-processing and creating unnaturally uniform text
       humanized = await llmHumanize(
-        text,
+        normalizedText,
         strength ?? 'strong',
         true,
         strict_meaning ?? true,
@@ -88,7 +105,7 @@ export async function POST(req: Request) {
     } else if (engine === 'ninja') {
       // Ninja: 3 LLM phases + rule-based + post-processing + detector feedback loop
       humanized = await llmHumanize(
-        text,
+        normalizedText,
         strength ?? 'medium',
         true,  // preserveSentences
         strict_meaning ?? true,
@@ -98,7 +115,7 @@ export async function POST(req: Request) {
       );
     } else if (engine === 'fast_v11') {
       // Fast V1.1: 7-phase pipeline (non-LLM primary, LLM optional for chunk rewrite)
-      const v11Result = await humanizeV11(text, {
+      const v11Result = await humanizeV11(normalizedText, {
         strength: strength ?? 'medium',
         tone: tone ?? 'neutral',
         strictMeaning: strict_meaning ?? false,
@@ -107,10 +124,10 @@ export async function POST(req: Request) {
     } else if (engine === 'ghost_mini_v1_2') {
       // Ghost Min v1.2: Academic Prose optimized
       const { ghostMiniV1_2 } = await import('@/lib/engine/ghost-mini-v1-2');
-      humanized = ghostMiniV1_2(text);
+      humanized = ghostMiniV1_2(normalizedText);
     } else if (engine === 'ghost_pro') {
       // Ghost Pro: Single LLM rewrite + signal-aware post-processing
-      humanized = await ghostProHumanize(text, {
+      humanized = await ghostProHumanize(normalizedText, {
         strength: strength ?? 'medium',
         tone: tone ?? 'neutral',
         strictMeaning: strict_meaning ?? false,
@@ -118,7 +135,7 @@ export async function POST(req: Request) {
       });
     } else {
       // Ghost Mini: Statistical-only pipeline (no LLM)
-      humanized = humanize(text, {
+      humanized = humanize(normalizedText, {
         mode: 'ghost_mini',
         strength: strength ?? 'medium',
         tone: tone ?? 'neutral',
@@ -144,8 +161,9 @@ export async function POST(req: Request) {
 
     // Post-capitalization formatting — fix sentence casing for all engine outputs
     // Skip for humara/nuru/omega: they have their own capitalization handling
+    // Pass original text so proper nouns from the input are preserved
     if (engine !== 'humara' && engine !== 'humara_v1_3' && engine !== 'nuru' && engine !== 'omega') {
-      humanized = fixCapitalization(humanized);
+      humanized = fixCapitalization(humanized, text);
     }
 
     // Fix AI/ai capitalization that fixCapitalization may lowercase

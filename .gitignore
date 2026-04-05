@@ -4,3 +4,7 @@ node_modules
 dist
 build
 .cache
+
+# Large dictionary files (exceed GitHub 100MB limit)
+dictionaries/corpus_massive.txt
+dictionaries/phrase_dictionary.jsonl

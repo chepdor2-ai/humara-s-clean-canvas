@@ -732,46 +732,12 @@ function expandAllContractions(sentences: string[]): string[] {
 // PHASE 10: PUNCTUATION & STARTER DIVERSITY
 // ════════════════════════════════════════════════════════════════════════════
 
-const TAIL_ASIDES = [
-  " — a point that deserves more attention",
-  " — though the specifics vary by context",
-  " — and the data reflects this",
-  " — which few would dispute",
-  " (though this varies widely)",
-  " (a reality many overlook)",
-  " (and the numbers are hard to argue with)",
-  " (at least in most documented cases)",
-];
+// TAIL_ASIDES removed: they inject fabricated content ("which few would dispute",
+// "and the data reflects this") that changes the meaning and isn't in the original.
 
-function diversifyPunctuation(sentences: string[], rng: () => number): string[] {
-  if (sentences.length < 5) return sentences;
-  let dashCount = 0;
-  let parenCount = 0;
-
-  return sentences.map((sent, idx) => {
-    const wc = sent.split(/\s+/).length;
-    if (wc < 10 || /[?!]/.test(sent)) return sent;
-
-    if (idx % 6 === 2 && dashCount < 2 && rng() < 0.45) {
-      const aside = pickOne(
-        TAIL_ASIDES.filter((a) => a.startsWith(" —")),
-        rng
-      );
-      dashCount++;
-      return sent.replace(/\.\s*$/, aside + ".");
-    }
-
-    if (idx % 6 === 5 && parenCount < 2 && rng() < 0.45) {
-      const aside = pickOne(
-        TAIL_ASIDES.filter((a) => a.startsWith(" (")),
-        rng
-      );
-      parenCount++;
-      return sent.replace(/\.\s*$/, aside + ".");
-    }
-
-    return sent;
-  });
+function diversifyPunctuation(sentences: string[], _rng: () => number): string[] {
+  // No-op: tail asides removed to prevent meaning-altering filler injection
+  return sentences;
 }
 
 const STARTER_ALTS: Record<string, string[]> = {
