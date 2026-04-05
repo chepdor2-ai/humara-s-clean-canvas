@@ -694,6 +694,165 @@ function ppKillFirstPerson(text: string): string {
 }
 
 // ══════════════════════════════════════════════════════════════════════════
+// SENTENCE SURGERY — burstiness injection via merge/split
+// ══════════════════════════════════════════════════════════════════════════
+
+const SURGERY_MERGE_CONNECTORS = [', and ', ', yet ', '; ', ', which means ', ', so '];
+const SURGERY_SPLIT_PATTERNS: RegExp[] = [
+  /,\s+and\s+/i, /,\s+but\s+/i, /;\s+/, /,\s+which\s+/i, /,\s+while\s+/i, /,\s+although\s+/i,
+];
+
+function ppSentenceSurgery(text: string): string {
+  return text.split(/\n\s*\n/).map(para => {
+    const trimmed = para.trim();
+    if (!trimmed || isProtectedLine(trimmed)) return para;
+    const sentences = trimmed.split(/(?<=[.!?])\s+/).filter(s => s.trim());
+    if (sentences.length < 4) return para;
+
+    const result: string[] = [];
+    let merges = 0;
+    let splits = 0;
+    const maxMerges = Math.max(1, Math.floor(sentences.length / 7));
+    const maxSplits = Math.max(1, Math.floor(sentences.length / 10));
+    const skip = new Set<number>();
+
+    for (let i = 0; i < sentences.length; i++) {
+      if (skip.has(i)) continue;
+      const s = sentences[i];
+      const wc = s.split(/\s+/).length;
+
+      // Merge short adjacent pairs
+      if (merges < maxMerges && i + 1 < sentences.length && !skip.has(i + 1)) {
+        const nextWc = sentences[i + 1].split(/\s+/).length;
+        if (wc >= 4 && wc <= 16 && nextWc >= 4 && nextWc <= 16 && (wc + nextWc) <= 32) {
+          const clean = s.replace(/[.!?]\s*$/, '');
+          const conn = SURGERY_MERGE_CONNECTORS[Math.floor(Math.random() * SURGERY_MERGE_CONNECTORS.length)];
+          const next = sentences[i + 1];
+          const lower = next[0]?.toLowerCase() + next.slice(1);
+          result.push(clean + conn + lower);
+          skip.add(i + 1);
+          merges++;
+          continue;
+        }
+      }
+
+      // Split long sentences at clause boundaries
+      if (splits < maxSplits && wc > 24) {
+        let didSplit = false;
+        for (const pat of SURGERY_SPLIT_PATTERNS) {
+          const match = s.match(pat);
+          if (match && match.index) {
+            const before = s.slice(0, match.index);
+            const after = s.slice(match.index + match[0].length);
+            if (before.split(/\s+/).length >= 8 && after.split(/\s+/).length >= 6) {
+              let p1 = before.trim();
+              if (!/[.!?]$/.test(p1)) p1 += '.';
+              let p2 = after.trim();
+              if (p2[0]) p2 = p2[0].toUpperCase() + p2.slice(1);
+              if (!/[.!?]$/.test(p2)) p2 += '.';
+              result.push(p1, p2);
+              splits++;
+              didSplit = true;
+              break;
+            }
+          }
+        }
+        if (!didSplit) result.push(s);
+        continue;
+      }
+
+      result.push(s);
+    }
+    return result.join(' ');
+  }).join('\n\n');
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// N-GRAM PATTERN BREAKING
+// ══════════════════════════════════════════════════════════════════════════
+
+const DIVERSE_STARTERS = [
+  'At the same time, ', 'On this basis, ', 'In practical terms, ',
+  'From this angle, ', 'Taken together, ', 'Looking at this differently, ',
+  'On a related point, ', 'In effect, ', 'Put another way, ',
+];
+const COMMON_STARTER_WORDS = new Set(['the','this','that','these','those','it','its','a','an','she','he','they','we','our','his','her','their','my','your','one','some','many','most','all','each','every','both','few','such','no','any','other']);
+
+function ppNgramBreaking(text: string): string {
+  return text.split(/\n\s*\n/).map(para => {
+    const trimmed = para.trim();
+    if (!trimmed || isProtectedLine(trimmed)) return para;
+    const sentences = trimmed.split(/(?<=[.!?])\s+/).filter(s => s.trim());
+    if (sentences.length < 3) return para;
+
+    let starterIdx = 0;
+    for (let i = 1; i < sentences.length; i++) {
+      const prevStart = sentences[i - 1].split(/\s+/)[0]?.toLowerCase().replace(/[^a-z]/g, '');
+      const currStart = sentences[i].split(/\s+/)[0]?.toLowerCase().replace(/[^a-z]/g, '');
+      if (prevStart && currStart && prevStart === currStart) {
+        const starter = DIVERSE_STARTERS[starterIdx % DIVERSE_STARTERS.length];
+        starterIdx++;
+        const firstWord = sentences[i].split(/\s/)[0].replace(/[^a-zA-Z]/g, '');
+        if (COMMON_STARTER_WORDS.has(firstWord.toLowerCase())) {
+          sentences[i] = starter + sentences[i][0].toLowerCase() + sentences[i].slice(1);
+        } else {
+          sentences[i] = starter + sentences[i];
+        }
+      }
+    }
+    return sentences.join(' ');
+  }).join('\n\n');
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// LLM FLOW CLEANUP — final punctuation/capitalization fix
+// ══════════════════════════════════════════════════════════════════════════
+
+async function llmFlowCleanup(text: string): Promise<string> {
+  try {
+    const client = getClient();
+    const wordCount = text.split(/\s+/).length;
+    const maxTokens = Math.min(16384, Math.max(4096, Math.ceil(wordCount * 2)));
+
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const r = await client.chat.completions.create({
+        model: LLM_MODEL,
+        messages: [
+          {
+            role: 'system',
+            content: `You are a punctuation and capitalization proofreader. Your ONLY job is to fix punctuation and capitalization errors.
+
+STRICT RULES:
+1. DO NOT change, add, remove, or replace ANY word.
+2. DO NOT reorder words or sentences.
+3. Only fix: missing/wrong periods, commas, semicolons, colons; incorrect capitalization after sentence ends; missing capitalization at sentence starts; duplicate punctuation.
+4. Keep paragraph breaks exactly as they are.
+5. Return ONLY the corrected text — no commentary.`,
+          },
+          { role: 'user', content: `Fix ONLY the punctuation and capitalization in this text. Do not change any words.\n\nTEXT:\n${text}` },
+        ],
+        temperature: 0.1,
+        max_tokens: maxTokens,
+      });
+
+      const result = r.choices[0]?.message?.content?.trim() ?? '';
+      if (!result || result.length < text.length * 0.5) continue;
+
+      // Word preservation check
+      const strip = (s: string) => s.replace(/[^a-zA-Z\s]/g, '').toLowerCase().split(/\s+/).filter(w => w);
+      const origWords = strip(text);
+      const fixedWords = strip(result);
+      if (Math.abs(origWords.length - fixedWords.length) <= 2) {
+        return result;
+      }
+    }
+    return text;
+  } catch {
+    return text;
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════
 // MAIN ENGINE
 // ══════════════════════════════════════════════════════════════════════════
 
@@ -854,6 +1013,19 @@ export async function omegaHumanize(
 
   // Final contraction sweep (catch any generated by post-processing)
   output = ppExpandContractions(output);
+
+  // ── SENTENCE SURGERY FOR BURSTINESS ──
+  output = ppSentenceSurgery(output);
+
+  // ── N-GRAM PATTERN BREAKING ──
+  output = ppNgramBreaking(output);
+
+  // ── LLM FLOW CLEANUP ──
+  output = await llmFlowCleanup(output);
+
+  // ── FINAL POST-SURGERY CLEANUP ──
+  output = ppExpandContractions(output);
+  output = ppAIWordKill(output);
 
   // Restore protected headings
   for (const [placeholder, heading] of headingPlaceholders) {

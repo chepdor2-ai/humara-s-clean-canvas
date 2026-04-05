@@ -223,9 +223,22 @@ function hasInjectionMarkers(text: string): boolean {
 export const perplexityPhase: Phase = {
   name: 'perplexity',
   async process(state: DocumentState): Promise<DocumentState> {
-    // DISABLED — rare vocabulary injection creates unnatural "crazy phrases"
-    // and parenthetical asides/hedges make text sound artificial
-    state.logs.push('[perplexity] DISABLED — skipped to preserve natural output');
+    // Re-enabled with SAFE settings: only single-word rare vocabulary swaps
+    // at ~15% rate. No asides, no hedges, no fronting — those corrupt output.
+    let swapCount = 0;
+
+    for (const paragraph of state.paragraphs) {
+      for (const sentence of paragraph.sentences) {
+        // Skip if already heavily modified
+        if (hasInjectionMarkers(sentence.text)) continue;
+
+        const before = sentence.text;
+        sentence.text = injectRareVocabulary(sentence.text);
+        if (sentence.text !== before) swapCount++;
+      }
+    }
+
+    state.logs.push(`[perplexity] ${swapCount} sentences had rare vocabulary injected`);
     return state;
   }
 };

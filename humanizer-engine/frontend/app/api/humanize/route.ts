@@ -59,7 +59,7 @@ export async function POST(req: Request) {
     if (engine === 'humara_v1_3') {
       // Humara v1.3: Stealth Humanizer Engine v5 from coursework-champ
       const { pipeline } = await import('@/lib/engine/humara-v1-3');
-      humanized = pipeline(normalizedText, tone ?? 'academic', strength === 'strong' ? 10 : strength === 'light' ? 4 : 7);
+      humanized = await pipeline(normalizedText, tone ?? 'academic', strength === 'strong' ? 10 : strength === 'light' ? 4 : 7);
     } else if (engine === 'omega') {
       // Omega: Pure LLM per-sentence independent processing — each sentence gets its own API call
       humanized = await omegaHumanize(

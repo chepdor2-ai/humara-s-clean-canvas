@@ -218,8 +218,17 @@ export const antiPatternPhase: Phase = {
           }
         }
 
-        // B. Register mixing — DISABLED (was replacing formal words with informal
-        // phrases like "on top of that", "even so", "and so" that break register)
+        // B. Register mixing — re-enabled at low rate (~15%)
+        // Only apply safe replacements that maintain academic register
+        if (Math.random() < 0.15) {
+          for (const [pattern, replacement] of INFORMAL_INJECTIONS) {
+            if (pattern.test(text)) {
+              text = text.replace(pattern, replacement);
+              registerMixes++;
+              break; // Only one per sentence
+            }
+          }
+        }
 
         // C. Break opening formula — DISABLED (injects unnatural openers like "On closer examination,")
         // if (sIdx === 0 && !isFirst && Math.random() < 0.10

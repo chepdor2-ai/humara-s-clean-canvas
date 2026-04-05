@@ -70,8 +70,24 @@ function applyRhythmToSentence(text: string): string {
 export const rhythmPhase: Phase = {
   name: 'rhythm',
   async process(state: DocumentState): Promise<DocumentState> {
-    // DISABLED — rhythm manipulation creates detectable uniformity
-    state.logs.push('[rhythm] DISABLED — skipped to preserve natural sentence structure');
+    // Re-enabled with safe settings: only adverbial fronting and
+    // clause reorder. No parenthetical injection. ~20% rate on medium sentences.
+    let rhythmChanges = 0;
+    const lengths: number[] = [];
+
+    for (const paragraph of state.paragraphs) {
+      for (const sentence of paragraph.sentences) {
+        const words = sentence.text.split(/\s+/);
+        lengths.push(words.length);
+
+        const before = sentence.text;
+        sentence.text = applyRhythmToSentence(sentence.text);
+        if (sentence.text !== before) rhythmChanges++;
+      }
+    }
+
+    const burstiness = calcBurstiness(lengths);
+    state.logs.push(`[rhythm] ${rhythmChanges} rhythm adjustments, burstiness=${burstiness.toFixed(3)}`);
     return state;
   },
 };
