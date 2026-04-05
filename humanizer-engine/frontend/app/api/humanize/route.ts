@@ -17,7 +17,6 @@ import { expandContractions } from '@/lib/humanize-transforms';
 import { removeEmDashes } from '@/lib/engine/v13-shared-techniques';
 import { nuruHumanize } from '@/lib/engine/nuru-humanizer';
 import { omegaHumanize } from '@/lib/engine/omega-humanizer';
-import { applyHeavyZeroAI } from '@/lib/engine/zero-ai-post-processor';
 
 export const maxDuration = 120; // LLM engines need more time
 
@@ -199,17 +198,6 @@ export async function POST(req: Request) {
     // ── FINAL SAFETY NET: Zero em-dash enforcement ──────────
     // Remove any em-dashes that may have been reintroduced by post-processors
     humanized = removeEmDashes(humanized);
-
-    // ── ZERO-AI POST-PROCESSOR: Aggressive anti-detection layer ───────
-    // Applies ALL known anti-AI techniques:
-    // - Removes AI markers (hedging, formal language, predictable vocabulary)
-    // - Breaks sentence/paragraph uniformity (attacks burstiness signals)
-    // - Attacks perplexity (introduces natural variance)
-    // - Imperfect punctuation (removes robotic precision)
-    // - Strategic typo injection (optional, based on strength)
-    // Apply to ALL engines to achieve 0% AI detection
-    const zeroAIAggressiveness = strength === 'strong' ? 'heavy' : strength === 'light' ? 'light' : 'medium';
-    humanized = applyHeavyZeroAI(humanized);
 
     // Generate per-sentence alternatives (3 candidates each, best already picked by engines)
     const FIRST_PERSON_RE = /\b(I|me|my|mine|myself|we|us|our|ours|ourselves)\b/i;
