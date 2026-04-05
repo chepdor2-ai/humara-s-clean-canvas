@@ -309,7 +309,14 @@ RULES:
 8. Keep the same meaning and all factual content, data, citations. Do NOT hallucinate or invent information not present in the original.
 9. Stay within ±20% of the original sentence word count.
 10. Use phrasal verbs where natural: look into, carry out, bring about, figure out, deal with, end up.
-11. VARY STRUCTURE: Do NOT always use Subject-Verb-Object order. Sometimes start with a prepositional phrase, a time reference, a dependent clause, or a participial phrase. Write as a real person would — unpredictable structure.
+11. STRUCTURAL TRANSFORMATION — use these specific techniques to restructure the sentence:
+    - CLAUSE FRONTING: Move subordinate clauses to the beginning ("Because X, Y" ↔ "Y because X")
+    - NOMINALIZATION: Convert verbs to nouns or nouns to verbs ("to expand access" → "the expansion of access", "the assessment" → "to assess")
+    - CONJUNCTION ROTATION: Vary linking words ("or" → "as well as", "and" → "along with", "but" → "however"/"yet")
+    - VOICE SHIFT: Change active to passive or passive to active, swap the grammatical subject
+    - CONDITIONAL SWAPS: "if" → "when"/"provided that", "because" → "since"/"given that"
+    - PHRASE EXPANSION/COMPRESSION: "location" → "place of residence", "regardless of" → "no matter"
+    - PARALLEL STRUCTURE BREAKING: Make lists asymmetric — "A, B, and C" → "A along with B, as well as C"
 12. AVOID HEDGING: Do not use "it is important to note", "it is worth mentioning", "one could argue". Make direct statements.
 13. PREFER CONCRETE OVER ABSTRACT: Say "the factory shut down" not "the operation ceased". Say "prices went up" not "costs increased significantly".`;
 }

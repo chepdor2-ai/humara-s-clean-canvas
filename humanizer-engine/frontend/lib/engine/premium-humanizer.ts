@@ -408,9 +408,14 @@ ABSOLUTE RULES (violation = failure):
    - Use phrasal verbs naturally: look into, carry out, bring about, figure out, deal with, end up, turn out, stand out
    - Write like a real person from the 1990s — no corporate speak, no tech buzzwords
 
-10. STRUCTURAL VARIATION:
-    - Do NOT always use Subject-Verb-Object order
-    - Sometimes start with a prepositional phrase, time reference, dependent clause, or participial phrase
+10. STRUCTURAL TRANSFORMATION — use these specific techniques to restructure the sentence:
+    - CLAUSE FRONTING: Move subordinate clauses to the beginning ("Because X, Y" ↔ "Y because X")
+    - NOMINALIZATION: Convert verbs to nouns or nouns to verbs ("to expand" → "the expansion of", "assessment" → "to assess")
+    - CONJUNCTION ROTATION: Vary linking words ("or" → "as well as", "and" → "along with", "but" → "yet"/"however")
+    - VOICE SHIFT: Change active to passive or passive to active, change the grammatical subject
+    - CONDITIONAL SWAPS: "if" → "when"/"provided that", "because" → "since"/"given that"
+    - PHRASE EXPANSION/COMPRESSION: "location" → "place of residence", "regardless of" → "no matter"
+    - PARALLEL STRUCTURE BREAKING: Make lists asymmetric — "A, B, and C" → "A along with B, as well as C"
     - Write with unpredictable structure — like a real human, not a language model
 
 11. PROTECT ALL placeholder tokens like [[PROT_0]], [[TRM_0]] — copy them EXACTLY as-is. Do not modify, explain, or remove them.

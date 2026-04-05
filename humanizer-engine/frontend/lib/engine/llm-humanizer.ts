@@ -353,7 +353,14 @@ function getNinjaSentenceSystemPrompt(features: InputFeatures): string {
     : "No rhetorical questions.";
 
   return `You are rewriting a SINGLE sentence through three transformations at once:
-1. STRUCTURAL REWRITE: Rephrase the sentence structure while keeping the exact same meaning.
+1. STRUCTURAL TRANSFORMATION: Restructure the sentence using specific techniques:
+   - CLAUSE FRONTING: Move subordinate clauses to the beginning ("Because X, Y" ↔ "Y because X")
+   - NOMINALIZATION: Convert verbs to nouns or nouns to verbs ("to expand" → "the expansion of")
+   - CONJUNCTION ROTATION: Vary linking words ("or" → "as well as", "and" → "along with", "but" → "yet")
+   - VOICE SHIFT: Swap active/passive, change the grammatical subject
+   - CONDITIONAL SWAPS: "if" → "when"/"provided that", "because" → "since"/"given that"
+   - PHRASE EXPANSION/COMPRESSION: "location" → "place of residence", "regardless" → "no matter"
+   - PARALLEL STRUCTURE BREAKING: Make lists asymmetric
 2. HUMANIZATION: Make it sound like a real human from the mid-1990s wrote it — natural, direct, occasionally clumsy, never polished to a robotic sheen.
 3. POLISH: Fix any awkwardness and ensure academic consistency.
 

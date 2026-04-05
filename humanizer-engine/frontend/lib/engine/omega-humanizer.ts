@@ -1,24 +1,27 @@
 /**
- * Omega Humanizer Engine v3 — Pure LLM Per-Sentence Independent Processing
- * =========================================================================
+ * Omega Humanizer Engine v4 — StealthWriter-Grade LLM Per-Sentence Rewriting
+ * ============================================================================
  *
  * ARCHITECTURE:
  *   Phase 1 — PRE-ANALYSIS
  *     • Detect first-person usage in input (preserve it only if present)
  *     • Extract paragraphs → identify titles/headings → extract sentences
- *     • Classify each sentence: protected, needs-error, needs-starter, needs-restructure
+ *     • Classify each sentence: protected, prompt assignment, error/starter flags
  *
  *   Phase 2 — INDEPENDENT PARALLEL PROCESSING
- *     • Each sentence gets ONE of 10 prompts assigned RANDOMLY (not cycling)
+ *     • Each sentence gets ONE of 10 STRUCTURAL TRANSFORMATION prompts
+ *     • Each prompt instructs specific techniques: clause fronting, nominalization,
+ *       conjunction rotation, conditional→temporal swaps, phrase expansion/compression
  *     • Each sentence opens its OWN independent API call
- *     • All calls fire in parallel — no batching, no shared context
  *     • 60% word-change enforcement with retry
  *
  *   Phase 3 — REASSEMBLY + POST-PROCESSING
  *     • Reassemble sentences into paragraphs
  *     • Apply statistical error injection to marked sentences
- *     • 7-phase post-processing: AI word kill, AI phrase kill, starter kill,
- *       contraction kill, uniformity break, final cleanup, second AI word sweep
+ *     • 9-phase post-processing: AI word kill, AI phrase kill, starter kill,
+ *       contraction kill, uniformity break, sentence surgery, n-gram breaking,
+ *       LLM flow cleanup, final cleanup
+ *     • Detector feedback loop: re-run if AI score > 15%
  *
  *   STRICT OUTPUT RULES:
  *     • NO contractions — ever
@@ -28,8 +31,14 @@
  */
 
 import OpenAI from "openai";
+import { getDetector } from "./multi-detector";
 
-const LLM_MODEL = process.env.LLM_MODEL ?? "gpt-4o-mini";
+// ── MODEL SELECTION ──
+// gpt-4.1-nano: cheapest ($0.10/M in, $0.40/M out), 200K TPM, 500 RPM
+// gpt-4.1-mini: mid-range ($0.40/M in, $1.60/M out), 200K TPM, 500 RPM
+// gpt-4o-mini: current default ($0.15/M in, $0.60/M out), 200K TPM, 500 RPM
+// Recommended: gpt-4.1-mini for best quality/cost ratio
+const LLM_MODEL = process.env.OMEGA_MODEL ?? process.env.LLM_MODEL ?? "gpt-4.1-mini";
 
 // ── OpenAI client singleton ──
 
@@ -252,30 +261,36 @@ const BANNED_PHRASES = [
 
 function buildStrictRules(inputHasFirstPerson: boolean): string {
   const firstPersonRule = inputHasFirstPerson
-    ? "11. First-person pronouns (I, we, my, our) are ALLOWED because the original text uses them."
-    : "11. NEVER use first-person pronouns (I, me, my, mine, we, us, our, ours). The original text does not use them. Write in third person or use passive constructions.";
+    ? "12. First-person pronouns (I, we, my, our) are ALLOWED because the original text uses them."
+    : "12. NEVER use first-person pronouns (I, me, my, mine, we, us, our, ours). The original text does not use them. Write in third person or use passive constructions.";
 
   return `
 ABSOLUTE RULES — VIOLATION MEANS FAILURE:
-1. Change at least 60% of the words. Completely rewrite the sentence in different words.
-2. Completely restructure the sentence — different word order, different clause arrangement.
+1. Change at least 60% of the words. Rewrite at the CONCEPT level, not word-for-word substitution.
+2. Restructure the sentence using specific techniques:
+   - CLAUSE FRONTING: Move subordinate clauses to the beginning ("Because X, Y" ↔ "Y because X")
+   - NOMINALIZATION: Convert verbs to nouns or nouns to verbs ("to expand" → "the expansion of", "assessment" → "to assess")
+   - CONJUNCTION ROTATION: Vary linking words ("or" → "as well as", "and" → "along with", "but" → "however"/"yet")
+   - CONDITIONAL SWAPS: "if" → "when"/"where"/"provided that", "because" → "since"/"given that"
+   - PHRASE EXPANSION/COMPRESSION: "location" → "place of residence", "regardless of" → "irrespective of"
 3. NEVER use these AI words: ${BANNED_WORDS}
 4. NEVER use these AI phrases: ${BANNED_PHRASES}
-5. Write in clear, natural academic language. Not robotic. Not formulaic.
+5. Write in clear, natural academic language that reads like a careful student wrote it by hand.
 6. Use everyday academic vocabulary — not thesaurus words, not fancy synonyms.
-7. Keep the EXACT same meaning and facts.
+7. Keep the EXACT same meaning, facts, and logical relationships.
 8. Return ONLY the rewritten sentence. No quotes, no explanations, no labels, no preamble.
 9. Do NOT start with "This", "It is", "There is", "There are". Vary sentence openings.
 10. NEVER use contractions (don't, can't, won't, etc.). Write them out fully (do not, cannot, will not).
+11. NEVER use semicolons excessively. Do NOT capitalize for emphasis. Do NOT use bold or italic markers.
 ${firstPersonRule}
-12. Do NOT use semicolons excessively. Do NOT capitalize for emphasis. Do NOT use bold or italic markers.
 13. Do NOT add humor, colloquialisms, slang, or informal expressions that were not in the original.
 14. Maintain the same level of formality and academic register as the original text.
+15. Produce output that reads as if a human sat down, understood the meaning, and expressed it in their own words from scratch.
 `;
 }
 
 // ══════════════════════════════════════════════════════════════════════════
-// 10 PERSONA PROMPTS — each completely different instruction set
+// 10 PERSONA PROMPTS — each uses DIFFERENT structural transformation techniques
 // ══════════════════════════════════════════════════════════════════════════
 
 interface PersonaPrompt {
@@ -285,75 +300,75 @@ interface PersonaPrompt {
 }
 
 const PERSONA_PROMPTS: PersonaPrompt[] = [
-  // 0 — Academic rewriter (analytical)
+  // 0 — Clause fronting specialist
   {
-    system: (rules) => `You rewrite academic sentences for clarity and originality. Your rewrites are analytical, precise, and read like a well-prepared student submission. You never add personality or flair — only substance. You never use contractions.
+    system: (rules) => `You are an academic rewriter who specializes in CLAUSE FRONTING. When you rewrite a sentence, you move subordinate clauses, prepositional phrases, or conditions to the front of the sentence. You change "X does Y because Z" to "Given Z, X does Y" or "Because of Z, Y occurs in X". You always restructure the sentence completely. You never use contractions. You write like a careful student submitting coursework.
 ${rules}`,
-    userTemplate: (s, idx) => `Task ${idx + 1}: Rewrite this academic sentence using completely different words and structure. Maintain the same meaning. Change at least 60% of the wording. No contractions.\n\nOriginal: "${s}"\n\nRewritten sentence:`,
+    userTemplate: (s, idx) => `Rewrite ${idx + 1}: Move a subordinate clause or condition to the FRONT of this sentence. Use completely different words. Change at least 60% of the vocabulary while keeping the exact meaning. No contractions.\n\nOriginal: "${s}"\n\nRewritten:`,
     temperature: 0.78,
   },
-  // 1 — Research paper voice
+  // 1 — Nominalization transformer
   {
-    system: (rules) => `You write in the voice of a careful research paper. Every sentence you produce is precise, well-structured, and uses standard academic vocabulary. You avoid all AI-associated language patterns. You never use contractions.
+    system: (rules) => `You are an academic rewriter who uses NOMINALIZATION and DENOMINALIATION. When you see a verb phrase, you convert it to a noun phrase ("to expand access" → "the expansion of access"). When you see a heavy noun phrase, you convert it to a verb construction ("the assessment of quality" → "assessing quality"). You always restructure the whole sentence around these changes. You never use contractions.
 ${rules}`,
-    userTemplate: (s, idx) => `Rewrite #${idx + 1}: Express this sentence in research-paper style with entirely different vocabulary and clause structure. Preserve the factual content exactly. No contractions.\n\nSentence: "${s}"\n\nResearch-paper version:`,
-    temperature: 0.76,
-  },
-  // 2 — Structured academic
-  {
-    system: (rules) => `You produce clean, structured academic prose. You favor active voice when possible and construct sentences that advance arguments logically. You do not add decorative language. You never use contractions.
-${rules}`,
-    userTemplate: (s, idx) => `Assignment sentence ${idx + 1}: Completely rephrase this using different words, different sentence structure, and a different way of expressing the same point. At least 60% of words must change. No contractions.\n\nInput: "${s}"\n\nRephrased:`,
-    temperature: 0.80,
-  },
-  // 3 — Direct scholarly
-  {
-    system: (rules) => `You write direct, efficient scholarly prose. Your sentences are tight and purposeful. You cut padding and unnecessary qualifiers. Every word serves the argument. You never use contractions.
-${rules}`,
-    userTemplate: (s, idx) => `Item ${idx + 1}: Rewrite this sentence to be more direct and scholarly. Use completely different phrasing and vocabulary. The meaning must remain identical. No contractions.\n\nOriginal: "${s}"\n\nDirect version:`,
-    temperature: 0.74,
-  },
-  // 4 — Traditional academic
-  {
-    system: (rules) => `You write in traditional academic style — measured, careful, and authoritative. Your prose reflects the conventions of peer-reviewed publications. You use precise language without modern buzzwords. You never use contractions.
-${rules}`,
-    userTemplate: (s, idx) => `Sentence ${idx + 1} — rewrite in traditional academic form. Change the vocabulary, restructure the clauses, and express the idea through different constructions. At least 60% must change. No contractions.\n\nOriginal: "${s}"\n\nTraditional academic:`,
-    temperature: 0.73,
-  },
-  // 5 — Thesis writer
-  {
-    system: (rules) => `You write as someone preparing a thesis. Your sentences connect evidence to arguments clearly. You build paragraphs logically and use transition devices naturally — not mechanically. You never use contractions.
-${rules}`,
-    userTemplate: (s, idx) => `Thesis rewrite ${idx + 1}: Express this sentence as it would appear in a well-written thesis. Completely restructure it with different vocabulary and clause arrangement. No contractions.\n\nSource: "${s}"\n\nThesis version:`,
-    temperature: 0.79,
-  },
-  // 6 — Analytical reviewer
-  {
-    system: (rules) => `You write analytical academic prose. You approach every sentence as a reviewer would — looking for clarity, precision, and logical flow. Your rewrites improve upon the original while preserving meaning exactly. You never use contractions.
-${rules}`,
-    userTemplate: (s, idx) => `Analysis ${idx + 1}: Rewrite this sentence with improved clarity using completely different words and structure. The factual content must be preserved exactly. No contractions.\n\nSentence: "${s}"\n\nAnalytical version:`,
+    userTemplate: (s, idx) => `Task ${idx + 1}: Rewrite this sentence using nominalization OR denominalization — convert key verbs to nouns or nouns to verbs. Build a completely new sentence structure around those changes. Change at least 60% of words. No contractions.\n\nOriginal: "${s}"\n\nRewritten:`,
     temperature: 0.77,
   },
-  // 7 — Report writer
+  // 2 — Conjunction and connector rotator
   {
-    system: (rules) => `You write clear, professional reports. Your sentences are well-organized and factual. You present information in a straightforward manner without any embellishment or AI-like phrasing. You never use contractions.
+    system: (rules) => `You are an academic rewriter who ROTATES conjunctions and logical connectors. You replace "and" with "along with" or "as well as", "or" with "alternatively", "but" with "yet" or "however", "because" with "since" or "given that", "if" with "when" or "provided that". You also rearrange clause order. You never use contractions. You write naturally like a student who carefully rephrased their own work.
 ${rules}`,
-    userTemplate: (s, idx) => `Report item ${idx + 1}: Reword this sentence entirely for a professional report. Different vocabulary, different structure, same meaning. No contractions.\n\nOriginal: "${s}"\n\nReport version:`,
+    userTemplate: (s, idx) => `Rewrite #${idx + 1}: Completely rephrase this sentence. Rotate ALL conjunctions and connectors to different equivalents. Restructure the clauses. Change at least 60% of words. No contractions.\n\nSentence: "${s}"\n\nRephrased:`,
+    temperature: 0.80,
+  },
+  // 3 — Voice and perspective shifter
+  {
+    system: (rules) => `You are an academic rewriter who shifts VOICE and PERSPECTIVE. You convert active constructions to passive or passive to active. You change the grammatical subject of the sentence. "Researchers found that X" becomes "X was identified through research" or "The findings revealed X". You restructure everything around the new subject. You never use contractions.
+${rules}`,
+    userTemplate: (s, idx) => `Item ${idx + 1}: Rewrite this sentence by CHANGING THE GRAMMATICAL SUBJECT. If the original says "A does B", rewrite as "B is done by A" or find a completely different subject. Change at least 60% of words. No contractions.\n\nOriginal: "${s}"\n\nRewritten:`,
+    temperature: 0.76,
+  },
+  // 4 — Phrase expander/compressor
+  {
+    system: (rules) => `You are an academic rewriter who EXPANDS compact phrases and COMPRESSES wordy ones. Short words become multi-word equivalents: "regardless" → "irrespective of", "location" → "place of residence", "important" → "of particular concern". Wordy phrases become compact: "due to the fact that" → "because", "in the event that" → "if". You restructure the whole sentence. You never use contractions.
+${rules}`,
+    userTemplate: (s, idx) => `Sentence ${idx + 1}: Rewrite by expanding compact words into multi-word phrases AND compressing wordy phrases into shorter ones. The whole sentence structure should change. At least 60% word change. No contractions.\n\nOriginal: "${s}"\n\nRewritten:`,
+    temperature: 0.79,
+  },
+  // 5 — Thesis-style restructurer
+  {
+    system: (rules) => `You write as someone preparing a thesis. You restructure sentences by placing the MAIN CLAIM first, then supporting detail. Or you place CONTEXT first, then the main point. You vary between these two patterns. You use transitional phrases naturally. You change vocabulary completely. You never use contractions.
+${rules}`,
+    userTemplate: (s, idx) => `Thesis rewrite ${idx + 1}: Restructure this sentence for a thesis. Place the main claim either FIRST (then support) or LAST (context first, then claim). Use entirely different vocabulary and phrasing. At least 60% word change. No contractions.\n\nSource: "${s}"\n\nThesis version:`,
+    temperature: 0.81,
+  },
+  // 6 — Conditional and temporal transformer
+  {
+    system: (rules) => `You are an academic rewriter specializing in CONDITIONAL and TEMPORAL transformations. You change "if X then Y" to "when X, Y follows" or "provided that X, Y occurs". You change "X leads to Y" to "Y follows from X" or "as a result of X, Y emerges". You swap the order of cause and effect. You never use contractions.
+${rules}`,
+    userTemplate: (s, idx) => `Analysis ${idx + 1}: Rewrite this sentence by transforming all conditional/causal/temporal relationships. Swap cause and effect order. Change "if" to "when"/"provided that", "because" to "since"/"given that". At least 60% word change. No contractions.\n\nSentence: "${s}"\n\nTransformed:`,
     temperature: 0.75,
   },
-  // 8 — Essay writer (measured)
+  // 7 — Parallel structure breaker
   {
-    system: (rules) => `You write measured, thoughtful essays. Your sentences reflect genuine engagement with the material. You express ideas clearly without the mechanical quality of AI-generated text. You never use contractions.
+    system: (rules) => `You are an academic rewriter who BREAKS parallel structures. Where the original lists "A, B, and C", you rewrite as "A along with B, as well as C" or "not only A but B and additionally C". Where the original uses parallel clauses, you make them asymmetric. This creates natural human-like irregularity. You never use contractions.
 ${rules}`,
-    userTemplate: (s, idx) => `Essay sentence ${idx + 1}: Rephrase this sentence in your own measured academic style. Use different words, restructure the clauses, and maintain the original meaning. No contractions.\n\nOriginal: "${s}"\n\nEssay version:`,
+    userTemplate: (s, idx) => `Report item ${idx + 1}: Rewrite this sentence by BREAKING any parallel structures — make lists asymmetric, vary clause patterns, use different constructions for similar ideas. Completely different vocabulary. At least 60% word change. No contractions.\n\nOriginal: "${s}"\n\nRewritten:`,
+    temperature: 0.77,
+  },
+  // 8 — Evidential and hedging reformulator
+  {
+    system: (rules) => `You write measured academic prose with careful evidential markers. You replace "X is Y" with "X appears to be Y" or "evidence suggests X is Y" or "based on available data, X is Y". You add or reshape hedging language naturally. You change the entire sentence structure. You never use contractions. Your output reads like a thoughtful student who is careful about claims.
+${rules}`,
+    userTemplate: (s, idx) => `Essay sentence ${idx + 1}: Rephrase this sentence with careful evidential framing. Add or reshape hedging where appropriate. Use completely different words and clause arrangement. At least 60% word change. No contractions.\n\nOriginal: "${s}"\n\nEssay version:`,
     temperature: 0.82,
   },
-  // 9 — Critical scholar
+  // 9 — Semantic decomposer
   {
-    system: (rules) => `You write with the precision of a critical scholar. Your sentences demonstrate command of the subject. You favor economy of expression and avoid redundancy. You never use contractions.
+    system: (rules) => `You are an academic rewriter who DECOMPOSES and RECOMPOSES meaning. You break the sentence into its core semantic units (who did what to whom, why, how), then rebuild it using completely different words and grammar. The result expresses identical meaning but looks like it was written from scratch by a different person. You never use contractions.
 ${rules}`,
-    userTemplate: (s, idx) => `Critical rewrite ${idx + 1}: Express this sentence with scholarly precision using entirely different vocabulary and sentence architecture. Meaning must be preserved. No contractions.\n\nInput: "${s}"\n\nScholarly version:`,
-    temperature: 0.72,
+    userTemplate: (s, idx) => `Critical rewrite ${idx + 1}: Decompose this sentence into its core meaning (who/what/why/how), then rebuild it from scratch using entirely different vocabulary and sentence architecture. At least 60% word change. No contractions.\n\nInput: "${s}"\n\nRebuilt:`,
+    temperature: 0.74,
   },
 ];
 
@@ -1026,6 +1041,39 @@ export async function omegaHumanize(
   // ── FINAL POST-SURGERY CLEANUP ──
   output = ppExpandContractions(output);
   output = ppAIWordKill(output);
+
+  // ── DETECTOR FEEDBACK LOOP ──
+  // Run internal detector; if AI score > 15%, re-run aggressive post-processing (max 2 retries)
+  try {
+    const detector = getDetector();
+    for (let feedbackRound = 0; feedbackRound < 2; feedbackRound++) {
+      const analysis = detector.analyze(output);
+      const aiScore = analysis.summary.overall_ai_score;
+      if (aiScore <= 15) break; // Good enough — passes as human
+
+      // Aggressive re-processing: run the full post-processing pipeline again
+      output = ppAIWordKill(output);
+      output = ppAIPhrasesKill(output);
+      output = ppStarterKill(output);
+      output = ppExpandContractions(output);
+      output = ppBreakUniformity(output);
+      output = ppFinalCleanup(output);
+      output = ppAIWordKill(output);
+      if (!inputHasFirstPerson) output = ppKillFirstPerson(output);
+      output = ppExpandContractions(output);
+      output = ppNgramBreaking(output);
+
+      // If still high after post-processing, run LLM cleanup again
+      const recheck = detector.analyze(output);
+      if (recheck.summary.overall_ai_score > 15) {
+        output = await llmFlowCleanup(output);
+        output = ppExpandContractions(output);
+        output = ppAIWordKill(output);
+      }
+    }
+  } catch {
+    // Detector failure is non-fatal — continue with current output
+  }
 
   // Restore protected headings
   for (const [placeholder, heading] of headingPlaceholders) {
