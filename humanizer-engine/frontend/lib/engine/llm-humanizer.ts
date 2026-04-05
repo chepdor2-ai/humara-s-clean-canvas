@@ -62,7 +62,7 @@ import {
 
 // ── Config ──
 
-const LLM_MODEL = process.env.LLM_MODEL ?? "gpt-4o-mini";
+const LLM_MODEL = process.env.LLM_MODEL ?? "gpt-4.1-mini";
 const MAX_FEEDBACK_ITERATIONS_MAP: Record<string, number> = { light: 1, medium: 1, strong: 2 };
 const TARGET_AI_SCORE = 5.0;
 
@@ -1832,6 +1832,30 @@ export async function llmHumanize(
   // ═══════════════════════════════════════════
   console.log("  [Ninja] Final rule-based stealth cleanup...");
   bestResult = sentenceIndependentStealthPass(bestResult, features, strength);
+
+  // ═══════════════════════════════════════════
+  // DETECTOR FEEDBACK LOOP — re-run post-processing if AI score > 15%
+  // ═══════════════════════════════════════════
+  try {
+    const feedbackDetector = getDetector();
+    for (let feedbackRound = 0; feedbackRound < 2; feedbackRound++) {
+      const detection = feedbackDetector.analyze(bestResult);
+      const aiScore = detection.summary.overall_ai_score;
+      if (aiScore <= 15) break;
+      console.log(`  [Ninja] Detector feedback round ${feedbackRound + 1}: AI score ${aiScore.toFixed(1)}% — re-running stealth pass`);
+
+      // Full stealth re-processing
+      bestResult = sentenceIndependentStealthPass(bestResult, features, strength);
+      bestResult = applyAIWordKill(bestResult);
+      bestResult = applyPhrasePatterns(bestResult);
+      bestResult = applyConnectorNaturalization(bestResult);
+      if (!features.hasContractions) bestResult = removeContractions(bestResult);
+      if (!features.hasFirstPerson) bestResult = removeFirstPerson(bestResult);
+      bestResult = fixPunctuation(bestResult);
+    }
+  } catch {
+    // Detector failure is non-fatal
+  }
 
   // ═══════════════════════════════════════════
   // FINAL: Strict constraint enforcement (catch anything the feedback loop re-introduced)

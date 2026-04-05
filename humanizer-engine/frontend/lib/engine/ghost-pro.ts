@@ -19,7 +19,7 @@ import { sentTokenize } from "./utils";
 import { expandContractions } from "./advanced-transforms";
 import { protectSpecialContent, restoreSpecialContent, protectContentTerms, restoreContentTerms, cleanOutputRepetitions, robustSentenceSplit, placeholdersToLLMFormat, llmFormatToPlaceholders, countSentences, enforceSentenceCountStrict, enforcePerParagraphSentenceCounts, rephraseCitations } from "./content-protection";
 import { semanticSimilaritySync } from "./semantic-guard";
-import { TextSignals } from "./multi-detector";
+import { TextSignals, getDetector } from "./multi-detector";
 import {
   applyAIWordKill, applyConnectorNaturalization, applyPhrasePatterns,
   applySyntacticTemplate,
@@ -54,7 +54,7 @@ import {
 
 // ── Config ──
 
-const LLM_MODEL = process.env.LLM_MODEL ?? "gpt-4o-mini";
+const LLM_MODEL = process.env.LLM_MODEL ?? "gpt-4.1-mini";
 
 // ── OpenAI client singleton ──
 
@@ -2108,6 +2108,35 @@ export async function ghostProHumanize(
       const sents = robustSentenceSplit(p.trim());
       return cleanSentenceStarters(sents).join(" ");
     }).join("\n\n");
+  }
+
+  // ── DETECTOR FEEDBACK LOOP — re-run post-processing if AI score > 15% ──
+  try {
+    const detector = getDetector();
+    for (let feedbackRound = 0; feedbackRound < 2; feedbackRound++) {
+      const detection = detector.analyze(result);
+      const aiScore = detection.summary.overall_ai_score;
+      if (aiScore <= 15) break;
+      console.log(`  [GhostPro] Detector feedback round ${feedbackRound + 1}: AI score ${aiScore.toFixed(1)}% — re-running post-processing`);
+
+      // Aggressive re-processing
+      result = applyAIWordKill(result);
+      result = applyPhrasePatterns(result);
+      result = applyConnectorNaturalization(result);
+      if (!features.hasContractions) result = expandContractions(result);
+      if (!features.hasFirstPerson) result = removeFirstPerson(result);
+
+      // Re-run sentence-level cleanup
+      const repassSentences = robustSentenceSplit(result);
+      const repassCleaned = perSentenceAntiDetection(repassSentences, features.hasContractions);
+      const repassDeep = deepCleaningPass(repassCleaned);
+      result = repassDeep.join(" ");
+
+      // Fix punctuation
+      result = fixPunctuation(result);
+    }
+  } catch {
+    // Detector failure is non-fatal
   }
 
   // ── Final diagnostic ──
