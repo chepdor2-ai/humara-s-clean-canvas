@@ -48,6 +48,17 @@ import {
   verifySentencePresence,
 } from "./shared-dictionaries";
 import { getDictionary } from "./dictionary";
+import {
+  buildSentenceItems,
+  applySentenceSurgery,
+  reassembleFromItems,
+  enforceCapitalization,
+  enforceStrictRules,
+  enforceSingleSentence,
+  getWordChangePercent,
+  type SurgeryItem,
+  type InputFeatures as SurgeryInputFeatures,
+} from "./sentence-surgery";
 
 // ── Config ──
 
@@ -1282,8 +1293,8 @@ function stealthProcessSingleSentence(sent: string, features: InputFeatures, str
     }
   }
 
-  // 5. Dictionary-enhanced synonym swap (per-sentence) — rate scales with strength
-  const synonymRate = strength === "strong" ? 0.22 : strength === "medium" ? 0.16 : 0.12;
+  // 5. Dictionary-enhanced synonym swap (per-sentence) — conservative rate to avoid wrong synonyms
+  const synonymRate = strength === "strong" ? 0.08 : strength === "medium" ? 0.06 : 0.04;
   const dict = getDictionary();
   const words = result.split(/\s+/);
   if (words.length >= 6) {
@@ -1508,6 +1519,75 @@ ${placeholdersToLLMFormat(text)}`;
   }
 }
 
+// ── Strict LLM Punctuation Cleanup (Ninja) ──
+// Only fixes punctuation and capitalization. Loops if words change.
+
+async function llmFixNinjaPunctuation(text: string): Promise<string> {
+  const wordCount = text.trim().split(/\s+/).length;
+  const maxTokens = Math.min(16384, Math.max(4096, Math.ceil(wordCount * 2)));
+
+  const systemPrompt = `You are a punctuation proofreader. Your ONLY job is to fix punctuation and capitalization errors.
+
+STRICT RULES — YOU MUST FOLLOW ALL OF THEM:
+1. DO NOT change, add, remove, or replace ANY word. Every single word must remain exactly as it is.
+2. DO NOT reorder words or sentences.
+3. DO NOT add or remove sentences.
+4. DO NOT add or remove paragraphs.
+5. Only fix these punctuation issues:
+   - Commas used where periods should be (run-on sentences)
+   - Missing periods at sentence ends
+   - Missing commas where a natural pause exists
+   - Double commas, double periods, or other duplicate punctuation
+   - Incorrect capitalization after periods/question marks/exclamation marks
+   - Missing capitalization at the start of sentences
+   - Semicolons or colons used incorrectly
+6. Keep paragraph breaks exactly as they are.
+7. Return ONLY the corrected text — no commentary, no labels, no explanations.
+
+REMEMBER: You are ONLY allowed to touch punctuation marks (. , ; : ! ? —) and letter capitalization. Do NOT change any word.`;
+
+  const userPrompt = `Fix ONLY the punctuation and capitalization in this text. Do not change any words. Preserve all [[PROT_n]] and [[TRM_n]] tokens exactly.\n\nTEXT:\n${placeholdersToLLMFormat(text)}`;
+
+  try {
+    const result = llmFormatToPlaceholders(await llmCall(systemPrompt, userPrompt, 0.1, maxTokens) ?? '');
+
+    if (!result || result.trim().length < text.length * 0.5) {
+      console.warn("  [Ninja]   Punctuation LLM output too short, skipping");
+      return text;
+    }
+
+    // Verify no words were changed
+    const stripPunct = (s: string) => s.replace(/[^a-zA-Z\s]/g, "").toLowerCase().split(/\s+/).filter(w => w);
+    const origWords = stripPunct(text);
+    const fixedWords = stripPunct(result.trim());
+
+    const maxDrift = Math.max(3, Math.ceil(origWords.length * 0.02));
+    let diffs = 0;
+    const minLen = Math.min(origWords.length, fixedWords.length);
+    for (let i = 0; i < minLen; i++) {
+      if (origWords[i] !== fixedWords[i]) diffs++;
+    }
+    diffs += Math.abs(origWords.length - fixedWords.length);
+
+    if (diffs > maxDrift) {
+      console.warn(`  [Ninja]   Punctuation LLM changed ${diffs} words (max ${maxDrift}), skipping`);
+      return text;
+    }
+
+    const origParas = text.split(/\n\s*\n/).filter(p => p.trim()).length;
+    const fixedParas = result.trim().split(/\n\s*\n/).filter(p => p.trim()).length;
+    if (origParas !== fixedParas) {
+      console.warn(`  [Ninja]   Punctuation LLM changed paragraph count (${origParas} → ${fixedParas}), skipping`);
+      return text;
+    }
+
+    return result.trim();
+  } catch (err) {
+    console.warn("  [Ninja]   Punctuation LLM call failed, skipping:", err);
+    return text;
+  }
+}
+
 function runStealthPass(
   text: string,
   features: InputFeatures,
@@ -1576,6 +1656,15 @@ export async function llmHumanize(
   const inputSentenceCount = countSentences(protectedText);
 
   // ═══════════════════════════════════════════
+  // PRE-HUMANIZATION: Sentence Merge/Split Surgery for Burstiness
+  // ═══════════════════════════════════════════
+  console.log("  [Ninja] Pre-surgery: Applying sentence merge/split for burstiness...");
+  const rawSurgeryItems = buildSentenceItems(protectedText);
+  const surgeryItems = applySentenceSurgery(rawSurgeryItems);
+  const surgeryText = reassembleFromItems(surgeryItems);
+  console.log(`  [Ninja] Surgery: ${rawSurgeryItems.filter(i => !i.isTitle).length} → ${surgeryItems.filter(i => !i.isTitle).length} sentences (merges + splits applied)`);
+
+  // ═══════════════════════════════════════════
   // LAYER 1: SENTENCE-BY-SENTENCE LLM Pipeline
   // Each sentence is independently rewritten by the LLM (combined 3-phase).
   // Adjacent sentences provided as read-only context for coherence.
@@ -1586,8 +1675,15 @@ export async function llmHumanize(
 
   console.log("  [Ninja] Sentence-by-sentence LLM rewrite (combined 3-phase)...");
   const sentenceSystem = getNinjaSentenceSystemPrompt(features);
-  const paragraphs = protectedText.split(/\n\s*\n/).filter(p => p.trim());
+  const paragraphs = surgeryText.split(/\n\s*\n/).filter(p => p.trim());
   let totalSentencesProcessed = 0;
+
+  // Surgery features for rule enforcement
+  const surgeryFeatures: SurgeryInputFeatures = {
+    hasContractions: features.hasContractions,
+    hasFirstPerson: features.hasFirstPerson,
+    hasRhetoricalQuestions: features.hasRhetoricalQuestions,
+  };
 
   // Process ALL paragraphs in parallel for maximum speed
   const rewrittenParagraphs = await Promise.all(paragraphs.map(async (para) => {
@@ -1634,14 +1730,15 @@ export async function llmHumanize(
         }
         rewritten = rewritten.replace(/^\[TARGET\]:\s*/i, "").trim();
         // Enforce single sentence: if LLM returned multiple sentences, collapse to one
-        const llmSents = robustSentenceSplit(rewritten);
-        if (llmSents.length > 1) {
-          // Merge all back into a single sentence
-          rewritten = llmSents.map((s, i) => {
-            if (i === 0) return s.replace(/\.\s*$/, "");
-            return s[0]?.toLowerCase() + s.slice(1);
-          }).join(", ") + (llmSents[llmSents.length - 1].match(/[.!?]$/) ? "" : ".");
-        }
+        rewritten = enforceSingleSentence(rewritten);
+
+        // Enforce strict rules (no contractions, no rhetorical questions, no first-person)
+        const ruleResult = enforceStrictRules(trimmed, rewritten, surgeryFeatures);
+        rewritten = ruleResult.text;
+
+        // Enforce capitalization
+        rewritten = enforceCapitalization(trimmed, rewritten);
+
         return rewritten;
       } catch {
         return trimmed;
@@ -1738,6 +1835,29 @@ export async function llmHumanize(
 
   // ── Final punctuation & capitalization cleanup ──
   bestResult = fixPunctuation(bestResult);
+
+  // ── LLM phrasing validation — fix awkward dictionary swaps ──
+  console.log("  [Ninja] Running LLM phrasing validation...");
+  bestResult = await llmValidateNinjaPhrasing(bestResult);
+
+  // ── Strict LLM punctuation/capitalization cleanup with word-preservation loop ──
+  console.log("  [Ninja] Running strict LLM punctuation cleanup...");
+  for (let puncLoop = 0; puncLoop < 3; puncLoop++) {
+    const beforePunc = bestResult;
+    const puncResult = await llmFixNinjaPunctuation(bestResult);
+    const beforeWords = beforePunc.replace(/[^a-zA-Z\s]/g, "").toLowerCase().split(/\s+/).filter(w => w);
+    const afterWords = puncResult.replace(/[^a-zA-Z\s]/g, "").toLowerCase().split(/\s+/).filter(w => w);
+    if (Math.abs(beforeWords.length - afterWords.length) <= 2) {
+      bestResult = puncResult;
+      console.log(`  [Ninja] Punctuation pass ${puncLoop + 1}: accepted (${afterWords.length} words)`);
+      break;
+    } else {
+      console.warn(`  [Ninja] Punctuation pass ${puncLoop + 1}: rejected — word count changed (${beforeWords.length} → ${afterWords.length}), retrying...`);
+    }
+  }
+
+  // Final capitalization enforcement
+  bestResult = enforceCapitalization(original, bestResult);
 
   // Merge/split DISABLED — strict sentence count enforcement: input = output
 

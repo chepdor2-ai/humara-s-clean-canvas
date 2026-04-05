@@ -40,6 +40,17 @@ import {
   perSentenceAntiDetection,
 } from "./shared-dictionaries";
 import { getDictionary } from "./dictionary";
+import {
+  buildSentenceItems,
+  applySentenceSurgery,
+  reassembleFromItems,
+  enforceCapitalization,
+  enforceStrictRules,
+  enforceSingleSentence,
+  getWordChangePercent,
+  type SurgeryItem,
+  type InputFeatures as SurgeryInputFeatures,
+} from "./sentence-surgery";
 
 // ── Config ──
 
@@ -1346,7 +1357,8 @@ function splitIntoChunks(text: string): string[] {
  */
 function postProcessSingleSentence(sent: string, features: InputFeatures, strength: string = "light"): string {
   if (!sent.trim()) return sent;
-  let result = sent.trim();
+  const originalSent = sent.trim();
+  let result = originalSent;
 
   // 1. Kill AI vocabulary — local PHRASE patterns first
   for (const [pattern, replacement] of AI_PHRASE_KILL) {
@@ -1385,8 +1397,8 @@ function postProcessSingleSentence(sent: string, features: InputFeatures, streng
     }
   }
 
-  // 11. Dictionary-enhanced synonym swap (per-sentence) — aggressive rate for deep AI killing
-  const synonymRate = strength === "strong" ? 0.16 : strength === "medium" ? 0.12 : 0.08;
+  // 11. Dictionary-enhanced synonym swap (per-sentence) — conservative rate to avoid wrong synonyms
+  const synonymRate = strength === "strong" ? 0.08 : strength === "medium" ? 0.06 : 0.04;
   const dict = getDictionary();
   const currentWords = result.split(/\s+/);
   if (currentWords.length >= 5) {
@@ -1454,27 +1466,8 @@ function postProcessSingleSentence(sent: string, features: InputFeatures, streng
   // 12b. Second-pass AI word kill — catch any AI words reintroduced by synonym/template steps
   result = applyAIWordKill(result);
 
-  // 12b2. Structural diversity — break SVO monotony that detectors flag
-  // Randomly front prepositional phrases, add inversions, or restructure
-  {
-    const words = result.split(/\s+/);
-    if (words.length >= 10 && Math.random() < 0.20) {
-      // Try to move a prepositional phrase from mid-sentence to front
-      const prepMatch = result.match(/^([A-Z][^,]{8,40}),?\s+(in \w+|at \w+|by \w+|for \w+|from \w+|with \w+|during \w+|before \w+|after \w+|through \w+)\s+(.+)$/i);
-      if (prepMatch) {
-        const prep = prepMatch[2];
-        const mainClause = prepMatch[1] + " " + prepMatch[3];
-        result = prep[0].toUpperCase() + prep.slice(1) + ", " + mainClause[0].toLowerCase() + mainClause.slice(1);
-      }
-    }
-    // Occasionally add a sentence-initial time/manner adverb for variety
-    if (words.length >= 8 && Math.random() < 0.08) {
-      const fronters = ["Back then, ", "At the time, ", "By that point, ", "In those days, ",
-        "Looking back, ", "As it turned out, ", "Sure enough, ", "Oddly, "];
-      const fronter = fronters[Math.floor(Math.random() * fronters.length)];
-      result = fronter + result[0].toLowerCase() + result.slice(1);
-    }
-  }
+  // 12b2. Structural diversity — DISABLED: random phrase injection was producing artifacts
+  // like "By that point," and "Oddly," that corrupt academic text
 
   // 12c. Per-sentence anti-detection — score this sentence against the same 9 micro-signals
   // the detector uses and apply targeted fixes to push it below detection threshold
@@ -1564,10 +1557,25 @@ function postProcessSingleSentence(sent: string, features: InputFeatures, streng
   result = result.replace(/\.\s*\./g, ".");
   result = result.trim();
 
+  // 16. Enforce single sentence output
+  result = enforceSingleSentence(result);
+
   // 17. Capitalize first letter
   if (result && /^[a-z]/.test(result)) {
     result = result[0].toUpperCase() + result.slice(1);
   }
+
+  // 18. Enforce strict rules (no contractions, no rhetorical questions, no first-person)
+  const surgeryFeatures: SurgeryInputFeatures = {
+    hasContractions: features.hasContractions,
+    hasFirstPerson: features.hasFirstPerson,
+    hasRhetoricalQuestions: features.hasRhetoricalQuestions,
+  };
+  const ruleResult = enforceStrictRules(originalSent, result, surgeryFeatures);
+  result = ruleResult.text;
+
+  // 19. Enforce capitalization
+  result = enforceCapitalization(originalSent, result);
 
   return result;
 }
@@ -1932,31 +1940,9 @@ async function processChunk(
   if (!features.hasFirstPerson) result = removeFirstPerson(result);
   if (!features.hasRhetoricalQuestions) result = removeRhetoricalQuestions(result);
 
-  // Word count enforcement for short text — trim sentences from the longest paragraph, never drop paragraphs
-  if (chunkWords < 300) {
-    const maxAllowed = Math.round(chunkWords * 1.10);
-    const outputWords = result.trim().split(/\s+/).length;
-    if (outputWords > maxAllowed) {
-      const paragraphs = result.split(/\n\s*\n/).filter(p => p.trim());
-      let totalWords = paragraphs.reduce((sum, p) => sum + p.trim().split(/\s+/).length, 0);
-      // Trim sentences from the longest paragraph until within limit
-      while (totalWords > maxAllowed) {
-        let longestIdx = 0;
-        let longestLen = 0;
-        for (let i = 0; i < paragraphs.length; i++) {
-          const wc = paragraphs[i].split(/\s+/).length;
-          if (wc > longestLen) { longestLen = wc; longestIdx = i; }
-        }
-        const sents = robustSentenceSplit(paragraphs[longestIdx]);
-        if (sents.length <= 1) break;
-        // Remove the last sentence from the longest paragraph
-        const removed = sents.pop()!;
-        paragraphs[longestIdx] = sents.join(" ");
-        totalWords -= removed.split(/\s+/).length;
-      }
-      result = paragraphs.join("\n\n");
-    }
-  }
+  // Word count enforcement DISABLED — was dropping whole sentences and corrupting output
+  // The LLM prompt already constrains word count, and enforcePerParagraphSentenceCounts
+  // handles structural integrity at the end.
 
   return result;
 }
@@ -2017,15 +2003,24 @@ export async function ghostProHumanize(
   }
 
   // ═══════════════════════════════════════════
+  // PRE-HUMANIZATION: Sentence Merge/Split Surgery for Burstiness
+  // ═══════════════════════════════════════════
+  console.log("  [GhostPro] Pre-surgery: Applying sentence merge/split for burstiness...");
+  const rawSurgeryItems = buildSentenceItems(protectedText);
+  const surgeryItems = applySentenceSurgery(rawSurgeryItems);
+  const surgeryText = reassembleFromItems(surgeryItems);
+  console.log(`  [GhostPro] Surgery: ${rawSurgeryItems.filter(i => !i.isTitle).length} → ${surgeryItems.filter(i => !i.isTitle).length} sentences (merges + splits applied)`);
+
+  // ═══════════════════════════════════════════
   // CHUNK PROCESSING
   // ═══════════════════════════════════════════
-  const chunks = splitIntoChunks(protectedText);
+  const chunks = splitIntoChunks(surgeryText);
   let result: string;
 
   if (chunks.length === 1) {
     // Single chunk — standard path
     console.log("  [GhostPro] Processing as single chunk...");
-    result = await processChunk(protectedText, features, { strength, tone, temperature });
+    result = await processChunk(surgeryText, features, { strength, tone, temperature });
   } else {
     // Multi-chunk path
     console.log(`  [GhostPro] Splitting into ${chunks.length} chunks for processing...`);
@@ -2049,6 +2044,33 @@ export async function ghostProHumanize(
 
   // ── Final punctuation & capitalization cleanup (non-LLM) ──
   result = fixPunctuation(result);
+
+  // ── LLM synonym/phrasing validation — fix awkward dictionary swaps ──
+  console.log("  [GhostPro] Running LLM phrasing validation...");
+  const valWordCount = result.trim().split(/\s+/).length;
+  const valMaxTokens = Math.min(16384, Math.max(4096, Math.ceil(valWordCount * 2)));
+  result = await llmValidatePhrasing(result, valMaxTokens);
+
+  // ── Strict LLM punctuation/capitalization cleanup with word-preservation loop ──
+  console.log("  [GhostPro] Running strict LLM punctuation cleanup...");
+  for (let puncLoop = 0; puncLoop < 3; puncLoop++) {
+    const beforePunc = result;
+    const puncResult = await llmFixPunctuation(result);
+    // Verify word count didn't change
+    const beforeWords = beforePunc.replace(/[^a-zA-Z\s]/g, "").toLowerCase().split(/\s+/).filter(w => w);
+    const afterWords = puncResult.replace(/[^a-zA-Z\s]/g, "").toLowerCase().split(/\s+/).filter(w => w);
+    if (Math.abs(beforeWords.length - afterWords.length) <= 2) {
+      result = puncResult;
+      console.log(`  [GhostPro] Punctuation pass ${puncLoop + 1}: accepted (${afterWords.length} words)`);
+      break;
+    } else {
+      console.warn(`  [GhostPro] Punctuation pass ${puncLoop + 1}: rejected — word count changed (${beforeWords.length} → ${afterWords.length}), retrying...`);
+      // Loop again with original result
+    }
+  }
+
+  // Final capitalization enforcement
+  result = enforceCapitalization(original, result);
 
   // Merge/split DISABLED — strict sentence count enforcement: input = output
 

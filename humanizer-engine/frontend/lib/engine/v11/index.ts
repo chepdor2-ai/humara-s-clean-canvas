@@ -44,6 +44,8 @@ import { formatPhase } from './phases/formatPhase';
 import { aggressivePostProcessPhase } from './phases/aggressivePostProcessPhase';
 import { humanizePhase } from './phases/humanizePhase';
 import { finalAIKillPhase } from './phases/finalAIKillPhase';
+import { sentenceSurgeryPhase } from './phases/sentenceSurgeryPhase';
+import { validationPhase } from './phases/validationPhase';
 
 /**
  * Main entry point for V1.1 humanization.
@@ -71,6 +73,7 @@ export async function humanizeV11(
   const pipeline = new HumanizationPipeline([
     cleanPhase,           // 1. Normalize input
     detectPhase,          // 2. Score sentences for AI likelihood
+    sentenceSurgeryPhase, // 2.5. Pre-humanization merge/split for burstiness
     sentenceRewritePhase, // 3. Rule-based word/phrase transforms
     chunkRewritePhase,    // 4. Optional LLM sentence rewrite
     sentencePolishPhase,  // 5. Filler removal + grammar fix
@@ -84,6 +87,7 @@ export async function humanizeV11(
     aggressivePostProcessPhase, // 13. Deep aggressive post-processing (≥75% change)
     humanizePhase,        // 14. Pre-1990 voice + phrasal verbs + explanatory padding
     finalAIKillPhase,     // 15. Scorched-earth AI term kill + contraction/first-person guard
+    validationPhase,      // 16. Post-humanization validation (caps, rules, 40% change)
   ]);
 
   // Run the pipeline

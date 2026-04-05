@@ -40,6 +40,17 @@ import {
   perSentenceAntiDetection,
 } from "./shared-dictionaries";
 import { getDictionary } from "./dictionary";
+import {
+  buildSentenceItems,
+  applySentenceSurgery,
+  reassembleFromItems,
+  enforceCapitalization,
+  enforceStrictRules,
+  enforceSingleSentence,
+  getWordChangePercent,
+  type SurgeryItem,
+  type InputFeatures as SurgeryInputFeatures,
+} from "./sentence-surgery";
 
 // ── Config ──
 
@@ -99,7 +110,7 @@ function detectInputFeatures(text: string): InputFeatures {
 }
 
 // ══════════════════════════════════════════════════════════════════════════
-// PASS 1: LLM DEEP REWRITE — Natural human-style prose
+// PASS 1: LLM DEEP REWRITE — Tuned to produce pre-2000 human-style prose
 // ══════════════════════════════════════════════════════════════════════════
 
 function getSystemPrompt(tone: string, wordCount?: number): string {
@@ -107,8 +118,8 @@ function getSystemPrompt(tone: string, wordCount?: number): string {
   const isShort = (wordCount ?? 999) < 300;
 
   const voiceInstruction = isAcademic
-    ? `You are a real human academic writer — a graduate student who writes essays, research papers, and thesis chapters by hand. You are NOT an AI. You do NOT simulate human writing. You ARE a human who writes with thoughtful rhythm, natural flow, and genuine intellectual engagement. Think of how a strong graduate thesis reads when written by someone who actually cares about clarity: direct, precise, occasionally personal in style, but never stiff or formulaic.`
-    : `You are a real human author — a columnist, essayist, or blogger who writes by hand. You are NOT an AI. You do NOT simulate human writing. You ARE a human who writes with messy rhythm, personal quirks, and uneven pacing. Think of how columnists from the 1990s or early-2000s bloggers wrote: direct, sometimes clumsy, never polished to a robotic sheen.`;
+    ? `You are ghostwriting as a real graduate student. Your job: rewrite text so it reads like a sharp human scholar wrote it — thoughtful rhythm, natural flow, not robotic. Think of how a strong graduate thesis or journal article reads when written by someone who actually cares about clarity: direct, precise, occasionally personal in style, but never stiff or formulaic.`
+    : `You are ghostwriting as a real human author. Your job: rewrite text so it reads exactly like a person wrote it by hand — messy rhythm, personal quirks, uneven pacing. Think of how columnists from the 1990s or early-2000s bloggers wrote: direct, sometimes clumsy, never polished to a robotic sheen.`;
 
   const shortTextRule = isShort ? `
 SHORT TEXT — EXTRA RULES (this text is under 300 words, so every sentence matters):
@@ -163,10 +174,10 @@ ABSOLUTE REQUIREMENTS — these are non-negotiable:
 
 ${burstinessRule}
 
-2. BANNED VOCABULARY — these are the most commonly flagged AI words:
-   utilize, facilitate, leverage, comprehensive, multifaceted, paramount, furthermore, moreover, additionally, consequently, subsequently, nevertheless, notwithstanding, aforementioned, paradigm, trajectory, discourse, nuanced, pivotal, intricate, meticulous, profound, overarching, transformative, noteworthy, elucidate, delve, embark, foster, harness, tapestry, cornerstone, myriad, plethora, landscape, realm, culminate
+2. ABSOLUTELY BANNED VOCABULARY — if you use ANY of these words, the output fails:
+   utilize, facilitate, leverage, comprehensive, multifaceted, paramount, furthermore, moreover, additionally, consequently, subsequently, nevertheless, notwithstanding, aforementioned, paradigm, trajectory, discourse, dichotomy, conundrum, ramification, underpinning, synergy, robust, nuanced, salient, ubiquitous, pivotal, intricate, meticulous, profound, inherent, overarching, substantive, efficacious, holistic, transformative, innovative, groundbreaking, noteworthy, proliferate, exacerbate, ameliorate, engender, delineate, elucidate, illuminate, necessitate, perpetuate, underscore, exemplify, encompass, bolster, catalyze, streamline, optimize, mitigate, navigate, prioritize, articulate, substantiate, corroborate, disseminate, cultivate, ascertain, endeavor, delve, embark, foster, harness, spearhead, unravel, unveil, tapestry, cornerstone, bedrock, linchpin, nexus, spectrum, myriad, plethora, multitude, landscape, realm, culminate
 
-   Also BANNED phrases: "it is important to note", "plays a crucial role", "in today's world", "a wide range of", "first and foremost", "serves as a testament", "it is worth noting", "it is clear that", "when it comes to", "moving forward"
+   Also BANNED phrases: "it is important to note", "it should be noted", "plays a crucial role", "in today's world", "in today's society", "a wide range of", "due to the fact that", "first and foremost", "each and every", "not only...but also", "serves as a testament", "in light of", "with that in mind", "having said that", "that being said", "it is worth noting", "on the other hand", "in conclusion", "in summary", "as a result", "for example,", "for instance,", "there are several", "there are many", "it is clear that", "when it comes to", "given that", "moving forward"
 
 3. SENTENCE STARTERS — vary them dramatically:
    - Start some sentences with the subject directly ("The economy grew...")
@@ -218,7 +229,9 @@ function buildUserPrompt(text: string, features: InputFeatures, tone: string): s
       toneGuide = "Write like a confident college student explaining this topic to a peer — natural, clear, occasionally conversational.";
   }
 
-  const contractionRule = "Do NOT use contractions under any circumstances. Write all words fully (do not, cannot, will not, it is, etc.).";
+  const contractionRule = features.hasContractions
+    ? "You MAY use contractions naturally."
+    : "Do NOT use contractions. Write all words fully (do not, cannot, will not, etc.).";
 
   const firstPersonRule = features.hasFirstPerson
     ? "You may use first-person pronouns where appropriate."
@@ -280,8 +293,8 @@ function getSentenceSystemPrompt(tone: string): string {
   const isAcademic = tone === "academic";
 
   const voiceInstruction = isAcademic
-    ? `You are a real human academic writer — a graduate student rewriting a SINGLE sentence the way you naturally write in your own essays and papers. You are NOT an AI. You ARE a human scholar who writes with genuine thought, natural rhythm, and intellectual clarity. Direct and precise but never formulaic.`
-    : `You are a real human author — a columnist or essayist rewriting a SINGLE sentence in your own natural voice. You are NOT an AI. You ARE a human writer with personal quirks and natural style. Think how a 1990s columnist or early-2000s blogger would phrase this.`;
+    ? `You are rewriting a SINGLE sentence as a real graduate student would write it — thoughtful, natural, not robotic. Direct and precise but never formulaic.`
+    : `You are rewriting a SINGLE sentence as a real human author would write it — natural quirks, personal style. Think how a 1990s columnist or early-2000s blogger would phrase this.`;
 
   return `${voiceInstruction}
 
@@ -307,7 +320,9 @@ function buildSentenceUserPrompt(
   nextSentence: string | null,
   features: InputFeatures,
 ): string {
-  const contractionRule = "Do NOT use contractions.";
+  const contractionRule = features.hasContractions
+    ? "You MAY use contractions."
+    : "Do NOT use contractions.";
   const firstPersonRule = features.hasFirstPerson
     ? "First-person pronouns OK."
     : "No first-person pronouns (I, we, me, us, my, our).";
@@ -636,8 +651,11 @@ function humanizePunctuation(text: string, features: InputFeatures): string {
     return processed.join(" ");
   }).filter(Boolean).join("\n\n");
 
-  // Handle contractions — always expand (zero tolerance)
-  return removeContractions(result);
+  // Handle contractions
+  if (!features.hasContractions) {
+    return removeContractions(result);
+  }
+  return result;
 }
 
 // ── Contraction handling ──
@@ -1339,7 +1357,8 @@ function splitIntoChunks(text: string): string[] {
  */
 function postProcessSingleSentence(sent: string, features: InputFeatures, strength: string = "light"): string {
   if (!sent.trim()) return sent;
-  let result = sent.trim();
+  const originalSent = sent.trim();
+  let result = originalSent;
 
   // 1. Kill AI vocabulary — local PHRASE patterns first
   for (const [pattern, replacement] of AI_PHRASE_KILL) {
@@ -1378,8 +1397,8 @@ function postProcessSingleSentence(sent: string, features: InputFeatures, streng
     }
   }
 
-  // 11. Dictionary-enhanced synonym swap (per-sentence) — moderate rate
-  const synonymRate = strength === "strong" ? 0.08 : strength === "medium" ? 0.06 : 0.05;
+  // 11. Dictionary-enhanced synonym swap (per-sentence) — conservative rate to avoid wrong synonyms
+  const synonymRate = strength === "strong" ? 0.08 : strength === "medium" ? 0.06 : 0.04;
   const dict = getDictionary();
   const currentWords = result.split(/\s+/);
   if (currentWords.length >= 5) {
@@ -1415,23 +1434,23 @@ function postProcessSingleSentence(sent: string, features: InputFeatures, streng
     result = newWords.join(" ");
   }
 
-  // 12. Syntactic template — DISABLED (LLM already handles structure)
-  // applySyntacticTemplate creates detectable patterns when combined with LLM output
-  // {
-  //   const templateProb = strength === "strong" ? 0.35 : strength === "medium" ? 0.25 : 0.15;
-  //   const rWords = result.split(/\s+/);
-  //   if (rWords.length >= 12 && Math.random() < templateProb) {
-  //     result = applySyntacticTemplate(result);
-  //   }
-  // }
+  // 12. Syntactic template — moderate application for structural variation
+  {
+    const templateProb = strength === "strong" ? 0.35 : strength === "medium" ? 0.25 : 0.15;
+    const rWords = result.split(/\s+/);
+    if (rWords.length >= 12 && Math.random() < templateProb) {
+      result = applySyntacticTemplate(result);
+    }
+  }
 
-  // 12a. Burstiness injection — only for sentences >28 words in the AI sweet spot
+  // 12a. Burstiness injection — break AI-typical sentence length uniformity
+  // Real detectors (GPTZero, Pangram) flag sentences in the 15-25 word "AI sweet spot"
   {
     const words = result.split(/\s+/);
     const wc = words.length;
-    if (wc >= 28) {
+    if (wc >= 16 && wc <= 24) {
       const roll = Math.random();
-      if (roll < 0.10) {
+      if (roll < 0.25) {
         // Shorten: remove a non-essential adverb or qualifier
         const adverbKill = /\b(very|really|quite|rather|somewhat|fairly|extremely|particularly|especially|significantly|substantially|generally|typically|essentially|fundamentally|relatively|primarily|largely|mainly)\s+/i;
         const before = result;
@@ -1447,27 +1466,8 @@ function postProcessSingleSentence(sent: string, features: InputFeatures, streng
   // 12b. Second-pass AI word kill — catch any AI words reintroduced by synonym/template steps
   result = applyAIWordKill(result);
 
-  // 12b2. Structural diversity — break SVO monotony that detectors flag
-  // Randomly front prepositional phrases, add inversions, or restructure
-  {
-    const words = result.split(/\s+/);
-    if (words.length >= 10 && Math.random() < 0.20) {
-      // Try to move a prepositional phrase from mid-sentence to front
-      const prepMatch = result.match(/^([A-Z][^,]{8,40}),?\s+(in \w+|at \w+|by \w+|for \w+|from \w+|with \w+|during \w+|before \w+|after \w+|through \w+)\s+(.+)$/i);
-      if (prepMatch) {
-        const prep = prepMatch[2];
-        const mainClause = prepMatch[1] + " " + prepMatch[3];
-        result = prep[0].toUpperCase() + prep.slice(1) + ", " + mainClause[0].toLowerCase() + mainClause.slice(1);
-      }
-    }
-    // Occasionally add a sentence-initial time/manner adverb for variety
-    if (words.length >= 8 && Math.random() < 0.08) {
-      const fronters = ["Back then, ", "At the time, ", "By that point, ", "In those days, ",
-        "Looking back, ", "As it turned out, ", "Sure enough, ", "Oddly, "];
-      const fronter = fronters[Math.floor(Math.random() * fronters.length)];
-      result = fronter + result[0].toLowerCase() + result.slice(1);
-    }
-  }
+  // 12b2. Structural diversity — DISABLED: random phrase injection was producing artifacts
+  // like "By that point," and "Oddly," that corrupt academic text
 
   // 12c. Per-sentence anti-detection — score this sentence against the same 9 micro-signals
   // the detector uses and apply targeted fixes to push it below detection threshold
@@ -1478,28 +1478,63 @@ function postProcessSingleSentence(sent: string, features: InputFeatures, streng
     }
   }
 
-  // 12d. Deep cleaning — DISABLED (over-cleans and creates unnatural uniformity)
-  // {
-  //   const deepCleaned = deepCleaningPass([result]);
-  //   if (deepCleaned.length > 0 && deepCleaned[0].trim()) {
-  //     result = deepCleaned[0];
-  //   }
-  // }
+  // 12d. Deep cleaning — eliminate residual AI structural patterns
+  {
+    const deepCleaned = deepCleaningPass([result]);
+    if (deepCleaned.length > 0 && deepCleaned[0].trim()) {
+      result = deepCleaned[0];
+    }
+  }
 
-  // 12e. Pre-1990 naturalness — DISABLED (creates unnatural old-fashioned phrasing)
-  // Keep language modern and natural
+  // 12e. Pre-1990 naturalness — replace modern collocations with older phrasing
+  result = result.replace(/\bin terms of\b/gi, "regarding");
+  result = result.replace(/\bat the end of the day\b/gi, "when all is said and done");
+  result = result.replace(/\bmoving forward\b/gi, "from here on");
+  result = result.replace(/\bgame[- ]changer\b/gi, "turning point");
+  result = result.replace(/\bimpact(?:s|ed|ing)? on\b/gi, (m) => m.replace(/impact/i, "effect"));
+  result = result.replace(/\bfocus(?:es|ed|ing)? on\b/gi, (m) => m.replace(/focus/i, "center"));
+  result = result.replace(/\bdriven by\b/gi, "caused by");
+  result = result.replace(/\bengage(?:s|d|ment)? with\b/gi, (m) => m.replace(/engage/i, "deal"));
+  result = result.replace(/\baddress(?:es|ed|ing)?\b(?!\s+(?:book|number|line|bar))/gi, (m) => m.replace(/address/i, "handle"));
+  result = result.replace(/\bgoing forward\b/gi, "from now on");
+  result = result.replace(/\bkey factor\b/gi, "main cause");
+  result = result.replace(/\bplayed a role\b/gi, "mattered");
+  result = result.replace(/\bplays a role\b/gi, "matters");
+  result = result.replace(/\bdue to\b/gi, "because of");
+  result = result.replace(/\bas well as\b/gi, "and");
 
-  // 12f. N-gram pattern breaking — only the most flagged AI patterns
+  // 12f. N-gram pattern breaking — Pangram and Copyleaks use n-gram frequency analysis
+  // These are the most common AI bigram/trigram patterns that flag text as AI-generated
   result = result.replace(/\bplays a crucial role\b/gi, "matters a great deal");
   result = result.replace(/\bplay a crucial role\b/gi, "matter a great deal");
+  result = result.replace(/\bplays an important role\b/gi, "carries real weight");
   result = result.replace(/\bit is worth noting\b/gi, "note that");
   result = result.replace(/\bit is important to\b/gi, "one must");
+  result = result.replace(/\bit is essential to\b/gi, "one must");
   result = result.replace(/\bin order to\b/gi, "to");
+  result = result.replace(/\bthe ability to\b/gi, "a way to");
   result = result.replace(/\ba wide range of\b/gi, "many");
-  result = result.replace(/\bthe fact that\b/gi, "that");
+  result = result.replace(/\ba wide variety of\b/gi, "many kinds of");
+  result = result.replace(/\bon the other hand\b/gi, "then again");
+  result = result.replace(/\bin this context\b/gi, "here");
+  result = result.replace(/\bin this regard\b/gi, "in that respect");
+  result = result.replace(/\bin the context of\b/gi, "within");
+  result = result.replace(/\bwith regard to\b/gi, "about");
+  result = result.replace(/\bwith respect to\b/gi, "about");
+  result = result.replace(/\bin the case of\b/gi, "for");
+  result = result.replace(/\bserves as a\b/gi, "works as a");
+  result = result.replace(/\baims to\b/gi, "tries to");
+  result = result.replace(/\bseeks to\b/gi, "tries to");
   result = result.replace(/\bhas the potential to\b/gi, "could");
+  result = result.replace(/\bthe fact that\b/gi, "that");
+  result = result.replace(/\bby means of\b/gi, "through");
   result = result.replace(/\bin light of\b/gi, "given");
   result = result.replace(/\btake into account\b/gi, "consider");
+  result = result.replace(/\btaken into account\b/gi, "considered");
+  result = result.replace(/\bgive rise to\b/gi, "cause");
+  result = result.replace(/\bas a result of\b/gi, "from");
+  result = result.replace(/\bas a consequence of\b/gi, "from");
+  result = result.replace(/\bon the basis of\b/gi, "based on");
 
   // 13. Constraint enforcement per sentence
   if (!features.hasContractions) {
@@ -1522,10 +1557,25 @@ function postProcessSingleSentence(sent: string, features: InputFeatures, streng
   result = result.replace(/\.\s*\./g, ".");
   result = result.trim();
 
+  // 16. Enforce single sentence output
+  result = enforceSingleSentence(result);
+
   // 17. Capitalize first letter
   if (result && /^[a-z]/.test(result)) {
     result = result[0].toUpperCase() + result.slice(1);
   }
+
+  // 18. Enforce strict rules (no contractions, no rhetorical questions, no first-person)
+  const surgeryFeatures: SurgeryInputFeatures = {
+    hasContractions: features.hasContractions,
+    hasFirstPerson: features.hasFirstPerson,
+    hasRhetoricalQuestions: features.hasRhetoricalQuestions,
+  };
+  const ruleResult = enforceStrictRules(originalSent, result, surgeryFeatures);
+  result = ruleResult.text;
+
+  // 19. Enforce capitalization
+  result = enforceCapitalization(originalSent, result);
 
   return result;
 }
@@ -1717,7 +1767,7 @@ async function llmFixPunctuation(text: string): Promise<string> {
   const wordCount = text.trim().split(/\s+/).length;
   const maxTokens = Math.min(16384, Math.max(4096, Math.ceil(wordCount * 2)));
 
-  const systemPrompt = `You are a human proofreader — a real person reviewing text for punctuation and capitalization errors. Your ONLY job is to fix punctuation and capitalization errors.
+  const systemPrompt = `You are a punctuation proofreader. Your ONLY job is to fix punctuation and capitalization errors.
 
 STRICT RULES — YOU MUST FOLLOW ALL OF THEM:
 1. DO NOT change, add, remove, or replace ANY word. Every single word must remain exactly as it is.
@@ -1795,74 +1845,32 @@ async function processChunk(
   const chunkWords = chunkText.trim().split(/\s+/).length;
 
   // ═══════════════════════════════════════════
-  // PASS 1: PER-SENTENCE PARALLEL LLM Rewrite
-  // Each sentence is independently sent to the LLM with human persona.
-  // All sentences processed in parallel for speed.
-  // Output reassembled in original order.
+  // PASS 1: FULL-TEXT LLM Rewrite (single call for speed)
   // ═══════════════════════════════════════════
-  console.log("  [GhostPro]   Pass 1: Per-sentence parallel LLM rewrite...");
+  console.log("  [GhostPro]   Pass 1: Full-text LLM rewrite...");
 
-  const sentenceSystem = getSentenceSystemPrompt(options.tone);
-  const paragraphs = chunkText.split(/\n\s*\n/).filter(p => p.trim());
-  let totalSentencesProcessed = 0;
+  const llmMaxTokens = Math.min(16384, Math.max(4096, Math.ceil(chunkWords * 2.5)));
+  const systemPrompt = getSystemPrompt(options.tone, chunkWords);
+  const userPrompt = buildUserPrompt(
+    placeholdersToLLMFormat(chunkText),
+    features,
+    options.tone,
+  );
 
-  const rewrittenParagraphs = await Promise.all(paragraphs.map(async (para) => {
-    const trimmedPara = para.trim();
-    if (isTitleOrHeading(trimmedPara)) return trimmedPara;
+  let result: string;
+  try {
+    const raw = await llmCall(systemPrompt, userPrompt, options.temperature, llmMaxTokens);
+    result = llmFormatToPlaceholders(raw ?? "");
+    if (!result || result.trim().length < chunkText.length * 0.3) {
+      console.warn("  [GhostPro]   LLM output too short, using original");
+      result = chunkText;
+    }
+  } catch (err) {
+    console.warn("  [GhostPro]   LLM call failed, using original:", err);
+    result = chunkText;
+  }
 
-    const sentences = robustSentenceSplit(trimmedPara);
-    if (sentences.length === 0) return trimmedPara;
-
-    // Process each sentence independently via LLM (parallel for speed)
-    const rewritePromises = sentences.map(async (sent, idx) => {
-      const trimmed = sent.trim();
-      if (!trimmed || trimmed.split(/\s+/).length < 3) return trimmed;
-      if (isTitleOrHeading(trimmed)) return trimmed;
-
-      const prevSent = idx > 0 ? sentences[idx - 1] : null;
-      const nextSent = idx < sentences.length - 1 ? sentences[idx + 1] : null;
-
-      const userPrompt = buildSentenceUserPrompt(
-        placeholdersToLLMFormat(trimmed),
-        prevSent ? placeholdersToLLMFormat(prevSent) : null,
-        nextSent ? placeholdersToLLMFormat(nextSent) : null,
-        features,
-      );
-
-      // Vary temperature per-sentence for maximum unpredictability
-      const sentTemp = options.temperature + (Math.random() * 0.14 - 0.07);
-      const clampedTemp = Math.max(0.3, Math.min(1.0, sentTemp));
-      const sentMaxTokens = Math.max(256, Math.ceil(trimmed.split(/\s+/).length * 3));
-
-      try {
-        let rewritten = llmFormatToPlaceholders(
-          await llmCall(sentenceSystem, userPrompt, clampedTemp, sentMaxTokens) ?? ''
-        );
-        if (!rewritten || rewritten.trim().length < trimmed.length * 0.2) {
-          return trimmed;
-        }
-        rewritten = rewritten.replace(/^\[TARGET\]:\s*/i, "").trim();
-        // Enforce single sentence: if LLM returned multiple sentences, collapse to one
-        const llmSents = robustSentenceSplit(rewritten);
-        if (llmSents.length > 1) {
-          rewritten = llmSents.map((s, i) => {
-            if (i === 0) return s.replace(/\.\s*$/, "");
-            return s[0]?.toLowerCase() + s.slice(1);
-          }).join(", ") + (llmSents[llmSents.length - 1].match(/[.!?]$/) ? "" : ".");
-        }
-        return rewritten;
-      } catch {
-        return trimmed;
-      }
-    });
-
-    const rewrittenSentences = await Promise.all(rewritePromises);
-    totalSentencesProcessed += rewrittenSentences.length;
-    return rewrittenSentences.join(" ");
-  }));
-
-  let result = rewrittenParagraphs.join("\n\n");
-  console.log(`  [GhostPro]   Pass 1 done: ${result.split(/\s+/).length} words (${totalSentencesProcessed} sentences processed in parallel)`);
+  console.log(`  [GhostPro]   Pass 1 done: ${result.split(/\s+/).length} words`);
 
   // ═══════════════════════════════════════════
   // PASS 2: SENTENCE-INDEPENDENT Post-processing
@@ -1932,31 +1940,9 @@ async function processChunk(
   if (!features.hasFirstPerson) result = removeFirstPerson(result);
   if (!features.hasRhetoricalQuestions) result = removeRhetoricalQuestions(result);
 
-  // Word count enforcement for short text — trim sentences from the longest paragraph, never drop paragraphs
-  if (chunkWords < 300) {
-    const maxAllowed = Math.round(chunkWords * 1.10);
-    const outputWords = result.trim().split(/\s+/).length;
-    if (outputWords > maxAllowed) {
-      const paragraphs = result.split(/\n\s*\n/).filter(p => p.trim());
-      let totalWords = paragraphs.reduce((sum, p) => sum + p.trim().split(/\s+/).length, 0);
-      // Trim sentences from the longest paragraph until within limit
-      while (totalWords > maxAllowed) {
-        let longestIdx = 0;
-        let longestLen = 0;
-        for (let i = 0; i < paragraphs.length; i++) {
-          const wc = paragraphs[i].split(/\s+/).length;
-          if (wc > longestLen) { longestLen = wc; longestIdx = i; }
-        }
-        const sents = robustSentenceSplit(paragraphs[longestIdx]);
-        if (sents.length <= 1) break;
-        // Remove the last sentence from the longest paragraph
-        const removed = sents.pop()!;
-        paragraphs[longestIdx] = sents.join(" ");
-        totalWords -= removed.split(/\s+/).length;
-      }
-      result = paragraphs.join("\n\n");
-    }
-  }
+  // Word count enforcement DISABLED — was dropping whole sentences and corrupting output
+  // The LLM prompt already constrains word count, and enforcePerParagraphSentenceCounts
+  // handles structural integrity at the end.
 
   return result;
 }
@@ -2017,15 +2003,24 @@ export async function ghostProHumanize(
   }
 
   // ═══════════════════════════════════════════
+  // PRE-HUMANIZATION: Sentence Merge/Split Surgery for Burstiness
+  // ═══════════════════════════════════════════
+  console.log("  [GhostPro] Pre-surgery: Applying sentence merge/split for burstiness...");
+  const rawSurgeryItems = buildSentenceItems(protectedText);
+  const surgeryItems = applySentenceSurgery(rawSurgeryItems);
+  const surgeryText = reassembleFromItems(surgeryItems);
+  console.log(`  [GhostPro] Surgery: ${rawSurgeryItems.filter(i => !i.isTitle).length} → ${surgeryItems.filter(i => !i.isTitle).length} sentences (merges + splits applied)`);
+
+  // ═══════════════════════════════════════════
   // CHUNK PROCESSING
   // ═══════════════════════════════════════════
-  const chunks = splitIntoChunks(protectedText);
+  const chunks = splitIntoChunks(surgeryText);
   let result: string;
 
   if (chunks.length === 1) {
     // Single chunk — standard path
     console.log("  [GhostPro] Processing as single chunk...");
-    result = await processChunk(protectedText, features, { strength, tone, temperature });
+    result = await processChunk(surgeryText, features, { strength, tone, temperature });
   } else {
     // Multi-chunk path
     console.log(`  [GhostPro] Splitting into ${chunks.length} chunks for processing...`);
@@ -2049,6 +2044,33 @@ export async function ghostProHumanize(
 
   // ── Final punctuation & capitalization cleanup (non-LLM) ──
   result = fixPunctuation(result);
+
+  // ── LLM synonym/phrasing validation — fix awkward dictionary swaps ──
+  console.log("  [GhostPro] Running LLM phrasing validation...");
+  const valWordCount = result.trim().split(/\s+/).length;
+  const valMaxTokens = Math.min(16384, Math.max(4096, Math.ceil(valWordCount * 2)));
+  result = await llmValidatePhrasing(result, valMaxTokens);
+
+  // ── Strict LLM punctuation/capitalization cleanup with word-preservation loop ──
+  console.log("  [GhostPro] Running strict LLM punctuation cleanup...");
+  for (let puncLoop = 0; puncLoop < 3; puncLoop++) {
+    const beforePunc = result;
+    const puncResult = await llmFixPunctuation(result);
+    // Verify word count didn't change
+    const beforeWords = beforePunc.replace(/[^a-zA-Z\s]/g, "").toLowerCase().split(/\s+/).filter(w => w);
+    const afterWords = puncResult.replace(/[^a-zA-Z\s]/g, "").toLowerCase().split(/\s+/).filter(w => w);
+    if (Math.abs(beforeWords.length - afterWords.length) <= 2) {
+      result = puncResult;
+      console.log(`  [GhostPro] Punctuation pass ${puncLoop + 1}: accepted (${afterWords.length} words)`);
+      break;
+    } else {
+      console.warn(`  [GhostPro] Punctuation pass ${puncLoop + 1}: rejected — word count changed (${beforeWords.length} → ${afterWords.length}), retrying...`);
+      // Loop again with original result
+    }
+  }
+
+  // Final capitalization enforcement
+  result = enforceCapitalization(original, result);
 
   // Merge/split DISABLED — strict sentence count enforcement: input = output
 

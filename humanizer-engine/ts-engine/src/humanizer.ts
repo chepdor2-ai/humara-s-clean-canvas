@@ -34,6 +34,17 @@ import {
 import {
   applyMicroNoiseToText,
 } from "./anti-ai-patterns";
+import {
+  buildSentenceItems,
+  applySentenceSurgery,
+  reassembleFromItems,
+  enforceCapitalization,
+  enforceStrictRules,
+  enforceSingleSentence,
+  getWordChangePercent,
+  type SurgeryItem,
+  type InputFeatures as SurgeryInputFeatures,
+} from "./sentence-surgery";
 
 // ── Input Feature Detection ──
 // These detect whether the ORIGINAL input uses contractions, first-person, or rhetorical questions.
@@ -2067,29 +2078,11 @@ export function humanize(
         if (iteration % 5 === 0) usedWords = new Set();
       }
 
-    // ── Sentence-by-sentence architecture ──
-    // Extract ALL sentences from ALL paragraphs, process each independently,
-    // then reassemble into original paragraph structure.
-    const paragraphs = source.split(/\n\s*\n/).filter((p) => p.trim());
-
-    // Build flat sentence list with paragraph tracking
-    const sentenceItems: { text: string; paraIdx: number; isTitle: boolean; sentIdxInPara: number }[] = [];
-    for (let pi = 0; pi < paragraphs.length; pi++) {
-      const trimmedPara = paragraphs[pi].trim();
-      if (isTitleOrHeading(trimmedPara)) {
-        sentenceItems.push({ text: trimmedPara, paraIdx: pi, isTitle: true, sentIdxInPara: 0 });
-        continue;
-      }
-      const sents = robustSentenceSplit(trimmedPara);
-      let si = 0;
-      for (const s of sents) {
-        const t = s.trim();
-        if (t) {
-          sentenceItems.push({ text: t, paraIdx: pi, isTitle: false, sentIdxInPara: si });
-          si++;
-        }
-      }
-    }
+    // ── Sentence-by-sentence architecture with pre-humanization merge/split ──
+    // Extract ALL sentences, apply merge/split surgery for burstiness,
+    // then process each independently through the full pipeline.
+    const rawItems = buildSentenceItems(source);
+    const sentenceItems = applySentenceSurgery(rawItems);
 
     // Process each sentence independently through the full pipeline
     for (const item of sentenceItems) {
@@ -2098,63 +2091,77 @@ export function humanize(
       // Skip very short fragments (< 3 words) — pass through as-is
       if (item.text.split(/\s+/).length < 3) continue;
 
-      const humanized = humanizeSingleSentence(
-        item.text, intensity, usedWords, ctx, settings,
-        dict, commonWords, inputFeatures, properNouns,
-        item.sentIdxInPara === 0, // isFirstInParagraph — skip heavy restructuring for topic sentences
-      );
-      if (humanized) {
+      const originalSentText = item.text;
+
+      // Humanize with retry loop: keeps retrying until output is a single sentence
+      // and meets the 40% minimum change threshold
+      let humanized = "";
+      let attempts = 0;
+      const maxAttempts = 3;
+
+      while (attempts < maxAttempts) {
+        attempts++;
+        let candidate = humanizeSingleSentence(
+          attempts === 1 ? item.text : originalSentText,
+          intensity + (attempts - 1) * 0.5,
+          usedWords, ctx, settings,
+          dict, commonWords, inputFeatures, properNouns,
+          item.sentIdxInPara === 0,
+        );
+        if (!candidate) { humanized = originalSentText; break; }
+
         // Per-sentence phrasal verb expansion
-        const expanded = expandWithPhrasalVerbs([humanized], intensity);
-        let sent = expanded[0] || humanized;
+        const expanded = expandWithPhrasalVerbs([candidate], intensity);
+        candidate = expanded[0] || candidate;
 
         // Per-sentence AI vocabulary sweep
-        sent = applyAIWordKill(sent);
-        sent = applyPhrasePatterns(sent);
-        sent = applyConnectorNaturalization(sent);
-        sent = killModernBuzzwords(sent);
-        sent = sent.replace(/ {2,}/g, " ").trim();
-        if (sent && /^[a-z]/.test(sent)) sent = sent[0].toUpperCase() + sent.slice(1);
+        candidate = applyAIWordKill(candidate);
+        candidate = applyPhrasePatterns(candidate);
+        candidate = applyConnectorNaturalization(candidate);
+        candidate = killModernBuzzwords(candidate);
+        candidate = candidate.replace(/ {2,}/g, " ").trim();
 
-        item.text = sent;
+        // Enforce single-sentence output
+        candidate = enforceSingleSentence(candidate);
+
+        // Enforce strict rules (no contractions, no rhetorical questions, no first-person)
+        const surgeryFeatures: SurgeryInputFeatures = {
+          hasContractions: inputFeatures.hasContractions,
+          hasFirstPerson: inputFeatures.hasFirstPerson,
+          hasRhetoricalQuestions: inputFeatures.hasRhetoricalQuestions,
+        };
+        const ruleResult = enforceStrictRules(originalSentText, candidate, surgeryFeatures);
+        candidate = ruleResult.text;
+
+        // Enforce capitalization
+        candidate = enforceCapitalization(originalSentText, candidate);
+
+        // Check 40% minimum change
+        if (getWordChangePercent(originalSentText, candidate) >= 40 || attempts >= maxAttempts) {
+          humanized = candidate;
+          break;
+        }
+        // If change% is too low, the loop will retry with higher intensity
+      }
+
+      if (humanized) {
+        item.text = humanized;
       }
     }
 
-    // Reassemble into paragraphs preserving original structure
-    const processed: string[] = [];
-    let curIdx = -1;
-    let curSents: string[] = [];
-    let curIsTitle = false;
+    // Reassemble from surgery items preserving paragraph structure
+    let currentResult = reassembleFromItems(sentenceItems);
 
-    const flushParagraph = () => {
-      if (curSents.length === 0) return;
-      if (curIsTitle) {
-        // Titles pass through without any cross-sentence polish
-        processed.push(curSents[0]);
-      } else {
-        // Sentences were already fully processed independently — just join them.
-        // No cross-sentence operations that could degrade individually-clean sentences.
-        let joined = curSents.join(" ");
-        joined = cleanup(joined, inputFeatures, properNouns);
-        if (joined.trim()) processed.push(joined);
-      }
-    };
-
-    for (const item of sentenceItems) {
-      if (item.paraIdx !== curIdx) {
-        flushParagraph();
-        curIdx = item.paraIdx;
-        curSents = [item.text];
-        curIsTitle = item.isTitle;
-      } else {
-        curSents.push(item.text);
-        if (!item.isTitle) curIsTitle = false;
-      }
+    // Apply per-paragraph cleanup
+    {
+      const paras = currentResult.split(/\n\s*\n/).filter(p => p.trim());
+      currentResult = paras.map(p => cleanup(p, inputFeatures, properNouns)).filter(p => p.trim()).join("\n\n");
     }
-    flushParagraph();
 
-    let currentResult = processed.join("\n\n");
         if (inputFeatures.hasContractions) currentResult = addContractions(currentResult);
+
+    // Final capitalization enforcement on full text
+    currentResult = enforceCapitalization(originalText, currentResult);
 
     if ((mode === "ghost_mini" || mode === "ghost_pro") && enablePostProcessing) {
       currentResult = postProcess(currentResult);
@@ -2251,6 +2258,9 @@ export function humanize(
 
   // Final punctuation & capitalization cleanup
   bestResult = fixPunctuation(bestResult);
+
+  // Final capitalization enforcement
+  bestResult = enforceCapitalization(originalText, bestResult);
 
   // Merge/split DISABLED — strict sentence count enforcement: input = output
 

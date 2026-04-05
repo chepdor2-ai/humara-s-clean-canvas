@@ -39,6 +39,17 @@ import { semanticSimilaritySync } from "./semantic-guard";
 import { TextSignals, getDetector } from "./multi-detector";
 import { expandContractions } from "./advanced-transforms";
 import { premiumDeepClean } from "./premium-deep-clean";
+import {
+  buildSentenceItems,
+  applySentenceSurgery,
+  reassembleFromItems,
+  enforceCapitalization,
+  enforceStrictRules,
+  enforceSingleSentence,
+  getWordChangePercent,
+  type SurgeryItem,
+  type InputFeatures as SurgeryInputFeatures,
+} from "./sentence-surgery";
 
 // ── Config ──
 
@@ -156,11 +167,28 @@ const BANNED_WORDS = new Set([
   "utilize", "utilise", "facilitate", "leverage", "comprehensive",
   "multifaceted", "paramount", "furthermore", "moreover", "additionally",
   "consequently", "subsequently", "nevertheless", "notwithstanding",
-  "aforementioned", "paradigm", "trajectory", "discourse",
-  "nuanced", "pivotal", "intricate", "meticulous", "profound",
-  "overarching", "transformative", "noteworthy", "elucidate",
-  "delve", "embark", "foster", "harness", "tapestry",
-  "cornerstone", "myriad", "plethora", "landscape", "realm", "culminate",
+  "aforementioned", "paradigm", "trajectory", "discourse", "dichotomy",
+  "conundrum", "ramification", "underpinning", "synergy", "robust",
+  "nuanced", "salient", "ubiquitous", "pivotal", "intricate",
+  "meticulous", "profound", "inherent", "overarching", "substantive",
+  "efficacious", "holistic", "transformative", "innovative",
+  "groundbreaking", "noteworthy", "proliferate", "exacerbate",
+  "ameliorate", "engender", "delineate", "elucidate", "illuminate",
+  "necessitate", "perpetuate", "underscore", "exemplify", "encompass",
+  "bolster", "catalyze", "streamline", "optimize", "mitigate",
+  "navigate", "prioritize", "articulate", "substantiate", "corroborate",
+  "disseminate", "cultivate", "ascertain", "endeavor", "delve",
+  "embark", "foster", "harness", "spearhead", "unravel", "unveil",
+  "tapestry", "cornerstone", "bedrock", "linchpin", "nexus", "spectrum",
+  "myriad", "plethora", "multitude", "landscape", "realm", "culminate",
+  "enhance", "crucial", "vital", "imperative", "notable", "significant",
+  "substantial", "remarkable", "considerable", "unprecedented",
+  "methodology", "framework", "implication", "implications",
+  "impactful", "actionable", "scalable", "stakeholders", "stakeholder",
+  "ecosystem", "proactive", "seamless", "optimal", "empower",
+  "narrative", "disruptive", "benchmark", "interplay", "diverse",
+  "dynamic", "implement", "pertaining", "integral", "demonstrate",
+  "ensure", "aspect", "notion",
 ]);
 
 const BANNED_STARTERS = new Set([
@@ -255,8 +283,8 @@ function verifySentenceOutput(
     issues.push(`HALLUCINATION: input ${origWords} words → output ${newWords} words`);
   }
 
-  // 6. Check contraction constraint — always enforce zero contractions
-  {
+  // 6. Check contraction constraint
+  if (!features.hasContractions) {
     const contractionRe =
       /\b(can't|won't|don't|doesn't|didn't|isn't|aren't|wasn't|weren't|hasn't|haven't|hadn't|wouldn't|shouldn't|couldn't|mustn't|it's|that's|there's|here's|he's|she's|they're|we're|you're|I'm|they've|we've|you've|I've|they'll|we'll|you'll|I'll|he'll|she'll|it'll|let's|who's|what's)\b/gi;
     if (contractionRe.test(rewritten)) issues.push("CONTRACTION_INJECTED");
@@ -305,18 +333,18 @@ function getModeConfig(engine: string, strength: string): ModeConfig {
         "Moderately rephrase and restructure. Change vocabulary, clause ordering, and sentence openings actively. Create a clearly distinct version from the input.",
     },
     ninja: {
-      temperatureBase: 0.80,
-      maxRetries: 1,
+      temperatureBase: 0.85,
+      maxRetries: 3,
       aggressiveness: "strong",
       strengthInstruction:
-        "Restructure and rephrase clearly. Change vocabulary, clause ordering, and sentence openings. Create a distinct version while keeping natural flow.",
+        "Aggressively restructure and rephrase. Substantially change sentence structure, vocabulary, and clause ordering. Push hard for maximum variation from the original while preserving meaning.",
     },
     undetectable: {
-      temperatureBase: 0.85,
-      maxRetries: 1,
+      temperatureBase: 0.90,
+      maxRetries: 3,
       aggressiveness: "extreme",
       strengthInstruction:
-        "Rephrase every sentence with different structure, vocabulary, and flow. The output should read as written by a different person. Preserve core meaning and facts.",
+        "Maximum restructuring. Completely rephrase every sentence with radically different structure, vocabulary, and flow. The output must read as if written by a completely different person. Preserve only the core meaning and facts.",
     },
   };
 
@@ -339,7 +367,9 @@ function getModeConfig(engine: string, strength: string): ModeConfig {
 // ══════════════════════════════════════════════════════════════════════════
 
 function getPhaseASystemPrompt(features: InputFeatures, config: ModeConfig): string {
-  const contractionRule = "STRICT: Do NOT use ANY contractions. Write all words fully (do not, cannot, will not, it is, that is, etc.). This is non-negotiable.";
+  const contractionRule = features.hasContractions
+    ? "You MAY use contractions naturally."
+    : "STRICT: Do NOT use ANY contractions. Write all words fully (do not, cannot, will not, it is, that is, etc.). This is non-negotiable.";
 
   const firstPersonRule = features.hasFirstPerson
     ? "First-person pronouns (I, we, me, us, my, our) are OK where appropriate."
@@ -349,9 +379,7 @@ function getPhaseASystemPrompt(features: InputFeatures, config: ModeConfig): str
     ? "Rhetorical questions OK sparingly."
     : "STRICT: Do NOT add ANY sentences ending with question marks. Use declarative statements ONLY. This is non-negotiable.";
 
-  return `You are a real human academic writer — a university student, a high school essayist, or a scholarly researcher who writes naturally by hand. You are NOT an AI. You do NOT simulate human writing. You ARE a human, and you write with genuine thought and natural rhythm.
-
-You are rewriting a SINGLE sentence the way you would naturally write it in your own essay — natural, clear, and academically competent. You are performing a deep structural rewrite combined with humanization in one pass.
+  return `You are rewriting a SINGLE sentence to make it sound like a real human from the mid-1990s wrote it — before AI existed. You are performing a deep structural rewrite combined with humanization in one pass.
 
 ABSOLUTE RULES (violation = failure):
 
@@ -378,7 +406,7 @@ ABSOLUTE RULES (violation = failure):
    - "use" not "utilize", "help" not "facilitate", "big" not "significant"
    - "show" not "demonstrate", "part" not "aspect", "idea" not "notion"
    - Use phrasal verbs naturally: look into, carry out, bring about, figure out, deal with, end up, turn out, stand out
-   - Write like a real person — no corporate speak, no tech buzzwords
+   - Write like a real person from the 1990s — no corporate speak, no tech buzzwords
 
 10. STRUCTURAL VARIATION:
     - Do NOT always use Subject-Verb-Object order
@@ -415,7 +443,7 @@ ${contextBefore}[TARGET]: ${sentence}${contextAfter}`;
 // PHASE B: AI Vocabulary Purge (per sentence, strict)
 // ══════════════════════════════════════════════════════════════════════════
 
-const PHASE_B_SYSTEM = `You are a human editor — a real person reviewing text for unnatural AI-sounding vocabulary. Your ONLY job is to replace banned AI-associated words in the given sentence with simple, everyday alternatives that a real human writer would naturally use.
+const PHASE_B_SYSTEM = `You are a vocabulary purger. Your ONLY job is to replace banned AI-associated words in the given sentence with simple, everyday alternatives.
 
 ABSOLUTE RULES:
 
@@ -445,13 +473,15 @@ SENTENCE: ${sentence}`;
 // ══════════════════════════════════════════════════════════════════════════
 
 function getPhaseCSystemPrompt(features: InputFeatures): string {
-  const contractionRule = "STRICT: NO contractions allowed.";
+  const contractionRule = features.hasContractions
+    ? "Contractions are OK."
+    : "STRICT: NO contractions allowed.";
 
   const firstPersonRule = features.hasFirstPerson
     ? "First-person OK."
     : "STRICT: NO first-person pronouns.";
 
-  return `You are a real human writer — a university student, academic researcher, or high school essayist who writes naturally by hand. You are NOT an AI. You do NOT simulate human writing. You ARE a human. You are doing a FINAL stealth polish on a single sentence. Your job is ONLY to:
+  return `You are doing a FINAL stealth polish on a single sentence. Your job is ONLY to:
 
 1. If the sentence starts with a formal connector (Furthermore, Moreover, Additionally, However, Nevertheless, Consequently, Subsequently, Thus, Hence, Indeed, Accordingly, Notably, Specifically, Therefore), replace it with a natural alternative:
    Furthermore/Moreover/Additionally → Also/On top of that/Beyond this
@@ -497,7 +527,7 @@ Replace EACH of the banned words above with a simple everyday alternative. Do NO
 SENTENCE: ${sentence}`;
 }
 
-const RETRY_SYSTEM = `You are a real human writer — a university student, academic researcher, or high school essayist who writes naturally by hand. You are NOT an AI. You are a strict vocabulary replacement engine. Your ONLY job is to replace specific banned words in the sentence with simple alternatives.
+const RETRY_SYSTEM = `You are a strict vocabulary replacement engine. Your ONLY job is to replace specific banned words in the sentence with simple alternatives.
 
 RULES:
 1. Replace ONLY the banned words listed in the user message
@@ -576,6 +606,75 @@ ${text}`;
   }
 }
 
+// ── Strict LLM Punctuation Cleanup (Premium) ──
+// Only fixes punctuation and capitalization. Loops if words change.
+
+async function llmFixPremiumPunctuation(text: string): Promise<string> {
+  const wordCount = text.trim().split(/\s+/).length;
+  const maxTokens = Math.min(16384, Math.max(4096, Math.ceil(wordCount * 2)));
+
+  const systemPrompt = `You are a punctuation proofreader. Your ONLY job is to fix punctuation and capitalization errors.
+
+STRICT RULES — YOU MUST FOLLOW ALL OF THEM:
+1. DO NOT change, add, remove, or replace ANY word. Every single word must remain exactly as it is.
+2. DO NOT reorder words or sentences.
+3. DO NOT add or remove sentences.
+4. DO NOT add or remove paragraphs.
+5. Only fix these punctuation issues:
+   - Commas used where periods should be (run-on sentences)
+   - Missing periods at sentence ends
+   - Missing commas where a natural pause exists
+   - Double commas, double periods, or other duplicate punctuation
+   - Incorrect capitalization after periods/question marks/exclamation marks
+   - Missing capitalization at the start of sentences
+   - Semicolons or colons used incorrectly
+6. Keep paragraph breaks exactly as they are.
+7. Return ONLY the corrected text — no commentary, no labels, no explanations.
+
+REMEMBER: You are ONLY allowed to touch punctuation marks (. , ; : ! ? —) and letter capitalization. Do NOT change any word.`;
+
+  const userPrompt = `Fix ONLY the punctuation and capitalization in this text. Do not change any words. Preserve all [[PROT_n]] and [[TRM_n]] tokens exactly.\n\nTEXT:\n${placeholdersToLLMFormat(text)}`;
+
+  try {
+    const result = llmFormatToPlaceholders(await llmCall(systemPrompt, userPrompt, 0.1, maxTokens) ?? '');
+
+    if (!result || result.trim().length < text.length * 0.5) {
+      console.warn("  [Premium]   Punctuation LLM output too short, skipping");
+      return text;
+    }
+
+    // Verify no words were changed
+    const stripPunct = (s: string) => s.replace(/[^a-zA-Z\s]/g, "").toLowerCase().split(/\s+/).filter(w => w);
+    const origWords = stripPunct(text);
+    const fixedWords = stripPunct(result.trim());
+
+    const maxDrift = Math.max(3, Math.ceil(origWords.length * 0.02));
+    let diffs = 0;
+    const minLen = Math.min(origWords.length, fixedWords.length);
+    for (let i = 0; i < minLen; i++) {
+      if (origWords[i] !== fixedWords[i]) diffs++;
+    }
+    diffs += Math.abs(origWords.length - fixedWords.length);
+
+    if (diffs > maxDrift) {
+      console.warn(`  [Premium]   Punctuation LLM changed ${diffs} words (max ${maxDrift}), skipping`);
+      return text;
+    }
+
+    const origParas = text.split(/\n\s*\n/).filter(p => p.trim()).length;
+    const fixedParas = result.trim().split(/\n\s*\n/).filter(p => p.trim()).length;
+    if (origParas !== fixedParas) {
+      console.warn(`  [Premium]   Punctuation LLM changed paragraph count (${origParas} → ${fixedParas}), skipping`);
+      return text;
+    }
+
+    return result.trim();
+  } catch (err) {
+    console.warn("  [Premium]   Punctuation LLM call failed, skipping:", err);
+    return text;
+  }
+}
+
 // ══════════════════════════════════════════════════════════════════════════
 // MAIN PIPELINE — premiumHumanize()
 // ══════════════════════════════════════════════════════════════════════════
@@ -626,12 +725,21 @@ export async function premiumHumanize(
   const inputSentenceCount = countSentences(protectedText);
 
   // ═══════════════════════════════════════════
+  // PRE-HUMANIZATION: Sentence Merge/Split Surgery for Burstiness
+  // ═══════════════════════════════════════════
+  console.log("  [Premium] Pre-surgery: Applying sentence merge/split for burstiness...");
+  const rawSurgeryItems = buildSentenceItems(protectedText);
+  const surgeryItems = applySentenceSurgery(rawSurgeryItems);
+  const surgeryText = reassembleFromItems(surgeryItems);
+  console.log(`  [Premium] Surgery: ${rawSurgeryItems.filter(i => !i.isTitle).length} → ${surgeryItems.filter(i => !i.isTitle).length} sentences (merges + splits applied)`);
+
+  // ═══════════════════════════════════════════
   // PHASE A: Per-Sentence Deep Rewrite (LLM)
   // ═══════════════════════════════════════════
   console.log("  [Premium] Phase A: Per-sentence deep rewrite...");
 
   const phaseASystem = getPhaseASystemPrompt(features, config);
-  const paragraphs = protectedText
+  const paragraphs = surgeryText
     .split(/\n\s*\n/)
     .filter((p) => p.trim());
   let totalSentencesProcessed = 0;
@@ -698,15 +806,21 @@ export async function premiumHumanize(
             // Enforce single sentence
             const llmSents = robustSentenceSplit(rewritten);
             if (llmSents.length > 1) {
-              rewritten =
-                llmSents
-                  .map((s, i) => {
-                    if (i === 0) return s.replace(/\.\s*$/, "");
-                    return s[0]?.toLowerCase() + s.slice(1);
-                  })
-                  .join(", ") +
-                (llmSents[llmSents.length - 1].match(/[.!?]$/) ? "" : ".");
+              rewritten = enforceSingleSentence(rewritten);
             }
+
+            // Enforce strict rules (no contractions, no rhetorical questions, no first-person)
+            const surgeryFeatures: SurgeryInputFeatures = {
+              hasContractions: features.hasContractions,
+              hasFirstPerson: features.hasFirstPerson,
+              hasRhetoricalQuestions: features.hasRhetoricalQuestions,
+            };
+            const ruleResult = enforceStrictRules(trimmed, rewritten, surgeryFeatures);
+            rewritten = ruleResult.text;
+
+            // Enforce capitalization
+            rewritten = enforceCapitalization(trimmed, rewritten);
+
             return rewritten;
           } catch {
             return trimmed;
@@ -798,11 +912,76 @@ export async function premiumHumanize(
   console.log(`  [Premium] Phase B complete: ${purgedCount} sentences purged`);
 
   // ═══════════════════════════════════════════
-  // PHASE C: DISABLED — unnecessary LLM pass that over-polishes output
-  // The LLM rewrite in Phase A already handles naturalness
+  // PHASE C: Per-Sentence Final Stealth Polish (LLM)
   // ═══════════════════════════════════════════
-  console.log("  [Premium] Phase C: SKIPPED (disabled to preserve natural output)");
-  const polishedCount = 0;
+  console.log("  [Premium] Phase C: Per-sentence stealth polish...");
+
+  const phaseCSystem = getPhaseCSystemPrompt(features);
+  const phaseCParagraphs = result
+    .split(/\n\s*\n/)
+    .filter((p) => p.trim());
+  let polishedCount = 0;
+
+  const polishedParagraphs = await Promise.all(
+    phaseCParagraphs.map(async (para) => {
+      const trimmedPara = para.trim();
+      if (isTitleOrHeading(trimmedPara)) return trimmedPara;
+
+      const sentences = robustSentenceSplit(trimmedPara);
+      if (sentences.length === 0) return trimmedPara;
+
+      const results = await Promise.all(
+        sentences.map(async (sent) => {
+          const trimmed = sent.trim();
+          if (!trimmed || trimmed.split(/\s+/).length < 3) return trimmed;
+
+          // Only polish sentences that have formal starters or sound stilted
+          const needsPolish = hasBannedStarter(trimmed) ||
+            /^(?:In\s+(?:the|this|a)\s+|The\s+(?:fact|notion|aspect)\s)/i.test(trimmed);
+
+          if (!needsPolish) return trimmed;
+
+          const userPrompt = buildPhaseCUserPrompt(
+            placeholdersToLLMFormat(trimmed),
+          );
+          const sentMaxTokens = Math.max(
+            256,
+            Math.ceil(trimmed.split(/\s+/).length * 2.5),
+          );
+
+          try {
+            let polished = llmFormatToPlaceholders(
+              await llmCall(phaseCSystem, userPrompt, 0.35, sentMaxTokens),
+            );
+            if (!polished || polished.trim().length < trimmed.length * 0.3)
+              return trimmed;
+
+            const sents = robustSentenceSplit(polished.trim());
+            if (sents.length > 1) {
+              polished =
+                sents
+                  .map((s, i) =>
+                    i === 0
+                      ? s.replace(/\.\s*$/, "")
+                      : s[0]?.toLowerCase() + s.slice(1),
+                  )
+                  .join(", ") +
+                (sents[sents.length - 1].match(/[.!?]$/) ? "" : ".");
+            }
+
+            polishedCount++;
+            return polished.trim();
+          } catch {
+            return trimmed;
+          }
+        }),
+      );
+
+      return results.join(" ");
+    }),
+  );
+
+  result = polishedParagraphs.join("\n\n");
   console.log(
     `  [Premium] Phase C complete: ${polishedCount} sentences polished`,
   );
@@ -905,8 +1084,8 @@ export async function premiumHumanize(
   // ═══════════════════════════════════════════
   console.log("  [Premium] Enforcing constraints...");
 
-  // Contraction expansion — always enforce (zero tolerance)
-  {
+  // Contraction expansion (LLM-based)
+  if (!features.hasContractions) {
     const contractionRe =
       /\b(can't|won't|don't|doesn't|didn't|isn't|aren't|wasn't|weren't|hasn't|haven't|hadn't|wouldn't|shouldn't|couldn't|mustn't|it's|that's|there's|here's|he's|she's|they're|we're|you're|I'm|they've|we've|you've|I've|they'll|we'll|you'll|I'll|he'll|she'll|it'll|let's|who's|what's)\b/gi;
     if (contractionRe.test(result)) {
@@ -1010,9 +1189,6 @@ export async function premiumHumanize(
 
   // ═══════════════════════════════════════════
   // DEEP-CLEAN POST-PROCESSING (non-LLM)
-  // Targets AI traces that statistical detectors still catch.
-  // Runs multi-pass cleaning: AI word kill, connector naturalization,
-  // burstiness injection, structure diversification, etc.
   // ═══════════════════════════════════════════
   console.log("  [Premium] Deep-Clean: Starting non-LLM post-processing...");
   try {
@@ -1027,6 +1203,30 @@ export async function premiumHumanize(
   } catch (e) {
     console.warn(`  [Premium] Deep-Clean failed (continuing with LLM output): ${e}`);
   }
+
+  // ═══════════════════════════════════════════
+  // STRICT LLM PUNCTUATION/CAPITALIZATION CLEANUP
+  // Only fixes punctuation — loops if any words are added/removed
+  // ═══════════════════════════════════════════
+  console.log("  [Premium] Running strict LLM punctuation cleanup...");
+  for (let puncLoop = 0; puncLoop < 3; puncLoop++) {
+    const beforePunc = result;
+    const puncResult = await llmFixPremiumPunctuation(result);
+    const beforeWords = beforePunc.replace(/[^a-zA-Z\s]/g, "").toLowerCase().split(/\s+/).filter(w => w);
+    const afterWords = puncResult.replace(/[^a-zA-Z\s]/g, "").toLowerCase().split(/\s+/).filter(w => w);
+    if (Math.abs(beforeWords.length - afterWords.length) <= 2) {
+      result = puncResult;
+      console.log(`  [Premium] Punctuation pass ${puncLoop + 1}: accepted (${afterWords.length} words)`);
+      break;
+    } else {
+      console.warn(`  [Premium] Punctuation pass ${puncLoop + 1}: rejected — word count changed (${beforeWords.length} → ${afterWords.length}), retrying...`);
+    }
+  }
+
+  // ═══════════════════════════════════════════
+  // FINAL CAPITALIZATION ENFORCEMENT
+  // ═══════════════════════════════════════════
+  result = enforceCapitalization(original, result);
 
   // ═══════════════════════════════════════════
   // FINAL DIAGNOSTICS

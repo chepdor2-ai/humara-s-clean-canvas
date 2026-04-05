@@ -220,5 +220,5 @@ export default async function handler(
       error: 'Internal server error',
       message: error instanceof Error ? error.message : 'Unknown error'
     });
-    .replace(/\bIn conclusion,?\b/gi, 'Overall,');
+  }
 }

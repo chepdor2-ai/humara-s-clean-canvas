@@ -39,6 +39,17 @@ import { semanticSimilaritySync } from "./semantic-guard";
 import { TextSignals, getDetector } from "./multi-detector";
 import { expandContractions } from "./advanced-transforms";
 import { premiumDeepClean } from "./premium-deep-clean";
+import {
+  buildSentenceItems,
+  applySentenceSurgery,
+  reassembleFromItems,
+  enforceCapitalization,
+  enforceStrictRules,
+  enforceSingleSentence,
+  getWordChangePercent,
+  type SurgeryItem,
+  type InputFeatures as SurgeryInputFeatures,
+} from "./sentence-surgery";
 
 // ── Config ──
 
@@ -595,6 +606,75 @@ ${text}`;
   }
 }
 
+// ── Strict LLM Punctuation Cleanup (Premium) ──
+// Only fixes punctuation and capitalization. Loops if words change.
+
+async function llmFixPremiumPunctuation(text: string): Promise<string> {
+  const wordCount = text.trim().split(/\s+/).length;
+  const maxTokens = Math.min(16384, Math.max(4096, Math.ceil(wordCount * 2)));
+
+  const systemPrompt = `You are a punctuation proofreader. Your ONLY job is to fix punctuation and capitalization errors.
+
+STRICT RULES — YOU MUST FOLLOW ALL OF THEM:
+1. DO NOT change, add, remove, or replace ANY word. Every single word must remain exactly as it is.
+2. DO NOT reorder words or sentences.
+3. DO NOT add or remove sentences.
+4. DO NOT add or remove paragraphs.
+5. Only fix these punctuation issues:
+   - Commas used where periods should be (run-on sentences)
+   - Missing periods at sentence ends
+   - Missing commas where a natural pause exists
+   - Double commas, double periods, or other duplicate punctuation
+   - Incorrect capitalization after periods/question marks/exclamation marks
+   - Missing capitalization at the start of sentences
+   - Semicolons or colons used incorrectly
+6. Keep paragraph breaks exactly as they are.
+7. Return ONLY the corrected text — no commentary, no labels, no explanations.
+
+REMEMBER: You are ONLY allowed to touch punctuation marks (. , ; : ! ? —) and letter capitalization. Do NOT change any word.`;
+
+  const userPrompt = `Fix ONLY the punctuation and capitalization in this text. Do not change any words. Preserve all [[PROT_n]] and [[TRM_n]] tokens exactly.\n\nTEXT:\n${placeholdersToLLMFormat(text)}`;
+
+  try {
+    const result = llmFormatToPlaceholders(await llmCall(systemPrompt, userPrompt, 0.1, maxTokens) ?? '');
+
+    if (!result || result.trim().length < text.length * 0.5) {
+      console.warn("  [Premium]   Punctuation LLM output too short, skipping");
+      return text;
+    }
+
+    // Verify no words were changed
+    const stripPunct = (s: string) => s.replace(/[^a-zA-Z\s]/g, "").toLowerCase().split(/\s+/).filter(w => w);
+    const origWords = stripPunct(text);
+    const fixedWords = stripPunct(result.trim());
+
+    const maxDrift = Math.max(3, Math.ceil(origWords.length * 0.02));
+    let diffs = 0;
+    const minLen = Math.min(origWords.length, fixedWords.length);
+    for (let i = 0; i < minLen; i++) {
+      if (origWords[i] !== fixedWords[i]) diffs++;
+    }
+    diffs += Math.abs(origWords.length - fixedWords.length);
+
+    if (diffs > maxDrift) {
+      console.warn(`  [Premium]   Punctuation LLM changed ${diffs} words (max ${maxDrift}), skipping`);
+      return text;
+    }
+
+    const origParas = text.split(/\n\s*\n/).filter(p => p.trim()).length;
+    const fixedParas = result.trim().split(/\n\s*\n/).filter(p => p.trim()).length;
+    if (origParas !== fixedParas) {
+      console.warn(`  [Premium]   Punctuation LLM changed paragraph count (${origParas} → ${fixedParas}), skipping`);
+      return text;
+    }
+
+    return result.trim();
+  } catch (err) {
+    console.warn("  [Premium]   Punctuation LLM call failed, skipping:", err);
+    return text;
+  }
+}
+
 // ══════════════════════════════════════════════════════════════════════════
 // MAIN PIPELINE — premiumHumanize()
 // ══════════════════════════════════════════════════════════════════════════
@@ -645,12 +725,21 @@ export async function premiumHumanize(
   const inputSentenceCount = countSentences(protectedText);
 
   // ═══════════════════════════════════════════
+  // PRE-HUMANIZATION: Sentence Merge/Split Surgery for Burstiness
+  // ═══════════════════════════════════════════
+  console.log("  [Premium] Pre-surgery: Applying sentence merge/split for burstiness...");
+  const rawSurgeryItems = buildSentenceItems(protectedText);
+  const surgeryItems = applySentenceSurgery(rawSurgeryItems);
+  const surgeryText = reassembleFromItems(surgeryItems);
+  console.log(`  [Premium] Surgery: ${rawSurgeryItems.filter(i => !i.isTitle).length} → ${surgeryItems.filter(i => !i.isTitle).length} sentences (merges + splits applied)`);
+
+  // ═══════════════════════════════════════════
   // PHASE A: Per-Sentence Deep Rewrite (LLM)
   // ═══════════════════════════════════════════
   console.log("  [Premium] Phase A: Per-sentence deep rewrite...");
 
   const phaseASystem = getPhaseASystemPrompt(features, config);
-  const paragraphs = protectedText
+  const paragraphs = surgeryText
     .split(/\n\s*\n/)
     .filter((p) => p.trim());
   let totalSentencesProcessed = 0;
@@ -717,15 +806,21 @@ export async function premiumHumanize(
             // Enforce single sentence
             const llmSents = robustSentenceSplit(rewritten);
             if (llmSents.length > 1) {
-              rewritten =
-                llmSents
-                  .map((s, i) => {
-                    if (i === 0) return s.replace(/\.\s*$/, "");
-                    return s[0]?.toLowerCase() + s.slice(1);
-                  })
-                  .join(", ") +
-                (llmSents[llmSents.length - 1].match(/[.!?]$/) ? "" : ".");
+              rewritten = enforceSingleSentence(rewritten);
             }
+
+            // Enforce strict rules (no contractions, no rhetorical questions, no first-person)
+            const surgeryFeatures: SurgeryInputFeatures = {
+              hasContractions: features.hasContractions,
+              hasFirstPerson: features.hasFirstPerson,
+              hasRhetoricalQuestions: features.hasRhetoricalQuestions,
+            };
+            const ruleResult = enforceStrictRules(trimmed, rewritten, surgeryFeatures);
+            rewritten = ruleResult.text;
+
+            // Enforce capitalization
+            rewritten = enforceCapitalization(trimmed, rewritten);
+
             return rewritten;
           } catch {
             return trimmed;
@@ -1108,6 +1203,30 @@ export async function premiumHumanize(
   } catch (e) {
     console.warn(`  [Premium] Deep-Clean failed (continuing with LLM output): ${e}`);
   }
+
+  // ═══════════════════════════════════════════
+  // STRICT LLM PUNCTUATION/CAPITALIZATION CLEANUP
+  // Only fixes punctuation — loops if any words are added/removed
+  // ═══════════════════════════════════════════
+  console.log("  [Premium] Running strict LLM punctuation cleanup...");
+  for (let puncLoop = 0; puncLoop < 3; puncLoop++) {
+    const beforePunc = result;
+    const puncResult = await llmFixPremiumPunctuation(result);
+    const beforeWords = beforePunc.replace(/[^a-zA-Z\s]/g, "").toLowerCase().split(/\s+/).filter(w => w);
+    const afterWords = puncResult.replace(/[^a-zA-Z\s]/g, "").toLowerCase().split(/\s+/).filter(w => w);
+    if (Math.abs(beforeWords.length - afterWords.length) <= 2) {
+      result = puncResult;
+      console.log(`  [Premium] Punctuation pass ${puncLoop + 1}: accepted (${afterWords.length} words)`);
+      break;
+    } else {
+      console.warn(`  [Premium] Punctuation pass ${puncLoop + 1}: rejected — word count changed (${beforeWords.length} → ${afterWords.length}), retrying...`);
+    }
+  }
+
+  // ═══════════════════════════════════════════
+  // FINAL CAPITALIZATION ENFORCEMENT
+  // ═══════════════════════════════════════════
+  result = enforceCapitalization(original, result);
 
   // ═══════════════════════════════════════════
   // FINAL DIAGNOSTICS
