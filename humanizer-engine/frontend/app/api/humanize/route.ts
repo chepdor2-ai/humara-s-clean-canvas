@@ -22,7 +22,12 @@ export const maxDuration = 120; // LLM engines need more time
 
 export async function POST(req: Request) {
   try {
-    const body = await req.json();
+    let body: any;
+    try {
+      body = await req.json();
+    } catch {
+      return NextResponse.json({ error: 'Invalid or empty request body' }, { status: 400 });
+    }
     const { text, engine, strength, tone, strict_meaning, no_contractions, enable_post_processing, premium } = body;
 
     if (!text || typeof text !== 'string' || text.trim().length === 0) {
