@@ -1,18 +1,10 @@
-# Vercel Deployment Guide
+# Vercel Deployment Guide - Web Interface (No CLI Required)
 
-## Quick Deployment via GitHub Integration (Recommended)
+## 🚀 Quick Deployment (Recommended - No Login Issues!)
 
-### Step 1: Push to GitHub (if not already done)
-```powershell
-cd "c:\Users\User\Documents\GitHub\New folder\humara-s-clean-canvas"
-git add .
-git commit -m "Prepare for Vercel deployment"
-git push origin main
-```
+### Step 1: Deploy on Vercel Web Dashboard
 
-### Step 2: Deploy on Vercel
-
-1. **Go to Vercel**: https://vercel.com/new
+1. **Open Vercel**: https://vercel.com/new
 
 2. **Import Repository**:
    - Click "Add New..." → "Project"
