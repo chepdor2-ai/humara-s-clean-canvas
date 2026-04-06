@@ -17,8 +17,109 @@ import { expandContractions } from '@/lib/humanize-transforms';
 import { removeEmDashes } from '@/lib/engine/v13-shared-techniques';
 import { nuruHumanize } from '@/lib/engine/nuru-humanizer';
 import { omegaHumanize } from '@/lib/engine/omega-humanizer';
+import { robustSentenceSplit } from '@/lib/engine/content-protection';
+import { deepRestructure, voiceShift, tenseVariation } from '@/lib/engine/advanced-transforms';
+import { synonymReplace } from '@/lib/engine/utils';
+import { applyAIWordKill } from '@/lib/engine/shared-dictionaries';
 
 export const maxDuration = 120; // LLM engines need more time
+
+// ── 60% Sentence Restructuring Enforcement ──────────────────────────
+// Ensures at least 60% of sentences are meaningfully restructured.
+// Compares output sentences against original, applies additional
+// transforms to under-changed sentences until the 60% threshold is met.
+
+function measureSentenceChange(original: string, modified: string): number {
+  const origWords = original.toLowerCase().split(/\s+/).filter(Boolean);
+  const modWords = modified.toLowerCase().split(/\s+/).filter(Boolean);
+  const len = Math.max(origWords.length, modWords.length);
+  if (len === 0) return 1;
+  let changed = 0;
+  for (let i = 0; i < len; i++) {
+    if (!origWords[i] || !modWords[i] || origWords[i] !== modWords[i]) changed++;
+  }
+  return changed / len;
+}
+
+function enforceRestructuringThreshold(
+  originalText: string,
+  humanizedText: string,
+  threshold: number = 0.60,
+): string {
+  const origSentences = robustSentenceSplit(originalText);
+  const humanizedSentences = robustSentenceSplit(humanizedText);
+
+  if (humanizedSentences.length < 2 || origSentences.length < 2) return humanizedText;
+
+  // Match each humanized sentence to closest original sentence
+  const changes: { idx: number; ratio: number; origIdx: number }[] = [];
+  for (let i = 0; i < humanizedSentences.length; i++) {
+    let bestRatio = 1;
+    let bestOrigIdx = 0;
+    for (let j = 0; j < origSentences.length; j++) {
+      const ratio = measureSentenceChange(origSentences[j], humanizedSentences[i]);
+      if (ratio < bestRatio) { bestRatio = ratio; bestOrigIdx = j; }
+    }
+    changes.push({ idx: i, ratio: bestRatio, origIdx: bestOrigIdx });
+  }
+
+  // Count sufficiently restructured sentences (≥25% word change)
+  const RESTRUCTURE_MIN = 0.25;
+  const restructuredCount = changes.filter(c => c.ratio >= RESTRUCTURE_MIN).length;
+  const totalCount = humanizedSentences.length;
+  const currentPercent = restructuredCount / totalCount;
+
+  if (currentPercent >= threshold) return humanizedText;
+
+  // Sort by change ratio ascending — fix the least changed first
+  const weak = changes
+    .filter(c => c.ratio < RESTRUCTURE_MIN)
+    .sort((a, b) => a.ratio - b.ratio);
+
+  const usedWords = new Set<string>();
+  const neededMore = Math.ceil(totalCount * threshold) - restructuredCount;
+  let fixed = 0;
+
+  for (const w of weak) {
+    if (fixed >= neededMore) break;
+    let s = humanizedSentences[w.idx];
+    const before = s;
+
+    // Apply transforms in sequence until enough change
+    s = applyAIWordKill(s);
+    s = synonymReplace(s, 0.5, usedWords);
+    if (measureSentenceChange(origSentences[w.origIdx], s) < RESTRUCTURE_MIN) {
+      s = deepRestructure(s, 0.4);
+    }
+    if (measureSentenceChange(origSentences[w.origIdx], s) < RESTRUCTURE_MIN) {
+      s = voiceShift(s, 0.5);
+    }
+    if (measureSentenceChange(origSentences[w.origIdx], s) < RESTRUCTURE_MIN) {
+      s = tenseVariation(s, 0.2);
+    }
+
+    if (s !== before && measureSentenceChange(origSentences[w.origIdx], s) >= RESTRUCTURE_MIN) {
+      humanizedSentences[w.idx] = s;
+      fixed++;
+    }
+  }
+
+  // Reconstruct text preserving paragraph structure
+  const paragraphs = humanizedText.split(/\n\s*\n/);
+  let sentIdx = 0;
+  const rebuilt = paragraphs.map(para => {
+    const paraSents = robustSentenceSplit(para);
+    const replacedSents: string[] = [];
+    for (let j = 0; j < paraSents.length; j++) {
+      if (sentIdx < humanizedSentences.length) {
+        replacedSents.push(humanizedSentences[sentIdx]);
+        sentIdx++;
+      }
+    }
+    return replacedSents.join(' ');
+  });
+  return rebuilt.join('\n\n');
+}
 
 export async function POST(req: Request) {
   try {
@@ -164,6 +265,11 @@ export async function POST(req: Request) {
       humanized = unifiedSentenceProcess(humanized, earlyFirstPerson, inputAiScore);
     }
 
+    // ── 60% Restructuring Enforcement ──────────────────────────────
+    // Ensures at least 60% of sentences show meaningful word-level changes.
+    // Applies additional transforms to under-changed sentences.
+    humanized = enforceRestructuringThreshold(text, humanized, 0.60);
+
     // Post-capitalization formatting — fix sentence casing for all engine outputs
     // Skip for humara/nuru/omega: they have their own capitalization handling
     // Pass original text so proper nouns from the input are preserved
@@ -185,13 +291,15 @@ export async function POST(req: Request) {
     // Structural post-processing — attacks document-level statistical signals
     // (spectral_flatness, burstiness, sentence_uniformity, readability_consistency, vocabulary_richness)
     // Skip for humara engine: it has its own structural diversity layer
-    if (engine !== 'humara' && engine !== 'humara_v1_3' && engine !== 'nuru' && engine !== 'omega') {
+    if (engine !== 'humara' && engine !== 'humara_v1_3' && engine !== 'nuru' && engine !== 'omega' && engine !== 'ninja' && engine !== 'undetectable') {
       humanized = structuralPostProcess(humanized);
     }
 
     // Restore the original title/paragraph layout for every engine output.
-    // Skip for humara engine: it has its own structure-preserving pipeline
-    if (engine !== 'humara' && engine !== 'humara_v1_3' && engine !== 'nuru' && engine !== 'omega') {
+    // Skip for humara/nuru/omega: they have their own structure-preserving pipeline
+    // Skip for ghost_pro: it preserves headings internally via LLM prompt — re-applying
+    // preserveInputStructure causes double headings and sentence redistribution artifacts
+    if (engine !== 'humara' && engine !== 'humara_v1_3' && engine !== 'nuru' && engine !== 'omega' && engine !== 'ghost_pro') {
       humanized = preserveInputStructure(text, humanized);
     }
 
@@ -212,6 +320,25 @@ export async function POST(req: Request) {
     // 2. "a increasingly" → "an increasingly" (shouldn't happen but safety)
     humanized = humanized.replace(/\ba (increasingly|ever|each|every|eight|eleven|eighteen|important|interesting|independent|innovative|intelligent|upper)\b/gi,
       (m, w) => (m[0] === 'A' ? 'An ' : 'an ') + w);
+    // 2b. Comprehensive article agreement: "a" before vowel → "an", "an" before consonant → "a"
+    // Skip words that start with vowel letters but sound like consonants
+    const CONSONANT_SOUND_VOWELS = new Set(['uni', 'use', 'usa', 'usu', 'uti', 'ure', 'uro', 'one', 'once']);
+    const VOWEL_SOUND_CONSONANTS = new Set(['hour', 'honest', 'honor', 'honour', 'heir', 'herb']);
+    humanized = humanized.replace(/\b(a|an)\s+(\w+)/gi, (full, art, word) => {
+      const lower = word.toLowerCase();
+      const firstChar = lower[0];
+      const first3 = lower.slice(0, 3);
+      const isVowelSound = 'aeiou'.includes(firstChar)
+        ? !CONSONANT_SOUND_VOWELS.has(first3)
+        : VOWEL_SOUND_CONSONANTS.has(lower);
+      const correctArt = isVowelSound ? 'an' : 'a';
+      const actualArt = art.toLowerCase();
+      if (actualArt === correctArt) return full;
+      const fixed = art[0] === art[0].toUpperCase()
+        ? (correctArt === 'an' ? 'An' : 'A')
+        : correctArt;
+      return fixed + ' ' + word;
+    });
     // 3. Fix broken possessives/contractions: "reflect ons" → "reflects on"
     humanized = humanized.replace(/\b(\w+)\s+ons\b/g, '$1s on');
     // 4. Fix double articles: "the the", "a a", "an an"
@@ -299,6 +426,26 @@ export async function POST(req: Request) {
     humanized = humanized.replace(/;\s+(and|or|but)\s+/gi, ', $1 ');
     // 13. Fix colons before list continuations: "AI: and global" → "AI, and global"
     humanized = humanized.replace(/:\s+(and|or|but)\s+/gi, ', $1 ');
+
+    // ── ABSOLUTE FINAL SAFETY NET ──────────────────────────────
+    // Runs after ALL engine processing AND all post-processors.
+    // Catches patterns that any step may have (re-)introduced.
+    // 1. Doubled subordinate conjunctions: "When when" → "When"
+    humanized = humanized.replace(/\b(when|since|though|although|because|while|if|unless|after|before|until|once)\s+\1\b/gi, "$1");
+    // 1b. Doubled prepositions/small words: "on on" → "on"
+    humanized = humanized.replace(/\b(on|in|at|to|of|by|or|and|for|nor|the|with|from|into|onto|upon|over|that|this|than)\s+\1\b/gi, "$1");
+    // 2. LLM garbled accessibility phrases
+    humanized = humanized.replace(/\b(eas(?:y|ier))\s+(?:for\s+\w+\s+)?to\s+(entry|availability)\b/gi, "$1 to access");
+    humanized = humanized.replace(/\bto entry\b/gi, "to access");
+    humanized = humanized.replace(/\bto availability\b/gi, "to access");
+    // 3. LLM garbled "cause" phrasing
+    humanized = humanized.replace(/\bcan cause (a more|Efficiency|social|better|stronger)/gi, "can bring about $1");
+    humanized = humanized.replace(/\bcould cause (a more|Efficiency|social|better|stronger)/gi, "could bring about $1");
+    // 4. Redundancy fixes
+    humanized = humanized.replace(/\bHealthcare care\b/g, "Healthcare");
+    // 5. Offensive/archaic words
+    humanized = humanized.replace(/\bquislingism\b/gi, "collaboration");
+    humanized = humanized.replace(/\bquisling\b/gi, "collaborator");
 
     // Generate per-sentence alternatives (3 candidates each, best already picked by engines)
     const FIRST_PERSON_RE = /\b(I|me|my|mine|myself|we|us|our|ours|ourselves)\b/i;

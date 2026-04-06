@@ -5,6 +5,7 @@ import { Copy, Check, Zap, Eraser, RotateCcw, Type, AlignLeft, RefreshCw, AlertT
 import UsageBar, { useUsage } from './UsageBar';
 
 const ProcessingAnimation = dynamic(() => import('../ProcessingAnimation'), { ssr: false });
+const LiveTextTransition = dynamic(() => import('./LiveTextTransition'), { ssr: false });
 
 /* ── Types ──────────────────────────────────────────────────────────────── */
 interface DetectorScore { detector: string; ai_score: number; human_score: number; }
@@ -194,6 +195,14 @@ export default function EditorPage() {
   const [iterationCount, setIterationCount] = useState(0);
   const [preGeneratedAlts, setPreGeneratedAlts] = useState<Record<string, SentenceAlternative[]>>({});
 
+  // Live streaming text transition animation
+  const [isAnimating, setIsAnimating] = useState(false);
+  const [streamSentences, setStreamSentences] = useState<{ text: string; stage: string }[]>([]);
+  const [streamParagraphBoundaries, setStreamParagraphBoundaries] = useState<number[]>([]);
+  const [streamGlobalStage, setStreamGlobalStage] = useState('Initializing…');
+  const [streamDone, setStreamDone] = useState(false);
+  const abortRef = useRef<AbortController | null>(null);
+
   // Temporary history (auto-expires)
   const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -293,66 +302,121 @@ export default function EditorPage() {
   }, [text, inputWords]);
 
   /* ── Handlers ───────────────────────────────────────────────────────── */
+  const handleTransitionComplete = useCallback(() => {
+    setIsAnimating(false);
+    setStreamSentences([]);
+    setStreamParagraphBoundaries([]);
+    setStreamDone(false);
+    setStreamGlobalStage('Initializing…');
+  }, []);
+
+  /** Shared SSE streaming handler used by humanize & rephrase */
+  const runStreamingHumanize = async (inputText: string, signal: AbortSignal) => {
+    const res = await fetch('/api/humanize-stream', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text: inputText, engine, strength, tone, strict_meaning: strictMeaning, enable_post_processing: true, premium }),
+      signal,
+    });
+
+    if (!res.ok || !res.body) throw new Error('Streaming request failed');
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    let finalData: Record<string, unknown> | null = null;
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() || ''; // keep incomplete line in buffer
+
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue;
+        let event: Record<string, unknown>;
+        try { event = JSON.parse(line.slice(6)); } catch { continue; }
+
+        if (event.type === 'error') throw new Error(event.error as string);
+
+        if (event.type === 'init') {
+          const sents = (event.sentences as string[]).map(t => ({ text: t, stage: 'original' }));
+          setStreamSentences(sents);
+          setStreamParagraphBoundaries(event.paragraphBoundaries as number[]);
+        } else if (event.type === 'stage') {
+          setStreamGlobalStage(event.stage as string);
+        } else if (event.type === 'sentence') {
+          const idx = event.index as number;
+          const txt = event.text as string;
+          const stg = event.stage as string;
+          setStreamSentences(prev => {
+            const next = [...prev];
+            if (idx < next.length) {
+              next[idx] = { text: txt, stage: stg };
+            }
+            return next;
+          });
+        } else if (event.type === 'done') {
+          finalData = event as Record<string, unknown>;
+          // Mark all sentences as done
+          setStreamSentences(prev => prev.map(s => ({ ...s, stage: 'done' })));
+          setStreamGlobalStage('Complete');
+          setStreamDone(true);
+        }
+      }
+    }
+
+    return finalData;
+  };
+
   const handleHumanize = async () => {
     if (!text.trim()) return;
     if (inputWords < 10) { setError('Please enter at least 10 words.'); return; }
     setLoading(true); setError(''); setResult(''); setOutputDetection(null); setMeaningScore(null); setIterationCount(0); setPreGeneratedAlts({});
+    // Reset streaming state and start animation
+    setStreamSentences([]);
+    setStreamParagraphBoundaries([]);
+    setStreamGlobalStage('Initializing…');
+    setStreamDone(false);
+    setIsAnimating(true);
+
+    // Abort any previous stream
+    if (abortRef.current) abortRef.current.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+
     try {
-      const res = await fetch('/api/humanize', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text, engine, strength, tone, strict_meaning: strictMeaning, enable_post_processing: true, premium }),
-      });
-      const data: HumanizeResponse = await res.json();
-      if (!res.ok || data.error) throw new Error(data.error || 'Humanization failed');
-      let currentResult = data.humanized;
-      setResult(currentResult);
-      // Store pre-generated sentence alternatives
-      if (data.sentence_alternatives) {
-        setPreGeneratedAlts(data.sentence_alternatives);
-      }
-      setMeaningScore(data.meaning_similarity);
-      if (data.input_detector_results) {
-        const d = data.input_detector_results;
-        setInputDetection({ overallAi: d.overall, overallHuman: 100 - d.overall, detectors: d.detectors });
-        const sentences = splitSentences(text);
-        setSentenceScores(sentences.map(s => ({ ...s, score: scoreSentence(s.text, d.overall) })));
-      }
-      let currentAi = 100;
-      if (data.output_detector_results) {
-        const d = data.output_detector_results;
-        currentAi = d.overall;
-        setOutputDetection({ overallAi: d.overall, overallHuman: 100 - d.overall, detectors: d.detectors });
-      }
+      const finalData = await runStreamingHumanize(text, controller.signal);
 
-      // Auto-iterate on "strong" depth until AI score < 20%
-      if (strength === 'strong' && currentAi >= 20) {
-        const MAX_AUTO = 4;
-        for (let i = 0; i < MAX_AUTO && currentAi >= 20; i++) {
-          setIterationCount(i + 1);
-          const reRes = await fetch('/api/humanize', {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ text: currentResult, engine, strength: 'strong', tone, strict_meaning: strictMeaning, enable_post_processing: true, premium }),
-          });
-          const reData: HumanizeResponse = await reRes.json();
-          if (!reRes.ok || reData.error || !reData.humanized) break;
-          currentResult = reData.humanized;
-          setResult(currentResult);
-          // Update pre-generated alternatives from re-iteration
-          if (reData.sentence_alternatives) {
-            setPreGeneratedAlts(reData.sentence_alternatives);
-          }
-          if (reData.output_detector_results) {
-            currentAi = reData.output_detector_results.overall;
-            setOutputDetection({ overallAi: currentAi, overallHuman: 100 - currentAi, detectors: reData.output_detector_results.detectors });
-          }
-          if (currentAi < 20) break;
+      if (finalData) {
+        const currentResult = finalData.humanized as string;
+        setResult(currentResult);
+        setMeaningScore(finalData.meaning_similarity as number);
+
+        if (finalData.input_detector_results) {
+          const d = finalData.input_detector_results as { overall: number; detectors: DetectorScore[] };
+          setInputDetection({ overallAi: d.overall, overallHuman: 100 - d.overall, detectors: d.detectors });
+          const sentences = splitSentences(text);
+          setSentenceScores(sentences.map(s => ({ ...s, score: scoreSentence(s.text, d.overall) })));
         }
-      }
+        if (finalData.output_detector_results) {
+          const d = finalData.output_detector_results as { overall: number; detectors: DetectorScore[] };
+          setOutputDetection({ overallAi: d.overall, overallHuman: 100 - d.overall, detectors: d.detectors });
+        }
 
-      // Add to temporary history
-      const finalAiAfter = outputDetection ? outputDetection.overallAi : (data.output_detector_results?.overall ?? 0);
-      addToHistory(text, currentResult, data.engine_used || engine, data.input_detector_results?.overall ?? 0, finalAiAfter, data.word_count || outputWords);
-    } catch (err) { setError(err instanceof Error ? err.message : 'Processing failed'); }
+        // Add to temporary history
+        const finalAi = finalData.output_detector_results ? (finalData.output_detector_results as { overall: number }).overall : 0;
+        const inputAi = finalData.input_detector_results ? (finalData.input_detector_results as { overall: number }).overall : 0;
+        addToHistory(text, currentResult, (finalData.engine_used as string) || engine, inputAi, finalAi, (finalData.word_count as number) || outputWords);
+      }
+    } catch (err) {
+      if ((err as Error).name !== 'AbortError') {
+        setError(err instanceof Error ? err.message : 'Processing failed');
+        setIsAnimating(false);
+      }
+    }
     finally { setLoading(false); setIterationCount(0); }
   };
 
@@ -360,23 +424,34 @@ export default function EditorPage() {
     if (!result.trim()) return;
     if (outputWords < 10) { setError('Output too short to rephrase.'); return; }
     setRephrasing(true); setError('');
+    // Reset streaming state and start animation
+    setStreamSentences([]);
+    setStreamParagraphBoundaries([]);
+    setStreamGlobalStage('Initializing…');
+    setStreamDone(false);
+    setIsAnimating(true);
+
+    if (abortRef.current) abortRef.current.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+
     try {
-      const res = await fetch('/api/humanize', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: result, engine, strength, tone, strict_meaning: strictMeaning, enable_post_processing: true, premium }),
-      });
-      const data: HumanizeResponse = await res.json();
-      if (!res.ok || data.error) throw new Error(data.error || 'Rephrase failed');
-      setResult(data.humanized);
-      if (data.sentence_alternatives) {
-        setPreGeneratedAlts(data.sentence_alternatives);
+      const finalData = await runStreamingHumanize(result, controller.signal);
+
+      if (finalData) {
+        setResult(finalData.humanized as string);
+        setMeaningScore(finalData.meaning_similarity as number);
+        if (finalData.output_detector_results) {
+          const d = finalData.output_detector_results as { overall: number; detectors: DetectorScore[] };
+          setOutputDetection({ overallAi: d.overall, overallHuman: 100 - d.overall, detectors: d.detectors });
+        }
       }
-      setMeaningScore(data.meaning_similarity);
-      if (data.output_detector_results) {
-        const d = data.output_detector_results;
-        setOutputDetection({ overallAi: d.overall, overallHuman: 100 - d.overall, detectors: d.detectors });
+    } catch (err) {
+      if ((err as Error).name !== 'AbortError') {
+        setError(err instanceof Error ? err.message : 'Rephrase failed');
+        setIsAnimating(false);
       }
-    } catch (err) { setError(err instanceof Error ? err.message : 'Rephrase failed'); }
+    }
     finally { setRephrasing(false); }
   };
 
@@ -392,6 +467,9 @@ export default function EditorPage() {
     setInputDetection(null); setOutputDetection(null);
     setSentenceScores([]); setMeaningScore(null);
     setPreGeneratedAlts({});
+    setIsAnimating(false);
+    setStreamSentences([]); setStreamParagraphBoundaries([]); setStreamDone(false); setStreamGlobalStage('Initializing…');
+    if (abortRef.current) { abortRef.current.abort(); abortRef.current = null; }
     setError(''); closePopup();
   };
 
@@ -726,7 +804,7 @@ export default function EditorPage() {
             </div>
             <div className="flex items-center gap-2">
               <span className="text-[11px] text-slate-400 tabular-nums">{outputWords} words</span>
-              {result && (
+              {result && !isAnimating && (
                 <>
                   <button onClick={handleRephrase} disabled={rephrasing || loading}
                     className="text-[11px] font-semibold text-brand-600 hover:text-brand-700 dark:text-brand-400 px-2 py-1 rounded-md hover:bg-brand-50 dark:hover:bg-brand-950 transition-colors flex items-center gap-1 disabled:opacity-50"
@@ -742,8 +820,14 @@ export default function EditorPage() {
             </div>
           </div>
 
-          {loading || rephrasing ? (
-            <ProcessingAnimation isRephrasing={rephrasing} iteration={iterationCount} />
+          {isAnimating ? (
+            <LiveTextTransition
+              sentences={streamSentences}
+              paragraphBoundaries={streamParagraphBoundaries}
+              globalStage={streamGlobalStage}
+              isDone={streamDone}
+              onComplete={handleTransitionComplete}
+            />
           ) : result ? (
             <div className="relative flex-1">
               <div className="absolute inset-0 bg-emerald-50/40 dark:bg-emerald-950/20 pointer-events-none rounded-b-xl" />

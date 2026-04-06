@@ -76,10 +76,30 @@ export function restoreContent(text: string, spans: Record<string, string>): str
     ciMap.set(key, original);
   }
 
-  // Match all ⟦VPROTn⟧ variants
+  // Match all ⟦VPROTn⟧ variants (normal Unicode)
   result = result.replace(/\u27E6\s*vprot(\d+)\s*\u27E7/gi, (_match, idx) => {
     const key = `\u27E6vprot${idx}\u27E7`;
     return ciMap.get(key) ?? _match;
+  });
+
+  // Fallback: match corrupted Unicode encoding variants (e.g., ΓƒªVPROT0Γƒº)
+  // U+27E6/U+27E7 get double-encoded as U+0393 U+0192 U+00AA / U+0393 U+0192 U+00BA
+  result = result.replace(/\u0393\u0192\u00AA\s*VPROT\s*(\d+)\s*\u0393\u0192\u00BA/gi, (_match, idx) => {
+    const key = `\u27E6vprot${idx}\u27E7`;
+    return ciMap.get(key) ?? _match;
+  });
+
+  // Fallback: match any non-ASCII characters surrounding VPROT patterns
+  result = result.replace(/[^\x00-\x7F]+\s*VPROT\s*(\d+)\s*[^\x00-\x7F]+/gi, (_match, idx) => {
+    const key = `\u27E6vprot${idx}\u27E7`;
+    return ciMap.get(key) ?? _match;
+  });
+
+  // Fallback: match any remaining garbled VPROT patterns
+  result = result.replace(/[^\w\s]{1,6}VPROT(\d+)[^\w\s]{1,6}/gi, (_match, idx) => {
+    const key = `\u27E6vprot${idx}\u27E7`;
+    if (ciMap.has(key)) return ciMap.get(key)!;
+    return _match;
   });
 
   return result;

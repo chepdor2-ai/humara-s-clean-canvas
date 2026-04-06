@@ -23,6 +23,7 @@
  */
 
 import type { StructuredSentenceMap, TextAnalysis } from "./linguistic-intelligence-core";
+import { robustSentenceSplit } from "./content-protection";
 
 // ══════════════════════════════════════════════════════════════════════════
 // 1. COMMON LLM OUTPUT PATTERNS (Blacklisted)
@@ -510,7 +511,8 @@ export function humanNoiseInjection(text: string): string {
     if (/^#{1,6}\s/.test(trimmed)) return trimmed;
 
     // split into sentences
-    const sents = trimmed.match(/[^.!?]+[.!?]+/g) ?? [trimmed];
+    const sents = robustSentenceSplit(trimmed);
+    if (sents.length === 0) return trimmed;
 
     const noisified = sents.map(sent => {
       const out = injectMicroNoise(sent.trim(), globalIdx, sents.length);

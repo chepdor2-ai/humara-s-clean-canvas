@@ -25,7 +25,7 @@ const DICT_DIR = findDictDir();
 // Words that must NEVER be replaced by thesaurus synonyms.
 // The mega_thesaurus.jsonl is a raw WordNet dump that maps these to wrong senses:
 //   analysis → psychoanalysis, pair → mating, null → nada, truancy → hooky, etc.
-const ACADEMIC_INPUT_GUARD = new Set([
+export const ACADEMIC_INPUT_GUARD = new Set([
   // Statistics & Research
   "hypothesis", "hypotheses", "null", "alternative", "statistical", "statistically",
   "significance", "significant", "mean", "median", "mode", "variance", "deviation",
@@ -57,10 +57,26 @@ const ACADEMIC_INPUT_GUARD = new Set([
   "student", "teacher", "faculty", "school", "district", "enrollment",
   "participant", "respondent", "survey", "questionnaire",
   "socioeconomic", "demographic", "cohort",
+  // Sensitive identity/social terms — thesaurus gives wrong-sense synonyms
+  "ethnic", "ethnicity", "racial", "minority", "minorities",
+  "indigenous", "gender", "sexuality", "disability", "religion",
   // Health
   "clinical", "diagnosis", "prognosis", "treatment", "therapy",
   "patient", "symptom", "pathology", "etiology", "epidemiology",
   "prevalence", "incidence", "morbidity", "mortality", "placebo",
+  // Business, Accounting & Cybersecurity
+  "risk", "risks", "management", "accounting", "cybersecurity", "cyber",
+  "phishing", "breach", "breaches", "intrusion", "intrusions",
+  "encryption", "governance", "compliance", "audit", "auditing",
+  "financial", "payroll", "tax", "revenue", "budget", "fiscal",
+  "stakeholder", "stakeholders", "resilience", "transparency",
+  "vulnerability", "vulnerabilities", "exposure", "threat", "threats",
+  "access", "authentication", "authorization", "credential", "credentials",
+  "confidentiality", "integrity", "availability",
+  "process", "processes", "processing", "system", "systems",
+  "implement", "implementation", "framework", "frameworks",
+  "component", "essential", "organizations", "organization",
+  "information", "data", "security", "controls",
   // Math & Science
   "equation", "formula", "function", "algorithm", "computation",
   "molecule", "atom", "electron", "protein", "genome",
@@ -264,6 +280,12 @@ export class HumanizerDictionary {
       "enate", "enatic", "agnate", "agnatic",
       "speculation", "conjecture", "guess", "guessing", "guesswork",
       "screening", "appraisal",
+      // Wrong-sense identity/religion synonyms
+      "pagan", "heathen", "infidel", "gentile", "tribal",
+      // Offensive/archaic wrong-sense synonyms
+      "quislingism", "quisling", "collaborationism", "treachery",
+      "sedition", "subversion", "servility", "subjugation",
+      "sycophant", "toady", "lackey", "minion",
     ]);
 
     // Filter out avoided words, multi-word synonyms, blocked words, and validate
@@ -273,6 +295,7 @@ export class HumanizerDictionary {
         s.toLowerCase() !== lower &&
         !avoid.has(s.toLowerCase()) &&
         !REPLACEMENT_BLOCKLIST.has(s.toLowerCase()) &&
+        !ACADEMIC_INPUT_GUARD.has(s.toLowerCase()) &&
         this.isValidWord(s),
     );
 

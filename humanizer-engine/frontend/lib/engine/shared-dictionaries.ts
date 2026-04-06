@@ -15,6 +15,8 @@
  * All engines import from this single file to stay in sync.
  */
 
+import { robustSentenceSplit } from './content-protection';
+
 // ══════════════════════════════════════════════════════════════════════════
 // 1. AI VOCABULARY KILL DICTIONARY (120+ words, 42+ phrase patterns)
 //    Shared by Ghost Pro, Ninja, Ghost Mini
@@ -594,14 +596,15 @@ export interface SyntacticTemplate {
 
 export const SYNTACTIC_TEMPLATES: SyntacticTemplate[] = [
   // A. CLAUSE REORDERING — Move trailing subordinate clause to front
-  { name: "because_front", pattern: /^(.{20,}?),?\s+(because|since|as)\s+(.{10,})$/i, replacements: ["$2 $3, $1"] },
+  // Note: "as" excluded from because_front to prevent breaking "such as X" constructions
+  { name: "because_front", pattern: /^(.{20,}?),?\s+(because|since)\s+(.{10,})$/i, replacements: ["$2 $3, $1"] },
   { name: "although_front", pattern: /^(.{20,}?),?\s+(although|though|even though|while)\s+(.{10,})$/i, replacements: ["$2 $3, $1"] },
   { name: "when_front", pattern: /^(.{20,}?),?\s+(when|whenever|once|after|before|until)\s+(.{10,})$/i, replacements: ["$2 $3, $1"] },
   { name: "if_front", pattern: /^(.{20,}?),?\s+(if|unless|provided that)\s+(.{10,})$/i, replacements: ["$2 $3, $1"] },
   { name: "where_front", pattern: /^(.{20,}?),?\s+(where|wherever)\s+(.{10,})$/i, replacements: ["$2 $3, $1"] },
 
   // Move fronted subordinate clause to back
-  { name: "because_back", pattern: /^(Because|Since|As)\s+(.{10,}?),\s+(.{15,})$/i, replacements: ["$3, $1 $2"] },
+  { name: "because_back", pattern: /^(Because|Since)\s+(.{10,}?),\s+(.{15,})$/i, replacements: ["$3, $1 $2"] },
   { name: "although_back", pattern: /^(Although|Though|Even though|While)\s+(.{10,}?),\s+(.{15,})$/i, replacements: ["$3, $1 $2"] },
   { name: "when_back", pattern: /^(When|Whenever|Once|After|Before|Until)\s+(.{10,}?),\s+(.{15,})$/i, replacements: ["$3 $1 $2"] },
   { name: "if_back", pattern: /^(If|Unless|Provided that)\s+(.{10,}?),\s+(.{15,})$/i, replacements: ["$3 $1 $2"] },
@@ -719,6 +722,19 @@ export const NATURAL_REROUTES: string[] = [
 export function applyAIWordKill(text: string): string {
   let result = text;
 
+  // Words that should never be replaced by AI word kill (academic/domain terms)
+  const AIWK_PROTECTED = new Set([
+    "risk", "risks", "management", "system", "systems", "access", "process", "processes",
+    "framework", "frameworks", "implement", "implementation", "component", "essential",
+    "organization", "organizations", "information", "data", "security", "controls",
+    "threat", "threats", "vulnerability", "vulnerabilities", "exposure", "governance",
+    "compliance", "financial", "accounting", "cybersecurity", "encryption", "integrity",
+    "confidentiality", "availability", "transparency", "resilience", "stakeholder",
+    "stakeholders", "payroll", "tax", "assessment", "credential", "credentials",
+    "authentication", "authorization", "breach", "breaches", "intrusion", "intrusions",
+    "phishing", "audit", "auditing",
+  ]);
+
   // Kill phrases first (longer patterns before shorter)
   for (const [pattern, replacement] of AI_PHRASE_PATTERNS) {
     result = result.replace(pattern, (match, ...groups) => {
@@ -738,6 +754,8 @@ export function applyAIWordKill(text: string): string {
   // Kill words (with simple stemming to catch inflected forms)
   result = result.replace(/\b[a-zA-Z]+\b/g, (word) => {
     const lower = word.toLowerCase();
+    // Skip words that are protected academic/domain terms
+    if (AIWK_PROTECTED.has(lower)) return word;
     let replacements = AI_WORD_REPLACEMENTS[lower];
     let suffix = "";
     // If no direct match, try common stems
@@ -769,7 +787,13 @@ export function applyAIWordKill(text: string): string {
       }
     }
     if (!replacements) return word;
-    let replacement = replacements[Math.floor(Math.random() * replacements.length)];
+    // Filter out replacements that are protected terms themselves
+    const safeReplacements = replacements.filter(r => {
+      const rLower = r.toLowerCase().split(' ')[0]; // check first word of multi-word
+      return !AIWK_PROTECTED.has(rLower);
+    });
+    if (safeReplacements.length === 0) return word;
+    let replacement = safeReplacements[Math.floor(Math.random() * safeReplacements.length)];
     // For multi-word replacements, suffix only the first word
     if (suffix && replacement.includes(" ")) {
       const parts = replacement.split(" ");
@@ -2288,15 +2312,13 @@ export function fixCapitalization(text: string, originalText?: string): string {
     // Preserve whitespace-only segments (paragraph breaks)
     if (/^\s*$/.test(segment)) return segment;
 
-    // Split into sentences by period/question/exclamation followed by space+capital or end
-    // We process sentence by sentence
-    return segment.replace(
-      /([^.!?]*[.!?]+)/g,
-      (sentence) => {
-        if (!sentence.trim()) return sentence;
-        return fixSentenceCapitalization(sentence, properNouns);
-      }
-    );
+    // Split into sentences using robust splitting that respects abbreviations and decimals
+    const sentences = robustSentenceSplit(segment);
+    if (sentences.length === 0) return segment;
+    return sentences.map(sentence => {
+      if (!sentence.trim()) return sentence;
+      return fixSentenceCapitalization(sentence, properNouns);
+    }).join(' ');
   }).join('');
 }
 

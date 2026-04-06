@@ -1397,42 +1397,8 @@ function postProcessSingleSentence(sent: string, features: InputFeatures, streng
     }
   }
 
-  // 11. Dictionary-enhanced synonym swap (per-sentence) — conservative rate to avoid wrong synonyms
-  const synonymRate = strength === "strong" ? 0.08 : strength === "medium" ? 0.06 : 0.04;
-  const dict = getDictionary();
-  const currentWords = result.split(/\s+/);
-  if (currentWords.length >= 5) {
-    const usedRep = new Set<string>();
-    const targetSwaps = Math.max(1, Math.floor(currentWords.length * synonymRate));
-    let swaps = 0;
-    const newWords = currentWords.map((word, idx) => {
-      if (swaps >= targetSwaps) return word;
-      const clean = word.replace(/[^a-zA-Z]/g, "");
-      if (clean.length < 4 || idx === 0) return word;
-      const lower = clean.toLowerCase();
-      // Skip function words
-      const skipWords = new Set(["about", "after", "again", "being", "below", "between",
-        "could", "doing", "during", "every", "found", "given", "going", "great",
-        "their", "there", "these", "those", "under", "using", "where", "which",
-        "while", "would", "shall", "should", "other", "still", "never", "often",
-        "have", "been", "were", "with", "from", "that", "this", "they", "will",
-        "also", "just", "only", "into", "some", "more", "most", "such", "when",
-        "than", "what", "each", "does", "then", "both"]);
-      if (skipWords.has(lower) || usedRep.has(lower)) return word;
-      const replacement = dict.replaceWordSmartly(clean, result, usedRep);
-      if (replacement !== clean && replacement.length > 0) {
-        usedRep.add(lower);
-        swaps++;
-        const prefix = word.match(/^[^a-zA-Z]*/)?.[0] ?? "";
-        const suffix = word.match(/[^a-zA-Z]*$/)?.[0] ?? "";
-        const isCapitalized = clean[0] === clean[0].toUpperCase();
-        const final = isCapitalized ? replacement[0].toUpperCase() + replacement.slice(1) : replacement;
-        return prefix + final + suffix;
-      }
-      return word;
-    });
-    result = newWords.join(" ");
-  }
+  // 11. Dictionary-enhanced synonym swap — REMOVED: produces off-context replacements.
+  // The per-sentence LLM rewrite already handles synonym variation with proper context.
 
   // 12. Syntactic template — moderate application for structural variation
   {
@@ -1845,32 +1811,81 @@ async function processChunk(
   const chunkWords = chunkText.trim().split(/\s+/).length;
 
   // ═══════════════════════════════════════════
-  // PASS 1: FULL-TEXT LLM Rewrite (single call for speed)
+  // PASS 1: PER-SENTENCE LLM Rewrite (each sentence independently)
   // ═══════════════════════════════════════════
-  console.log("  [GhostPro]   Pass 1: Full-text LLM rewrite...");
+  console.log("  [GhostPro]   Pass 1: Per-sentence LLM rewrite...");
 
-  const llmMaxTokens = Math.min(16384, Math.max(4096, Math.ceil(chunkWords * 2.5)));
-  const systemPrompt = getSystemPrompt(options.tone, chunkWords);
-  const userPrompt = buildUserPrompt(
-    placeholdersToLLMFormat(chunkText),
-    features,
-    options.tone,
-  );
+  const sentenceSystemPrompt = getSentenceSystemPrompt(options.tone);
+  const paragraphs = chunkText.split(/\n\s*\n/).filter(p => p.trim());
 
-  let result: string;
-  try {
-    const raw = await llmCall(systemPrompt, userPrompt, options.temperature, llmMaxTokens);
-    result = llmFormatToPlaceholders(raw ?? "");
-    if (!result || result.trim().length < chunkText.length * 0.3) {
-      console.warn("  [GhostPro]   LLM output too short, using original");
-      result = chunkText;
+  let totalSentencesProcessed = 0;
+
+  const rewrittenParagraphs = await Promise.all(paragraphs.map(async (para) => {
+    const trimmedPara = para.trim();
+    // Skip headings/titles — pass through unchanged
+    if (isTitleOrHeading(trimmedPara)) {
+      return trimmedPara;
     }
-  } catch (err) {
-    console.warn("  [GhostPro]   LLM call failed, using original:", err);
-    result = chunkText;
-  }
 
-  console.log(`  [GhostPro]   Pass 1 done: ${result.split(/\s+/).length} words`);
+    const sentences = robustSentenceSplit(trimmedPara);
+    if (sentences.length === 0) {
+      return trimmedPara;
+    }
+
+    // Process each sentence independently via LLM (parallel for speed)
+    const rewritePromises = sentences.map(async (sent, idx) => {
+      const trimmed = sent.trim();
+      if (!trimmed || trimmed.split(/\s+/).length < 3) return trimmed;
+
+      // Skip title-like sentences
+      if (isTitleOrHeading(trimmed)) return trimmed;
+
+      const prevSent = idx > 0 ? sentences[idx - 1] : null;
+      const nextSent = idx < sentences.length - 1 ? sentences[idx + 1] : null;
+
+      const userPrompt = buildSentenceUserPrompt(
+        placeholdersToLLMFormat(trimmed),
+        prevSent ? placeholdersToLLMFormat(prevSent) : null,
+        nextSent ? placeholdersToLLMFormat(nextSent) : null,
+        features,
+      );
+
+      // Vary temperature per-sentence for unpredictability
+      const sentTemp = options.temperature + (Math.random() * 0.14 - 0.07);
+      const clampedTemp = Math.max(0.3, Math.min(1.0, sentTemp));
+      const sentMaxTokens = Math.max(256, Math.ceil(trimmed.split(/\s+/).length * 3));
+
+      try {
+        let rewritten = llmFormatToPlaceholders(
+          await llmCall(sentenceSystemPrompt, userPrompt, clampedTemp, sentMaxTokens) ?? ''
+        );
+        if (!rewritten || rewritten.trim().length < trimmed.length * 0.2) {
+          return trimmed;
+        }
+        rewritten = rewritten.replace(/^\[TARGET\]:\s*/i, "").trim();
+        // Enforce single sentence: if LLM returned multiple sentences, collapse to one
+        rewritten = enforceSingleSentence(rewritten);
+
+        // Enforce strict rules (no contractions, no rhetorical questions, no first-person)
+        const ruleResult = enforceStrictRules(trimmed, rewritten, features as unknown as SurgeryInputFeatures);
+        rewritten = ruleResult.text;
+
+        // Enforce capitalization
+        rewritten = enforceCapitalization(trimmed, rewritten);
+
+        return rewritten;
+      } catch {
+        return trimmed;
+      }
+    });
+
+    const rewrittenSentences = await Promise.all(rewritePromises);
+    totalSentencesProcessed += rewrittenSentences.length;
+    return rewrittenSentences.join(" ");
+  }));
+
+  let result = rewrittenParagraphs.join("\n\n");
+  console.log(`  [GhostPro]   Pass 1 done: ${result.split(/\s+/).length} words (${totalSentencesProcessed} sentences processed independently)`);
 
   // ═══════════════════════════════════════════
   // PASS 2: SENTENCE-INDEPENDENT Post-processing
@@ -1882,11 +1897,19 @@ async function processChunk(
   result = sentenceIndependentPostProcess(result, features, strength);
   console.log(`  [GhostPro]   Post-processing done at strength=${strength}`);
 
-  // De-repeat n-grams across full text after post-processing
-  result = deRepeatNgrams(result);
-
-  // Light global polish (punctuation artifact cleanup only)
-  result = finalPolish(result);
+  // Per-sentence polish and n-gram de-repeat — prevent bulk operations from splitting sentences
+  {
+    const polishParas = result.split(/\n\s*\n/).filter(p => p.trim());
+    result = polishParas.map(para => {
+      const sents = robustSentenceSplit(para.trim());
+      return sents.map(s => {
+        let fixed = deRepeatNgrams(s);
+        fixed = finalPolish(fixed);
+        fixed = enforceSingleSentence(fixed);
+        return fixed;
+      }).join(" ");
+    }).join("\n\n");
+  }
 
   // ═══════════════════════════════════════════
   // PASS 3: DETECTOR FEEDBACK LOOP
@@ -1931,8 +1954,14 @@ async function processChunk(
       return cleaned.join(" ");
     }).join("\n\n");
 
-    // Re-polish after fixes
-    result = finalPolish(result);
+    // Re-polish after fixes — per-sentence to preserve sentence count
+    {
+      const rpParas = result.split(/\n\s*\n/).filter(p => p.trim());
+      result = rpParas.map(para => {
+        const sents = robustSentenceSplit(para.trim());
+        return sents.map(s => enforceSingleSentence(finalPolish(s))).join(" ");
+      }).join("\n\n");
+    }
   }
 
   // Final constraint pass
@@ -2003,13 +2032,11 @@ export async function ghostProHumanize(
   }
 
   // ═══════════════════════════════════════════
-  // PRE-HUMANIZATION: Sentence Merge/Split Surgery for Burstiness
+  // PRE-HUMANIZATION: Sentence Merge/Split Surgery — DISABLED
+  // Strict 1-in=1-out per-sentence processing means we cannot alter sentence count.
+  // The LLM per-sentence prompt already creates length variation.
   // ═══════════════════════════════════════════
-  console.log("  [GhostPro] Pre-surgery: Applying sentence merge/split for burstiness...");
-  const rawSurgeryItems = buildSentenceItems(protectedText);
-  const surgeryItems = applySentenceSurgery(rawSurgeryItems);
-  const surgeryText = reassembleFromItems(surgeryItems);
-  console.log(`  [GhostPro] Surgery: ${rawSurgeryItems.filter(i => !i.isTitle).length} → ${surgeryItems.filter(i => !i.isTitle).length} sentences (merges + splits applied)`);
+  const surgeryText = protectedText;
 
   // ═══════════════════════════════════════════
   // CHUNK PROCESSING
@@ -2033,8 +2060,14 @@ export async function ghostProHumanize(
     result = processedChunks.join("\n\n");
     console.log(`  [GhostPro] All ${chunks.length} chunks processed, merged.`);
 
-    // Run a light cross-chunk polish to smooth seams
-    result = finalPolish(result);
+    // Run a light cross-chunk polish to smooth seams — per-sentence
+    {
+      const cpParas = result.split(/\n\s*\n/).filter(p => p.trim());
+      result = cpParas.map(para => {
+        const sents = robustSentenceSplit(para.trim());
+        return sents.map(s => enforceSingleSentence(finalPolish(s))).join(" ");
+      }).join("\n\n");
+    }
 
     // Final constraint pass on merged result
     if (!features.hasContractions) result = removeContractions(result);
@@ -2045,29 +2078,11 @@ export async function ghostProHumanize(
   // ── Final punctuation & capitalization cleanup (non-LLM) ──
   result = fixPunctuation(result);
 
-  // ── LLM synonym/phrasing validation — fix awkward dictionary swaps ──
-  console.log("  [GhostPro] Running LLM phrasing validation...");
-  const valWordCount = result.trim().split(/\s+/).length;
-  const valMaxTokens = Math.min(16384, Math.max(4096, Math.ceil(valWordCount * 2)));
-  result = await llmValidatePhrasing(result, valMaxTokens);
-
-  // ── Strict LLM punctuation/capitalization cleanup with word-preservation loop ──
-  console.log("  [GhostPro] Running strict LLM punctuation cleanup...");
-  for (let puncLoop = 0; puncLoop < 3; puncLoop++) {
-    const beforePunc = result;
-    const puncResult = await llmFixPunctuation(result);
-    // Verify word count didn't change
-    const beforeWords = beforePunc.replace(/[^a-zA-Z\s]/g, "").toLowerCase().split(/\s+/).filter(w => w);
-    const afterWords = puncResult.replace(/[^a-zA-Z\s]/g, "").toLowerCase().split(/\s+/).filter(w => w);
-    if (Math.abs(beforeWords.length - afterWords.length) <= 2) {
-      result = puncResult;
-      console.log(`  [GhostPro] Punctuation pass ${puncLoop + 1}: accepted (${afterWords.length} words)`);
-      break;
-    } else {
-      console.warn(`  [GhostPro] Punctuation pass ${puncLoop + 1}: rejected — word count changed (${beforeWords.length} → ${afterWords.length}), retrying...`);
-      // Loop again with original result
-    }
-  }
+  // ── LLM phrasing validation & punctuation REMOVED ──
+  // These were full-text LLM calls that could expand 1 sentence into multiple.
+  // Per-sentence LLM rewrite in processChunk already handles quality.
+  // Non-LLM fixPunctuation above handles punctuation/capitalization safely.
+  console.log("  [GhostPro] Skipping full-text LLM validation (per-sentence LLM already applied).");
 
   // Final capitalization enforcement
   result = enforceCapitalization(original, result);

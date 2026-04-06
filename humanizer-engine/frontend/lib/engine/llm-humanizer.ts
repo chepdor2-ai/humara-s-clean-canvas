@@ -62,7 +62,7 @@ import {
 
 // ── Config ──
 
-const LLM_MODEL = process.env.LLM_MODEL ?? "gpt-4.1-mini";
+const LLM_MODEL = process.env.LLM_MODEL ?? "gpt-4o-mini";
 const MAX_FEEDBACK_ITERATIONS_MAP: Record<string, number> = { light: 1, medium: 1, strong: 2 };
 const TARGET_AI_SCORE = 5.0;
 
@@ -377,7 +377,13 @@ RULES:
 - ${rhetoricalConstraint}
 - CRITICAL: Preserve all placeholder tokens like [[PROT_0]], [[TRM_0]] exactly as-is.
 - Keep all factual content, data, citations, technical terms exactly.
-- Stay within ±10% of original sentence word count. NEVER pad with filler words or unnecessary qualifiers. Prefer shorter over longer when possible.
+- CRITICAL WORD COUNT: Your output sentence MUST stay within ±15% of the original word count. Do NOT drastically shorten or pad the sentence.
+- SYNONYM REPLACEMENT: Swap at least 30% of non-technical words with natural synonyms (e.g., "important" → "key", "implement" → "put in place", "significant" → "major").
+- VOICE/TENSE VARIATION: Randomly apply ONE of these per sentence:
+  * Active → passive or passive → active ("The study examined" → "The data were examined by the study")
+  * Simple → continuous or vice versa ("organizations process" → "organizations are processing", "is managing" → "manages")
+  * Noun → verb conversion ("the implementation of" → "implementing", "the analysis" → "analyzing")
+- AI PHRASE KILLING: Replace any AI-typical constructions: "plays a crucial role" → "matters", "it is important to note" → cut entirely, "a wide range of" → "many"
 - Do NOT hallucinate or invent information not present in the original.
 - Do NOT add explanatory phrases, hedging clauses, or extra context that was not in the original sentence.
 - Write like a real person from the 1990s — no modern corporate or tech buzzwords.`;
@@ -397,7 +403,12 @@ function buildNinjaSentenceUserPrompt(
   const contextBefore = prevSentence ? `[BEFORE]: ${prevSentence}\n` : "";
   const contextAfter = nextSentence ? `\n[AFTER]: ${nextSentence}` : "";
 
+  const wordCount = sentence.split(/\s+/).length;
+  const minWords = Math.max(3, Math.floor(wordCount * 0.85));
+  const maxWords = Math.ceil(wordCount * 1.15);
+
   return `${variationGuide}
+WORD RANGE: The original is ${wordCount} words. Your output MUST be between ${minWords} and ${maxWords} words. Do NOT drastically shorten it.
 
 CRITICAL: Rewrite ONLY the [TARGET] sentence. Do NOT borrow, merge, or incorporate ANY content from [BEFORE] or [AFTER]. They are read-only context for tone continuity only. Your output must contain ONLY the meaning from [TARGET].
 
@@ -1049,9 +1060,11 @@ function signalAwareRefinement(text: string, features: InputFeatures, iteration:
   const starterThreshold = strength === "strong" ? 60 : strength === "medium" ? 58 : 55;
   const uniformThreshold = strength === "strong" ? 40 : strength === "medium" ? 45 : 50;
 
-  // Always run sentence-independent AI pattern kills first
+  // Only run safe/idempotent AI word kill — NOT sentenceIndependentStealthPass
+  // because it re-applies applyPhrasePatterns, applyConnectorNaturalization, and
+  // applySyntacticTemplate which compound on repeated calls ("When when", "Since since").
   if (signals.ai_pattern_score > aiPatThreshold || signals.per_sentence_ai_ratio > aiRatioThreshold) {
-    result = sentenceIndependentStealthPass(result, features, strength);
+    result = applyAIWordKill(result);
   }
 
   // Fix burstiness (sentence length variation)
@@ -1263,29 +1276,15 @@ function stealthProcessSingleSentence(sent: string, features: InputFeatures, str
   if (!sent.trim()) return sent;
   let result = sent.trim();
 
-  // 1. Kill AI vocabulary (word-level + phrase-level)
-  for (const [pattern, replacement] of AI_PHRASE_KILL) {
-    result = result.replace(pattern, replacement);
-  }
+  // 1. Kill remaining AI vocabulary — shared dictionary only (120+ words + 48 phrase patterns)
+  // NOTE: Local AI_PHRASE_KILL and applyPhrasePatterns removed — they were destroying
+  // meaning by applying aggressive replacements on text already humanized by LLM:
+  //   - "the importance of" → "how much ... matters" (literal dots → garbled grammar)
+  //   - "plays a crucial role in" → "matters" (drops "in" → broken sentence)
+  //   - 9 random swap dictionaries that change phrasing the LLM intentionally chose
+  // The shared applyAIWordKill already handles phrase + word replacement with better grammar.
+  // Local AI_WORD_KILL per-word loop also removed — redundant with applyAIWordKill.
   result = applyAIWordKill(result);
-  result = applyPhrasePatterns(result);
-
-  // 2. Kill AI word replacements (word by word)
-  const aiWords = result.split(/\s+/);
-  const newAiWords = aiWords.map((word) => {
-    const clean = word.replace(/[^a-zA-Z]/g, "").toLowerCase();
-    const replacements = AI_WORD_KILL[clean];
-    if (replacements && replacements.length > 0) {
-      const rep = replacements[Math.floor(Math.random() * replacements.length)];
-      const prefix = word.match(/^[^a-zA-Z]*/)?.[0] ?? "";
-      const suffix = word.match(/[^a-zA-Z]*$/)?.[0] ?? "";
-      const isCapitalized = word[0] === word[0].toUpperCase() && word[0] !== word[0].toLowerCase();
-      const final = isCapitalized ? rep[0].toUpperCase() + rep.slice(1) : rep;
-      return prefix + final + suffix;
-    }
-    return word;
-  });
-  result = newAiWords.join(" ");
 
   // 3. Naturalize connectors
   result = applyConnectorNaturalization(result);
@@ -1300,13 +1299,15 @@ function stealthProcessSingleSentence(sent: string, features: InputFeatures, str
     }
   }
 
-  // 5. Dictionary-enhanced synonym swap (per-sentence) — conservative rate to avoid wrong synonyms
-  const synonymRate = strength === "strong" ? 0.08 : strength === "medium" ? 0.06 : 0.04;
+  // 5. Dictionary-enhanced synonym swap (per-sentence) — VERY conservative after LLM rewrite
+  // The LLM already varies vocabulary. Aggressive thesaurus swaps produce wrong synonyms
+  // ("healthy" → "sizeable", "system" → "arrangement") that destroy meaning.
+  const synonymRate = strength === "strong" ? 0.03 : strength === "medium" ? 0.02 : 0.01;
   const dict = getDictionary();
   const words = result.split(/\s+/);
-  if (words.length >= 6) {
+  if (words.length >= 10) {
     const usedRep = new Set<string>();
-    const targetSwaps = Math.max(1, Math.floor(words.length * synonymRate));
+    const targetSwaps = Math.min(1, Math.floor(words.length * synonymRate));
     let swaps = 0;
     const swapped = words.map((word, idx) => {
       if (swaps >= targetSwaps) return word;
@@ -1333,12 +1334,16 @@ function stealthProcessSingleSentence(sent: string, features: InputFeatures, str
     result = swapped.join(" ");
   }
 
-  // 6. Syntactic template — probability scales with strength
-  const templateProb = strength === "strong" ? 0.55 : strength === "medium" ? 0.42 : 0.35;
-  if (result.split(/\s+/).length >= 15 && Math.random() < templateProb) {
-    const transformed = applySyntacticTemplate(result);
-    if (transformed !== result) result = transformed;
-  }
+  // 6. Syntactic template — DISABLED: The LLM rewrite already handles clause fronting,
+  // nominalization, conjunction rotation, etc. Applying syntactic templates in the non-LLM
+  // pipeline AFTER phrase/connector naturalization causes cascading duplication:
+  //   - applyPhrasePatterns inserts "since" → because_front template fronts it → "Since since"
+  //   - applyConnectorNaturalization inserts "When" → when_front template fronts → "When when"
+  // const templateProb = strength === "strong" ? 0.55 : strength === "medium" ? 0.42 : 0.35;
+  // if (result.split(/\s+/).length >= 15 && Math.random() < templateProb) {
+  //   const transformed = applySyntacticTemplate(result);
+  //   if (transformed !== result) result = transformed;
+  // }
 
   // 7. Word diversity swaps (overused common words)
   for (const [common, alternatives] of Object.entries(SHARED_DIVERSITY_SWAPS)) {
@@ -1826,12 +1831,14 @@ export async function llmHumanize(
   }
 
   // ═══════════════════════════════════════════
-  // POST-FEEDBACK: Final stealth cleanup (rule-based only — no LLM rewrite)
-  // LLM validation was removed because it re-introduces AI vocabulary after stealth cleaning.
-  // Instead, run one final sentence-independent stealth pass to catch any residue.
+  // POST-FEEDBACK: Light AI word cleanup only (rule-based only — no LLM rewrite)
+  // NOTE: Full sentenceIndependentStealthPass was removed here because it was the
+  // 2nd/3rd invocation — applyPhrasePatterns, applyConnectorNaturalization, and
+  // applySyntacticTemplate compound on re-application ("When when", "Since since").
   // ═══════════════════════════════════════════
   console.log("  [Ninja] Final rule-based stealth cleanup...");
-  bestResult = sentenceIndependentStealthPass(bestResult, features, strength);
+  bestResult = applyAIWordKill(bestResult);
+  bestResult = fixPunctuation(bestResult);
 
   // ═══════════════════════════════════════════
   // DETECTOR FEEDBACK LOOP — re-run post-processing if AI score > 15%
@@ -1844,11 +1851,10 @@ export async function llmHumanize(
       if (aiScore <= 15) break;
       console.log(`  [Ninja] Detector feedback round ${feedbackRound + 1}: AI score ${aiScore.toFixed(1)}% — re-running stealth pass`);
 
-      // Full stealth re-processing
-      bestResult = sentenceIndependentStealthPass(bestResult, features, strength);
+      // Light re-processing only — sentenceIndependentStealthPass already applies
+      // applyAIWordKill, applyPhrasePatterns, applyConnectorNaturalization internally.
+      // Re-applying them here causes compounding ("when when", "though though").
       bestResult = applyAIWordKill(bestResult);
-      bestResult = applyPhrasePatterns(bestResult);
-      bestResult = applyConnectorNaturalization(bestResult);
       if (!features.hasContractions) bestResult = removeContractions(bestResult);
       if (!features.hasFirstPerson) bestResult = removeFirstPerson(bestResult);
       bestResult = fixPunctuation(bestResult);
@@ -1866,6 +1872,10 @@ export async function llmHumanize(
 
   // ── Final punctuation & capitalization cleanup ──
   bestResult = fixPunctuation(bestResult);
+
+  // ── Safety net: fix doubled subordinate conjunctions ("when when", "since since") ──
+  bestResult = bestResult.replace(/\b(when|since|though|although|because|while|if|unless|after|before|until|once)\s+\1\b/gi, "$1");
+  bestResult = bestResult.replace(/\b(When|Since|Though|Although|Because|While|If|Unless|After|Before|Until|Once)\s+\1\b/gi, "$1");
 
   // ── LLM phrasing validation — fix awkward dictionary swaps ──
   console.log("  [Ninja] Running LLM phrasing validation...");
@@ -1889,6 +1899,19 @@ export async function llmHumanize(
 
   // Final capitalization enforcement
   bestResult = enforceCapitalization(original, bestResult);
+
+  // ── FINAL safety net: fix doubled subordinate conjunctions and garbled phrases ──
+  // Must run AFTER llmValidateNinjaPhrasing and llmFixNinjaPunctuation since those
+  // LLM calls can re-introduce "when when", "while while", etc.
+  bestResult = bestResult.replace(/\b(when|since|though|although|because|while|if|unless|after|before|until|once)\s+\1\b/gi, "$1");
+  // Fix garbled accessibility phrases the LLM produces:
+  //   "easy to entry" → "easy to access", "easier to availability" → "easier to access"
+  bestResult = bestResult.replace(/\b(eas(?:y|ier)) to (entry|availability)\b/gi, "$1 to access");
+  // Fix "cause" used as "promote/foster" (LLM garble):
+  //   "can cause Efficiency" → "can improve Efficiency"
+  bestResult = bestResult.replace(/\bcan cause (a more|Efficiency|social)/gi, "can bring about $1");
+  // Fix "Healthcare care" redundancy
+  bestResult = bestResult.replace(/\bHealthcare care\b/g, "Healthcare");
 
   // Merge/split DISABLED — strict sentence count enforcement: input = output
 
@@ -1943,6 +1966,22 @@ export async function llmHumanize(
       console.warn(`  [Ninja] Missing keywords: ${verification.missingKeywords.join(", ")}`);
     }
   }
+
+  // ── ABSOLUTE FINAL safety net ──
+  // Runs after ALL processing (including enforcePerParagraphSentenceCounts and
+  // cleanSentenceStarters which can re-introduce doubled conjunctions via
+  // sentence merge/split operations).
+  const beforeNet = bestResult;
+  bestResult = bestResult.replace(/\b(when|since|though|although|because|while|if|unless|after|before|until|once)\s+\1\b/gi, "$1");
+  bestResult = bestResult.replace(/\b(eas(?:y|ier))\s+(?:for\s+\w+\s+)?to\s+(entry|availability)\b/gi, "$1 to access");
+  bestResult = bestResult.replace(/\bto entry\b/gi, "to access");
+  bestResult = bestResult.replace(/\bto availability\b/gi, "to access");
+  bestResult = bestResult.replace(/\bcan cause (a more|Efficiency|social)/gi, "can bring about $1");
+  bestResult = bestResult.replace(/\bHealthcare care\b/g, "Healthcare");
+  // Kill offensive/archaic words that should never appear in output
+  bestResult = bestResult.replace(/\bquislingism\b/gi, "collaboration");
+  bestResult = bestResult.replace(/\bquisling\b/gi, "collaborator");
+  if (beforeNet !== bestResult) console.log("  [Ninja] SAFETY NET caught issues in final output");
 
   return bestResult;
 }

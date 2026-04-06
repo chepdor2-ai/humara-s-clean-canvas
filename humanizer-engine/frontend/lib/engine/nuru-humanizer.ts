@@ -53,7 +53,10 @@ import {
 import {
   voiceShift,
   deepRestructure,
+  tenseVariation,
 } from './advanced-transforms';
+import { robustSentenceSplit } from './content-protection';
+import { enforceSingleSentence } from './sentence-surgery';
 
 // ══════════════════════════════════════════════════════════════════════════
 // PHASE 1: PRE-ANALYSIS
@@ -114,13 +117,15 @@ function isProtectedLine(line: string): boolean {
   if (/^[\d]+[.):\-]\s/.test(t) || /^[A-Za-z][.)]\s/.test(t)) return true;
   const words = t.split(/\s+/);
   if (words.length <= 5 && !/[.!?]$/.test(t)) return true;
+  // Detect title-like lines: no terminal punctuation, or contains colons/dashes typical of titles
+  if (!/[.!?]$/.test(t) && words.length <= 15) return true;
+  if (/[:–—]\s/.test(t) && !/[.!?]$/.test(t)) return true;
   return false;
 }
 
-/** Extract sentences from a paragraph. */
+/** Extract sentences from a paragraph using robust splitting (handles abbreviations, decimals, URLs). */
 function extractSentences(paragraph: string): string[] {
-  const raw = paragraph.match(/[^.!?]*[.!?]+[\s]*/g) || [paragraph];
-  return raw.map(s => s.trim()).filter(s => s.length > 0);
+  return robustSentenceSplit(paragraph);
 }
 
 /** Deterministic hash for sentence-specific randomness. */
@@ -235,13 +240,25 @@ function applySwapDict(sentence: string, dict: Record<string, string[]>, seed: n
 
 type Strategy = (sentence: string, seed: number) => string;
 
+/** Safe wrapper for applySyntacticTemplate — reverts if output is garbled */
+function safeSyntacticTemplate(sentence: string): string {
+  const result = applySyntacticTemplate(sentence);
+  return isGarbledSentence(result) ? sentence : result;
+}
+
+/** Safe wrapper for deepRestructure — reverts if output is garbled */
+function safeDeepRestructure(sentence: string, intensity: number): string {
+  const result = deepRestructure(sentence, intensity);
+  return isGarbledSentence(result) ? sentence : result;
+}
+
 /** Strategy 0: Analytical rewriter — clause rephrasings + verb swaps + restructure */
 function strategyAnalytical(sentence: string, seed: number): string {
   let s = applyAIWordKill(sentence);
   s = applySwapDict(s, CLAUSE_REPHRASINGS, seed);
   s = applySwapDict(s, VERB_PHRASE_SWAPS, seed + 1);
-  s = deepRestructure(s, 0.6);
-  if (seed % 10 < 5) s = applySyntacticTemplate(s);
+  s = safeDeepRestructure(s, 0.6);
+  if (seed % 10 < 5) s = safeSyntacticTemplate(s);
   return s;
 }
 
@@ -252,7 +269,7 @@ function strategyFormalAcademic(sentence: string, seed: number): string {
   s = applySwapDict(s, CAUSAL_SWAPS, seed);
   s = applySwapDict(s, TEMPORAL_SWAPS, seed + 1);
   s = applySwapDict(s, TRANSITION_SWAPS, seed + 2);
-  if (seed % 10 < 6) s = applySyntacticTemplate(s);
+  if (seed % 10 < 6) s = safeSyntacticTemplate(s);
   return s;
 }
 
@@ -277,10 +294,10 @@ function strategySimplification(sentence: string, seed: number): string {
 function strategyVoiceShift(sentence: string, seed: number): string {
   let s = applyAIWordKill(sentence);
   s = voiceShift(s, 0.5);
-  s = deepRestructure(s, 0.7);
+  s = safeDeepRestructure(s, 0.35);
   s = applyPhrasePatterns(s);
   s = applySwapDict(s, CAUSAL_SWAPS, seed);
-  if (seed % 10 < 7) s = applySyntacticTemplate(s);
+  if (seed % 10 < 7) s = safeSyntacticTemplate(s);
   return s;
 }
 
@@ -297,7 +314,7 @@ function strategyTraditional(sentence: string, seed: number): string {
     });
   }
   s = applySwapDict(s, TEMPORAL_SWAPS, seed + 2);
-  s = deepRestructure(s, 0.4);
+  s = safeDeepRestructure(s, 0.4);
   return s;
 }
 
@@ -308,19 +325,19 @@ function strategyDirect(sentence: string, seed: number): string {
   s = applySwapDict(s, MODIFIER_SWAPS, seed);
   s = applySwapDict(s, DIVERSITY_SWAPS, seed + 1);
   s = applySwapDict(s, EMPHASIS_SWAPS, seed + 2);
-  if (seed % 10 < 4) s = applySyntacticTemplate(s);
+  if (seed % 10 < 4) s = safeSyntacticTemplate(s);
   return s;
 }
 
 /** Strategy 6: Deep restructure — maximum structural change */
 function strategyDeepRestructure(sentence: string, seed: number): string {
   let s = applyAIWordKill(sentence);
-  s = deepRestructure(s, 0.9);
+  s = safeDeepRestructure(s, 0.45);
   s = voiceShift(s, 0.3);
   s = applySwapDict(s, VERB_PHRASE_SWAPS, seed);
   s = applySwapDict(s, CLAUSE_REPHRASINGS, seed + 1);
   s = applySwapDict(s, TRANSITION_SWAPS, seed + 2);
-  s = applySyntacticTemplate(s);
+  s = safeSyntacticTemplate(s);
   return s;
 }
 
@@ -332,7 +349,7 @@ function strategyPrecision(sentence: string, seed: number): string {
   s = applySwapDict(s, QUANTIFIER_SWAPS, seed + 1);
   s = applySwapDict(s, TEMPORAL_SWAPS, seed + 2);
   s = applySwapDict(s, MODIFIER_SWAPS, seed + 3);
-  if (seed % 10 < 5) s = deepRestructure(s, 0.5);
+  if (seed % 10 < 5) s = safeDeepRestructure(s, 0.5);
   return s;
 }
 
@@ -347,7 +364,7 @@ function strategyFullSweep(sentence: string, seed: number): string {
   s = applySwapDict(s, TRANSITION_SWAPS, seed + 4);
   s = applySwapDict(s, DIVERSITY_SWAPS, seed + 5);
   s = applyConnectorNaturalization(s);
-  if (seed % 10 < 6) s = applySyntacticTemplate(s);
+  if (seed % 10 < 6) s = safeSyntacticTemplate(s);
   return s;
 }
 
@@ -359,7 +376,7 @@ function strategyMeasured(sentence: string, seed: number): string {
   s = voiceShift(s, 0.4);
   s = applySwapDict(s, CAUSAL_SWAPS, seed + 2);
   s = applySwapDict(s, TEMPORAL_SWAPS, seed + 3);
-  s = deepRestructure(s, 0.5);
+  s = safeDeepRestructure(s, 0.5);
   return s;
 }
 
@@ -395,6 +412,39 @@ function calculateWordChangePercent(original: string, rewritten: string): number
   return Math.round((1 - kept / origSet.size) * 100);
 }
 
+/**
+ * Check if a sentence looks garbled after transformation.
+ * Returns true if the sentence appears ungrammatical.
+ */
+function isGarbledSentence(sentence: string): boolean {
+  const s = sentence.trim();
+  const words = s.split(/\s+/);
+  // Sentence fragment: very short and ends with period
+  if (words.length <= 3 && /[.!?]$/.test(s)) return true;
+  // "is alsoed by" or any nonsense "-ed" passive form
+  if (/\bis\s+alsoed\b/i.test(s)) return true;
+  // Repeated adjacent words (excluding intentional)
+  if (/\b(\w{4,})\s+\1\b/i.test(s)) return true;
+  // Sentence starts with a conjunction followed by fragment
+  if (/^(?:And|But|Or)\s+[^.!?]{1,15}[.!?]$/i.test(s)) return true;
+  // Dangling "such" at end
+  if (/\bsuch[.!?]$/i.test(s)) return true;
+  // Double prepositions or broken patterns
+  if (/\b(?:by|of|in|on|at|for|to)\s+(?:by|of|in|on|at|for|to)\s+/i.test(s)) return true;
+  // "are expanded by transformation organizations" — passive + random noun mash
+  if (/\bare\s+\w+ed\s+by\s+\w+\s+organizations?\b/i.test(s) && !/\bare\s+(?:used|employed|adopted|managed|operated|owned|run|funded|supported)\s+by\b/i.test(s)) return true;
+  // Sentence starts with "are" or "is" (broken subject)
+  if (/^(?:are|is)\s+\w+ed\b/i.test(s)) return true;
+  // "by measures risk" — preposition followed by noun then unrelated noun  
+  if (/\bby\s+measures?\s+risk\b/i.test(s)) return true;
+  // Sentence lacks a verb entirely (for sentences > 5 words)
+  if (words.length > 5) {
+    const commonVerbs = /\b(?:is|are|was|were|has|have|had|do|does|did|can|could|will|would|shall|should|may|might|must|need|help|make|take|give|get|go|come|see|know|think|find|include|includes|involve|involves|require|requires|ensure|ensures|provide|provides|play|plays|remain|remains|allow|allows|address|manage|protect|identify|implement|assess|mitigate)\b/i;
+    if (!commonVerbs.test(s)) return true;
+  }
+  return false;
+}
+
 function enforceMinimumChange(original: string, current: string, seed: number): string {
   let result = current;
   let changePercent = calculateWordChangePercent(original, result);
@@ -408,10 +458,13 @@ function enforceMinimumChange(original: string, current: string, seed: number): 
     changePercent = calculateWordChangePercent(original, result);
   }
 
-  // Pass 2: Voice shift + deep restructure
+  // Pass 2: Voice shift + deep restructure + tense variation
   if (changePercent < 55) {
     result = voiceShift(result, 0.7);
-    result = deepRestructure(result, 0.8);
+    result = deepRestructure(result, 0.4);
+    result = tenseVariation(result, 0.15);
+    // Revert if garbled
+    if (isGarbledSentence(result)) result = current;
     changePercent = calculateWordChangePercent(original, result);
   }
 
@@ -423,7 +476,9 @@ function enforceMinimumChange(original: string, current: string, seed: number): 
     result = applySwapDict(result, EMPHASIS_SWAPS, seed + 33);
     result = applySwapDict(result, TEMPORAL_SWAPS, seed + 34);
     result = applySwapDict(result, DIVERSITY_SWAPS, seed + 35);
-    result = applySyntacticTemplate(result);
+    const templated = applySyntacticTemplate(result);
+    // Only use template if it doesn't garble
+    if (!isGarbledSentence(templated)) result = templated;
   }
 
   return result;
@@ -653,7 +708,7 @@ function ppAIPhrasesKill(text: string): string {
       result = result.replace(pattern, replacement);
     }
     result = result.replace(/ {2,}/g, ' ').trim();
-    const sents = result.split(/(?<=[.!?])\s+/);
+    const sents = robustSentenceSplit(result);
     return sents.map(s => {
       if (s[0] && s[0] !== s[0].toUpperCase()) return s[0].toUpperCase() + s.slice(1);
       return s;
@@ -671,7 +726,7 @@ const PP_AI_STARTERS = new Set([
 
 function ppStarterKill(text: string): string {
   return text.split(/\n\s*\n/).map(para => {
-    const sentences = para.split(/(?<=[.!?])\s+/);
+    const sentences = robustSentenceSplit(para);
     return sentences.map(sent => {
       const firstWord = sent.split(/\s+/)[0]?.toLowerCase().replace(/[^a-z]/g, '') ?? '';
       if (PP_AI_STARTERS.has(firstWord)) {
@@ -715,7 +770,7 @@ function ppExpandContractions(text: string): string {
 
 function ppBreakUniformity(text: string): string {
   return text.split(/\n\s*\n/).map(para => {
-    const sentences = para.split(/(?<=[.!?])\s+/);
+    const sentences = robustSentenceSplit(para);
     if (sentences.length < 3) return para;
 
     const result: string[] = [];
@@ -817,6 +872,11 @@ export function nuruHumanize(
     const strategy = STRATEGIES[cls.assignedStrategy];
     let processed = strategy(cls.text, cls.seed);
 
+    // Revert if strategy produced garbled output
+    if (isGarbledSentence(processed)) {
+      processed = cls.text;
+    }
+
     // Extra AI phrase kill
     processed = extraAIPhraseKill(processed);
 
@@ -896,31 +956,38 @@ export function nuruHumanize(
   });
   let output = outputParagraphs.join('\n\n');
 
-  // ── POST-PROCESSING PIPELINE ──
-  output = ppAIWordKill(output);          // Phase 1: Kill AI words
-  output = ppAIPhrasesKill(output);       // Phase 2: Kill AI phrases
-  output = ppStarterKill(output);         // Phase 3: Kill AI starters
-  if (expandContractions) {
-    output = ppExpandContractions(output); // Phase 4: Kill ALL contractions
+  // ── POST-PROCESSING PIPELINE (per-sentence) ──
+  // All transforms applied independently to each sentence to prevent bulk processing
+  {
+    const ppParas = output.split(/\n\s*\n/).filter(p => p.trim());
+    output = ppParas.map(para => {
+      // Skip heading placeholders
+      if (para.trim().startsWith('__HEADING_')) return para;
+      const sents = robustSentenceSplit(para.trim());
+      return sents.map(s => {
+        let fixed = s;
+        fixed = ppAIWordKill(fixed);          // Phase 1: Kill AI words
+        fixed = ppAIPhrasesKill(fixed);       // Phase 2: Kill AI phrases
+        fixed = ppStarterKill(fixed);         // Phase 3: Kill AI starters
+        if (expandContractions) {
+          fixed = ppExpandContractions(fixed); // Phase 4: Kill ALL contractions
+        }
+        fixed = ppFinalCleanup(fixed);        // Phase 6: Final cleanup
+        fixed = ppAIWordKill(fixed);          // Phase 7: Second AI word sweep
+        fixed = applyAIWordKill(fixed);
+        fixed = expandAllContractions(fixed);
+        fixed = fixPunctuation(fixed);
+        if (!inputHasFirstPerson) {
+          fixed = ppKillFirstPerson(fixed);
+        }
+        fixed = ppExpandContractions(fixed);
+        fixed = enforceSingleSentence(fixed);
+        return fixed;
+      }).join(' ');
+    }).join('\n\n');
   }
-  output = ppBreakUniformity(output);     // Phase 5: Break uniformity
-  output = ppFinalCleanup(output);        // Phase 6: Final cleanup
-  output = ppAIWordKill(output);          // Phase 7: Second AI word sweep
 
-  // Additional shared-dictionary passes
-  output = applyAIWordKill(output);
-  output = expandAllContractions(output);
-  // NOTE: diversifyStarters removed — engine handles starter variation per-sentence
-  // NOTE: fixCapitalization removed — it destroys proper nouns (Suzanne→suzanne)
-  output = fixPunctuation(output);
-
-  // Kill first person if input did not contain it
-  if (!inputHasFirstPerson) {
-    output = ppKillFirstPerson(output);
-  }
-
-  // Final contraction sweep
-  output = ppExpandContractions(output);
+  // Phase 5: ppBreakUniformity — DISABLED: splits sentences, violates 1-in=1-out
 
   // Restore protected headings
   for (const [placeholder, heading] of headingPlaceholders) {

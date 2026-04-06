@@ -14,6 +14,8 @@
  * and academic construction patterns.
  */
 
+import { robustSentenceSplit } from './content-protection';
+
 // ══════════════════════════════════════════════════════════════════
 // HELPERS
 // ══════════════════════════════════════════════════════════════════
@@ -395,8 +397,8 @@ export function academicPostProcess(text: string): string {
   resetConnectorTracking();
 
   // Split into sentences
-  const sentences = text.match(/[^.!?]+[.!?]+/g) || [text];
-  const cleaned = sentences.map(s => s.trim()).filter(s => s.length > 0);
+  const sentences = robustSentenceSplit(text);
+  const cleaned = sentences.filter(s => s.length > 0);
 
   // Inject burstiness (short sentences after long ones)
   const bursty = injectBurstiness(cleaned);

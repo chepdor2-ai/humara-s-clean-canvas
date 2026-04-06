@@ -262,6 +262,12 @@ export function deepRestructure(sentence: string, intensity: number = 1.0): stri
   // Try clause swap with boosted intensity
   result = clauseSwap(result, intensity * 1.3);
 
+  // Sanity check: reject if result looks garbled (no verb, or too many fragments)
+  const hasVerb = /\b(?:is|are|was|were|has|have|had|does|do|did|will|would|can|could|should|may|might|must|become|became|been|being|make|makes|made|get|gets|got|seem|seems|went|go|goes|come|comes|came|take|takes|took|give|gives|gave|lead|leads|led|play|plays|played|help|helps|helped|show|shows|showed|require|requires|required|include|includes|included|affect|affects|affected|manage|manages|managed|handle|handles|handled|cause|causes|caused)\b/i;
+  if (!hasVerb.test(result)) {
+    return sentence; // Original had a verb, result doesn't — revert
+  }
+
   return result;
 }
 
@@ -320,4 +326,118 @@ export function expandContractions(text: string): string {
     }
     return expanded;
   });
+}
+
+// ── Tense variation (simple ↔ continuous) ──
+
+const IRREGULAR_ING: Record<string, string> = {
+  "run": "running", "sit": "sitting", "get": "getting", "put": "putting",
+  "set": "setting", "cut": "cutting", "hit": "hitting", "let": "letting",
+  "begin": "beginning", "stop": "stopping", "plan": "planning", "swim": "swimming",
+  "win": "winning", "drop": "dropping", "shop": "shopping", "skip": "skipping",
+  "occur": "occurring", "refer": "referring", "prefer": "preferring",
+  "admit": "admitting", "permit": "permitting", "submit": "submitting",
+  "die": "dying", "lie": "lying", "tie": "tying",
+};
+
+const ING_TO_BASE: Record<string, string> = {
+  "running": "run", "sitting": "sit", "getting": "get", "putting": "put",
+  "setting": "set", "cutting": "cut", "hitting": "hit", "letting": "let",
+  "beginning": "begin", "stopping": "stop", "planning": "plan", "swimming": "swim",
+  "winning": "win", "dropping": "drop", "shopping": "shop", "skipping": "skip",
+  "occurring": "occur", "referring": "refer", "preferring": "prefer",
+  "admitting": "admit", "permitting": "permit", "submitting": "submit",
+  "dying": "die", "lying": "lie", "tying": "tie",
+};
+
+const TENSE_SKIP = new Set([
+  "being", "having", "doing", "going", "saying", "making", "taking",
+  "coming", "seeing", "knowing", "thing", "something", "nothing",
+  "everything", "anything", "during", "bring", "ring", "sing", "king",
+  "spring", "string", "wing", "cling", "fling", "swing", "sting",
+  "morning", "evening", "ceiling", "feeling", "building", "according",
+]);
+
+// Words that are safe to convert to/from gerund (common verbs only)
+const SAFE_TENSE_VERBS = new Set([
+  "process", "analyze", "examine", "investigate", "evaluate", "assess",
+  "consider", "explore", "develop", "create", "build", "design",
+  "implement", "establish", "maintain", "manage", "operate", "control",
+  "monitor", "track", "measure", "calculate", "compute", "determine",
+  "identify", "recognize", "detect", "observe", "study", "research",
+  "teach", "learn", "train", "practice", "improve", "enhance",
+  "increase", "decrease", "reduce", "expand", "extend", "grow",
+  "change", "transform", "modify", "adapt", "adjust", "update",
+  "test", "verify", "validate", "check", "review", "audit",
+  "plan", "organize", "coordinate", "schedule", "arrange", "prepare",
+  "communicate", "discuss", "explain", "describe", "present", "report",
+  "support", "assist", "guide", "lead", "direct", "supervise",
+  "produce", "manufacture", "generate", "deliver", "distribute", "supply",
+  "protect", "secure", "defend", "preserve", "conserve", "maintain",
+  "address", "handle", "resolve", "solve", "fix", "repair",
+  "collect", "gather", "compile", "assemble", "accumulate", "store",
+  "function", "work", "perform", "execute", "accomplish", "achieve",
+  "integrate", "combine", "merge", "connect", "link", "associate",
+]);
+
+function toGerund(verb: string): string | null {
+  if (verb.length < 3 || TENSE_SKIP.has(verb)) return null;
+  if (IRREGULAR_ING[verb]) return IRREGULAR_ING[verb];
+  if (verb.endsWith("e") && !verb.endsWith("ee")) return verb.slice(0, -1) + "ing";
+  if (verb.endsWith("ie")) return verb.slice(0, -2) + "ying";
+  return verb + "ing";
+}
+
+function fromGerund(word: string): string | null {
+  if (!word.endsWith("ing") || word.length < 5) return null;
+  if (TENSE_SKIP.has(word)) return null;
+  if (ING_TO_BASE[word]) return ING_TO_BASE[word];
+  const stem = word.slice(0, -3);
+  if (stem.length >= 2 && stem[stem.length - 1] === stem[stem.length - 2]) return stem.slice(0, -1);
+  if (stem.endsWith("y") && stem.length >= 2) return stem.slice(0, -1) + "ie";
+  return stem.endsWith("e") ? stem : stem + "e";
+}
+
+export function tenseVariation(sentence: string, probability: number = 0.15): string {
+  const words = sentence.split(/\s+/);
+  const result: string[] = [];
+  let applied = false; // Only apply once per sentence for safety
+  
+  for (let i = 0; i < words.length; i++) {
+    const w = words[i];
+    const stripped = w.replace(/^[.,;:!?"'()\-\[\]{}]+/, "").replace(/[.,;:!?"'()\-\[\]{}]+$/, "");
+    const lower = stripped.toLowerCase();
+
+    if (applied || Math.random() > probability || stripped.length < 4) {
+      result.push(w);
+      continue;
+    }
+
+    let replacement: string | null = null;
+
+    if (lower.endsWith("ing") && lower.length >= 6) {
+      // Only convert gerund → base if the base form is a known safe verb
+      const base = fromGerund(lower);
+      if (base && SAFE_TENSE_VERBS.has(base)) {
+        replacement = base;
+      }
+    } else if (SAFE_TENSE_VERBS.has(lower)) {
+      // Only convert base → gerund for known safe verbs
+      replacement = toGerund(lower);
+    }
+
+    if (replacement && replacement !== lower && replacement.length >= 3) {
+      if (stripped[0] === stripped[0].toUpperCase()) {
+        replacement = replacement[0].toUpperCase() + replacement.slice(1);
+      }
+      const prefixMatch = w.match(/^[.,;:!?"'()\-\[\]{}]+/);
+      const suffixMatch = w.match(/[.,;:!?"'()\-\[\]{}]+$/);
+      result.push((prefixMatch?.[0] ?? "") + replacement + (suffixMatch?.[0] ?? ""));
+      applied = true;
+    } else {
+      result.push(w);
+    }
+  }
+
+  return result.join(" ");
 }

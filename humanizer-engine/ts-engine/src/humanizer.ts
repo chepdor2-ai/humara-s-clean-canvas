@@ -21,7 +21,7 @@ import {
   deepRestructure,
   hasFirstPerson,
 } from "./advanced-transforms";
-import { getDictionary, type HumanizerDictionary } from "./dictionary";
+import { getDictionary, type HumanizerDictionary, ACADEMIC_INPUT_GUARD } from "./dictionary";
 import { getDetector, type AnalysisResult } from "./multi-detector";
 import { protectSpecialContent, restoreSpecialContent, protectContentTerms, restoreContentTerms, cleanOutputRepetitions, robustSentenceSplit, countSentences, enforceSentenceCountStrict, rephraseCitations, type ProtectionMap } from "./content-protection";
 import { semanticSimilaritySync } from "./semantic-guard";
@@ -1347,7 +1347,7 @@ function fixNgramRepetition(sentences: string[], _intensity: number, used: Set<s
       const tri = sw[i].toLowerCase().replace(/[.,;:!?]/g, "") + " " + sw[i + 1].toLowerCase().replace(/[.,;:!?]/g, "") + " " + sw[i + 2].toLowerCase().replace(/[.,;:!?]/g, "");
       if (repeated.has(tri) && Math.random() < 0.6) {
         const mid = sw[i + 1].replace(/^[.,;:!?"'()\-\[\]{}]+/, "").replace(/[.,;:!?"'()\-\[\]{}]+$/, "");
-        const candidates = (SYNONYM_BANK[mid.toLowerCase()] ?? []).filter((c: string) => !c.includes(" ") && !used.has(c.toLowerCase()));
+        const candidates = (SYNONYM_BANK[mid.toLowerCase()] ?? []).filter((c: string) => !c.includes(" ") && !used.has(c.toLowerCase()) && !ACADEMIC_INPUT_GUARD.has(c.toLowerCase()));
         if (candidates.length > 0) {
           let repl = candidates[Math.floor(Math.random() * candidates.length)];
           if (mid[0] === mid[0].toUpperCase()) repl = repl[0].toUpperCase() + repl.slice(1);

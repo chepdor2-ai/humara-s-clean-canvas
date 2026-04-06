@@ -31,12 +31,13 @@ import {
   restructureSentence,
 } from "./utils";
 import { PROTECTED_WORDS } from "./rules";
-import { expandContractions, voiceShift, deepRestructure } from "./advanced-transforms";
+import { expandContractions, voiceShift, deepRestructure, tenseVariation } from "./advanced-transforms";
 import { getDictionary, type HumanizerDictionary } from "./dictionary";
 import {
   protectSpecialContent,
   restoreSpecialContent,
   cleanOutputRepetitions,
+  robustSentenceSplit,
 } from "./content-protection";
 import {
   applyPhrasePatterns,
@@ -50,9 +51,9 @@ import {
 // ═══════════════════════════════════════════
 
 const BASE_INTENSITY = 0.4;     // Synonym replacement — boost word unpredictability
-const DICT_INTENSITY = 0.0;     // DISABLED — dictionary synonyms create archaic text
-const VOICE_SHIFT_PROB = 0.0;   // DISABLED — passive voice is AI signal
-const RESTRUCTURE_INTENSITY = 0.0; // DISABLED — restructuring creates detectable patterns
+const DICT_INTENSITY = 0.15;    // Light dictionary synonyms — filtered through blacklist
+const VOICE_SHIFT_PROB = 0.30;  // 30% chance of active↔passive swap
+const RESTRUCTURE_INTENSITY = 0.35; // Moderate restructuring — clause fronting, adverbial moves
 
 // ═══════════════════════════════════════════
 // Dictionary blacklist (academic-safe filtering)
@@ -504,9 +505,8 @@ function extractSentences(paragraph: string): string[] {
   const trimmed = paragraph.trim();
   if (isTitle(trimmed)) return [trimmed];
 
-  // Use regex-based splitting preserving punctuation
-  const matches = trimmed.match(/[^.!?]+[.!?]+|[^.!?]+$/g) || [trimmed];
-  return matches.map(s => s.trim()).filter(Boolean);
+  // Use robust sentence splitting that handles abbreviations, decimals, URLs
+  return robustSentenceSplit(trimmed);
 }
 
 // ═══════════════════════════════════════════
@@ -643,18 +643,33 @@ function processSentenceAggressive(
     s = s.replace(pat, rep);
   }
 
-  // ── F4: Phrase pattern substitution — DISABLED ──
+  // ── F4: Phrase pattern substitution ──
+  s = safeTransform(s, (x) => applyPhrasePatterns(x));
 
   // ── F5: Rules-based synonym replacement — light, for perplexity boost ──
   if (intensity > 0.05) {
     s = safeTransform(s, (x) => synonymReplace(x, intensity, usedWords, protectedTerms));
   }
 
-  // ── F6: Dictionary synonym replacement — DISABLED ──
+  // ── F6: Dictionary synonym replacement ──
+  if (DICT_INTENSITY > 0) {
+    s = safeTransform(s, (x) => dictSynonymReplaceSentence(x, DICT_INTENSITY, usedWords, protectedTerms));
+  }
 
-  // ── F7: Restructure — DISABLED ──
+  // ── F7: Restructure ──
+  if (RESTRUCTURE_INTENSITY > 0 && Math.random() < 0.6) {
+    s = safeTransform(s, (x) => deepRestructure(x, RESTRUCTURE_INTENSITY));
+  }
 
-  // ── F8: Voice shift — DISABLED ──
+  // ── F8: Voice shift ──
+  if (VOICE_SHIFT_PROB > 0 && Math.random() < VOICE_SHIFT_PROB) {
+    s = safeTransform(s, (x) => voiceShift(x, VOICE_SHIFT_PROB));
+  }
+
+  // ── F8b: Tense variation (simple ↔ continuous) ──
+  if (Math.random() < 0.2) {
+    s = safeTransform(s, (x) => tenseVariation(x, 0.15));
+  }
 
   // ── F9: Punctuation normalization ──
   // Insert missing "that" after passive constructions (e.g. "It is understood organizations" → "It is understood that organizations")
@@ -886,14 +901,24 @@ export function ghostMiniV1_2(text: string): string {
       return sentences[0];
     }
 
-    // ── 4a: Paragraph-level processing ──
-    // Process the full paragraph as one block (not sentence-by-sentence)
-    // for natural cross-sentence context and varied transformation patterns.
-    const processedBlock = processSentenceAggressive(
-      paragraph.trim(), true, usedWords, protectedTerms, INTENSITY
-    );
-    // Split processed block back into sentences for post-processing
-    let processed = extractSentences(processedBlock);
+    // ── 4a: Sentence-by-sentence independent processing ──
+    // Each sentence is processed independently through the 9-phase pipeline,
+    // then reassembled back into the paragraph.
+    let processed = sentences.map(sent => {
+      const result = processSentenceAggressive(
+        sent, true, usedWords, protectedTerms, INTENSITY
+      );
+      // Ensure the result is a single sentence (no extra periods introduced)
+      const resultSentences = extractSentences(result);
+      if (resultSentences.length === 1) return resultSentences[0];
+      // If processing split the sentence, rejoin and fix
+      if (resultSentences.length > 1) {
+        // Take the full result but ensure it ends with proper punctuation
+        const joined = resultSentences.join(' ');
+        return joined;
+      }
+      return result;
+    });
 
     // ── 4b: Anti-detection pass — DISABLED (creates uniform patterns) ──
 

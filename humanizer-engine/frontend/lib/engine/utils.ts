@@ -5,7 +5,7 @@
 
 import nlp from "compromise";
 import * as rules from "./rules";
-import { getDictionary } from "./dictionary";
+import { getDictionary, ACADEMIC_INPUT_GUARD } from "./dictionary";
 
 // ── Real word validation cache ──
 
@@ -315,6 +315,7 @@ export function synonymReplace(
     // Skip protected words
     if (
       rules.PROTECTED_WORDS.has(lower) ||
+      ACADEMIC_INPUT_GUARD.has(lower) ||
       stripped.length <= 2 ||
       usedWords.has(lower) ||
       protectedExtra?.has(lower)
@@ -409,7 +410,7 @@ export function synonymReplace(
       sentence.toLowerCase().split(/\s+/).map((w) => w.replace(/[^a-z']/g, "")),
     );
     const valid = candidates.filter(
-      (c) => !c.includes(" ") && !usedWords.has(c.toLowerCase()) && !sentWords.has(c.toLowerCase())
+      (c) => !c.includes(" ") && !usedWords.has(c.toLowerCase()) && !sentWords.has(c.toLowerCase()) && !ACADEMIC_INPUT_GUARD.has(c.toLowerCase())
              && !SYNONYM_BLACKLIST.has(c.toLowerCase()),
     );
     if (valid.length === 0) {

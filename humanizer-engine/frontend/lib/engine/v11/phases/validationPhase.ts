@@ -10,7 +10,7 @@ import type { DocumentState, Phase } from '../types';
 import { isLLMAvailable } from '../services/llmService';
 import OpenAI from 'openai';
 
-const LLM_MODEL = process.env.LLM_MODEL ?? 'gpt-4o-mini';
+const LLM_MODEL = process.env.LLM_MODEL ?? 'gpt-4.1-nano';
 
 async function llmFixPunctuation(text: string): Promise<string> {
   const apiKey = process.env.OPENAI_API_KEY?.trim();

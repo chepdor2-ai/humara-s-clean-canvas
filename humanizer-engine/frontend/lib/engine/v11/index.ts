@@ -25,7 +25,7 @@
  */
 
 import { HumanizationPipeline } from './pipeline';
-import { protectContent } from './services/protectionService';
+import { protectContent, restoreContent } from './services/protectionService';
 import type { DocumentState, V11Options } from './types';
 
 // Import all 15 phases
@@ -92,6 +92,11 @@ export async function humanizeV11(
 
   // Run the pipeline
   const finalState = await pipeline.run(initialState);
+
+  // Final restoration pass: phases 13-16 reassemble from state.paragraphs
+  // which still have VPROT markers, overwriting formatPhase's restored text.
+  // Run restoreContent one more time to catch any surviving markers.
+  finalState.currentText = restoreContent(finalState.currentText, spans);
 
   const elapsed = Date.now() - startTime;
   finalState.logs.push(`[v1.1] Complete in ${elapsed}ms`);

@@ -20,8 +20,9 @@ import {
   voiceShift,
   deepRestructure,
   hasFirstPerson,
+  tenseVariation,
 } from "./advanced-transforms";
-import { getDictionary, type HumanizerDictionary } from "./dictionary";
+import { getDictionary, type HumanizerDictionary, ACADEMIC_INPUT_GUARD } from "./dictionary";
 import { getDetector, type AnalysisResult } from "./multi-detector";
 import { protectSpecialContent, restoreSpecialContent, protectContentTerms, restoreContentTerms, cleanOutputRepetitions, robustSentenceSplit, countSentences, enforceSentenceCountStrict, enforcePerParagraphSentenceCounts, rephraseCitations, type ProtectionMap } from "./content-protection";
 import { semanticSimilaritySync } from "./semantic-guard";
@@ -1242,13 +1243,16 @@ function _fixHighUniformity(sentences: string[], intensity: number): string[] {
   for (let i = 0; i < sentences.length; i++) {
     const wc = sentences[i].split(/\s+/).length;
     if (i % 3 === 0 && wc > 8) {
-      // deepRestructure DISABLED — clause reordering garbles sentence structure
-      // const r = deepRestructure(sentences[i], Math.min(intensity * 1.2, 2.5));
-      // if (r !== sentences[i]) { result.push(r); continue; }
+      const r = deepRestructure(sentences[i], Math.min(intensity * 1.2, 2.5));
+      if (r !== sentences[i]) { result.push(r); continue; }
     }
     if (i % 3 === 1 && wc >= 8 && wc <= 22) {
       const shifted = voiceShift(sentences[i], 0.35);
       if (shifted !== sentences[i]) { result.push(shifted); continue; }
+    }
+    if (i % 3 === 2 && wc >= 6) {
+      const varied = tenseVariation(sentences[i], 0.15);
+      if (varied !== sentences[i]) { result.push(varied); continue; }
     }
     result.push(sentences[i]);
   }
@@ -1341,7 +1345,7 @@ function fixNgramRepetition(sentences: string[], _intensity: number, used: Set<s
       const tri = sw[i].toLowerCase().replace(/[.,;:!?]/g, "") + " " + sw[i + 1].toLowerCase().replace(/[.,;:!?]/g, "") + " " + sw[i + 2].toLowerCase().replace(/[.,;:!?]/g, "");
       if (repeated.has(tri) && Math.random() < 0.6) {
         const mid = sw[i + 1].replace(/^[.,;:!?"'()\-\[\]{}]+/, "").replace(/[.,;:!?"'()\-\[\]{}]+$/, "");
-        const candidates = (SYNONYM_BANK[mid.toLowerCase()] ?? []).filter((c: string) => !c.includes(" ") && !used.has(c.toLowerCase()));
+        const candidates = (SYNONYM_BANK[mid.toLowerCase()] ?? []).filter((c: string) => !c.includes(" ") && !used.has(c.toLowerCase()) && !ACADEMIC_INPUT_GUARD.has(c.toLowerCase()));
         if (candidates.length > 0) {
           let repl = candidates[Math.floor(Math.random() * candidates.length)];
           if (mid[0] === mid[0].toUpperCase()) repl = repl[0].toUpperCase() + repl.slice(1);
@@ -1835,6 +1839,11 @@ function humanizeSingleSentence(
     result = applyNaturalPhraseVariation(result);
   }
 
+  // ── Step 14c: Tense variation (simple ↔ continuous) ──
+  if (Math.random() < 0.2) {
+    result = tenseVariation(result, 0.15);
+  }
+
   // ── Step 15: Synonym replacement — single pass, reduced coverage (≈12%) ──
   result = synonymReplace(result, intensity * 0.5, usedWords, ctx?.protectedTerms);
 
@@ -2091,87 +2100,31 @@ export function humanize(
       }
 
     // ── Paragraph-level processing architecture ──
-    // Process each paragraph as a whole block (not sentence-by-sentence)
-    // for natural cross-sentence context and varied transformation patterns.
+    // Process each paragraph sentence-by-sentence through humanizeParagraph
+    // which splits into sentences, processes each independently, and enforces 1-in=1-out.
     const paragraphs = source.split(/\n\s*\n/).filter((p) => p.trim());
 
-    // Build paragraph-level items
-    const chunkItems: { text: string; paraIdx: number; isTitle: boolean; chunkIdxInPara: number }[] = [];
+    const processedParas: string[] = [];
     for (let pi = 0; pi < paragraphs.length; pi++) {
       const trimmedPara = paragraphs[pi].trim();
       if (isTitleOrHeading(trimmedPara)) {
-        chunkItems.push({ text: trimmedPara, paraIdx: pi, isTitle: true, chunkIdxInPara: 0 });
+        processedParas.push(trimmedPara);
         continue;
       }
-      // Process the entire paragraph as one block
-      chunkItems.push({ text: trimmedPara, paraIdx: pi, isTitle: false, chunkIdxInPara: 0 });
-    }
-
-    // Process each chunk through the full pipeline
-    for (const item of chunkItems) {
-      if (item.isTitle) continue; // titles pass through unchanged
-
       // Skip very short fragments (< 3 words) — pass through as-is
-      if (item.text.split(/\s+/).length < 3) continue;
-
-      const humanized = humanizeSingleSentence(
-        item.text, intensity, usedWords, ctx, settings,
+      if (trimmedPara.split(/\s+/).length < 3) {
+        processedParas.push(trimmedPara);
+        continue;
+      }
+      // Process paragraph sentence-by-sentence (each sentence is independent)
+      const humanizedPara = humanizeParagraph(
+        trimmedPara, intensity, usedWords, ctx, settings, iteration,
         dict, commonWords, inputFeatures, properNouns,
-        item.chunkIdxInPara === 0, // isFirstInParagraph — skip heavy restructuring for topic sentences
       );
-      if (humanized) {
-        // Per-chunk phrasal verb expansion
-        const expanded = expandWithPhrasalVerbs([humanized], intensity);
-        let sent = expanded[0] || humanized;
-
-        // Per-chunk AI vocabulary sweep
-        sent = applyAIWordKill(sent);
-        sent = applyPhrasePatterns(sent);
-        sent = applyConnectorNaturalization(sent);
-        sent = killModernBuzzwords(sent);
-        sent = sent.replace(/ {2,}/g, " ").trim();
-        if (sent && /^[a-z]/.test(sent)) sent = sent[0].toUpperCase() + sent.slice(1);
-
-        // Ensure chunk ends with proper punctuation
-        if (sent && !/[.!?]$/.test(sent.trim())) {
-          sent = sent.trim() + ".";
-        }
-
-        item.text = sent;
-      }
+      processedParas.push(humanizedPara);
     }
 
-    // Reassemble into paragraphs preserving original structure
-    const processed: string[] = [];
-    let curIdx = -1;
-    let curSents: string[] = [];
-    let curIsTitle = false;
-
-    const flushParagraph = () => {
-      if (curSents.length === 0) return;
-      if (curIsTitle) {
-        processed.push(curSents[0]);
-      } else {
-        let joined = curSents.join(" ");
-        joined = cleanup(joined, inputFeatures, properNouns);
-        if (joined.trim()) processed.push(joined);
-      }
-    };
-
-    for (const item of chunkItems) {
-      if (item.paraIdx !== curIdx) {
-        flushParagraph();
-        curIdx = item.paraIdx;
-        curSents = [item.text];
-        curIsTitle = item.isTitle;
-      } else {
-        curSents.push(item.text);
-        if (!item.isTitle) curIsTitle = false;
-      }
-    }
-    flushParagraph();
-
-    let currentResult = processed.join("\n\n");
+    let currentResult = processedParas.join("\n\n");
         // Contractions DISABLED — zero-tolerance policy for academic output
 
     if ((mode === "ghost_mini" || mode === "ghost_pro") && enablePostProcessing) {

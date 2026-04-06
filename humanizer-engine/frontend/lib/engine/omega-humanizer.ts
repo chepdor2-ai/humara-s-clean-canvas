@@ -32,13 +32,14 @@
 
 import OpenAI from "openai";
 import { getDetector } from "./multi-detector";
+import { robustSentenceSplit } from "./content-protection";
 
 // ── MODEL SELECTION ──
 // gpt-4.1-nano: cheapest ($0.10/M in, $0.40/M out), 200K TPM, 500 RPM
 // gpt-4.1-mini: mid-range ($0.40/M in, $1.60/M out), 200K TPM, 500 RPM
 // gpt-4o-mini: current default ($0.15/M in, $0.60/M out), 200K TPM, 500 RPM
 // Recommended: gpt-4.1-mini for best quality/cost ratio
-const LLM_MODEL = process.env.OMEGA_MODEL ?? process.env.LLM_MODEL ?? "gpt-4.1-mini";
+const LLM_MODEL = process.env.OMEGA_MODEL ?? process.env.LLM_MODEL ?? "gpt-4o-mini";
 
 // ── OpenAI client singleton ──
 
@@ -133,10 +134,9 @@ function isProtectedLine(line: string): boolean {
   return false;
 }
 
-/** Extract sentences from a paragraph. */
+/** Extract sentences from a paragraph using robust splitting (handles abbreviations, decimals, URLs). */
 function extractSentences(paragraph: string): string[] {
-  const raw = paragraph.match(/[^.!?]*[.!?]+[\s]*/g) || [paragraph];
-  return raw.map(s => s.trim()).filter(s => s.length > 0);
+  return robustSentenceSplit(paragraph);
 }
 
 /** Deterministic hash for sentence-specific randomness. */
@@ -286,6 +286,13 @@ ${firstPersonRule}
 13. Do NOT add humor, colloquialisms, slang, or informal expressions that were not in the original.
 14. Maintain the same level of formality and academic register as the original text.
 15. Produce output that reads as if a human sat down, understood the meaning, and expressed it in their own words from scratch.
+16. CRITICAL WORD COUNT: Your output MUST stay within ±15% of the original sentence word count. Do NOT drastically shorten or pad.
+17. SYNONYM REPLACEMENT: Swap at least 30% of non-technical words with natural synonyms.
+18. VOICE/TENSE VARIATION: Randomly apply ONE per sentence:
+   - Active → passive or passive → active
+   - Simple → continuous or vice versa ("process" → "are processing", "is managing" → "manages")
+   - Noun → verb conversion ("the implementation of" → "implementing")
+19. AI PHRASE KILLING: Replace AI constructions: "plays a crucial role" → "matters", "it is important to note" → cut, "a wide range of" → "many"
 `;
 }
 
@@ -582,7 +589,7 @@ function ppAIPhrasesKill(text: string): string {
       result = result.replace(pattern, replacement);
     }
     result = result.replace(/ {2,}/g, ' ').trim();
-    const sents = result.split(/(?<=[.!?])\s+/);
+    const sents = robustSentenceSplit(result);
     return sents.map(s => {
       if (s[0] && s[0] !== s[0].toUpperCase()) return s[0].toUpperCase() + s.slice(1);
       return s;
@@ -601,7 +608,7 @@ const AI_STARTERS = new Set([
 
 function ppStarterKill(text: string): string {
   return text.split(/\n\s*\n/).map(para => {
-    const sentences = para.split(/(?<=[.!?])\s+/);
+    const sentences = robustSentenceSplit(para);
     return sentences.map(sent => {
       const firstWord = sent.split(/\s+/)[0]?.toLowerCase().replace(/[^a-z]/g, '') ?? '';
       if (AI_STARTERS.has(firstWord)) {
@@ -647,7 +654,7 @@ function ppExpandContractions(text: string): string {
 // Phase 5: Uniformity breaker
 function ppBreakUniformity(text: string): string {
   return text.split(/\n\s*\n/).map(para => {
-    const sentences = para.split(/(?<=[.!?])\s+/);
+    const sentences = robustSentenceSplit(para);
     if (sentences.length < 3) return para;
 
     const result: string[] = [];
@@ -721,7 +728,7 @@ function ppSentenceSurgery(text: string): string {
   return text.split(/\n\s*\n/).map(para => {
     const trimmed = para.trim();
     if (!trimmed || isProtectedLine(trimmed)) return para;
-    const sentences = trimmed.split(/(?<=[.!?])\s+/).filter(s => s.trim());
+    const sentences = robustSentenceSplit(trimmed);
     if (sentences.length < 4) return para;
 
     const result: string[] = [];
@@ -797,7 +804,7 @@ function ppNgramBreaking(text: string): string {
   return text.split(/\n\s*\n/).map(para => {
     const trimmed = para.trim();
     if (!trimmed || isProtectedLine(trimmed)) return para;
-    const sentences = trimmed.split(/(?<=[.!?])\s+/).filter(s => s.trim());
+    const sentences = robustSentenceSplit(trimmed);
     if (sentences.length < 3) return para;
 
     let starterIdx = 0;
@@ -909,11 +916,14 @@ export async function omegaHumanize(
 
     const persona = PERSONA_PROMPTS[cls.assignedPrompt];
     const temp = Math.max(0.5, Math.min(1.1, persona.temperature + tempBoost));
+    const sentenceWordCount = cls.text.split(/\s+/).length;
+    const minSentWords = Math.max(3, Math.floor(sentenceWordCount * 0.85));
+    const maxSentWords = Math.ceil(sentenceWordCount * 1.15);
 
     try {
       let result = await llmCall(
         persona.system(strictRules),
-        persona.userTemplate(cls.text, cls.index),
+        persona.userTemplate(cls.text, cls.index) + `\n\nWORD RANGE: The original is ${sentenceWordCount} words. Your output MUST be between ${minSentWords} and ${maxSentWords} words. Do NOT drastically shorten it.`,
         temp,
         512,
       );

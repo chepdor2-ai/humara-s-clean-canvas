@@ -23,7 +23,7 @@ const DICT_DIR = findDictDir();
 
 // ═══ ACADEMIC INPUT GUARD ═══
 // Words that must NEVER be replaced by thesaurus synonyms.
-const ACADEMIC_INPUT_GUARD = new Set([
+export const ACADEMIC_INPUT_GUARD = new Set([
   "hypothesis", "hypotheses", "null", "alternative", "statistical", "statistically",
   "significance", "significant", "mean", "median", "mode", "variance", "deviation",
   "sample", "population", "parameter", "coefficient", "correlation", "regression",
@@ -250,6 +250,7 @@ export class HumanizerDictionary {
         s.toLowerCase() !== lower &&
         !avoid.has(s.toLowerCase()) &&
         !REPLACEMENT_BLOCKLIST.has(s.toLowerCase()) &&
+        !ACADEMIC_INPUT_GUARD.has(s.toLowerCase()) &&
         this.isValidWord(s),
     );
 

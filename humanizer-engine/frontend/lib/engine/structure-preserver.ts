@@ -1,3 +1,5 @@
+import { robustSentenceSplit } from './content-protection';
+
 export type StructureBlockType = 'blank' | 'heading' | 'paragraph';
 
 export interface StructureBlock {
@@ -84,8 +86,7 @@ function splitIntoSentences(text: string): string[] {
   const normalized = normalizeParagraphText(text);
   if (!normalized) return [];
 
-  const matches = normalized.match(/[^.!?]+(?:[.!?]+(?=\s|$)|$)/g);
-  return (matches ?? [normalized]).map((sentence) => sentence.trim()).filter(Boolean);
+  return robustSentenceSplit(normalized);
 }
 
 export function reflowParagraphToOriginalLines(originalLines: string[], rewritten: string): string {

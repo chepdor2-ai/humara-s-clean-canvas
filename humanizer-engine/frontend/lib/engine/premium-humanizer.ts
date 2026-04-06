@@ -63,7 +63,7 @@ import {
 
 // ── Config ──
 
-const LLM_MODEL = process.env.LLM_MODEL ?? "gpt-4.1-mini";
+const LLM_MODEL = process.env.LLM_MODEL ?? "gpt-4o-mini";
 
 // ── OpenAI client singleton ──
 
@@ -1268,25 +1268,22 @@ export async function premiumHumanize(
       if (aiScore <= 15) break;
       console.log(`  [Premium] Detector feedback round ${feedbackRound + 1}: AI score ${aiScore.toFixed(1)}% — re-running post-processing`);
 
-      // Full re-processing
+      // Light re-processing only — applyPhrasePatterns, applyConnectorNaturalization,
+      // and diversifyStarters compound when re-applied ("when when", "though though").
+      // Only run safe/idempotent steps.
       result = applyAIWordKill(result);
-      result = applyPhrasePatterns(result);
-      result = applyConnectorNaturalization(result);
-      result = diversifyStarters(result);
       if (!features.hasContractions) {
         result = expandAllContractions(result);
         result = expandContractions(result);
       }
-      const repassSentences = robustSentenceSplit(result);
-      const repassCleaned = perSentenceAntiDetection(repassSentences, features.hasContractions);
-      const repassDeep = deepCleaningPass(repassCleaned);
-      result = repassDeep.join(" ");
-      result = applyAIWordKill(result);
       result = fixPunctuation(result);
     }
   } catch {
     // Detector failure is non-fatal
   }
+
+  // ── Safety net: fix doubled subordinate conjunctions ("when when", "since since") ──
+  result = result.replace(/\b(when|since|though|although|because|while|if|unless|after|before|until|once)\s+\1\b/gi, "$1");
 
   // ═══════════════════════════════════════════
   // STRICT LLM PUNCTUATION/CAPITALIZATION CLEANUP

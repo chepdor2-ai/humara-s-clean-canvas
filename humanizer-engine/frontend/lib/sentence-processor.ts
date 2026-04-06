@@ -33,6 +33,7 @@ import {
   academicPostProcess,
   resetConnectorTracking,
 } from './engine/academic-rewriter';
+import { robustSentenceSplit } from './engine/content-protection';
 
 // ══════════════════════════════════════════════════════════════════
 // 1. CONTENT PROTECTION (sentence-level)
@@ -240,16 +241,14 @@ function processSingleSentence(
   // 3. Measure change ratio
   const changeRatio = measureWordChange(safeSentence, s);
 
-  // 4. If below 30%, try academic expansion (light touch)
-  if (changeRatio < 0.30) {
+  // 4. If below 40%, try academic expansion (moderate touch)
+  if (changeRatio < 0.40) {
     s = addAcademicExpansion(s, changeRatio);
   }
 
-  // 5. Target 25-35% change — do NOT retry aggressively
-  // Over-processing creates statistical uniformity that detectors flag.
-  // Only retry once for sentences with very low change.
+  // 5. Target 40-55% change — retry for sentences with low change.
   const finalRatio = measureWordChange(safeSentence, s);
-  if (finalRatio < 0.20 && attempt < 1) {
+  if (finalRatio < 0.30 && attempt < 1) {
     s = finalAIKill(s);
   }
 
@@ -354,8 +353,8 @@ export function deepAIFlowClean(text: string, aiScore: number = 50): string {
   // Pass 2: Fix consecutive duplicate starters across all sentences
   const paragraphs = result.split(/\n\n+/);
   const cleanedParagraphs = paragraphs.map(para => {
-    const sentences = para.match(/[^.!?]+[.!?]+/g);
-    if (!sentences || sentences.length < 2) return para;
+    const sentences = robustSentenceSplit(para);
+    if (sentences.length < 2) return para;
     const fixed = fixConsecutiveStarters(sentences.map(s => s.trim()));
     return fixed.join(' ');
   });
@@ -423,7 +422,7 @@ export function unifiedSentenceProcess(
     }
 
     // Split paragraph into sentences
-    const sentences = trimmedPara.match(/[^.!?]+[.!?]+/g) || [trimmedPara];
+    const sentences = robustSentenceSplit(trimmedPara);
 
     const processedSentences: string[] = [];
     for (let i = 0; i < sentences.length; i++) {
