@@ -49,6 +49,7 @@ import {
   deepCleaningPass,
   fixPunctuation,
 } from "./shared-dictionaries";
+import { validateAndRepairOutput } from "./validation-post-process";
 import {
   buildSentenceItems,
   applySentenceSurgery,
@@ -1364,6 +1365,10 @@ export async function premiumHumanize(
       `  [Premium] WARNING: ${finalBanned.length} banned words still present: ${finalBanned.join(", ")}`,
     );
   }
+
+  // Final validation: fix capitalization + sentence formatting
+  const validated = validateAndRepairOutput(original, result);
+  result = validated.text;
 
   return result;
 }

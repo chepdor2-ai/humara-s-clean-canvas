@@ -17,6 +17,7 @@
 import OpenAI from "openai";
 import { sentTokenize } from "./utils";
 import { expandContractions } from "./advanced-transforms";
+import { validateAndRepairOutput } from "./validation-post-process";
 import { protectSpecialContent, restoreSpecialContent, protectContentTerms, restoreContentTerms, cleanOutputRepetitions, robustSentenceSplit, placeholdersToLLMFormat, llmFormatToPlaceholders, countSentences, enforceSentenceCountStrict, enforcePerParagraphSentenceCounts, rephraseCitations } from "./content-protection";
 import { semanticSimilaritySync } from "./semantic-guard";
 import { TextSignals, getDetector } from "./multi-detector";
@@ -2196,6 +2197,10 @@ export async function ghostProHumanize(
 
   // Strip unicode replacement characters (U+FFFD)
   result = result.replace(/\ufffd/g, "");
+
+  // Final validation: fix capitalization + sentence formatting
+  const validated = validateAndRepairOutput(original, result);
+  result = validated.text;
 
   return result;
 }

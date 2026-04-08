@@ -221,7 +221,7 @@ DEEP_SYNONYMS: list[tuple[str, list[str]]] = [
     (r"\btransformed\b", ["changed", "reshaped", "altered", "shifted"]),
     (r"\bsignificantly\b", ["greatly", "notably", "markedly", "considerably"]),
     (r"\badvancements\b", ["progress", "developments", "improvements", "strides"]),
-    (r"\bdevelopment\b", ["creation", "growth", "formation", "building"]),
+    # "development" removed — too many academic collocations (economic development, sustainable development)
     (r"\balgorithms\b", ["methods", "processes", "techniques", "approaches"]),
     (r"\bdisciplines?\b", ["fields", "areas", "branches", "domains"]),
     (r"\bintegration\b", ["adoption", "incorporation", "blending", "merging"]),
@@ -230,7 +230,7 @@ DEEP_SYNONYMS: list[tuple[str, list[str]]] = [
     (r"\bensure\b", ["guarantee", "make sure", "confirm", "verify"]),
     (r"\badoption\b", ["uptake", "acceptance", "embrace", "rollout"]),
     (r"\boutcomes?\b", ["results", "findings", "effects", "impacts"]),
-    (r"\bimpact\b", ["effect", "influence", "role", "mark"]),
+    (r"\bimpact\b", ["effect", "influence"]),
     (r"\bsystems?\b", ["setups", "frameworks", "structures", "platforms"]),
     (r"\btechnolog(?:y|ies)\b", ["digital tools", "modern tools", "current tools"]),
     (r"\btechnological\b", ["digital", "modern", "current", "technical"]),
@@ -266,7 +266,21 @@ DEEP_SYNONYMS: list[tuple[str, list[str]]] = [
 def deep_synonym_replace(text: str, intensity: float = 0.6) -> str:
     """Aggressive word-level synonym replacement for low-change sentences."""
     for pattern, replacements in DEEP_SYNONYMS:
-        if re.search(pattern, text, re.IGNORECASE) and random.random() < intensity:
+        m = re.search(pattern, text, re.IGNORECASE)
+        if m and random.random() < intensity:
+            matched = m.group()
+            # Skip if inside parenthetical citation
+            depth = text[:m.start()].count('(') - text[:m.start()].count(')')
+            if depth > 0:
+                continue
+            # Skip if part of multi-word proper noun (capitalized + adjacent capitalized)
+            if matched[0].isupper():
+                before = text[:m.start()].rstrip().split()
+                after = text[m.end():].lstrip().split()
+                prev_cap = before and before[-1][0].isupper() if before else False
+                next_cap = after and after[0][0].isupper() if after else False
+                if prev_cap or next_cap:
+                    continue
             chosen = random.choice(replacements)
             text = re.sub(pattern, chosen, text, count=1, flags=re.IGNORECASE)
     return text
@@ -354,6 +368,10 @@ T5_GRAMMAR_FIXES: list[tuple[str, str]] = [
     (r"\b(\w{4,})\s+\1\b", r"\1"),
     # Fix "a" before vowel sounds from T5
     (r"\ba ([aeiou])", r"an \1"),
+    # Undo for consonant-sounding vowels (unique, union, university, European, one, once)
+    (r"\ban (uni\w+|Euro\w+|one\b|once\b)", r"a \1"),
+    # Ensure space before opening parenthesis (T5 sometimes removes it)
+    (r"(\w)\(", r"\1 ("),
     # Fix "in deal with" → "in dealing with" (verb form after preposition)
     (r"\bin deal with\b", "in dealing with"),
     (r"\bin tackle\b", "in tackling"),
@@ -595,21 +613,21 @@ MODE_PRESETS = {
     "quality": {
         "num_beams": 4,
         "no_repeat_ngram": 3,
-        "length_penalty": 1.0,
+        "length_penalty": 1.5,       # Penalize short outputs to prevent clause truncation
         "repetition_penalty": 1.2,
         "max_retries": 5,
     },
     "fast": {
         "num_beams": 1,       # greedy = faster
         "no_repeat_ngram": 2,
-        "length_penalty": 1.0,
+        "length_penalty": 1.3,
         "repetition_penalty": 1.1,
         "max_retries": 2,
     },
     "aggressive": {
         "num_beams": 6,
         "no_repeat_ngram": 4,
-        "length_penalty": 1.2,
+        "length_penalty": 1.5,
         "repetition_penalty": 1.5,
         "max_retries": 8,
     },
@@ -654,18 +672,34 @@ def humanize_sentence(original: str, preset: dict, min_change: float,
         )
 
         # Sanity check 1: if T5 output is too short, reject
-        if len(t5_out.split()) < max(3, len(original.split()) * 0.3):
+        # T5 often cuts trailing clauses — reject if output lost >25% of words
+        if len(t5_out.split()) < max(3, len(original.split()) * 0.75):
             t5_out = original
 
         # Sanity check 2: MEANING GUARD — reject T5 hallucinations
-        # If less than 35% of original content words survive, T5 hallucinated
+        # If less than 40% of original content words survive, T5 hallucinated
         meaning_overlap = measure_meaning_overlap(original, t5_out)
-        if meaning_overlap < 0.35:
+        if meaning_overlap < 0.40:
             logger.warning(
                 f"T5 hallucination detected (overlap={meaning_overlap:.2f}): "
                 f"'{original[:60]}...' → '{t5_out[:60]}...'"
             )
             t5_out = original  # Fall back to original for rule-based processing
+
+        # Sanity check 2b: Proper noun hallucination — reject if T5 introduces
+        # entity names (countries, orgs) not present in the original
+        orig_upper = {w.strip(".,;:!?\"'()[]") for w in original.split() if w[0:1].isupper() and len(w) > 2}
+        t5_upper = {w.strip(".,;:!?\"'()[]") for w in t5_out.split() if w[0:1].isupper() and len(w) > 2}
+        new_entities = t5_upper - orig_upper - {"The", "This", "That", "These", "Those",
+            "Also", "However", "Although", "While", "Since", "After", "Before",
+            "Despite", "Because", "Furthermore", "Moreover", "Additionally",
+            "Regarding", "Concerning", "Meanwhile", "Still", "Yet", "But"}
+        if len(new_entities) >= 2:  # T5 introduced 2+ new capitalized words → likely hallucination
+            logger.warning(
+                f"T5 entity hallucination detected: new entities {new_entities} "
+                f"in '{t5_out[:60]}...'"
+            )
+            t5_out = original
 
         # Sanity check 3: if T5 output is too long (>2x input), truncate
         if len(t5_out.split()) > len(original.split()) * 2:
@@ -674,6 +708,33 @@ def humanize_sentence(original: str, preset: dict, min_change: float,
             t5_out = " ".join(t5_words[:max_words])
             if not t5_out.rstrip()[-1] in ".!?":
                 t5_out = t5_out.rstrip() + "."
+
+        # Sanity check 4: Preserve parenthetical citations from the original
+        # T5 often mangles "(Author, Year)" references — replace mangled versions
+        citation_pattern = re.compile(r'\([^)]*?\b\d{4}\b[^)]*?\)')
+        orig_citations = citation_pattern.findall(original)
+        if orig_citations:
+            # Remove bracketed references T5 sometimes hallucinates, e.g. [2] or [Author Name]
+            t5_out = re.sub(r'\s*\[[^\]]{1,60}\]', '', t5_out)
+            for citation in orig_citations:
+                if citation in t5_out:
+                    continue  # Citation preserved correctly
+                # Try to find a mangled T5 citation with the same year and replace it
+                years = re.findall(r'\b\d{4}\b', citation)
+                replaced = False
+                for year in years:
+                    mangled = re.search(r'\([^)]*?' + re.escape(year) + r'[^)]*?\)', t5_out)
+                    if mangled:
+                        t5_out = t5_out.replace(mangled.group(), citation, 1)
+                        replaced = True
+                        break
+                if not replaced:
+                    # No mangled version found — append before sentence-ending punctuation
+                    t5_out = t5_out.rstrip()
+                    if t5_out and t5_out[-1] in '.!?':
+                        t5_out = t5_out[:-1] + ' ' + citation + t5_out[-1]
+                    else:
+                        t5_out = t5_out + ' ' + citation + '.'
 
         # Phase 2: AI word kill + filler cuts
         processed = apply_ai_word_kill(t5_out)
@@ -803,7 +864,7 @@ def humanize_text(text: str, mode: str = "quality",
                     if len(t5_out.split()) < max(3, len(sent.split()) * 0.3):
                         t5_out = sent
                     # Meaning guard for bulk mode too
-                    if measure_meaning_overlap(sent, t5_out) < 0.35:
+                    if measure_meaning_overlap(sent, t5_out) < 0.40:
                         t5_out = sent
                     chunk_results.append(t5_out)
                 t5_out = " ".join(chunk_results)
@@ -818,7 +879,7 @@ def humanize_text(text: str, mode: str = "quality",
                 if len(t5_out.split()) < max(3, len(para.split()) * 0.3):
                     t5_out = para
                 # Meaning guard
-                if measure_meaning_overlap(para, t5_out) < 0.35:
+                if measure_meaning_overlap(para, t5_out) < 0.40:
                     t5_out = para
 
             # Apply post-processing to whole paragraph
@@ -846,8 +907,8 @@ def humanize_text(text: str, mode: str = "quality",
     # Reassemble paragraphs with proper title handling
     final_paragraphs = []
     for item in all_results:
-        text = item['text'].strip()
-        if not text:
+        para_text = item['text'].strip()
+        if not para_text:
             continue
         
         is_title = item.get('is_title', False)
@@ -855,21 +916,21 @@ def humanize_text(text: str, mode: str = "quality",
         if is_title:
             # Preserve titles exactly, but fix basic capitalization
             # Ensure first letter is capitalized
-            if text and text[0].islower():
-                text = text[0].upper() + text[1:]
-            final_paragraphs.append(text)
+            if para_text and para_text[0].islower():
+                para_text = para_text[0].upper() + para_text[1:]
+            final_paragraphs.append(para_text)
         else:
             # Fix capitalization for body paragraphs
             # First letter of paragraph
-            if text and text[0].islower():
-                text = text[0].upper() + text[1:]
+            if para_text and para_text[0].islower():
+                para_text = para_text[0].upper() + para_text[1:]
             # First letter after sentence endings within paragraph
-            text = re.sub(
+            para_text = re.sub(
                 r'([.!?])\s+([a-z])',
                 lambda m: f"{m.group(1)} {m.group(2).upper()}",
-                text
+                para_text
             )
-            final_paragraphs.append(text)
+            final_paragraphs.append(para_text)
 
     humanized = "\n\n".join(final_paragraphs)
 
@@ -901,6 +962,7 @@ def humanize_text(text: str, mode: str = "quality",
     humanized = re.sub(r'\bhas seen its (?:use |)(\w+ed)\b', r'has \1', humanized)
     # Run T5 grammar fixes one more time on final text
     humanized = fix_t5_grammar(humanized)
+
     # Expand contractions (AI detectors flag them as human-written patterns,
     # but academic text should avoid them)
     contractions = {
@@ -973,6 +1035,25 @@ def humanize_text(text: str, mode: str = "quality",
     except Exception as e:
         logger.error(f"Validation failed: {e}")
         validation_info = {'validation_passed': False, 'error': str(e)}
+
+    # Deduplicate near-identical consecutive sentences (T5 artifact)
+    # Runs AFTER validation to avoid validation seeing fewer sentences and appending originals
+    deduped_paras = []
+    for para in humanized.split('\n\n'):
+        sents = re.split(r'(?<=[.!?])\s+(?=[A-Z])', para)
+        unique = []
+        for s in sents:
+            s_lower = s.lower().strip()
+            if unique:
+                prev_lower = unique[-1].lower().strip()
+                prev_words = set(prev_lower.split())
+                cur_words = set(s_lower.split())
+                overlap = len(prev_words & cur_words) / max(len(prev_words | cur_words), 1)
+                if overlap > 0.65:
+                    continue  # Skip near-duplicate
+            unique.append(s)
+        deduped_paras.append(' '.join(unique))
+    humanized = '\n\n'.join(deduped_paras)
 
     avg_change = (sum(s.get("change_ratio", 0) for s in all_stats) /
                   max(len(all_stats), 1))

@@ -92,7 +92,7 @@ export const AI_WORD_REPLACEMENTS: Record<string, string[]> = {
   emanate: ["come", "flow", "arise"], compel: ["push", "drive", "force"],
   accommodate: ["handle", "work with", "make room for"],
   coexist: ["live side by side", "share space"], devise: ["create", "come up with", "work out"],
-  emphasize: ["stress", "highlight", "press"], establish: ["set up", "create", "form"],
+  emphasize: ["stress", "highlight", "underline"], establish: ["set up", "create", "form"],
   thereby: ["in turn", "through this", "as a result"],
   profoundly: ["deeply", "greatly"], influenced: ["shaped", "affected", "touched"],
   contributed: ["added", "aided", "led"],
@@ -1869,8 +1869,8 @@ export function deepCleaningPass(sentences: string[]): string[] {
           'appropriately': 'rightly', 'investigation': 'study',
           'understanding': 'grasp', 'opportunities': 'chances',
           'circumstances': 'conditions', 'characteristics': 'traits', 'determination': 'resolve',
-          'environmental': 'nature-related', 'infrastructure': 'setup', 'organizations': 'groups',
-          'manufacturing': 'making', 'collaboration': 'teamwork', 'implementation': 'rollout',
+          'environmental': 'nature-related', 'organizations': 'groups',
+          'collaboration': 'teamwork', 'implementation': 'rollout',
         };
         for (const [long, short] of Object.entries(simplifyMap)) {
           const rx = new RegExp(`\\b${long}\\b`, 'i');
@@ -2307,10 +2307,27 @@ export function fixCapitalization(text: string, originalText?: string): string {
   // Extract proper nouns from the original text to preserve them
   const properNouns = originalText ? extractProperNouns(originalText) : new Set<string>();
 
+  // Helper: detect heading/title paragraphs that should not have casing changed
+  const isHeadingPara = (s: string): boolean => {
+    const t = s.trim();
+    if (!t) return false;
+    if (/^#{1,6}\s/.test(t)) return true;
+    if (/^[IVXLCDM]+\.\s/i.test(t)) return true;
+    if (/^(?:Part|Section|Chapter)\s+\d+/i.test(t)) return true;
+    if (/^[\d]+[.):]\s/.test(t) || /^[A-Za-z][.):]\s/.test(t)) return true;
+    const words = t.split(/\s+/);
+    if (words.length <= 10 && !/[.!?]$/.test(t)) return true;
+    if (words.length <= 12 && t === t.toUpperCase() && /[A-Z]/.test(t)) return true;
+    return false;
+  };
+
   // Process paragraph by paragraph to preserve structure
   return text.split(/(\n\s*\n)/).map(segment => {
     // Preserve whitespace-only segments (paragraph breaks)
     if (/^\s*$/.test(segment)) return segment;
+
+    // Skip heading/title paragraphs — preserve their original casing
+    if (isHeadingPara(segment)) return segment;
 
     // Split into sentences using robust splitting that respects abbreviations and decimals
     const sentences = robustSentenceSplit(segment);

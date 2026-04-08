@@ -8,6 +8,7 @@ import { humaraHumanize } from '@/lib/humara';
 import { getDetector } from '@/lib/engine/multi-detector';
 import { isMeaningPreserved, semanticSimilaritySync } from '@/lib/engine/semantic-guard';
 import { fixCapitalization } from '@/lib/engine/shared-dictionaries';
+import { fixMidSentenceCapitalization } from '@/lib/engine/validation-post-process';
 import { deduplicateRepeatedPhrases } from '@/lib/engine/premium-deep-clean';
 import { preserveInputStructure } from '@/lib/engine/structure-preserver';
 import { structuralPostProcess } from '@/lib/engine/structural-post-processor';
@@ -18,7 +19,8 @@ import { removeEmDashes } from '@/lib/engine/v13-shared-techniques';
 import { nuruHumanize } from '@/lib/engine/nuru-humanizer';
 import { omegaHumanize } from '@/lib/engine/omega-humanizer';
 import { robustSentenceSplit } from '@/lib/engine/content-protection';
-import { deepRestructure, voiceShift, tenseVariation } from '@/lib/engine/advanced-transforms';
+// deepRestructure, voiceShift, tenseVariation disabled — they garble sentence structure
+// import { deepRestructure, voiceShift, tenseVariation } from '@/lib/engine/advanced-transforms';
 import { synonymReplace } from '@/lib/engine/utils';
 import { applyAIWordKill } from '@/lib/engine/shared-dictionaries';
 
@@ -41,22 +43,69 @@ function measureSentenceChange(original: string, modified: string): number {
   return changed / len;
 }
 
+// Detect whether a paragraph looks like a title or heading.
+function isHeadingParagraph(para: string): boolean {
+  const trimmed = para.trim();
+  if (!trimmed) return false;
+  if (/^#{1,6}\s/.test(trimmed)) return true;
+  if (/^[IVXLCDM]+\.\s/i.test(trimmed)) return true;
+  if (/^(?:Part|Section|Chapter)\s+\d+/i.test(trimmed)) return true;
+  if (/^[\d]+[.):]\s/.test(trimmed) || /^[A-Za-z][.):]\s/.test(trimmed)) return true;
+  if (/^(?:Introduction|Conclusion|Summary|Abstract|Background|Discussion|Results|Methods|References|Acknowledgments|Appendix)\s*$/i.test(trimmed)) return true;
+  const words = trimmed.split(/\s+/);
+  if (words.length <= 10 && !/[.!?]$/.test(trimmed)) return true;
+  if (words.length <= 12 && trimmed === trimmed.toUpperCase() && /[A-Z]/.test(trimmed)) return true;
+  return false;
+}
+
 function enforceRestructuringThreshold(
   originalText: string,
   humanizedText: string,
   threshold: number = 0.60,
 ): string {
-  const origSentences = robustSentenceSplit(originalText);
-  const humanizedSentences = robustSentenceSplit(humanizedText);
+  // Split by paragraph boundaries first to avoid merging titles into body sentences
+  const origParas = originalText.split(/\n\s*\n/).filter(p => p.trim());
+  const humanParas = humanizedText.split(/\n\s*\n/).filter(p => p.trim());
+
+  // Collect sentences per-paragraph (skip headings entirely)
+  const origSentences: string[] = [];
+  const humanizedSentences: string[] = [];
+  // Track which indices in the flat sentence list are heading lines
+  const headingIndicesOrig = new Set<number>();
+  const headingIndicesHuman = new Set<number>();
+
+  for (const para of origParas) {
+    const trimmed = para.trim();
+    if (isHeadingParagraph(trimmed)) {
+      headingIndicesOrig.add(origSentences.length);
+      origSentences.push(trimmed);
+    } else {
+      origSentences.push(...robustSentenceSplit(trimmed));
+    }
+  }
+  for (const para of humanParas) {
+    const trimmed = para.trim();
+    if (isHeadingParagraph(trimmed)) {
+      headingIndicesHuman.add(humanizedSentences.length);
+      humanizedSentences.push(trimmed);
+    } else {
+      humanizedSentences.push(...robustSentenceSplit(trimmed));
+    }
+  }
 
   if (humanizedSentences.length < 2 || origSentences.length < 2) return humanizedText;
 
-  // Match each humanized sentence to closest original sentence
+  // Match each humanized sentence to closest original sentence (skip headings)
   const changes: { idx: number; ratio: number; origIdx: number }[] = [];
   for (let i = 0; i < humanizedSentences.length; i++) {
+    if (headingIndicesHuman.has(i)) {
+      changes.push({ idx: i, ratio: 1, origIdx: -1 }); // headings always "changed enough"
+      continue;
+    }
     let bestRatio = 1;
     let bestOrigIdx = 0;
     for (let j = 0; j < origSentences.length; j++) {
+      if (headingIndicesOrig.has(j)) continue;
       const ratio = measureSentenceChange(origSentences[j], humanizedSentences[i]);
       if (ratio < bestRatio) { bestRatio = ratio; bestOrigIdx = j; }
     }
@@ -71,9 +120,9 @@ function enforceRestructuringThreshold(
 
   if (currentPercent >= threshold) return humanizedText;
 
-  // Sort by change ratio ascending — fix the least changed first
+  // Sort by change ratio ascending — fix the least changed first (skip headings)
   const weak = changes
-    .filter(c => c.ratio < RESTRUCTURE_MIN)
+    .filter(c => c.ratio < RESTRUCTURE_MIN && !headingIndicesHuman.has(c.idx))
     .sort((a, b) => a.ratio - b.ratio);
 
   const usedWords = new Set<string>();
@@ -85,18 +134,10 @@ function enforceRestructuringThreshold(
     let s = humanizedSentences[w.idx];
     const before = s;
 
-    // Apply transforms in sequence until enough change
+    // Apply safe word-level transforms only (no clause swap / voice shift / restructuring
+    // — those produce garbled output like "is led by ." and "is stronglyed by")
     s = applyAIWordKill(s);
     s = synonymReplace(s, 0.5, usedWords);
-    if (measureSentenceChange(origSentences[w.origIdx], s) < RESTRUCTURE_MIN) {
-      s = deepRestructure(s, 0.4);
-    }
-    if (measureSentenceChange(origSentences[w.origIdx], s) < RESTRUCTURE_MIN) {
-      s = voiceShift(s, 0.5);
-    }
-    if (measureSentenceChange(origSentences[w.origIdx], s) < RESTRUCTURE_MIN) {
-      s = tenseVariation(s, 0.2);
-    }
 
     if (s !== before && measureSentenceChange(origSentences[w.origIdx], s) >= RESTRUCTURE_MIN) {
       humanizedSentences[w.idx] = s;
@@ -104,20 +145,26 @@ function enforceRestructuringThreshold(
     }
   }
 
-  // Reconstruct text preserving paragraph structure
-  const paragraphs = humanizedText.split(/\n\s*\n/);
+  // Reconstruct text preserving paragraph structure — headings stay as-is
+  const rebuilt: string[] = [];
   let sentIdx = 0;
-  const rebuilt = paragraphs.map(para => {
-    const paraSents = robustSentenceSplit(para);
-    const replacedSents: string[] = [];
-    for (let j = 0; j < paraSents.length; j++) {
-      if (sentIdx < humanizedSentences.length) {
-        replacedSents.push(humanizedSentences[sentIdx]);
-        sentIdx++;
+  for (const para of humanParas) {
+    const trimmed = para.trim();
+    if (isHeadingParagraph(trimmed)) {
+      rebuilt.push(trimmed);
+      sentIdx++; // skip the heading entry in humanizedSentences
+    } else {
+      const paraSents = robustSentenceSplit(trimmed);
+      const replacedSents: string[] = [];
+      for (let j = 0; j < paraSents.length; j++) {
+        if (sentIdx < humanizedSentences.length) {
+          replacedSents.push(humanizedSentences[sentIdx]);
+          sentIdx++;
+        }
       }
+      rebuilt.push(replacedSents.join(' '));
     }
-    return replacedSents.join(' ');
-  });
+  }
   return rebuilt.join('\n\n');
 }
 
@@ -214,10 +261,20 @@ function lastMileMeaningValidator(
       // Sentence preserves meaning — keep it
       fixedSentences.push(humanizedSentences[i]);
     } else if (coveredOriginals.has(origIdx)) {
-      // This sentence is hallucinated AND its closest original is already
-      // covered by another good output sentence → DROP it (would create duplicate)
-      anyFixed = true;
-      // Don't push anything — sentence is removed
+      // Original already covered — check if there's a different uncovered original
+      // that this sentence might actually correspond to (positional fallback)
+      let positionalOrig = origSentences[Math.min(i, origSentences.length - 1)];
+      let positionalOverlap = contentWordOverlap(positionalOrig, humanizedSentences[i]);
+      if (positionalOverlap >= minOverlap) {
+        fixedSentences.push(humanizedSentences[i]);
+      } else {
+        // Keep a lightly-transformed version of the positional original instead of dropping
+        let fixed = applyAIWordKill(positionalOrig);
+        const usedWords = new Set<string>();
+        fixed = synonymReplace(fixed, 0.35, usedWords);
+        fixedSentences.push(fixed);
+        anyFixed = true;
+      }
     } else {
       // Original sentence not yet covered — reprocess with light transforms
       const origSent = origSentences[origIdx];
@@ -325,7 +382,7 @@ export async function POST(req: Request) {
         strength: strength ?? 'medium',
         mode: body.oxygen_mode || oxygenMode,
         min_change_ratio: body.oxygen_min_change_ratio || 0.40,
-        max_retries: body.oxygen_max_retries || 5,
+        max_retries: body.oxygen_max_retries || 3,
         sentence_by_sentence: body.oxygen_sentence_by_sentence !== false,
       };
       
@@ -333,7 +390,7 @@ export async function POST(req: Request) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(oxygenParams),
-        signal: AbortSignal.timeout(120000),
+        signal: AbortSignal.timeout(300000), // 5 min — T5 on CPU is slow
       });
       if (!resp.ok) {
         const errBody = await resp.text();
@@ -441,19 +498,21 @@ export async function POST(req: Request) {
     const FIRST_PERSON_RE_EARLY = /\b(I|me|my|mine|myself|we|us|our|ours|ourselves)\b/i;
     const earlyFirstPerson = FIRST_PERSON_RE_EARLY.test(text);
     const inputAiScore = inputAnalysis.summary.overall_ai_score;
-    if (engine !== 'humara' && engine !== 'humara_v1_3' && engine !== 'nuru' && engine !== 'omega') {
+    if (engine !== 'humara' && engine !== 'humara_v1_3' && engine !== 'nuru' && engine !== 'omega' && engine !== 'oxygen') {
       humanized = unifiedSentenceProcess(humanized, earlyFirstPerson, inputAiScore);
     }
 
     // ── 60% Restructuring Enforcement ──────────────────────────────
     // Ensures at least 60% of sentences show meaningful word-level changes.
     // Applies additional transforms to under-changed sentences.
-    humanized = enforceRestructuringThreshold(text, humanized, 0.60);
+    if (engine !== 'oxygen') {
+      humanized = enforceRestructuringThreshold(text, humanized, 0.60);
+    }
 
     // Post-capitalization formatting — fix sentence casing for all engine outputs
     // Skip for humara/nuru/omega: they have their own capitalization handling
     // Pass original text so proper nouns from the input are preserved
-    if (engine !== 'humara' && engine !== 'humara_v1_3' && engine !== 'nuru' && engine !== 'omega') {
+    if (engine !== 'humara' && engine !== 'humara_v1_3' && engine !== 'nuru' && engine !== 'omega' && engine !== 'oxygen') {
       humanized = fixCapitalization(humanized, text);
     }
 
@@ -465,14 +524,14 @@ export async function POST(req: Request) {
 
     // Cross-sentence repetition cleanup — deduplicates phrases repeated across sentences
     // Skip for humara engine: it has its own coherence layer
-    if (engine !== 'humara' && engine !== 'humara_v1_3' && engine !== 'nuru' && engine !== 'omega') {
+    if (engine !== 'humara' && engine !== 'humara_v1_3' && engine !== 'nuru' && engine !== 'omega' && engine !== 'oxygen') {
       humanized = deduplicateRepeatedPhrases(humanized);
     }
 
     // Structural post-processing — attacks document-level statistical signals
     // (spectral_flatness, burstiness, sentence_uniformity, readability_consistency, vocabulary_richness)
     // Skip for humara engine: it has its own structural diversity layer
-    if (engine !== 'humara' && engine !== 'humara_v1_3' && engine !== 'nuru' && engine !== 'omega' && engine !== 'ninja' && engine !== 'undetectable') {
+    if (engine !== 'humara' && engine !== 'humara_v1_3' && engine !== 'nuru' && engine !== 'omega' && engine !== 'ninja' && engine !== 'undetectable' && engine !== 'oxygen') {
       humanized = structuralPostProcess(humanized);
     }
 
@@ -480,7 +539,7 @@ export async function POST(req: Request) {
     // Skip for humara/nuru/omega: they have their own structure-preserving pipeline
     // Skip for ghost_pro: it preserves headings internally via LLM prompt — re-applying
     // preserveInputStructure causes double headings and sentence redistribution artifacts
-    if (engine !== 'humara' && engine !== 'humara_v1_3' && engine !== 'nuru' && engine !== 'omega' && engine !== 'ghost_pro') {
+    if (engine !== 'humara' && engine !== 'humara_v1_3' && engine !== 'nuru' && engine !== 'omega' && engine !== 'ghost_pro' && engine !== 'oxygen') {
       humanized = preserveInputStructure(text, humanized);
     }
 
@@ -633,10 +692,19 @@ export async function POST(req: Request) {
     // the original to ensure the content still communicates the same idea.
     // If any sentence has drifted too far, it gets reprocessed with
     // lighter transforms that preserve meaning.
-    humanized = lastMileMeaningValidator(text, humanized, 0.35);
+    // Skip for Oxygen: it has its own Python-side validation/repair
+    if (engine !== 'oxygen') {
+      humanized = lastMileMeaningValidator(text, humanized, 0.35);
+    }
 
     // Fix sentence-initial lowercase after all processing
     humanized = humanized.replace(/(^|[.!?]\s+)([a-z])/g, (_m, pre, ch) => pre + ch.toUpperCase());
+
+    // ── FINAL CAPITALIZATION FIX ──────────────────────────────
+    // Runs AFTER all post-processing to catch mid-sentence capitals
+    // re-introduced by enforceRestructuringThreshold, fixCapitalization,
+    // preserveInputStructure, unifiedSentenceProcess, etc.
+    humanized = fixMidSentenceCapitalization(humanized, text);
 
     // Generate per-sentence alternatives (3 candidates each, best already picked by engines)
     const FIRST_PERSON_RE = /\b(I|me|my|mine|myself|we|us|our|ours|ourselves)\b/i;

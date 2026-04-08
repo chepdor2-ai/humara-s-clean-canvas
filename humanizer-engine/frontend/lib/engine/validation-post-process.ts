@@ -274,6 +274,351 @@ export function repairHumanizedOutput(
   return { repaired, repairs };
 }
 
+// ═══════════════════════════════════════════════════════════════════
+// Capitalization Fixer — Mid-Sentence Capitals
+// ═══════════════════════════════════════════════════════════════════
+
+/** Known abbreviations / acronyms that must STAY uppercase */
+const ABBREVIATIONS = new Set([
+  'AI', 'US', 'USA', 'UK', 'EU', 'UN', 'NASA', 'FBI', 'CIA', 'CEO', 'CFO',
+  'CTO', 'COO', 'PhD', 'MBA', 'MD', 'JD', 'BS', 'BA', 'MA', 'MS', 'DNA',
+  'RNA', 'HIV', 'AIDS', 'GDP', 'GPA', 'SAT', 'ACT', 'GRE', 'GMAT', 'LSAT',
+  'MCAT', 'STEM', 'NATO', 'WHO', 'IMF', 'WTO', 'UNICEF', 'UNESCO', 'OECD',
+  'OPEC', 'API', 'URL', 'HTML', 'CSS', 'SQL', 'IT', 'IoT', 'SaaS', 'PaaS',
+  'IaaS', 'VPN', 'HTTP', 'HTTPS', 'FTP', 'TCP', 'IP', 'CPU', 'GPU', 'RAM',
+  'ROM', 'SSD', 'HDD', 'USB', 'HDMI', 'LED', 'LCD', 'PDF', 'CSV', 'JSON',
+  'XML', 'ASAP', 'FAQ', 'DIY', 'RSVP', 'ETA', 'FYI', 'TBD', 'TBA', 'ROI',
+  'KPI', 'B2B', 'B2C', 'PR', 'HR', 'QA', 'R&D', 'P&L', 'LLC', 'Inc',
+  'Corp', 'Ltd', 'AM', 'PM', 'BC', 'AD', 'BCE', 'CE', 'ADHD', 'PTSD',
+  'OCD', 'APA', 'MLA', 'IEEE', 'ACM', 'HVAC', 'SWOT', 'SEO', 'CRM', 'ERP',
+  'MVP', 'UX', 'UI', 'ML', 'NLP', 'LLM', 'GPT', 'AWS', 'GCP', 'IBM',
+  'FPE', 'FDSE', 'KCPE', 'KCSE', 'NGO', 'NGOs', 'CBE', 'ECDE', 'TVET',
+  'TVETs', 'TSC', 'KNEC', 'KICD', 'BOM', 'CDF', 'SDGs', 'MDGs', 'EFA',
+  'ICT', 'STEM',
+]);
+
+/**
+ * Common English words that should NEVER be capitalized mid-sentence.
+ * Comprehensive list covering articles, prepositions, conjunctions,
+ * common nouns, adjectives, verbs, and adverbs that engines wrongly capitalize.
+ */
+const ALWAYS_LOWERCASE_MID_SENTENCE = new Set([
+  // Articles & determiners
+  'the', 'a', 'an', 'this', 'that', 'these', 'those', 'some', 'any', 'all',
+  'each', 'every', 'both', 'few', 'several', 'such', 'many', 'much', 'more',
+  'most', 'other', 'another',
+  // Prepositions
+  'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by', 'from', 'as', 'into',
+  'through', 'during', 'before', 'after', 'above', 'below', 'between', 'under',
+  'over', 'about', 'against', 'among', 'around', 'behind', 'beyond', 'down',
+  'near', 'off', 'out', 'past', 'toward', 'towards', 'up', 'upon', 'within',
+  'without', 'across', 'along', 'beside', 'besides', 'despite', 'except',
+  'like', 'unlike', 'until', 'onto',
+  // Conjunctions
+  'and', 'or', 'but', 'nor', 'yet', 'so', 'if', 'then', 'than', 'when',
+  'while', 'where', 'whether', 'although', 'because', 'since', 'unless',
+  'though', 'whereas',
+  // Pronouns
+  'it', 'its', 'they', 'them', 'their', 'theirs', 'he', 'she', 'him', 'her',
+  'his', 'hers', 'we', 'us', 'our', 'ours', 'you', 'your', 'yours', 'my',
+  'me', 'mine', 'who', 'whom', 'whose', 'which', 'what',
+  // Common verbs
+  'is', 'are', 'was', 'were', 'be', 'been', 'being', 'have', 'has', 'had',
+  'do', 'does', 'did', 'will', 'would', 'could', 'should', 'may', 'might',
+  'shall', 'can', 'must', 'need', 'get', 'got', 'make', 'made', 'take',
+  'took', 'taken', 'give', 'gave', 'given', 'come', 'came', 'go', 'went',
+  'gone', 'know', 'knew', 'known', 'think', 'thought', 'see', 'saw', 'seen',
+  'find', 'found', 'say', 'said', 'tell', 'told', 'keep', 'kept', 'let',
+  'put', 'run', 'set', 'show', 'showed', 'shown', 'try', 'tried', 'use',
+  'used', 'work', 'worked', 'call', 'called', 'become', 'became', 'leave',
+  'left', 'play', 'played', 'move', 'moved', 'live', 'lived', 'believe',
+  'bring', 'brought', 'happen', 'happened', 'write', 'wrote', 'written',
+  'provide', 'provided', 'sit', 'sat', 'stand', 'stood', 'lose', 'lost',
+  'pay', 'paid', 'meet', 'met', 'include', 'included', 'continue', 'continued',
+  'learn', 'learned', 'change', 'changed', 'lead', 'led', 'understand',
+  'understood', 'watch', 'watched', 'follow', 'followed', 'stop', 'stopped',
+  'create', 'created', 'speak', 'spoke', 'spoken', 'read', 'allow', 'allowed',
+  'add', 'added', 'grow', 'grew', 'grown', 'open', 'opened', 'walk', 'walked',
+  'win', 'won', 'offer', 'offered', 'remember', 'love', 'consider', 'considered',
+  'appear', 'appeared', 'buy', 'bought', 'wait', 'waited', 'serve', 'served',
+  'die', 'died', 'send', 'sent', 'expect', 'expected', 'build', 'built',
+  'stay', 'stayed', 'fall', 'fell', 'fallen', 'cut', 'reach', 'reached',
+  'kill', 'killed', 'remain', 'remained', 'suggest', 'suggested', 'raise',
+  'raised', 'pass', 'passed', 'sell', 'sold', 'require', 'required', 'report',
+  'reported', 'decide', 'decided', 'pull', 'pulled', 'develop', 'developed',
+  'argues', 'argue', 'argued', 'describes', 'describe', 'described',
+  'explains', 'explain', 'explained', 'notes', 'noted', 'states', 'stated',
+  'suggests', 'claims', 'claimed', 'indicates', 'indicated', 'shows',
+  'reveals', 'revealed', 'demonstrates', 'demonstrated', 'highlights',
+  'highlighted', 'emphasizes', 'emphasized', 'acknowledges', 'acknowledged',
+  'recognizes', 'recognized', 'identifies', 'identified', 'supports',
+  'supported', 'contributes', 'contributed', 'influences', 'influenced',
+  'affects', 'affected', 'impacts', 'impacted', 'generates', 'generated',
+  'strengthened', 'strengthens', 'transforms', 'transformed', 'expands',
+  'expanded', 'reduces', 'reduced', 'increases', 'increased', 'improves',
+  'improved', 'enhances', 'enhanced', 'promotes', 'promoted', 'ensures',
+  'ensured', 'enables', 'enabled', 'encourages', 'encouraged', 'establishes',
+  'established', 'maintains', 'maintained', 'addresses', 'addressed',
+  'involves', 'involved', 'compelled', 'motivated', 'invested', 'allocated',
+  'subsidizing', 'formulation',
+  // Common nouns — education/academic
+  'education', 'training', 'teaching', 'instruction', 'learning', 'school',
+  'schools', 'university', 'universities', 'college', 'colleges', 'student',
+  'students', 'teacher', 'teachers', 'classroom', 'classrooms', 'curriculum',
+  'enrolment', 'enrollment', 'tuition', 'graduate', 'graduates', 'pupil',
+  'pupils', 'lesson', 'lessons', 'course', 'courses', 'degree', 'degrees',
+  'examination', 'examinations', 'exam', 'exams', 'certificate', 'qualification',
+  'qualifications', 'literacy', 'numeracy', 'pedagogy', 'scholarship',
+  // Common nouns — government/policy
+  'government', 'policy', 'policies', 'legislation', 'regulation', 'regulations',
+  'law', 'laws', 'governance', 'administration', 'authority', 'authorities',
+  'parliament', 'congress', 'senate', 'ministry', 'department', 'bureau',
+  'agency', 'commission', 'committee', 'council', 'directive', 'directives',
+  'initiative', 'initiatives', 'reform', 'reforms', 'mandate', 'mandates',
+  'sector', 'sectors',
+  // Common nouns — society/economy
+  'development', 'growth', 'demand', 'population', 'community', 'communities',
+  'society', 'economy', 'economic', 'market', 'markets', 'labor', 'labour',
+  'employment', 'workforce', 'industry', 'industries', 'commerce', 'trade',
+  'investment', 'infrastructure', 'technology', 'innovation', 'progress',
+  'poverty', 'wealth', 'income', 'budget', 'expenditure', 'assets', 'resources',
+  'capacity', 'productivity', 'sustainability', 'equality', 'equity', 'access',
+  'opportunity', 'opportunities', 'mobility', 'urbanization',
+  // Common nouns — general
+  'introduction', 'commitment', 'participation', 'responsibility', 'expansion',
+  'movement', 'spirit', 'tradition', 'culture', 'practice', 'practices',
+  'approach', 'method', 'methods', 'strategy', 'strategies', 'system',
+  'systems', 'process', 'processes', 'structure', 'structures', 'framework',
+  'model', 'models', 'factor', 'factors', 'element', 'elements', 'aspect',
+  'aspects', 'feature', 'features', 'concept', 'concepts', 'principle',
+  'principles', 'role', 'roles', 'impact', 'effect', 'effects', 'result',
+  'results', 'outcome', 'outcomes', 'consequence', 'consequences', 'benefit',
+  'benefits', 'challenge', 'challenges', 'problem', 'problems', 'issue',
+  'issues', 'solution', 'solutions', 'response', 'effort', 'efforts',
+  'measure', 'measures', 'level', 'levels', 'rate', 'rates', 'number',
+  'numbers', 'area', 'areas', 'region', 'regions', 'country', 'countries',
+  'part', 'parts', 'place', 'places', 'group', 'groups', 'member', 'members',
+  'parent', 'parents', 'child', 'children', 'family', 'families', 'people',
+  'person', 'individual', 'individuals', 'citizen', 'citizens', 'leader',
+  'leaders', 'worker', 'workers', 'candidate', 'candidates', 'investor',
+  'investors', 'planner', 'planners', 'stakeholder', 'stakeholders',
+  'management', 'accountability', 'ownership', 'performance', 'achievement',
+  'success', 'failure', 'improvement', 'quality', 'standard', 'standards',
+  'value', 'values', 'need', 'needs', 'goal', 'goals', 'objective',
+  'objectives', 'purpose', 'target', 'targets', 'priority', 'priorities',
+  'basis', 'foundation', 'context', 'situation', 'condition', 'conditions',
+  'environment', 'circumstances', 'case', 'cases', 'example', 'examples',
+  'evidence', 'data', 'information', 'knowledge', 'research', 'study',
+  'studies', 'analysis', 'findings', 'report', 'reports', 'review', 'reviews',
+  'perception', 'consciousness', 'mindset', 'notion', 'idea', 'ideas',
+  'thought', 'thoughts', 'belief', 'beliefs', 'view', 'views', 'opinion',
+  'opinions', 'attitude', 'attitudes', 'position', 'positions',
+  'land', 'building', 'materials', 'laboratories', 'cost', 'costs',
+  'price', 'prices', 'fee', 'fees', 'space', 'spaces', 'provision',
+  // Adjectives
+  'secondary', 'primary', 'key', 'main', 'central', 'major', 'critical',
+  'essential', 'important', 'significant', 'considerable', 'substantial',
+  'fundamental', 'basic', 'general', 'specific', 'particular', 'various',
+  'different', 'similar', 'other', 'new', 'old', 'good', 'better', 'best',
+  'great', 'large', 'small', 'long', 'short', 'high', 'low', 'early',
+  'late', 'next', 'last', 'first', 'second', 'third', 'whole', 'entire',
+  'full', 'complete', 'total', 'overall', 'direct', 'indirect', 'rapid',
+  'steady', 'sharp', 'clear', 'strong', 'powerful', 'effective', 'active',
+  'responsible', 'available', 'limited', 'adequate', 'sufficient', 'growing',
+  'increasing', 'ongoing', 'consistent', 'radical', 'unique', 'private',
+  'public', 'national', 'local', 'rural', 'urban', 'modern', 'current',
+  'recent', 'existing', 'skilled', 'educated', 'financial', 'social',
+  'political', 'cultural', 'academic', 'professional', 'practical',
+  'technical', 'industrial', 'agricultural', 'environmental', 'demographic',
+  'successive', 'collective', 'underserved', 'remote', 'broad',
+  // Adverbs
+  'also', 'just', 'only', 'very', 'still', 'again', 'even', 'not', 'no',
+  'here', 'there', 'now', 'then', 'often', 'always', 'never', 'sometimes',
+  'usually', 'perhaps', 'likely', 'probably', 'certainly', 'clearly',
+  'simply', 'merely', 'effectively', 'essentially', 'particularly',
+  'especially', 'specifically', 'generally', 'typically', 'primarily',
+  'largely', 'mainly', 'heavily', 'deeply', 'directly', 'steadily',
+  'dramatically', 'increasingly', 'previously', 'further', 'furthermore',
+  'moreover', 'therefore', 'thus', 'hence', 'however', 'nevertheless',
+  'nonetheless', 'meanwhile', 'subsequently', 'consequently', 'additionally',
+  'equally', 'besides', 'accordingly', 'overall',
+  // Transition words/phrases
+  'according', 'regarding', 'concerning', 'including', 'following', 'given',
+  'based', 'rather', 'instead', 'answering', 'responding',
+]);
+
+/**
+ * Detect if a line looks like a heading/title that should preserve capitalization.
+ */
+function isHeadingLine(line: string): boolean {
+  const trimmed = line.trim();
+  if (!trimmed) return false;
+  // Markdown headings
+  if (/^#{1,6}\s/.test(trimmed)) return true;
+  // Numbered headings like "1." or "1.1" or "A."
+  if (/^[\d]+[.):]\s/.test(trimmed) || /^[A-Za-z][.):]\s/.test(trimmed)) return true;
+  // Roman numeral headings
+  if (/^[IVXLCDM]+[.):]\s/i.test(trimmed)) return true;
+  // Short lines without ending punctuation (typical heading)
+  const words = trimmed.split(/\s+/);
+  if (words.length <= 12 && !/[.!?:;]$/.test(trimmed)) return true;
+  return false;
+}
+
+/**
+ * Check if a word is an abbreviation, acronym, or known proper pattern.
+ */
+function isAbbreviationOrProper(word: string): boolean {
+  const stripped = word.replace(/[^a-zA-Z&.''-]/g, '');
+  if (!stripped) return false;
+  if (ABBREVIATIONS.has(stripped)) return true;
+  // All caps (2+ letters)
+  if (stripped.length >= 2 && stripped === stripped.toUpperCase() && /[A-Z]/.test(stripped)) return true;
+  // Mixed case like "iPhone", "JavaScript", "McCoy"
+  if (/[a-z][A-Z]/.test(stripped) || /^Mc[A-Z]/.test(stripped)) return true;
+  // Dotted abbreviations like "U.S.", "e.g."
+  if (/^([A-Za-z]\.){2,}$/.test(word)) return true;
+  return false;
+}
+
+/**
+ * Extract proper nouns that genuinely appear mid-sentence in the ORIGINAL text.
+ * Only picks up words that are capitalized in non-heading, mid-sentence positions
+ * AND are not in the common-words blacklist.
+ */
+function extractGenuineProperNouns(originalText: string): Set<string> {
+  const proper = new Set<string>();
+  if (!originalText) return proper;
+
+  const paragraphs = originalText.split(/\n\s*\n/);
+  for (const para of paragraphs) {
+    const lines = para.split(/\n/).map(l => l.trim()).filter(Boolean);
+    for (const line of lines) {
+      // Skip heading lines
+      if (isHeadingLine(line)) continue;
+
+      // Split into rough sentences
+      const sentences = line.split(/(?<=[.!?])\s+/);
+      for (const sent of sentences) {
+        const words = sent.split(/\s+/);
+        for (let i = 1; i < words.length; i++) { // skip first word (sentence-initial)
+          const w = words[i].replace(/[^a-zA-Z'-]/g, '');
+          if (!w || w.length < 2) continue;
+          if (/^[A-Z][a-z]/.test(w) && !ALWAYS_LOWERCASE_MID_SENTENCE.has(w.toLowerCase())) {
+            proper.add(w);
+          }
+        }
+      }
+    }
+  }
+  return proper;
+}
+
+/**
+ * Fix mid-sentence capitalization across the entire text.
+ * Ensures only proper nouns, acronyms, and sentence-initial words are capitalized.
+ * Preserves heading/title lines exactly as they are.
+ */
+export function fixMidSentenceCapitalization(text: string, originalText?: string): string {
+  if (!text || !text.trim()) return text;
+
+  // Extract genuine proper nouns from original text
+  const properNouns = originalText ? extractGenuineProperNouns(originalText) : new Set<string>();
+
+  // Also always preserve "I" as a word
+  properNouns.add('I');
+
+  // Process paragraph by paragraph
+  const paragraphs = text.split(/(\n\s*\n)/);
+  
+  return paragraphs.map(segment => {
+    // Preserve paragraph break whitespace
+    if (/^\n\s*\n$/.test(segment)) return segment;
+    if (!segment.trim()) return segment;
+
+    // Process line by line within each paragraph
+    const lines = segment.split(/(\n)/);
+    return lines.map(line => {
+      if (line === '\n') return line;
+      if (!line.trim()) return line;
+
+      // Skip heading lines - preserve their casing
+      if (isHeadingLine(line)) return line;
+
+      // Fix capitalization within this body-text line
+      return fixLineCapitalization(line, properNouns);
+    }).join('');
+  }).join('');
+}
+
+/**
+ * Fix capitalization within a single body-text line.
+ */
+function fixLineCapitalization(line: string, properNouns: Set<string>): string {
+  // Split into sentences at . ! ? followed by space+uppercase
+  // But also handle sentences starting at the beginning of the line
+  const parts = line.split(/(?<=[.!?])\s+/);
+  
+  return parts.map((sentence) => {
+    if (!sentence.trim()) return sentence;
+
+    const tokens = sentence.split(/(\s+)/);
+    let isFirstWord = true;
+
+    return tokens.map(token => {
+      // Preserve whitespace tokens
+      if (/^\s+$/.test(token)) return token;
+
+      // Split punctuation from core word
+      const leadPunc = token.match(/^([^a-zA-Z0-9]*)/)?.[1] || '';
+      const trailPunc = token.match(/([^a-zA-Z0-9]*)$/)?.[1] || '';
+      const core = token.slice(leadPunc.length, token.length - (trailPunc.length || 0));
+
+      if (!core || !/[a-zA-Z]/.test(core)) return token;
+
+      // Always preserve abbreviations/acronyms
+      if (isAbbreviationOrProper(core)) {
+        isFirstWord = false;
+        return token;
+      }
+
+      // Always preserve proper nouns from original text
+      const properMatch = [...properNouns].find(pn => pn.toLowerCase() === core.toLowerCase());
+      if (properMatch) {
+        isFirstWord = false;
+        return leadPunc + properMatch + trailPunc;
+      }
+
+      // Preserve "I" as standalone word
+      if (core === 'I') {
+        isFirstWord = false;
+        return token;
+      }
+
+      // First word of sentence: capitalize first letter, lowercase rest
+      if (isFirstWord) {
+        isFirstWord = false;
+        // Handle quoted starts like ("The → preserve quote, capitalize "the"
+        if (core.length > 0) {
+          const fixed = core[0].toUpperCase() + core.slice(1).toLowerCase();
+          return leadPunc + fixed + trailPunc;
+        }
+        return token;
+      }
+
+      // Mid-sentence: lowercase if it's a common word
+      isFirstWord = false;
+      const lower = core.toLowerCase();
+      if (ALWAYS_LOWERCASE_MID_SENTENCE.has(lower)) {
+        return leadPunc + lower + trailPunc;
+      }
+
+      // Leave unknown capitalized words as-is (may be proper nouns)
+      return token;
+    }).join('');
+  }).join(' ');
+}
+
 /**
  * Validate and repair humanized output in one step.
  */
@@ -297,10 +642,18 @@ export function validateAndRepairOutput(
   let wasRepaired = false;
   let repairs: string[] = [];
   
-  // First validation
+  // ── STEP 1: Fix mid-sentence capitalization (always applied) ──
+  const beforeCaps = finalText;
+  finalText = fixMidSentenceCapitalization(finalText, originalText);
+  if (finalText !== beforeCaps) {
+    wasRepaired = true;
+    repairs.push('Fixed mid-sentence capitalization');
+  }
+  
+  // ── STEP 2: Validate sentence integrity ──
   let validation = validateHumanizedOutput(originalText, finalText, validationOptions);
   
-  // If invalid and auto-repair enabled, attempt repair
+  // ── STEP 3: If invalid and auto-repair enabled, attempt repair ──
   if (!validation.isValid && autoRepair) {
     const repairResult = repairHumanizedOutput(originalText, finalText);
     finalText = repairResult.repaired;

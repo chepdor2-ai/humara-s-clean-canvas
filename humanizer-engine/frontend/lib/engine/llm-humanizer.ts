@@ -34,6 +34,7 @@ import OpenAI from "openai";
 import { sentTokenize } from "./utils";
 import { expandContractions } from "./advanced-transforms";
 import { protectSpecialContent, restoreSpecialContent, protectContentTerms, restoreContentTerms, cleanOutputRepetitions, robustSentenceSplit, placeholdersToLLMFormat, llmFormatToPlaceholders, countSentences, enforceSentenceCountStrict, enforcePerParagraphSentenceCounts, rephraseCitations } from "./content-protection";
+import { validateAndRepairOutput } from "./validation-post-process";
 import { semanticSimilaritySync } from "./semantic-guard";
 import { TextSignals, getDetector } from "./multi-detector";
 import { getStyleMemory, profileSummaryText } from "./style-memory";
@@ -1982,6 +1983,10 @@ export async function llmHumanize(
   bestResult = bestResult.replace(/\bquislingism\b/gi, "collaboration");
   bestResult = bestResult.replace(/\bquisling\b/gi, "collaborator");
   if (beforeNet !== bestResult) console.log("  [Ninja] SAFETY NET caught issues in final output");
+
+  // Final validation: fix capitalization + sentence formatting
+  const validated = validateAndRepairOutput(original, bestResult);
+  bestResult = validated.text;
 
   return bestResult;
 }

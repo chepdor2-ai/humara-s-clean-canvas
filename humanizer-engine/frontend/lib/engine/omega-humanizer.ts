@@ -33,6 +33,7 @@
 import OpenAI from "openai";
 import { getDetector } from "./multi-detector";
 import { robustSentenceSplit } from "./content-protection";
+import { validateAndRepairOutput } from "./validation-post-process";
 
 // ── MODEL SELECTION ──
 // gpt-4.1-nano: cheapest ($0.10/M in, $0.40/M out), 200K TPM, 500 RPM
@@ -1099,6 +1100,10 @@ export async function omegaHumanize(
   output = output.replace(/\(([a-z][a-zA-Z&.\s]+,?\s*\d{4}[a-z]?(?:;\s*[a-z][a-zA-Z&.\s]+,?\s*\d{4}[a-z]?)*)\)/g, (match) => {
     return match.replace(/([(\s;])([a-z])/g, (_, pre, letter) => pre + letter.toUpperCase());
   });
+
+  // Final validation: fix capitalization + sentence formatting
+  const validated = validateAndRepairOutput(text.trim(), output);
+  output = validated.text;
 
   return output;
 }

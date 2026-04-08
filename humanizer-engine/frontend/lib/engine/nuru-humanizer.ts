@@ -27,6 +27,7 @@
  *     • Target: 0% AI detection score
  */
 
+import { validateAndRepairOutput } from "./validation-post-process";
 import {
   applyAIWordKill,
   applyPhrasePatterns,
@@ -1006,6 +1007,10 @@ export function nuruHumanize(
 
   // Final cleanup
   output = output.replace(/  +/g, ' ').replace(/ +\n/g, '\n').trim();
+
+  // Final validation: fix capitalization + sentence formatting
+  const validated = validateAndRepairOutput(text.trim(), output);
+  output = validated.text;
 
   return output;
 }

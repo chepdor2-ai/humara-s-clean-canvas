@@ -714,7 +714,7 @@ function varyReadability(sentences: string[]): string[] {
 const NGRAM_SWAP_WORDS: Record<string, string[]> = {
   "important": ["key", "central", "vital"],
   "significant": ["major", "big", "real"],
-  "development": ["growth", "shift", "change"],
+  // "development" removed — corrupts proper nouns like "Development Bank"
   "approach": ["method", "way", "tactic"],
   "various": ["many", "different", "assorted"],
   "process": ["procedure", "course", "series of steps"],
@@ -783,6 +783,14 @@ function disruptNgrams(text: string): string {
           const secondIdx = lowerResult.indexOf(w, firstIdx + w.length + 1);
           if (secondIdx >= 0) {
             const originalWord = result.slice(secondIdx, secondIdx + w.length);
+            // Skip if inside a proper noun (preceded or followed by a capitalized word)
+            const beforeCtx = result.slice(Math.max(0, secondIdx - 20), secondIdx);
+            const afterCtx = result.slice(secondIdx + w.length, secondIdx + w.length + 20);
+            const isInProperNoun = /[A-Z][a-z]+\s*$/.test(beforeCtx) || /^\s*[A-Z][a-z]/.test(afterCtx);
+            // Skip if inside parenthetical citation
+            const isInCitation = /\([^)]*$/.test(beforeCtx);
+            if (isInProperNoun || isInCitation) break;
+
             const isCapitalized = originalWord[0] === originalWord[0].toUpperCase();
             const finalReplacement = isCapitalized
               ? replacement[0].toUpperCase() + replacement.slice(1)
