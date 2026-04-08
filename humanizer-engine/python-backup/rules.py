@@ -9,10 +9,10 @@ No contractions. No first-person. No casual/chatty phrases. Academic register.
 # CORE PARAMETERS
 # ============================================================================
 BURSTINESS_TARGET = 0.70
-SYNONYM_RATE = 0.45           # probability of replacing an eligible word
-PHRASE_RATE = 0.90            # probability of applying a phrase substitution
-RESTRUCTURE_RATE = 0.35       # probability of restructuring a sentence
-CLAUSE_SWAP_RATE = 0.30       # probability of swapping clause order
+SYNONYM_RATE = 0.60           # probability of replacing an eligible word (was 0.45, raised per training data)
+PHRASE_RATE = 0.95            # probability of applying a phrase substitution (was 0.90)
+RESTRUCTURE_RATE = 0.40       # probability of restructuring a sentence (was 0.35)
+CLAUSE_SWAP_RATE = 0.35       # probability of swapping clause order (was 0.30)
 
 # ============================================================================
 # AI SENTENCE STARTERS TO REPLACE (maps to academic-natural alternatives)
@@ -116,6 +116,19 @@ AI_STARTER_REPLACEMENTS = {
 # MULTI-WORD PHRASE SUBSTITUTIONS (case-insensitive matching)
 # ============================================================================
 PHRASE_SUBSTITUTIONS = {
+    # ==== AI-FLAGGED BIGRAMS (from Colab aggressive detector training) ====
+    "such as": ["like", "for example", "including things like", "e.g."],
+    "it is": ["this remains", "this is", "that is"],
+    "can be": ["may be", "could be", "might be", "tends to be"],
+    "a variety of": ["a mix of", "a range of", "all sorts of", "different kinds of"],
+    "variety of": ["range of", "mix of", "assortment of", "array of"],
+    "important to": ["key to", "worth", "vital to", "needed for"],
+    "including the": ["among them the", "like the", "with the"],
+    "known for": ["famous for", "recognized for", "noted for", "celebrated for"],
+    "also known": ["sometimes called", "often referred to", "commonly called"],
+    "can also": ["may also", "could also", "is also able to"],
+    "it can": ["this may", "it could", "it might"],
+    "has also": ["also has", "likewise has", "has similarly"],
     # ==== GENERAL ACADEMIC PHRASES (cross-discipline) ====
     "refers to the": ["denotes the", "pertains to the", "concerns the", "relates to the"],
     "increasing interconnectedness": ["growing linkages", "rising integration",
@@ -1237,6 +1250,10 @@ SYNONYM_BANK = {
     "remain": ["continue", "endure", "stay"],
     "achieved": ["attained", "accomplished", "reached"],
     "supported": ["reinforced", "backed", "bolstered"],
+    # --- Colab training: top AI-flagged verbs/words ---
+    "help": ["assist", "support", "aid", "guide"],
+    "helps": ["supports", "aids", "assists", "guides"],
+    "including": ["like", "among them", "with", "featuring"],
     # --- General academic verbs ---
     "refers": ["relates", "pertains", "alludes"],
     "involves": ["entails", "encompasses", "includes"],

@@ -21,12 +21,27 @@ export function splitIntoParagraphs(text: string): string[] {
  */
 export function splitIntoSentences(paragraph: string): string[] {
   // Preserve heading lines — if a paragraph starts with a short title-like line
-  // (no period, under 80 chars) followed by body text, split them apart
+  // (no period, under 100 chars, title case) followed by body text, split them apart
   const lines = paragraph.split(/\n/);
   if (lines.length > 1) {
     const firstLine = lines[0].trim();
-    // Detect title/heading lines: short, no period at end, not a full sentence
-    if (firstLine.length > 0 && firstLine.length < 80 && !/[.!?]$/.test(firstLine) && firstLine.split(/\s+/).length <= 12) {
+    const words = firstLine.split(/\s+/);
+    const capitalWords = words.filter(w => w.length > 0 && /^[A-Z]/.test(w)).length;
+    const titleRatio = capitalWords / Math.max(words.length, 1);
+    
+    // Detect title/heading lines: 
+    // - short (≤ 12 words, ≤ 100 chars)
+    // - no ending punctuation
+    // - high title-case ratio (≥60% words capitalized)
+    const isTitle = (
+      firstLine.length > 0 && 
+      firstLine.length <= 100 && 
+      words.length <= 12 &&
+      !/[.!?]$/.test(firstLine) &&
+      titleRatio >= 0.6
+    );
+    
+    if (isTitle) {
       // Keep heading separate, process rest as normal
       const rest = lines.slice(1).join(' ').replace(/\s+/g, ' ').trim();
       if (rest.length > 0) {

@@ -137,6 +137,7 @@ const splitSentences = (text: string): { text: string; start: number; end: numbe
 
 /* ── Constants ──────────────────────────────────────────────────────────── */
 const ENGINES = [
+  { id: 'oxygen', label: 'Oxygen', subtitle: 'Multi-Phase T5 Pipeline', premium: false, desc: 'T5 beam-search paraphrase + 4-phase AI-kill pipeline. Sentence-by-sentence processing with 40% minimum change enforcement. AI word kill, filler removal, structural variance, then full TypeScript post-processing (10-phase signal attack). Zero LLM calls. Targets 0% AI score.' },
   { id: 'omega', label: 'Omega', subtitle: 'Pure LLM Parallel', premium: false, desc: 'Every sentence extracted independently and sent to its own GPT-4o-mini API call in parallel. 10 distinct academic prompts assigned randomly. Pre-analysis detects structure, titles, and first-person usage. 60% word-change enforcement with retry. 40% statistical error injection. 7-phase AI-kill post-processing. No contractions. No first person unless in input.' },
   { id: 'nuru', label: 'Nuru', subtitle: 'Non-LLM Parallel', premium: false, desc: 'Every sentence processed independently through 10 randomly assigned rule-based strategies. Pre-analysis extracts structure, titles, paragraphs, and detects first-person usage. 60% word-change enforcement. 40% academic error injection. 7-phase AI-kill post-processing. Zero LLM calls, instant processing. No contractions. No first person unless in input.' },
   { id: 'humara_v1_3', label: 'Humara v1.3', subtitle: 'Stealth Engine v5', premium: false, desc: '8-stage non-LLM pipeline: structure parsing, token shielding, 300+ phrase compressions, 42 sentence restructuring patterns, 1500+ synonyms, 150+ AI phrase kills, discourse markers, and 3-pass retry loop. Zero LLM calls, instant processing.' },
@@ -206,6 +207,13 @@ export default function EditorPage() {
   // Temporary history (auto-expires)
   const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [historyOpen, setHistoryOpen] = useState(false);
+
+  // Oxygen model v2 controls
+  const [oxygenMode, setOxygenMode] = useState<'quality' | 'fast' | 'aggressive'>('quality');
+  const [oxygenSentenceBySentence, setOxygenSentenceBySentence] = useState(true);
+  const [oxygenMinChangeRatio, setOxygenMinChangeRatio] = useState(0.40);
+  const [oxygenMaxRetries, setOxygenMaxRetries] = useState(5);
+  const [oxygenAdvancedOpen, setOxygenAdvancedOpen] = useState(false);
 
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const outputRef = useRef<HTMLTextAreaElement>(null);
@@ -312,10 +320,28 @@ export default function EditorPage() {
 
   /** Shared SSE streaming handler used by humanize & rephrase */
   const runStreamingHumanize = async (inputText: string, signal: AbortSignal) => {
+    const requestBody: Record<string, unknown> = {
+      text: inputText,
+      engine,
+      strength,
+      tone,
+      strict_meaning: strictMeaning,
+      enable_post_processing: true,
+      premium,
+    };
+
+    // Add Oxygen v2 controls if Oxygen engine is selected
+    if (engine === 'oxygen') {
+      requestBody.oxygen_mode = oxygenMode;
+      requestBody.oxygen_sentence_by_sentence = oxygenSentenceBySentence;
+      requestBody.oxygen_min_change_ratio = oxygenMinChangeRatio;
+      requestBody.oxygen_max_retries = oxygenMaxRetries;
+    }
+
     const res = await fetch('/api/humanize-stream', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text: inputText, engine, strength, tone, strict_meaning: strictMeaning, enable_post_processing: true, premium }),
+      body: JSON.stringify(requestBody),
       signal,
     });
 
@@ -766,6 +792,139 @@ export default function EditorPage() {
           ) : null;
         })()}
       </div>
+
+      {/* Oxygen Advanced Controls */}
+      {engine === 'oxygen' && (
+        <div className="bg-gradient-to-br from-purple-50 to-blue-50 dark:from-purple-950/30 dark:to-blue-950/30 border border-purple-200 dark:border-purple-800 rounded-xl overflow-hidden">
+          <button
+            onClick={() => setOxygenAdvancedOpen(!oxygenAdvancedOpen)}
+            className="w-full flex items-center justify-between px-4 py-3 hover:bg-white/50 dark:hover:bg-black/20 transition-colors"
+          >
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold text-purple-700 dark:text-purple-300">⚙️ Oxygen Pipeline Controls</span>
+              <span className="text-[10px] px-2 py-0.5 rounded-full bg-purple-200 dark:bg-purple-900/50 text-purple-700 dark:text-purple-300">Multi-phase AI kill</span>
+            </div>
+            <ChevronDown className={`w-4 h-4 text-purple-500 transition-transform ${oxygenAdvancedOpen ? 'rotate-180' : ''}`} />
+          </button>
+          
+          {oxygenAdvancedOpen && (
+            <div className="px-4 pb-4 space-y-4 border-t border-purple-200 dark:border-purple-800 pt-4">
+              {/* Pipeline Mode */}
+              <div className="space-y-1.5">
+                <label className="block text-xs font-semibold text-purple-900 dark:text-purple-200">
+                  Pipeline Mode
+                </label>
+                <div className="flex gap-2">
+                  {[
+                    { id: 'quality', label: 'Quality', desc: 'Beam=4, 5 retries' },
+                    { id: 'fast', label: 'Fast', desc: 'Greedy, 2 retries' },
+                    { id: 'aggressive', label: 'Aggressive', desc: 'Beam=6, 8 retries' },
+                  ].map(mode => (
+                    <button
+                      key={mode.id}
+                      onClick={() => setOxygenMode(mode.id as typeof oxygenMode)}
+                      className={`flex-1 px-3 py-2 rounded-lg border transition-all text-xs ${
+                        oxygenMode === mode.id
+                          ? 'bg-purple-600 text-white border-purple-600 shadow-md'
+                          : 'bg-white dark:bg-zinc-800 text-slate-600 dark:text-zinc-300 border-slate-200 dark:border-zinc-700 hover:border-purple-300'
+                      }`}
+                    >
+                      <div className="font-bold">{mode.label}</div>
+                      <div className="text-[10px] opacity-80">{mode.desc}</div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Sentence-by-Sentence Toggle */}
+              <div className="space-y-1">
+                <label className="flex items-center justify-between text-xs font-semibold text-purple-900 dark:text-purple-200">
+                  <span>Sentence-by-Sentence Processing</span>
+                  <button
+                    onClick={() => setOxygenSentenceBySentence(!oxygenSentenceBySentence)}
+                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                      oxygenSentenceBySentence 
+                        ? 'bg-purple-600 dark:bg-purple-500' 
+                        : 'bg-gray-200 dark:bg-gray-700'
+                    }`}
+                  >
+                    <span
+                      className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                        oxygenSentenceBySentence ? 'translate-x-6' : 'translate-x-1'
+                      }`}
+                    />
+                  </button>
+                </label>
+                <p className="text-[10px] text-purple-600 dark:text-purple-400">
+                  Each sentence processed independently with retry loop until change threshold met
+                </p>
+              </div>
+
+              {/* Min Change Ratio */}
+              <div className="space-y-1">
+                <label className="block text-xs font-semibold text-purple-900 dark:text-purple-200">
+                  Minimum Change Threshold: {(oxygenMinChangeRatio * 100).toFixed(0)}%
+                </label>
+                <input
+                  type="range"
+                  min="0.2"
+                  max="0.8"
+                  step="0.05"
+                  value={oxygenMinChangeRatio}
+                  onChange={(e) => setOxygenMinChangeRatio(parseFloat(e.target.value))}
+                  className="w-full h-2 bg-purple-200 dark:bg-purple-900/50 rounded-lg appearance-none cursor-pointer accent-purple-600"
+                />
+                <p className="text-[10px] text-purple-600 dark:text-purple-400">
+                  At least {(oxygenMinChangeRatio * 100).toFixed(0)}% of words must change per sentence
+                </p>
+              </div>
+
+              {/* Max Retries */}
+              <div className="space-y-1">
+                <label className="block text-xs font-semibold text-purple-900 dark:text-purple-200">
+                  Max Retries per Sentence: {oxygenMaxRetries}
+                </label>
+                <input
+                  type="range"
+                  min="1"
+                  max="15"
+                  step="1"
+                  value={oxygenMaxRetries}
+                  onChange={(e) => setOxygenMaxRetries(parseInt(e.target.value))}
+                  className="w-full h-2 bg-purple-200 dark:bg-purple-900/50 rounded-lg appearance-none cursor-pointer accent-purple-600"
+                />
+                <p className="text-[10px] text-purple-600 dark:text-purple-400">
+                  Retry T5 generation until {(oxygenMinChangeRatio * 100).toFixed(0)}% change is achieved (max {oxygenMaxRetries} attempts)
+                </p>
+              </div>
+
+              {/* Pipeline Info */}
+              <div className="bg-purple-100/50 dark:bg-purple-900/20 rounded-lg p-3 text-[10px] text-purple-700 dark:text-purple-300 space-y-1">
+                <p className="font-bold">Pipeline Phases:</p>
+                <p>1. T5 beam-search paraphrase (per sentence)</p>
+                <p>2. AI word kill (60+ markers) + filler removal</p>
+                <p>3. Structural variance (clause fronting, splitting)</p>
+                <p>4. Quality gate (retry loop for min change)</p>
+                <p>5. TypeScript post-processing (10-phase signal attack)</p>
+                <p>6. Grammar sanitizer + contraction expansion</p>
+              </div>
+
+              {/* Reset Button */}
+              <button
+                onClick={() => {
+                  setOxygenMode('quality');
+                  setOxygenSentenceBySentence(true);
+                  setOxygenMinChangeRatio(0.40);
+                  setOxygenMaxRetries(5);
+                }}
+                className="w-full py-2 text-xs font-semibold text-purple-600 dark:text-purple-300 hover:bg-purple-100 dark:hover:bg-purple-900/30 rounded-lg transition-colors"
+              >
+                ↻ Reset to Defaults
+              </button>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Editor Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">

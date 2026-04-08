@@ -6,7 +6,7 @@ import { premiumHumanize } from '@/lib/engine/premium-humanizer';
 import { humanizeV11 } from '@/lib/engine/v11';
 import { humaraHumanize } from '@/lib/humara';
 import { getDetector } from '@/lib/engine/multi-detector';
-import { isMeaningPreserved } from '@/lib/engine/semantic-guard';
+import { isMeaningPreserved, semanticSimilaritySync } from '@/lib/engine/semantic-guard';
 import { fixCapitalization } from '@/lib/engine/shared-dictionaries';
 import { deduplicateRepeatedPhrases } from '@/lib/engine/premium-deep-clean';
 import { preserveInputStructure } from '@/lib/engine/structure-preserver';
@@ -121,6 +121,155 @@ function enforceRestructuringThreshold(
   return rebuilt.join('\n\n');
 }
 
+// ── Last-Mile Meaning Validator ─────────────────────────────────────
+// Compares each output sentence against the original sentence it maps to.
+// If the meaning has drifted too far (content words diverged), replaces
+// the output sentence with a lightly-transformed version of the original.
+// This applies to ALL humanizers as a universal safety net.
+
+function contentWordOverlap(original: string, modified: string): number {
+  const STOPWORDS = new Set([
+    'the','a','an','is','are','was','were','be','been','being','have','has','had',
+    'do','does','did','will','would','could','should','may','might','can','shall',
+    'to','of','in','for','on','with','at','by','from','as','into','through','during',
+    'before','after','above','below','between','out','off','over','under','again',
+    'further','then','once','here','there','when','where','why','how','all','each',
+    'every','both','few','more','most','other','some','such','no','nor','not','only',
+    'own','same','so','than','too','very','just','because','but','and','or','if',
+    'while','that','this','these','those','it','its','they','them','their','we',
+    'our','he','she','his','her','which','what','who','whom','about','also',
+  ]);
+
+  const getContentWords = (text: string) => {
+    return text.toLowerCase()
+      .replace(/[^a-z0-9\s]/g, '')
+      .split(/\s+/)
+      .filter(w => w.length >= 3 && !STOPWORDS.has(w));
+  };
+
+  const origWords = new Set(getContentWords(original));
+  const modWords = new Set(getContentWords(modified));
+
+  if (origWords.size === 0) return 1.0;
+
+  // Count how many original content words (or close variants) appear in output
+  let matches = 0;
+  for (const w of origWords) {
+    if (modWords.has(w)) {
+      matches++;
+    } else {
+      // Check stem overlap (simple: first 5 chars match)
+      for (const m of modWords) {
+        if (w.length >= 5 && m.length >= 5 && w.slice(0, 5) === m.slice(0, 5)) {
+          matches += 0.7;
+          break;
+        }
+      }
+    }
+  }
+  return matches / origWords.size;
+}
+
+function lastMileMeaningValidator(
+  originalText: string,
+  humanizedText: string,
+  minOverlap: number = 0.35,
+): string {
+  const origSentences = robustSentenceSplit(originalText);
+  const humanizedSentences = robustSentenceSplit(humanizedText);
+
+  if (humanizedSentences.length < 1 || origSentences.length < 1) return humanizedText;
+
+  // Step 1: Build best-match mapping from output → original
+  const matches: { origIdx: number; overlap: number }[] = [];
+  for (let i = 0; i < humanizedSentences.length; i++) {
+    let bestOrigIdx = 0;
+    let bestOverlap = 0;
+    for (let j = 0; j < origSentences.length; j++) {
+      const overlap = contentWordOverlap(origSentences[j], humanizedSentences[i]);
+      if (overlap > bestOverlap) {
+        bestOverlap = overlap;
+        bestOrigIdx = j;
+      }
+    }
+    matches.push({ origIdx: bestOrigIdx, overlap: bestOverlap });
+  }
+
+  // Step 2: Track which original sentences are already well-covered
+  const coveredOriginals = new Set<number>();
+  for (let i = 0; i < matches.length; i++) {
+    if (matches[i].overlap >= minOverlap) {
+      coveredOriginals.add(matches[i].origIdx);
+    }
+  }
+
+  // Step 3: Fix or remove bad sentences
+  let anyFixed = false;
+  const fixedSentences: string[] = [];
+
+  for (let i = 0; i < humanizedSentences.length; i++) {
+    const { origIdx, overlap } = matches[i];
+
+    if (overlap >= minOverlap) {
+      // Sentence preserves meaning — keep it
+      fixedSentences.push(humanizedSentences[i]);
+    } else if (coveredOriginals.has(origIdx)) {
+      // This sentence is hallucinated AND its closest original is already
+      // covered by another good output sentence → DROP it (would create duplicate)
+      anyFixed = true;
+      // Don't push anything — sentence is removed
+    } else {
+      // Original sentence not yet covered — reprocess with light transforms
+      const origSent = origSentences[origIdx];
+      let fixed = applyAIWordKill(origSent);
+      const usedWords = new Set<string>();
+      fixed = synonymReplace(fixed, 0.35, usedWords);
+
+      // Verify fix preserves meaning
+      const fixOverlap = contentWordOverlap(origSent, fixed);
+      if (fixOverlap >= minOverlap) {
+        fixedSentences.push(fixed);
+      } else {
+        // Minimal change fallback
+        fixedSentences.push(applyAIWordKill(origSent));
+      }
+      coveredOriginals.add(origIdx);
+      anyFixed = true;
+    }
+  }
+
+  if (!anyFixed) return humanizedText;
+
+  // Reconstruct preserving paragraph structure
+  const paragraphs = humanizedText.split(/\n\s*\n/);
+  let sentIdx = 0;
+  const rebuilt = paragraphs.map(para => {
+    const paraSents = robustSentenceSplit(para);
+    const replacedSents: string[] = [];
+    // Distribute fixed sentences proportionally to paragraph size
+    const count = Math.min(paraSents.length, fixedSentences.length - sentIdx);
+    for (let j = 0; j < count; j++) {
+      if (sentIdx < fixedSentences.length) {
+        replacedSents.push(fixedSentences[sentIdx]);
+        sentIdx++;
+      }
+    }
+    return replacedSents.join(' ');
+  });
+
+  // If there are remaining sentences, append to last paragraph
+  if (sentIdx < fixedSentences.length) {
+    const remaining = fixedSentences.slice(sentIdx).join(' ');
+    if (rebuilt.length > 0) {
+      rebuilt[rebuilt.length - 1] += ' ' + remaining;
+    } else {
+      rebuilt.push(remaining);
+    }
+  }
+
+  return rebuilt.filter(p => p.trim()).join('\n\n');
+}
+
 export async function POST(req: Request) {
   try {
     let body: any;
@@ -162,7 +311,38 @@ export async function POST(req: Request) {
 
     let humanized: string;
 
-    if (engine === 'humara_v1_3') {
+    if (engine === 'oxygen') {
+      // Oxygen v2: T5 model + multi-phase pipeline + full TS post-processing
+      const oxygenUrl = process.env.OXYGEN_SERVER_URL || 'http://127.0.0.1:5001';
+      
+      // Map strength to mode presets
+      const oxygenMode = strength === 'light' ? 'fast'
+        : strength === 'strong' ? 'aggressive'
+        : 'quality';
+      
+      const oxygenParams = {
+        text: normalizedText,
+        strength: strength ?? 'medium',
+        mode: body.oxygen_mode || oxygenMode,
+        min_change_ratio: body.oxygen_min_change_ratio || 0.40,
+        max_retries: body.oxygen_max_retries || 5,
+        sentence_by_sentence: body.oxygen_sentence_by_sentence !== false,
+      };
+      
+      const resp = await fetch(`${oxygenUrl}/humanize`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(oxygenParams),
+        signal: AbortSignal.timeout(120000),
+      });
+      if (!resp.ok) {
+        const errBody = await resp.text();
+        return NextResponse.json({ error: `Oxygen model error: ${errBody}` }, { status: 502 });
+      }
+      const oxygenResult = await resp.json();
+      humanized = oxygenResult.humanized;
+      // Oxygen now flows through ALL post-processing below (no longer skipped)
+    } else if (engine === 'humara_v1_3') {
       // Humara v1.3: Stealth Humanizer Engine v5 from coursework-champ
       const { pipeline } = await import('@/lib/engine/humara-v1-3');
       humanized = await pipeline(normalizedText, tone ?? 'academic', strength === 'strong' ? 10 : strength === 'light' ? 4 : 7);
@@ -280,6 +460,7 @@ export async function POST(req: Request) {
     // Fix AI/ai capitalization that fixCapitalization may lowercase
     humanized = humanized
       .replace(/\bai-(\w)/gi, (_m: string, c: string) => `AI-${c}`)
+      .replace(/\baI\b/g, 'AI')
       .replace(/\bai\b/g, 'AI');
 
     // Cross-sentence repetition cleanup — deduplicates phrases repeated across sentences
@@ -446,6 +627,16 @@ export async function POST(req: Request) {
     // 5. Offensive/archaic words
     humanized = humanized.replace(/\bquislingism\b/gi, "collaboration");
     humanized = humanized.replace(/\bquisling\b/gi, "collaborator");
+
+    // ── LAST-MILE MEANING VALIDATOR ─────────────────────────────
+    // Applies to ALL humanizers. Compares each output sentence against
+    // the original to ensure the content still communicates the same idea.
+    // If any sentence has drifted too far, it gets reprocessed with
+    // lighter transforms that preserve meaning.
+    humanized = lastMileMeaningValidator(text, humanized, 0.35);
+
+    // Fix sentence-initial lowercase after all processing
+    humanized = humanized.replace(/(^|[.!?]\s+)([a-z])/g, (_m, pre, ch) => pre + ch.toUpperCase());
 
     // Generate per-sentence alternatives (3 candidates each, best already picked by engines)
     const FIRST_PERSON_RE = /\b(I|me|my|mine|myself|we|us|our|ours|ourselves)\b/i;

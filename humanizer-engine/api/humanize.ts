@@ -2,7 +2,9 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 
 // Import actual humanization engines
 import { humanizeV11 } from '../frontend/lib/engine/v11/index';
-import { humanize } from '../ts-engine/src/humanizer';
+import { humanize, humanizeWithChunking } from '../frontend/lib/engine/humanizer';
+import { humanizeDocument } from '../frontend/lib/engine/ghost-mini-v1-2';
+import { humaraHumanize } from '../frontend/lib/humara/index';
 import { premiumHumanize } from '../ts-engine/src/premium-humanizer';
 import { llmHumanize } from '../ts-engine/src/llm-humanizer';
 import { ghostProHumanize } from '../ts-engine/src/ghost-pro';
@@ -79,11 +81,15 @@ export default async function handler(
       'fast_v11': 'v1.1',
       'v1.1': 'v1.1',
       'standard': 'standard',
-      'ghost_mini': 'standard',
+      'engine': 'standard',
+      'ghost_mini': 'ghost_mini',
+      'humara': 'humara',
       'premium': 'premium',
       'ghost_pro': 'ghost_pro',
       'llm': 'llm',
       'ninja': 'llm',
+      'omega': 'llm',
+      'nuru': 'ghost_mini',
     };
 
     const engine = engineMap[rawEngine] || 'v1.1';
@@ -116,13 +122,38 @@ export default async function handler(
           break;
 
         case 'standard':
-          // Standard Humanizer
-          humanized = humanize(text, {
-            preserve_sentence_count: true,
-            allow_contractions: false,
-            allow_first_person_injection: false,
-            stealth_mode: true,
-            max_word_change: strength === 'strong' ? 0.75 : strength === 'medium' ? 0.5 : 0.3,
+          // Standard Humanizer (Main Engine v3)
+          const wordCount = text.split(/\s+/).length;
+          if (wordCount > 1000) {
+            humanized = humanizeWithChunking(text, {
+              preserve_sentence_count: true,
+              allow_contractions: false,
+              allow_first_person_injection: false,
+              stealth_mode: true,
+              max_word_change: strength === 'strong' ? 0.75 : strength === 'medium' ? 0.5 : 0.3,
+            });
+          } else {
+            humanized = humanize(text, {
+              preserve_sentence_count: true,
+              allow_contractions: false,
+              allow_first_person_injection: false,
+              stealth_mode: true,
+              max_word_change: strength === 'strong' ? 0.75 : strength === 'medium' ? 0.5 : 0.3,
+            });
+          }
+          break;
+
+        case 'ghost_mini':
+          // Ghost Mini v1.2 - Academic Prose Engine
+          humanized = humanizeDocument(text);
+          break;
+
+        case 'humara':
+          // Humara - Stealth Humanizer Engine
+          humanized = humaraHumanize(text, {
+            strength: strength as 'light' | 'medium' | 'heavy',
+            tone: tone as 'neutral' | 'academic' | 'professional' | 'casual',
+            strictMeaning: keepMeaning,
           });
           break;
 

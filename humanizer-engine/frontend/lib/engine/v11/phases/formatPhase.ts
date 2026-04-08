@@ -244,7 +244,28 @@ export const formatPhase: Phase = {
       const liveSentences = paragraph.sentences.filter(
         s => s.text.trim().length > 0 && !s.flags.includes('killed')
       );
-      const assembled = liveSentences.map(s => s.text).join(' ');
+      
+      // Preserve title sentences exactly (no modification)
+      const titleSentences = liveSentences.filter(s => s.flags.includes('title'));
+      const bodySentences = liveSentences.filter(s => !s.flags.includes('title'));
+      
+      // If entire paragraph is a title, preserve it exactly
+      if (titleSentences.length > 0 && bodySentences.length === 0) {
+        const titleText = titleSentences[0].text.trim();
+        // Ensure first letter is capitalized
+        const fixed = titleText.length > 0 && titleText[0] === titleText[0].toLowerCase()
+          ? titleText[0].toUpperCase() + titleText.slice(1)
+          : titleText;
+        paragraph.currentText = fixed;
+        if (fixed) {
+          paragraphTexts.push(fixed);
+        }
+        continue;
+      }
+      
+      // Mixed paragraph: titles followed by body (shouldn't happen often but handle it)
+      const allSentences = [...titleSentences.map(s => s.text), ...bodySentences.map(s => s.text)];
+      const assembled = allSentences.join(' ');
       paragraph.currentText = assembled;
       if (assembled.trim()) {
         paragraphTexts.push(assembled);

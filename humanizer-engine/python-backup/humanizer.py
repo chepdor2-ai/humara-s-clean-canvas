@@ -334,6 +334,12 @@ _HUMAN_STARTERS = [
     "It helps to remember that ", "Part of the issue is that ",
     "To put it another way, ",
     "What often goes unnoticed is that ", "In many ways, ",
+    # --- Added from Colab training (human indicators: "you", "but", "just", "so", "only") ---
+    "So, ", "Just to be clear, ", "Sure, ", "Look, ",
+    "The thing is, ", "Here is the catch: ",
+    "What you see is ", "At the end of the day, ",
+    "For one thing, ", "Honestly, ",
+    "Simply put, ", "As it happens, ",
 ]
 
 # Mid-sentence hedging/aside injections (inserted after a comma or clause)
@@ -986,6 +992,12 @@ _OPENER_VARIANTS = [
     "Then again, ", "Put differently, ", "Seen another way, ",
     "Which means ", "In other words, ",
     "Equally worth noting, ", "Just as relevant, ",
+    # --- Added from Colab training (boost starter_diversity) ---
+    "So ", "Yet ", "Still, ", "Plus, ", "Now, ",
+    "Oddly, ", "Granted, ", "Sure, ", "Look, ",
+    "Of course, ", "For one thing, ", "To be fair, ",
+    "Notably, ", "What stands out is that ",
+    "Think of it this way: ", "Here is the thing: ",
 ]
 
 
@@ -1537,6 +1549,14 @@ def _fix_starter_diversity(sentences: list) -> list:
         "Worth noting, ", "On the flip side, ",
         "To put it plainly, ", "As it turns out, ",
         "Interestingly, ", "Crucially, ", "Not surprisingly, ",
+        # --- Added from Colab training (top signal: starter_diversity 0.648) ---
+        "So, ", "Plus, ", "Sure, ", "Look, ",
+        "Here is the thing: ", "One thing to note: ",
+        "What stands out is ", "At the same time, ",
+        "For what it is worth, ", "To sum it up, ",
+        "Think about it: ", "Along those lines, ",
+        "Oddly enough, ", "Just as important, ",
+        "Perhaps more to the point, ", "In any case, ",
     ]
 
     for i, sent in enumerate(sentences):
@@ -1753,6 +1773,21 @@ def _fix_function_word_freq(sentences: list, intensity: float) -> list:
         "it is necessary to": "we need to",
         "it is evident that": "clearly",
         "it should be noted that": "",
+        # --- Added from Colab aggressive training data (top AI indicators) ---
+        "it is also": "this is also",
+        "it is essential": "this is essential",
+        "it is crucial": "this is crucial",
+        "such as": "like",
+        "a variety of": "a range of",
+        "a wide variety of": "all sorts of",
+        "including the": "like the",
+        "important to consider": "worth considering",
+        "can be seen": "shows up",
+        "can be observed": "appears",
+        "can be achieved": "is possible",
+        "it can be": "this could be",
+        "helps to": "lets us",
+        "it helps": "this lets",
     }
     for sent in sentences:
         for old, new in _fw_swaps.items():

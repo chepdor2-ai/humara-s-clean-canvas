@@ -1,0 +1,274 @@
+{
+  "ai_indicators": [
+    {
+      "feature": "has_contractions",
+      "weight": 2.205581079389362
+    },
+    {
+      "feature": "avg_word_len",
+      "weight": 1.7985782253273581
+    },
+    {
+      "feature": "including",
+      "weight": 1.5114322767493042
+    },
+    {
+      "feature": "born in",
+      "weight": 1.4952583360072016
+    },
+    {
+      "feature": "can",
+      "weight": 1.3316930585841344
+    },
+    {
+      "feature": "ai_marker_count",
+      "weight": 1.3284205673316178
+    },
+    {
+      "feature": "born",
+      "weight": 1.3263785589511352
+    },
+    {
+      "feature": "such as",
+      "weight": 1.2443656857760845
+    },
+    {
+      "feature": "or",
+      "weight": 1.2396398283674113
+    },
+    {
+      "feature": "important",
+      "weight": 1.2004021503938653
+    },
+    {
+      "feature": "died",
+      "weight": 1.1518081006858998
+    },
+    {
+      "feature": "help",
+      "weight": 1.1513218998301509
+    },
+    {
+      "feature": "was born",
+      "weight": 1.1186773552267475
+    },
+    {
+      "feature": "it is",
+      "weight": 1.0575063484276568
+    },
+    {
+      "feature": "may",
+      "weight": 1.0479181823285006
+    },
+    {
+      "feature": "also",
+      "weight": 0.9995803702970468
+    },
+    {
+      "feature": "known for",
+      "weight": 0.9404834077033287
+    },
+    {
+      "feature": "such",
+      "weight": 0.9367701377953204
+    },
+    {
+      "feature": "has",
+      "weight": 0.8917000930424477
+    },
+    {
+      "feature": "helps",
+      "weight": 0.8887612685471865
+    },
+    {
+      "feature": "for his",
+      "weight": 0.8228148077317793
+    },
+    {
+      "feature": "can be",
+      "weight": 0.8168967129594638
+    },
+    {
+      "feature": "is",
+      "weight": 0.7966579344125794
+    },
+    {
+      "feature": "died in",
+      "weight": 0.7680042840177771
+    },
+    {
+      "feature": "important to",
+      "weight": 0.7538223283570461
+    },
+    {
+      "feature": "who",
+      "weight": 0.74448967532407
+    },
+    {
+      "feature": "he",
+      "weight": 0.7401471380118597
+    },
+    {
+      "feature": "including the",
+      "weight": 0.7344181896035774
+    },
+    {
+      "feature": "variety of",
+      "weight": 0.7305024494189799
+    },
+    {
+      "feature": "the age",
+      "weight": 0.7242298863843368
+    }
+  ],
+  "human_indicators": [
+    {
+      "feature": "vocab_diversity",
+      "weight": -7.565847018984069
+    },
+    {
+      "feature": "starter_diversity",
+      "weight": -3.9257469549090627
+    },
+    {
+      "feature": "you",
+      "weight": -1.1621826568009763
+    },
+    {
+      "feature": "of the",
+      "weight": -1.0167498767940588
+    },
+    {
+      "feature": "only",
+      "weight": -0.9610656553380406
+    },
+    {
+      "feature": "but",
+      "weight": -0.8969018114032458
+    },
+    {
+      "feature": "were",
+      "weight": -0.8612721241062604
+    },
+    {
+      "feature": "just",
+      "weight": -0.856136498975631
+    },
+    {
+      "feature": "would",
+      "weight": -0.8518286439567611
+    },
+    {
+      "feature": "all",
+      "weight": -0.8210006181581688
+    },
+    {
+      "feature": "with",
+      "weight": -0.7721464854938774
+    },
+    {
+      "feature": "so",
+      "weight": -0.7641034921271068
+    },
+    {
+      "feature": "re",
+      "weight": -0.7539087426500374
+    },
+    {
+      "feature": "url_0",
+      "weight": -0.7502141788335809
+    },
+    {
+      "feature": "to the",
+      "weight": -0.7357585570055257
+    },
+    {
+      "feature": "do",
+      "weight": -0.7255003162976861
+    },
+    {
+      "feature": "year",
+      "weight": -0.7145159997556187
+    },
+    {
+      "feature": "the first",
+      "weight": -0.6885597849140792
+    },
+    {
+      "feature": "under",
+      "weight": -0.6644660263698104
+    },
+    {
+      "feature": "early life",
+      "weight": -0.6587216363320506
+    },
+    {
+      "feature": "along",
+      "weight": -0.6560763611673702
+    },
+    {
+      "feature": "no",
+      "weight": -0.6527586914234944
+    },
+    {
+      "feature": "at",
+      "weight": -0.6330399909028527
+    },
+    {
+      "feature": "had",
+      "weight": -0.6312968265358626
+    },
+    {
+      "feature": "later",
+      "weight": -0.60369897668972
+    },
+    {
+      "feature": "for the",
+      "weight": -0.6018654796782257
+    },
+    {
+      "feature": "south",
+      "weight": -0.6012662335367084
+    },
+    {
+      "feature": "from",
+      "weight": -0.5921733689724256
+    },
+    {
+      "feature": "description",
+      "weight": -0.5910838041318388
+    },
+    {
+      "feature": "from the",
+      "weight": -0.5866087981642294
+    }
+  ],
+  "training_stats": {
+    "total_samples": 76436,
+    "human_count": 38080,
+    "ai_count": 38356,
+    "auc_score": 0.9409268877867449,
+    "datasets": [
+      "wiki_gpt",
+      "aihumanv1",
+      "wiki_human"
+    ]
+  },
+  "signal_strengths": {
+    "starter_diversity": 0.648,
+    "vocab_diversity": 0.541,
+    "has_contractions": 0.487,
+    "avg_word_len": 0.465,
+    "repeated_bigrams": 0.419,
+    "has_first_person": 0.392,
+    "ai_marker_count": 0.386,
+    "ai_marker_density": 0.352,
+    "dash_count": 0.325,
+    "paren_count": 0.265,
+    "sent_len_std": 0.222,
+    "has_questions": 0.193,
+    "avg_sent_len": 0.109,
+    "flesch_ease": 0.045,
+    "num_sentences": 0.028
+  }
+}

@@ -45,6 +45,7 @@ import {
   fixPunctuation,
   cleanSentenceStarters,
 } from "./shared-dictionaries";
+import { validateAndRepairOutput } from "./validation-post-process";
 
 // ═══════════════════════════════════════════
 // Configuration
@@ -1051,6 +1052,20 @@ export function ghostMiniV1_2(text: string): string {
   result = result.replace(/\s*—\s*/g, ", ").replace(/\s*–\s*/g, ", ");
   // Fix double spaces
   result = result.replace(/ {2,}/g, " ");
+
+  // ── POST-PROCESSING VALIDATION ──
+  try {
+    const validationResult = validateAndRepairOutput(text, result, {
+      allowWordChangeBound: 0.7,
+      minSentenceWords: 3,
+      autoRepair: true,
+    });
+    if (validationResult.wasRepaired) {
+      result = validationResult.text;
+    }
+  } catch (error) {
+    console.warn('[ghostMiniV1_2] Validation error:', error);
+  }
 
   return result;
 }

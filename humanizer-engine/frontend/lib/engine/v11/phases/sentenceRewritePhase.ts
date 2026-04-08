@@ -125,10 +125,17 @@ export const sentenceRewritePhase: Phase = {
 
     for (const paragraph of state.paragraphs) {
       for (const sentence of paragraph.sentences) {
-        // Skip headings/titles — word replacement destroys them
+        // Skip titles completely — preserve them exactly
+        if (sentence.flags.includes('title')) {
+          continue;
+        }
+        
+        // Also skip very short sentences that look like headings
         const trimmed = sentence.text.trim();
         const wordCount = trimmed.split(/\s+/).length;
-        if (wordCount <= 10 && !/[.!?]$/.test(trimmed) && trimmed.length > 0) continue;
+        if (wordCount <= 10 && !/[.!?]$/.test(trimmed) && trimmed.length > 0) {
+          continue;
+        }
         
         // Process ALL sentences — even low-ai ones can carry detector fingerprints
         let text = sentence.text;

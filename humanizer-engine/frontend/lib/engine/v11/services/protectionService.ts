@@ -2,8 +2,25 @@
  * V1.1 Protection Service
  * ========================
  * Protects and restores special content (URLs, citations, code, math,
- * brackets, figures, percentages, dates, measurements, currency).
+ * brackets, figures, percentages, dates, measurements, currency, titles).
  */
+
+/**
+ * Detect if a line is a title/heading.
+ */
+function isTitleLine(line: string): boolean {
+  const trimmed = line.trim();
+  if (!trimmed || trimmed.length > 100) return false;
+  if (/[.!?]$/.test(trimmed)) return false; // Has ending punctuation
+
+  const words = trimmed.split(/\s+/);
+  if (words.length > 12) return false; // Too long
+  
+  const capitalWords = words.filter(w => w.length > 0 && /^[A-Z]/.test(w)).length;
+  const titleRatio = capitalWords / Math.max(words.length, 1);
+  
+  return titleRatio >= 0.6; // At least 60% words capitalized
+}
 
 const PROTECTION_PATTERNS: RegExp[] = [
   // Containers

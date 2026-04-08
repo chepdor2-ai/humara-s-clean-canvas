@@ -32,6 +32,7 @@ import {
   TRANSITION_SWAPS, QUANTIFIER_SWAPS, TEMPORAL_SWAPS, CAUSAL_SWAPS, EMPHASIS_SWAPS,
   fixPunctuation, cleanSentenceStarters, verifySentencePresence, deepCleaningPass, perSentenceAntiDetection,
 } from "./shared-dictionaries";
+import { validateAndRepairOutput } from "./validation-post-process";
 import {
   applyMicroNoiseToText, humanNoiseInjection,
 } from "./anti-ai-patterns";
@@ -2404,7 +2405,23 @@ export function humanizeWithChunking(
   // Humanize each chunk independently
   const processed = chunks.map(chunk => humanize(chunk, opts));
 
-  return processed.join("\n\n");
+  const finalOutput = processed.join("\n\n");
+
+  // ── POST-PROCESSING VALIDATION ──
+  try {
+    const validationResult = validateAndRepairOutput(text, finalOutput, {
+      allowWordChangeBound: 0.7,
+      minSentenceWords: 3,
+      autoRepair: true,
+    });
+    if (validationResult.wasRepaired) {
+      return validationResult.text;
+    }
+  } catch (error) {
+    console.warn('[humanizeWithChunking] Validation error:', error);
+  }
+
+  return finalOutput;
 }
 
 // ── Writing Style Profile Matching ──

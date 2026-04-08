@@ -27,6 +27,7 @@
 import { HumanizationPipeline } from './pipeline';
 import { protectContent, restoreContent } from './services/protectionService';
 import type { DocumentState, V11Options } from './types';
+import { validateAndRepairOutput } from '../validation-post-process';
 
 // Import all 15 phases
 import { cleanPhase } from './phases/cleanPhase';
@@ -98,11 +99,59 @@ export async function humanizeV11(
   // Run restoreContent one more time to catch any surviving markers.
   finalState.currentText = restoreContent(finalState.currentText, spans);
 
+  // ── POST-PROCESSING VALIDATION ──
+  // Validate output integrity: ensure all sentences present, no truncation
+  let validatedText = finalState.currentText;
+  let wasRepaired = false;
+  const repairs: string[] = [];
+  
+  try {
+    const validationResult = validateAndRepairOutput(text, validatedText, {
+      allowWordChangeBound: 0.7,
+      minSentenceWords: 3,
+      autoRepair: true,
+    });
+    
+    validatedText = validationResult.text;
+    wasRepaired = validationResult.wasRepaired;
+    
+    if (wasRepaired) {
+      repairs.push(...validationResult.repairs);
+      finalState.logs.push(
+        `[validation] Output repaired: ${repairs.length} repairs made: ${repairs.join(', ')}`
+      );
+    }
+    
+    if (!validationResult.validation.isValid) {
+      finalState.logs.push(
+        `[validation] Issues found: ${validationResult.validation.issues.length} issues`
+      );
+      if (validationResult.validation.issues.length > 0) {
+        finalState.logs.push(`  First issue: ${validationResult.validation.issues[0]}`);
+      }
+    }
+    
+    // Update metadata with validation results
+    finalState.metadata.validation = {
+      passed: validationResult.validation.isValid,
+      repaired: wasRepaired,
+      repairs,
+      stats: validationResult.validation.stats,
+      issues: validationResult.validation.issues.slice(0, 5), // First 5 issues only
+    };
+  } catch (error) {
+    finalState.logs.push(`[validation] Validation error: ${error}`);
+    finalState.metadata.validation = {
+      passed: false,
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
+
   const elapsed = Date.now() - startTime;
   finalState.logs.push(`[v1.1] Complete in ${elapsed}ms`);
 
   return {
-    humanized: finalState.currentText,
+    humanized: validatedText,
     logs: finalState.logs,
     metadata: {
       ...finalState.metadata,

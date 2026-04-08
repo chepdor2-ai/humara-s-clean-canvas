@@ -25,6 +25,7 @@ import {
 import {
   humanizeSentence,
 } from '../humanize-transforms';
+import { validateAndRepairOutput } from '../engine/validation-post-process';
 
 export interface HumaraOptions {
   strength?: 'light' | 'medium' | 'heavy';
@@ -202,7 +203,7 @@ export function humaraHumanize(text: string, options: HumaraOptions = {}): strin
     strictMeaning: options.strictMeaning ?? false,
   };
 
-  const output = parseStructuredBlocks(text)
+  let output = parseStructuredBlocks(text)
     .map((block) => {
       if (block.type === 'blank' || block.type === 'heading') {
         return block.rawLines.join('\n');
@@ -218,6 +219,20 @@ export function humaraHumanize(text: string, options: HumaraOptions = {}): strin
     })
     .join('\n')
     .replace(/[ \t]{2,}/g, ' ');
+
+  // ── POST-PROCESSING VALIDATION ──
+  try {
+    const validationResult = validateAndRepairOutput(text, output, {
+      allowWordChangeBound: 0.7,
+      minSentenceWords: 3,
+      autoRepair: true,
+    });
+    if (validationResult.wasRepaired) {
+      output = validationResult.text;
+    }
+  } catch (error) {
+    console.warn('[humaraHumanize] Validation error:', error);
+  }
 
   return output;
 }
