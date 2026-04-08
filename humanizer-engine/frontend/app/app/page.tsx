@@ -1,8 +1,9 @@
 'use client';
 import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import dynamic from 'next/dynamic';
-import { Copy, Check, Zap, Eraser, RotateCcw, Type, AlignLeft, RefreshCw, AlertTriangle, Info, Clock, ChevronDown, ChevronUp } from 'lucide-react';
+import { Copy, Check, Zap, Eraser, RotateCcw, Type, AlignLeft, RefreshCw, AlertTriangle, Clock, ChevronDown, ChevronUp } from 'lucide-react';
 import UsageBar, { useUsage } from './UsageBar';
+import { supabase } from '../../lib/supabase';
 
 const ProcessingAnimation = dynamic(() => import('../ProcessingAnimation'), { ssr: false });
 const LiveTextTransition = dynamic(() => import('./LiveTextTransition'), { ssr: false });
@@ -136,19 +137,27 @@ const splitSentences = (text: string): { text: string; start: number; end: numbe
 };
 
 /* ── Constants ──────────────────────────────────────────────────────────── */
-const ENGINES = [
-  { id: 'oxygen', label: 'Oxygen', subtitle: 'Multi-Phase T5 Pipeline', premium: false, desc: 'T5 beam-search paraphrase + 4-phase AI-kill pipeline. Sentence-by-sentence processing with 40% minimum change enforcement. AI word kill, filler removal, structural variance, then full TypeScript post-processing (10-phase signal attack). Zero LLM calls. Targets 0% AI score.' },
-  { id: 'omega', label: 'Omega', subtitle: 'Pure LLM Parallel', premium: false, desc: 'Every sentence extracted independently and sent to its own GPT-4o-mini API call in parallel. 10 distinct academic prompts assigned randomly. Pre-analysis detects structure, titles, and first-person usage. 60% word-change enforcement with retry. 40% statistical error injection. 7-phase AI-kill post-processing. No contractions. No first person unless in input.' },
-  { id: 'nuru', label: 'Nuru', subtitle: 'Non-LLM Parallel', premium: false, desc: 'Every sentence processed independently through 10 randomly assigned rule-based strategies. Pre-analysis extracts structure, titles, paragraphs, and detects first-person usage. 60% word-change enforcement. 40% academic error injection. 7-phase AI-kill post-processing. Zero LLM calls, instant processing. No contractions. No first person unless in input.' },
-  { id: 'humara_v1_3', label: 'Humara v1.3', subtitle: 'Stealth Engine v5', premium: false, desc: '8-stage non-LLM pipeline: structure parsing, token shielding, 300+ phrase compressions, 42 sentence restructuring patterns, 1500+ synonyms, 150+ AI phrase kills, discourse markers, and 3-pass retry loop. Zero LLM calls, instant processing.' },
-  { id: 'ghost_mini', label: 'Ghost Mini', subtitle: 'Statistical', premium: false, desc: 'Pure statistical engine — zero LLM calls. Multi-iteration synonym replacement, AI word kill (120+ banned words), 500K+ phrase variations, clause restructuring, and detector feedback loop. Fastest option.' },
-  { id: 'ghost_mini_v1_2', label: 'Ghost Mini v1.2', subtitle: 'Academic Statistical', premium: false, desc: 'Enhanced Ghost Mini specifically calibrated for pre-2000 academic prose. Employs semicolons strictly, blocks em-dashes, and maintains rigid structural syntax.' },
-  { id: 'ghost_pro', label: 'Ghost Pro', subtitle: 'Hybrid', premium: false, desc: 'LLM full-text rewrite (GPT-4o-mini) with pre-2000 style constraints, followed by aggressive statistical post-processing targeting 20 detector signals. Balanced quality and cost.' },
-  { id: 'ninja', label: 'Ninja', subtitle: '4-Layer Hybrid', premium: false, desc: '4-layer pipeline: sentence-level LLM (structural rewrite + humanization + polish), rule-based AI vocabulary kill, statistical tweaks (burstiness, punctuation), and a 22-detector feedback loop. Supports style memory.' },
-  { id: 'undetectable', label: 'Undetectable', subtitle: 'Double Pass', premium: false, desc: 'Maximum stealth — runs full Ninja pipeline first, then passes output through Ghost Mini statistical scrubbing. Double processing for the lowest possible AI detection scores.' },
-  { id: 'fast_v11', label: 'V1.1', subtitle: '15-Phase Pipeline', premium: true, desc: '15 sequential phases: clean, detect, sentence rewrite, optional LLM for high-AI sentences, perplexity injection, syntax restructuring, pre-2000 voice, anti-pattern breaking, deep AI kill, rhythm variance, aggressive post-processing, and final scorched-earth sweep.' },
-  { id: 'humara', label: 'Humara', subtitle: 'Independent Stealth', premium: true, desc: '3-layer sentence pipeline with 4000+ dictionary entries: structural rewriting (clause repositioning, voice switching), controlled rephrasing (context-aware synonyms, 421 phrase compressions), and flow adjustment. Zero LLM calls, instant processing.' },
+// Full engine registry — admin controls which are visible/premium via Supabase engine_config
+const ALL_ENGINES: EngineConfig[] = [
+  { id: 'easy', label: 'Easy', premium: false },
+  { id: 'oxygen', label: 'Oxygen', premium: false },
+  { id: 'omega', label: 'Omega', premium: false },
+  { id: 'nuru', label: 'Nuru', premium: false },
+  { id: 'humara_v1_3', label: 'Humara v1.3', premium: false },
+  { id: 'ghost_mini', label: 'Ghost Mini', premium: false },
+  { id: 'ghost_mini_v1_2', label: 'Ghost Mini v1.2', premium: false },
+  { id: 'ghost_pro', label: 'Ghost Pro', premium: false },
+  { id: 'ninja', label: 'Ninja', premium: false },
+  { id: 'undetectable', label: 'Undetectable', premium: false },
+  { id: 'fast_v11', label: 'V1.1', premium: true },
+  { id: 'humara', label: 'Humara', premium: true },
 ];
+
+interface EngineConfig {
+  id: string;
+  label: string;
+  premium: boolean;
+}
 const STRENGTHS = [
   { id: 'light', label: 'Light' },
   { id: 'medium', label: 'Medium' },
@@ -176,6 +185,43 @@ export default function EditorPage() {
   const [tone, setTone] = useState('academic');
   const [strictMeaning, setStrictMeaning] = useState(true);
   const [premium, setPremium] = useState(false);
+
+  // Admin-controlled engine visibility
+  const [engineConfig, setEngineConfig] = useState<Record<string, { enabled: boolean; premium: boolean; sort_order: number }>>({});
+  const [engineConfigLoaded, setEngineConfigLoaded] = useState(false);
+
+  // Fetch engine config from Supabase on mount
+  useEffect(() => {
+    (async () => {
+      try {
+        const { data } = await supabase.from('engine_config').select('engine_id, enabled, premium, sort_order');
+        if (data && data.length > 0) {
+          const config: Record<string, { enabled: boolean; premium: boolean; sort_order: number }> = {};
+          for (const row of data) {
+            config[row.engine_id] = { enabled: row.enabled, premium: row.premium, sort_order: row.sort_order ?? 0 };
+          }
+          setEngineConfig(config);
+        }
+      } catch {
+        // Fallback to defaults if table doesn't exist yet
+      }
+      setEngineConfigLoaded(true);
+    })();
+  }, []);
+
+  // Compute visible engines: if admin config exists, use it; otherwise fall back to ALL_ENGINES defaults
+  const ENGINES: EngineConfig[] = useMemo(() => {
+    if (!engineConfigLoaded) return ALL_ENGINES;
+    const hasConfig = Object.keys(engineConfig).length > 0;
+    if (!hasConfig) return ALL_ENGINES;
+    return ALL_ENGINES
+      .filter(e => engineConfig[e.id]?.enabled !== false)
+      .map(e => ({
+        ...e,
+        premium: engineConfig[e.id]?.premium ?? e.premium,
+      }))
+      .sort((a, b) => (engineConfig[a.id]?.sort_order ?? 99) - (engineConfig[b.id]?.sort_order ?? 99));
+  }, [engineConfig, engineConfigLoaded]);
 
   const [inputDetection, setInputDetection] = useState<DetectionResult | null>(null);
   const [outputDetection, setOutputDetection] = useState<DetectionResult | null>(null);
@@ -693,32 +739,26 @@ export default function EditorPage() {
             <button
               type="button"
               onClick={() => setEngineDropdownOpen(!engineDropdownOpen)}
-              className="flex items-center gap-2 bg-white dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-lg px-3 py-1.5 text-xs font-semibold text-slate-700 dark:text-zinc-300 outline-none focus:border-brand-400 hover:border-brand-300 transition-colors min-w-[160px]"
+              className="flex items-center gap-2 bg-white dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-lg px-3 py-1.5 text-xs font-semibold text-slate-700 dark:text-zinc-300 outline-none focus:border-brand-400 hover:border-brand-300 transition-colors min-w-[140px]"
             >
               <span>{ENGINES.find(e => e.id === engine)?.label}</span>
-              <span className="text-[10px] font-normal text-slate-400 dark:text-zinc-500">
-                {ENGINES.find(e => e.id === engine)?.subtitle}
-              </span>
+              {ENGINES.find(e => e.id === engine)?.premium && <span className="text-[9px] font-bold px-1 py-0.5 rounded bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400">PRO</span>}
               <svg className={`ml-auto w-3.5 h-3.5 text-slate-400 transition-transform ${engineDropdownOpen ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
             </button>
             {engineDropdownOpen && (
               <>
                 <div className="fixed inset-0 z-40" onClick={() => setEngineDropdownOpen(false)} />
-                <div className="absolute left-0 top-full mt-1 z-50 w-[340px] bg-white dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-xl shadow-xl overflow-hidden animate-in fade-in slide-in-from-top-1 duration-150">
+                <div className="absolute left-0 top-full mt-1 z-50 w-[200px] bg-white dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-xl shadow-xl overflow-hidden animate-in fade-in slide-in-from-top-1 duration-150 max-h-[320px] overflow-y-auto">
                   {ENGINES.filter(e => premium || !e.premium).map(e => (
                     <button
                       key={e.id}
                       type="button"
                       onClick={() => { setEngine(e.id); setEngineDropdownOpen(false); }}
-                      className={`w-full text-left px-4 py-3 hover:bg-slate-50 dark:hover:bg-zinc-700/50 transition-colors border-b border-slate-100 dark:border-zinc-700/50 last:border-b-0 ${engine === e.id ? 'bg-brand-50 dark:bg-brand-900/20' : ''}`}
+                      className={`w-full text-left px-3 py-2 hover:bg-slate-50 dark:hover:bg-zinc-700/50 transition-colors border-b border-slate-100 dark:border-zinc-700/50 last:border-b-0 flex items-center gap-2 ${engine === e.id ? 'bg-brand-50 dark:bg-brand-900/20' : ''}`}
                     >
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm font-semibold text-slate-800 dark:text-zinc-200">{e.label}</span>
-                        <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-slate-100 dark:bg-zinc-700 text-slate-500 dark:text-zinc-400">{e.subtitle}</span>
-                        {e.premium && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400">PRO</span>}
-                        {engine === e.id && <svg className="ml-auto w-4 h-4 text-brand-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>}
-                      </div>
-                      <p className="text-[11px] text-slate-400 dark:text-zinc-500 mt-1 leading-relaxed line-clamp-2">{e.desc}</p>
+                      <span className="text-sm font-medium text-slate-800 dark:text-zinc-200">{e.label}</span>
+                      {e.premium && <span className="text-[9px] font-bold px-1 py-0.5 rounded bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400">PRO</span>}
+                      {engine === e.id && <svg className="ml-auto w-4 h-4 text-brand-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>}
                     </button>
                   ))}
                 </div>
@@ -770,28 +810,15 @@ export default function EditorPage() {
         </button>
       </div>
 
-      {/* Depth Note + Engine Description */}
-      <div className="flex flex-wrap gap-3">
-        {strength === 'strong' && (
-          <div className="flex items-start gap-1.5 px-3 py-2 bg-amber-50/60 dark:bg-amber-950/40 border border-amber-100 dark:border-amber-900 rounded-lg max-w-md">
-            <AlertTriangle className="w-3 h-3 text-amber-500 mt-0.5 shrink-0" />
-            <p className="text-[11px] text-amber-700 dark:text-amber-300 leading-relaxed">
-              <span className="font-bold">Strong depth</span> focuses on beating AI detectors rather than preserving meaning. For best meaning retention, use Light or Medium.
-            </p>
-          </div>
-        )}
-        {(() => {
-          const currentEngine = ENGINES.find(e => e.id === engine);
-          return currentEngine?.desc ? (
-            <div className="flex items-start gap-1.5 px-3 py-2 bg-indigo-50/60 dark:bg-indigo-950/30 border border-indigo-100 dark:border-indigo-900 rounded-lg w-full">
-              <Info className="w-3 h-3 text-indigo-500 mt-0.5 shrink-0" />
-              <p className="text-[11px] text-indigo-700 dark:text-indigo-300 leading-relaxed">
-                <span className="font-bold">{currentEngine.label}:</span> {currentEngine.desc}
-              </p>
-            </div>
-          ) : null;
-        })()}
-      </div>
+      {/* Depth Note */}
+      {strength === 'strong' && (
+        <div className="flex items-start gap-1.5 px-3 py-2 bg-amber-50/60 dark:bg-amber-950/40 border border-amber-100 dark:border-amber-900 rounded-lg max-w-md">
+          <AlertTriangle className="w-3 h-3 text-amber-500 mt-0.5 shrink-0" />
+          <p className="text-[11px] text-amber-700 dark:text-amber-300 leading-relaxed">
+            <span className="font-bold">Strong depth</span> focuses on beating AI detectors rather than preserving meaning. For best meaning retention, use Light or Medium.
+          </p>
+        </div>
+      )}
 
       {/* Oxygen Advanced Controls */}
       {engine === 'oxygen' && (

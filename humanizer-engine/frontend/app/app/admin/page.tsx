@@ -2,7 +2,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../../AuthProvider';
 import { supabase } from '../../../lib/supabase';
-import { Users, CreditCard, FileText, BarChart3, MessageSquare, Shield, Search, RefreshCw, ChevronDown } from 'lucide-react';
+import { Users, CreditCard, FileText, BarChart3, MessageSquare, Shield, Search, RefreshCw, ChevronDown, Cpu, GripVertical, Eye, EyeOff, Crown, Save, AlertCircle, CheckCircle2 } from 'lucide-react';
 
 /* ── Types ──────────────────────────────────────────────────────────── */
 interface AdminStats { totalUsers: number; activeSubscriptions: number; totalDocuments: number; totalFeedback: number; revenueThisMonth: number; }
@@ -10,10 +10,11 @@ interface UserRow { id: string; full_name: string; email?: string; plan_name?: s
 interface SubRow { id: string; user_id: string; plan_name: string; status: string; current_period_end: string; }
 interface DocRow { id: string; user_id: string; title: string; engine_used: string; input_word_count: number; output_ai_score: number | null; created_at: string; }
 interface FeedbackRow { id: string; user_id: string; rating: number; comment: string; category: string; created_at: string; }
+interface EngineConfigRow { id: string; engine_id: string; label: string; enabled: boolean; premium: boolean; sort_order: number; updated_at: string; }
 
-type Tab = 'overview' | 'users' | 'subscriptions' | 'documents' | 'feedback';
+type Tab = 'overview' | 'engines' | 'users' | 'subscriptions' | 'documents' | 'feedback';
 
-const ADMIN_EMAILS = ['admin@humaragpt.com']; // Add admin emails here
+const ADMIN_EMAILS = ['maguna956@gmail.com', 'maxwellotieno11@gmail.com']; // Admin emails
 
 export default function AdminDashboard() {
   const { user } = useAuth();
@@ -25,6 +26,14 @@ export default function AdminDashboard() {
   const [feedback, setFeedback] = useState<FeedbackRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+
+  // Engine management state
+  const [engines, setEngines] = useState<EngineConfigRow[]>([]);
+  const [engineDraft, setEngineDraft] = useState<EngineConfigRow[]>([]);
+  const [engineSaving, setEngineSaving] = useState(false);
+  const [engineMessage, setEngineMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [engineDirty, setEngineDirty] = useState(false);
+  const [dragIdx, setDragIdx] = useState<number | null>(null);
 
   const isAdmin = user?.email && ADMIN_EMAILS.includes(user.email);
 
@@ -71,9 +80,30 @@ export default function AdminDashboard() {
     }
   }, []);
 
+  const fetchEngines = useCallback(async () => {
+    try {
+      const token = (await supabase.auth.getSession()).data.session?.access_token;
+      const res = await fetch('/api/admin/engines', {
+        headers: { 'Authorization': `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        const sorted = (data.engines || []).sort((a: EngineConfigRow, b: EngineConfigRow) => a.sort_order - b.sort_order);
+        setEngines(sorted);
+        setEngineDraft(sorted.map((e: EngineConfigRow) => ({ ...e })));
+        setEngineDirty(false);
+      }
+    } catch (err) {
+      console.error('Engine fetch error:', err);
+    }
+  }, []);
+
   useEffect(() => {
-    if (isAdmin) fetchData();
-  }, [isAdmin, fetchData]);
+    if (isAdmin) {
+      fetchData();
+      fetchEngines();
+    }
+  }, [isAdmin, fetchData, fetchEngines]);
 
   if (!isAdmin) {
     return (
@@ -87,8 +117,92 @@ export default function AdminDashboard() {
     );
   }
 
+  /* ── Engine management helpers ── */
+  const updateEngineDraft = (idx: number, field: keyof EngineConfigRow, value: unknown) => {
+    setEngineDraft(prev => {
+      const next = prev.map(e => ({ ...e }));
+      (next[idx] as Record<string, unknown>)[field] = value;
+      return next;
+    });
+    setEngineDirty(true);
+    setEngineMessage(null);
+  };
+
+  const moveEngine = (fromIdx: number, toIdx: number) => {
+    if (toIdx < 0 || toIdx >= engineDraft.length) return;
+    setEngineDraft(prev => {
+      const next = [...prev];
+      const [item] = next.splice(fromIdx, 1);
+      next.splice(toIdx, 0, item);
+      return next.map((e, i) => ({ ...e, sort_order: i + 1 }));
+    });
+    setEngineDirty(true);
+    setEngineMessage(null);
+  };
+
+  const handleDragStart = (idx: number) => setDragIdx(idx);
+  const handleDragOver = (e: React.DragEvent, idx: number) => {
+    e.preventDefault();
+    if (dragIdx !== null && dragIdx !== idx) {
+      moveEngine(dragIdx, idx);
+      setDragIdx(idx);
+    }
+  };
+  const handleDragEnd = () => setDragIdx(null);
+
+  const saveEngines = async () => {
+    const enabledCount = engineDraft.filter(e => e.enabled).length;
+    if (enabledCount === 0) {
+      setEngineMessage({ type: 'error', text: 'At least one engine must remain enabled.' });
+      return;
+    }
+
+    setEngineSaving(true);
+    setEngineMessage(null);
+    try {
+      const token = (await supabase.auth.getSession()).data.session?.access_token;
+      const payload = engineDraft.map((e, i) => ({
+        engine_id: e.engine_id,
+        enabled: e.enabled,
+        premium: e.premium,
+        sort_order: i + 1,
+        label: e.label,
+      }));
+
+      const res = await fetch('/api/admin/engines', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ engines: payload }),
+      });
+
+      if (res.ok) {
+        setEngineMessage({ type: 'success', text: 'Engine configuration saved. Changes are live.' });
+        setEngineDirty(false);
+        await fetchEngines();
+      } else {
+        const err = await res.json();
+        setEngineMessage({ type: 'error', text: err.error || 'Failed to save.' });
+      }
+    } catch {
+      setEngineMessage({ type: 'error', text: 'Network error. Try again.' });
+    } finally {
+      setEngineSaving(false);
+    }
+  };
+
+  const resetEngines = () => {
+    setEngineDraft(engines.map(e => ({ ...e })));
+    setEngineDirty(false);
+    setEngineMessage(null);
+  };
+
+  const enabledCount = engineDraft.filter(e => e.enabled).length;
+  const premiumCount = engineDraft.filter(e => e.enabled && e.premium).length;
+  const freeCount = engineDraft.filter(e => e.enabled && !e.premium).length;
+
   const TABS: { id: Tab; label: string; icon: typeof Users }[] = [
     { id: 'overview', label: 'Overview', icon: BarChart3 },
+    { id: 'engines', label: 'Engines', icon: Cpu },
     { id: 'users', label: 'Users', icon: Users },
     { id: 'subscriptions', label: 'Subscriptions', icon: CreditCard },
     { id: 'documents', label: 'Documents', icon: FileText },
@@ -137,6 +251,210 @@ export default function AdminDashboard() {
               <p className="text-2xl font-bold text-slate-900 dark:text-white">{s.val}</p>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* ── Engines Management Tab ────────────────────────────────── */}
+      {tab === 'engines' && (
+        <div className="space-y-4">
+          {/* Summary cards */}
+          <div className="grid grid-cols-3 gap-4">
+            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-4">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Enabled</span>
+                <Eye className="w-4 h-4 text-emerald-500" />
+              </div>
+              <p className="text-2xl font-bold text-slate-900 dark:text-white">{enabledCount} <span className="text-sm font-normal text-slate-400">/ {engineDraft.length}</span></p>
+            </div>
+            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-4">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Free Tier</span>
+                <Cpu className="w-4 h-4 text-blue-500" />
+              </div>
+              <p className="text-2xl font-bold text-slate-900 dark:text-white">{freeCount}</p>
+            </div>
+            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-4">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Premium</span>
+                <Crown className="w-4 h-4 text-amber-500" />
+              </div>
+              <p className="text-2xl font-bold text-slate-900 dark:text-white">{premiumCount}</p>
+            </div>
+          </div>
+
+          {/* Status message */}
+          {engineMessage && (
+            <div className={`flex items-center gap-2 px-4 py-3 rounded-lg text-sm font-medium ${
+              engineMessage.type === 'success'
+                ? 'bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800'
+                : 'bg-red-50 dark:bg-red-950/30 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800'
+            }`}>
+              {engineMessage.type === 'success' ? <CheckCircle2 className="w-4 h-4 shrink-0" /> : <AlertCircle className="w-4 h-4 shrink-0" />}
+              {engineMessage.text}
+            </div>
+          )}
+
+          {/* Engine list */}
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden">
+            <div className="px-4 py-3 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+              <div>
+                <h3 className="text-sm font-bold text-slate-900 dark:text-white">Engine Configuration</h3>
+                <p className="text-[11px] text-slate-400 mt-0.5">Drag to reorder. Toggle visibility and tier. Changes apply to all users immediately.</p>
+              </div>
+              <div className="flex items-center gap-2">
+                {engineDirty && (
+                  <button onClick={resetEngines} className="px-3 py-1.5 text-xs font-medium text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-white rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
+                    Reset
+                  </button>
+                )}
+                <button
+                  onClick={saveEngines}
+                  disabled={!engineDirty || engineSaving}
+                  className={`flex items-center gap-1.5 px-4 py-1.5 text-xs font-bold rounded-lg transition-all ${
+                    engineDirty
+                      ? 'bg-brand-600 hover:bg-brand-700 text-white shadow-sm'
+                      : 'bg-slate-100 dark:bg-slate-800 text-slate-400 cursor-not-allowed'
+                  }`}
+                >
+                  {engineSaving ? <RefreshCw className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />}
+                  {engineSaving ? 'Saving…' : 'Save Changes'}
+                </button>
+              </div>
+            </div>
+
+            {/* Table header */}
+            <div className="grid grid-cols-[32px_1fr_80px_80px_80px_80px] gap-2 px-4 py-2 border-b border-slate-100 dark:border-slate-800 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
+              <div></div>
+              <div>Engine</div>
+              <div className="text-center">Visible</div>
+              <div className="text-center">Tier</div>
+              <div className="text-center">Order</div>
+              <div className="text-center">Status</div>
+            </div>
+
+            {/* Engine rows */}
+            {engineDraft.map((eng, idx) => (
+              <div
+                key={eng.engine_id}
+                draggable
+                onDragStart={() => handleDragStart(idx)}
+                onDragOver={(e) => handleDragOver(e, idx)}
+                onDragEnd={handleDragEnd}
+                className={`grid grid-cols-[32px_1fr_80px_80px_80px_80px] gap-2 px-4 py-3 items-center border-b border-slate-50 dark:border-slate-800 last:border-b-0 transition-colors ${
+                  dragIdx === idx ? 'bg-brand-50 dark:bg-brand-900/20' : 'hover:bg-slate-50 dark:hover:bg-slate-800/50'
+                } ${!eng.enabled ? 'opacity-50' : ''}`}
+              >
+                {/* Drag handle */}
+                <div className="cursor-grab active:cursor-grabbing text-slate-300 dark:text-slate-600 hover:text-slate-500">
+                  <GripVertical className="w-4 h-4" />
+                </div>
+
+                {/* Engine name */}
+                <div className="flex items-center gap-2">
+                  <input
+                    value={eng.label}
+                    onChange={(e) => updateEngineDraft(idx, 'label', e.target.value)}
+                    className="text-sm font-semibold text-slate-900 dark:text-white bg-transparent border-b border-transparent hover:border-slate-300 dark:hover:border-slate-600 focus:border-brand-400 outline-none transition-colors py-0.5 w-full max-w-[180px]"
+                  />
+                  <span className="text-[10px] font-mono text-slate-400 dark:text-slate-500">{eng.engine_id}</span>
+                </div>
+
+                {/* Enabled toggle */}
+                <div className="flex justify-center">
+                  <button
+                    onClick={() => updateEngineDraft(idx, 'enabled', !eng.enabled)}
+                    title={eng.enabled ? 'Visible to users' : 'Hidden from users'}
+                    className={`p-1.5 rounded-lg transition-colors ${
+                      eng.enabled
+                        ? 'text-emerald-600 bg-emerald-50 dark:bg-emerald-950/30 hover:bg-emerald-100'
+                        : 'text-slate-400 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200'
+                    }`}
+                  >
+                    {eng.enabled ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
+                  </button>
+                </div>
+
+                {/* Premium toggle */}
+                <div className="flex justify-center">
+                  <button
+                    onClick={() => updateEngineDraft(idx, 'premium', !eng.premium)}
+                    title={eng.premium ? 'Premium tier' : 'Free tier'}
+                    className={`px-2 py-1 rounded-lg text-[10px] font-bold uppercase transition-colors ${
+                      eng.premium
+                        ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 hover:bg-amber-200'
+                        : 'bg-slate-100 dark:bg-slate-800 text-slate-400 hover:bg-slate-200'
+                    }`}
+                  >
+                    {eng.premium ? 'Pro' : 'Free'}
+                  </button>
+                </div>
+
+                {/* Sort order */}
+                <div className="flex justify-center items-center gap-1">
+                  <button onClick={() => moveEngine(idx, idx - 1)} disabled={idx === 0}
+                    className="text-slate-400 hover:text-slate-600 disabled:opacity-30 disabled:cursor-not-allowed p-0.5">
+                    <ChevronDown className="w-3.5 h-3.5 rotate-180" />
+                  </button>
+                  <span className="text-xs font-mono text-slate-500 w-5 text-center">{idx + 1}</span>
+                  <button onClick={() => moveEngine(idx, idx + 1)} disabled={idx === engineDraft.length - 1}
+                    className="text-slate-400 hover:text-slate-600 disabled:opacity-30 disabled:cursor-not-allowed p-0.5">
+                    <ChevronDown className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+
+                {/* Live status */}
+                <div className="flex justify-center">
+                  <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full ${
+                    eng.enabled
+                      ? 'bg-emerald-50 dark:bg-emerald-950 text-emerald-600'
+                      : 'bg-slate-100 dark:bg-slate-800 text-slate-400'
+                  }`}>
+                    {eng.enabled ? 'Live' : 'Off'}
+                  </span>
+                </div>
+              </div>
+            ))}
+
+            {engineDraft.length === 0 && (
+              <div className="px-4 py-8 text-center text-sm text-slate-400">
+                No engine configuration found. Run the Supabase migration to seed engine_config table.
+              </div>
+            )}
+          </div>
+
+          {/* Quick actions */}
+          <div className="flex flex-wrap gap-2">
+            <button
+              onClick={() => {
+                setEngineDraft(prev => prev.map(e => ({ ...e, enabled: true })));
+                setEngineDirty(true);
+                setEngineMessage(null);
+              }}
+              className="px-3 py-1.5 text-xs font-medium text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
+            >
+              Enable All
+            </button>
+            <button
+              onClick={() => {
+                setEngineDraft(prev => prev.map(e => ({ ...e, premium: false })));
+                setEngineDirty(true);
+                setEngineMessage(null);
+              }}
+              className="px-3 py-1.5 text-xs font-medium text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
+            >
+              All Free Tier
+            </button>
+            <button
+              onClick={() => {
+                setEngineDraft(prev => prev.map(e => ({ ...e, premium: true })));
+                setEngineDirty(true);
+                setEngineMessage(null);
+              }}
+              className="px-3 py-1.5 text-xs font-medium text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 rounded-lg hover:bg-amber-100 dark:hover:bg-amber-900/30 transition-colors"
+            >
+              All Premium
+            </button>
+          </div>
         </div>
       )}
 

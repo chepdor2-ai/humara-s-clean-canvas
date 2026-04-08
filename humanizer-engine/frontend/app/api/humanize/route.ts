@@ -18,6 +18,7 @@ import { expandContractions } from '@/lib/humanize-transforms';
 import { removeEmDashes } from '@/lib/engine/v13-shared-techniques';
 import { nuruHumanize } from '@/lib/engine/nuru-humanizer';
 import { omegaHumanize } from '@/lib/engine/omega-humanizer';
+import { easyHumanize } from '@/lib/engine/easy-humanizer';
 import { robustSentenceSplit } from '@/lib/engine/content-protection';
 // deepRestructure, voiceShift, tenseVariation disabled — they garble sentence structure
 // import { deepRestructure, voiceShift, tenseVariation } from '@/lib/engine/advanced-transforms';
@@ -368,7 +369,16 @@ export async function POST(req: Request) {
 
     let humanized: string;
 
-    if (engine === 'oxygen') {
+    if (engine === 'easy') {
+      // Easy: EssayWritingSupport external API — instant processing, no LLM
+      const easyResult = await easyHumanize(
+        normalizedText,
+        strength ?? 'medium',
+        tone ?? 'academic',
+      );
+      humanized = easyResult.humanized;
+      // Easy flows through all post-processing below
+    } else if (engine === 'oxygen') {
       // Oxygen v2: T5 model + multi-phase pipeline + full TS post-processing
       const oxygenUrl = process.env.OXYGEN_SERVER_URL || 'http://127.0.0.1:5001';
       

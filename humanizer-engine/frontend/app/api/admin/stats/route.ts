@@ -16,7 +16,7 @@ export async function GET(request: Request) {
     if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
     // Check admin (simple email-based check — replace with role column in production)
-    const adminEmails = (process.env.ADMIN_EMAILS || '').split(',').map(e => e.trim().toLowerCase());
+    const adminEmails = (process.env.ADMIN_EMAILS || 'maguna956@gmail.com,maxwellotieno11@gmail.com').split(',').map(e => e.trim().toLowerCase());
     if (!user.email || !adminEmails.includes(user.email.toLowerCase())) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
