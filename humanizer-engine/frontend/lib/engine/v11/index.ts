@@ -132,7 +132,7 @@ export async function humanizeV11(
     }
     
     // Update metadata with validation results
-    finalState.metadata.validation = {
+    if (finalState.metadata) finalState.metadata.validation = {
       passed: validationResult.validation.isValid,
       repaired: wasRepaired,
       repairs,
@@ -141,7 +141,7 @@ export async function humanizeV11(
     };
   } catch (error) {
     finalState.logs.push(`[validation] Validation error: ${error}`);
-    finalState.metadata.validation = {
+    if (finalState.metadata) finalState.metadata.validation = {
       passed: false,
       error: error instanceof Error ? error.message : String(error),
     };
