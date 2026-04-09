@@ -207,10 +207,14 @@
     opacity: 1;
   }
 
-  /* ── Plan Glow (Enhanced) ─────────────────────────────── */
+  /* ── Plan Glow (Enhanced with Audi-style animated border) ─────────────────────────────── */
   @keyframes borderPulse {
     0%, 100% { opacity: 0.3; }
     50% { opacity: 0.7; }
+  }
+  @keyframes borderRotate {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
   }
   @keyframes glowBreath {
     0%,100% { box-shadow: 0 0 12px 2px var(--plan-color, transparent), inset 0 0 8px 0 transparent; }
@@ -219,17 +223,56 @@
   .plan-glow {
     position: relative;
     animation: glowBreath 2.5s ease-in-out infinite;
+    overflow: hidden;
   }
   .plan-glow::before {
     content: '';
     position: absolute;
-    inset: -2px;
+    inset: -3px;
     border-radius: inherit;
     pointer-events: none;
-    background: linear-gradient(135deg, var(--plan-color, transparent) 0%, transparent 40%, transparent 60%, var(--plan-color, transparent) 100%);
-    opacity: 0.7;
+    background: conic-gradient(
+      from 0deg,
+      transparent 0%,
+      var(--plan-color, transparent) 10%,
+      transparent 20%,
+      transparent 40%,
+      var(--plan-color, transparent) 50%,
+      transparent 60%,
+      transparent 80%,
+      var(--plan-color, transparent) 90%,
+      transparent 100%
+    );
+    opacity: 0.8;
     z-index: 0;
-    animation: borderPulse 3s ease-in-out infinite;
+    animation: borderRotate 4s linear infinite;
+    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    padding: 2px;
+  }
+  .plan-glow::after {
+    content: '';
+    position: absolute;
+    inset: -3px;
+    border-radius: inherit;
+    pointer-events: none;
+    background: conic-gradient(
+      from 180deg,
+      transparent 0%,
+      var(--plan-color, transparent) 10%,
+      transparent 20%,
+      transparent 40%,
+      var(--plan-color, transparent) 50%,
+      transparent 60%,
+      transparent 80%,
+      var(--plan-color, transparent) 90%,
+      transparent 100%
+    );
+    opacity: 0.6;
+    z-index: 0;
+    animation: borderRotate 6s linear infinite reverse;
     -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
     mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
     -webkit-mask-composite: xor;

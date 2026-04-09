@@ -744,12 +744,12 @@ export default function EditorPage() {
 
   /* ── Render ───────────────────────────────────────────────────────────── */
   return (
-    <div className="flex flex-col gap-6 animate-in fade-in duration-500 max-w-7xl mx-auto">
+    <div className="flex flex-col gap-8 animate-in fade-in duration-500 max-w-7xl mx-auto">
       {/* Header */}
       <header className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-extrabold text-white tracking-tight brand-glow">HumaraGPT</h1>
-          <p className="text-[13px] text-zinc-500 mt-0.5">Transform AI text into undetectable human writing</p>
+          <p className="text-[13px] text-zinc-500 mt-1">Transform AI text into undetectable human writing</p>
         </div>
         <div className="flex items-center gap-2">
           {isAdmin && (
@@ -774,32 +774,24 @@ export default function EditorPage() {
 
       {/* Model Usage Ticker */}
       <div className="glass-card rounded-2xl overflow-hidden">
-        <div className="relative h-10 flex items-center overflow-hidden">
+        <div className="relative h-12 flex items-center overflow-hidden">
           <div className="absolute inset-0 bg-gradient-to-r from-zinc-900 via-transparent to-zinc-900 pointer-events-none z-10" />
           <div className="ticker-animate flex items-center gap-8 whitespace-nowrap px-4">
-            {[
-              { engine: 'Oxygen', use: 'Blog Posts & SEO Content' },
-              { engine: 'Nuru', use: 'Academic Essays (Non-Submission)' },
-              { engine: 'Humara v1.3', use: 'Long-Form Articles' },
-              { engine: 'Ghost Mini', use: 'Social Media Captions' },
-              { engine: 'Ghost Pro', use: 'Marketing Copy & Ads' },
-              { engine: 'Ninja', use: 'Technical Documentation' },
-              { engine: 'Undetectable', use: 'Product Descriptions' },
-              { engine: 'Omega', use: 'Email Newsletters' },
-              { engine: 'V1.1 Premium', use: 'High-Stakes Business Writing' },
-              { engine: 'Humara Premium', use: 'Enterprise Reports' },
-            ].concat([
-              { engine: 'Oxygen', use: 'Blog Posts & SEO Content' },
-              { engine: 'Nuru', use: 'Academic Essays (Non-Submission)' },
-              { engine: 'Humara v1.3', use: 'Long-Form Articles' },
-              { engine: 'Ghost Mini', use: 'Social Media Captions' },
-              { engine: 'Ghost Pro', use: 'Marketing Copy & Ads' },
-              { engine: 'Ninja', use: 'Technical Documentation' },
-              { engine: 'Undetectable', use: 'Product Descriptions' },
-              { engine: 'Omega', use: 'Email Newsletters' },
-              { engine: 'V1.1 Premium', use: 'High-Stakes Business Writing' },
-              { engine: 'Humara Premium', use: 'Enterprise Reports' },
-            ]).map((item, i) => (
+            {ENGINES.flatMap(eng => {
+              const useCases: Record<string, string> = {
+                oxygen: 'Clear GPTZero signals from stealthy humanized text',
+                ozone: 'Eliminate ZeroGPT & Surfer AI detection markers',
+                easy: 'Broad-spectrum detection bypass for all major platforms',
+              };
+              return [{ engine: eng.label, use: useCases[eng.id] || 'Advanced humanization' }];
+            }).concat(ENGINES.flatMap(eng => {
+              const useCases: Record<string, string> = {
+                oxygen: 'Clear GPTZero signals from stealthy humanized text',
+                ozone: 'Eliminate ZeroGPT & Surfer AI detection markers',
+                easy: 'Broad-spectrum detection bypass for all major platforms',
+              };
+              return [{ engine: eng.label, use: useCases[eng.id] || 'Advanced humanization' }];
+            })).map((item, i) => (
               <div key={i} className="flex items-center gap-2 shrink-0">
                 <span className="text-xs font-bold text-brand-400">{item.engine}</span>
                 <span className="text-zinc-600">→</span>
@@ -812,7 +804,7 @@ export default function EditorPage() {
 
       {/* Settings Bar */}
       <div
-        className={`flex flex-wrap items-center gap-x-6 gap-y-3 bg-[#0c0c14] border border-zinc-800/60 rounded-2xl px-6 py-4 ${planColor ? 'plan-glow' : ''}`}
+        className={`flex flex-wrap items-center gap-x-8 gap-y-4 bg-[#0c0c14] border border-zinc-800/60 rounded-2xl px-7 py-5 ${planColor ? 'plan-glow' : ''}`}
         style={planColor ? { '--plan-color': planColor } as React.CSSProperties : undefined}
       >
         <div className="flex items-center gap-2 relative">

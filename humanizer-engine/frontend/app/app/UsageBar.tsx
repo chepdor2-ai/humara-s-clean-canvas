@@ -86,19 +86,31 @@ export default function UsageBar() {
   const fastPct = usage.wordsLimitFast > 0 ? Math.min(100, (usage.wordsUsedFast / usage.wordsLimitFast) * 100) : 0;
   const stealthPct = usage.wordsLimitStealth > 0 ? Math.min(100, (usage.wordsUsedStealth / usage.wordsLimitStealth) * 100) : 0;
 
+  // Get plan color for glow effect
+  const planColors: Record<string, string> = {
+    'Starter': '#a855f7',
+    'Pro': '#3b82f6',
+    'Premium': '#f59e0b',
+    'Enterprise': '#10b981',
+  };
+  const planColor = planColors[usage.planName] || '#a855f7';
+
   return (
-    <div className="glass-card rounded-2xl px-5 py-4">
-      <div className="flex items-center justify-between mb-3.5">
-        <div className="flex items-center gap-3">
+    <div 
+      className="glass-card rounded-2xl px-6 py-5 plan-glow"
+      style={{ '--plan-color': planColor } as React.CSSProperties}
+    >
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-4">
           <span className="text-[11px] font-bold text-zinc-500 uppercase tracking-wider">Current Package</span>
-          <div className="flex items-center gap-2">
-            <span className="text-sm font-extrabold text-brand-400 bg-brand-950/30 px-3 py-1 rounded-lg border border-brand-800/40">{usage.planName}</span>
-            <span className="text-[10px] text-zinc-400 bg-zinc-800/50 px-2 py-1 rounded-full">{usage.daysRemaining}d remaining</span>
+          <div className="flex items-center gap-2.5">
+            <span className="text-sm font-extrabold text-brand-400 bg-brand-950/30 px-3.5 py-1.5 rounded-lg border border-brand-800/40">{usage.planName}</span>
+            <span className="text-[10px] text-zinc-400 bg-zinc-800/50 px-2.5 py-1 rounded-full">{usage.daysRemaining}d remaining</span>
           </div>
         </div>
         <div className="text-[10px] text-zinc-500 font-medium">Real-time usage tracking</div>
       </div>
-      <div className="grid grid-cols-2 gap-5">
+      <div className="grid grid-cols-2 gap-6">
         <div>
           <div className="flex items-center justify-between mb-2">
             <span className="text-[10px] font-semibold text-zinc-400 uppercase tracking-wide">Fast & Standard</span>
