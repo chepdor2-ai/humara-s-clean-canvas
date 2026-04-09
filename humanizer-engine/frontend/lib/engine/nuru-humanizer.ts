@@ -294,8 +294,12 @@ function strategySimplification(sentence: string, seed: number): string {
 /** Strategy 3: Voice shift heavy — passive voice + restructure */
 function strategyVoiceShift(sentence: string, seed: number): string {
   let s = applyAIWordKill(sentence);
-  s = voiceShift(s, 0.5);
-  s = safeDeepRestructure(s, 0.35);
+  const shifted = voiceShift(s, 0.5);
+  // Revert voice shift if it produced garbled output
+  s = isGarbledSentence(shifted) ? s : shifted;
+  const restructured = safeDeepRestructure(s, 0.35);
+  // Extra garble check after deep restructure
+  s = isGarbledSentence(restructured) ? s : restructured;
   s = applyPhrasePatterns(s);
   s = applySwapDict(s, CAUSAL_SWAPS, seed);
   if (seed % 10 < 7) s = safeSyntacticTemplate(s);
@@ -424,6 +428,10 @@ function isGarbledSentence(sentence: string): boolean {
   if (words.length <= 3 && /[.!?]$/.test(s)) return true;
   // "is alsoed by" or any nonsense "-ed" passive form
   if (/\bis\s+alsoed\b/i.test(s)) return true;
+  // Broken irregular past participles created by naive voice shift
+  if (/\b(?:chosed|choosed|runned|comed|goed|taked|takened|gived|writed|speaked|leaved|finded|knowed|thinked|sayed|tolded|keeped|bringed|buyed|felted|cutted|putted|setted|digged|stronglyed|becomed|choosened)\b/i.test(s)) return true;
+  // Broken passive with dangling agent: "is X by Y, subject"
+  if (/\b(?:is|was|are|were)\s+\w+(?:ed|en)\s+by\s+\w+(?:\s+\w+)?\s*,\s*(?:I|he|she|it|we|they|you)\b/i.test(s)) return true;
   // Repeated adjacent words (excluding intentional)
   if (/\b(\w{4,})\s+\1\b/i.test(s)) return true;
   // Sentence starts with a conjunction followed by fragment
@@ -438,9 +446,29 @@ function isGarbledSentence(sentence: string): boolean {
   if (/^(?:are|is)\s+\w+ed\b/i.test(s)) return true;
   // "by measures risk" — preposition followed by noun then unrelated noun  
   if (/\bby\s+measures?\s+risk\b/i.test(s)) return true;
+  // Garbled clause reordering: verb before subject at sentence start
+  if (/^(?:do|does|did)\s+\w+\s+(?:from|in|at|by|of)\b/i.test(s) && !/^(?:do|does|did)\s+(?:not|n't)\b/i.test(s)) return true;
+  // "is [verb]ed by [noun], [pronoun] [noun]" — dangling passive reordering
+  if (/\bis\s+\w+ed\s+by\s+\w+\s*,\s*\w+\s+\w+\s*\./i.test(s)) return true;
+  // Subject-less sentences starting with preposition + verb (broken reordering)
+  if (/^(?:By|From|In|At|On)\s+\w+(?:\s+\w+)?\s*,\s*(?:is|are|was|were)\b/i.test(s)) return true;
+  // Broken passive ending: "is/are + past_part + by + bare_noun bare_noun." (no determiner)
+  if (/\b(?:is|are|was|were)\s+\w+(?:ed|en|wn|ne|ght)\s+by\s+\w+\s+\w+[.,]\s*$/i.test(s)) {
+    const m = s.match(/by\s+(\w+\s+\w+)[.,]\s*$/i);
+    if (m && !/^(?:the|a|an|this|that|these|those|some|many|most|its|his|her|their|our|my|your)\b/i.test(m[1])) return true;
+  }
+  // "Because for" — double conjunction/preposition at start
+  if (/^Because\s+for\b/i.test(s)) return true;
+  // Dangling prepositional phrase as sentence start + modal (no subject): "Before bedtime might..."
+  if (/^(?:Before|After|During|At|In)\s+\w+\s+(?:might|could|can|would|should|will)\b/i.test(s)) return true;
+  // Sentence ending with fragment after comma: ", cheese consumption." or ", relationship chart."
+  if (/,\s+\w+\s+\w+\.\s*$/.test(s) && s.split(/,/).length >= 3) {
+    const tail = s.match(/,\s+(\w+\s+\w+)\.\s*$/);
+    if (tail && !/\b(?:is|are|was|were|has|have|had|do|does|did|can|could|will|would)\b/i.test(tail[1])) return true;
+  }
   // Sentence lacks a verb entirely (for sentences > 5 words)
   if (words.length > 5) {
-    const commonVerbs = /\b(?:is|are|was|were|has|have|had|do|does|did|can|could|will|would|shall|should|may|might|must|need|help|make|take|give|get|go|come|see|know|think|find|include|includes|involve|involves|require|requires|ensure|ensures|provide|provides|play|plays|remain|remains|allow|allows|address|manage|protect|identify|implement|assess|mitigate)\b/i;
+    const commonVerbs = /\b(?:is|are|was|were|has|have|had|do|does|did|can|could|will|would|shall|should|may|might|must|need|help|make|take|give|get|go|come|see|know|think|find|include|includes|involve|involves|require|requires|ensure|ensures|provide|provides|play|plays|remain|remains|allow|allows|address|manage|protect|identify|implement|assess|mitigate|chose|show|shows|suggest|suggests|indicate|indicates|highlight|highlights|raise|raises|cause|causes|connect|connects|imply|implies|trend|trends|happen|happens|recognize|recognizes|avoid|avoids|consider|considers)\b/i;
     if (!commonVerbs.test(s)) return true;
   }
   return false;
@@ -461,11 +489,14 @@ function enforceMinimumChange(original: string, current: string, seed: number): 
 
   // Pass 2: Voice shift + deep restructure + tense variation
   if (changePercent < 55) {
-    result = voiceShift(result, 0.7);
-    result = deepRestructure(result, 0.4);
-    result = tenseVariation(result, 0.15);
+    let pass2 = voiceShift(result, 0.7);
+    if (isGarbledSentence(pass2)) pass2 = result;
+    let pass2b = deepRestructure(pass2, 0.4);
+    if (isGarbledSentence(pass2b)) pass2b = pass2;
+    pass2b = tenseVariation(pass2b, 0.15);
     // Revert if garbled
-    if (isGarbledSentence(result)) result = current;
+    if (isGarbledSentence(pass2b)) pass2b = result;
+    result = pass2b;
     changePercent = calculateWordChangePercent(original, result);
   }
 
@@ -481,6 +512,9 @@ function enforceMinimumChange(original: string, current: string, seed: number): 
     // Only use template if it doesn't garble
     if (!isGarbledSentence(templated)) result = templated;
   }
+
+  // Final safety: if result is garbled after all passes, revert to input
+  if (isGarbledSentence(result)) return current;
 
   return result;
 }

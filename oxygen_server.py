@@ -41,10 +41,12 @@ MODEL_DIR = "oxygen-model"
 device = "cuda" if torch.cuda.is_available() else "cpu"
 model: T5ForConditionalGeneration | None = None
 tokenizer: AutoTokenizer | None = None
+model_prefix: str = ""  # e.g. "paraphrase: " for paraphrase-trained models
+import json as _json
 
 
 def load_model():
-    global model, tokenizer
+    global model, tokenizer, model_prefix
     if not os.path.exists(MODEL_DIR):
         raise FileNotFoundError(f"Model directory not found: {MODEL_DIR}")
     logger.info(f"Loading model from {MODEL_DIR} ...")
@@ -55,6 +57,14 @@ def load_model():
     model.eval()
     n = sum(p.numel() for p in model.parameters())
     logger.info(f"Model loaded ({n:,} params) on {device}")
+    
+    # Check for model source info (set by upgrade_oxygen_model.py)
+    source_file = os.path.join(MODEL_DIR, "model_source.json")
+    if os.path.exists(source_file):
+        with open(source_file) as f:
+            info = _json.load(f)
+        model_prefix = info.get("prefix", "")
+        logger.info(f"Model source: {info.get('source', 'unknown')}, prefix: '{model_prefix}'")
 
 
 # ── FastAPI ──
@@ -83,6 +93,82 @@ class HumanizeResponse(BaseModel):
     success: bool = True
     params_used: dict[str, Any] = Field(default_factory=dict)
     stats: dict[str, Any] = Field(default_factory=dict)
+
+
+# ── Tense-aware replacement helpers ──
+
+_IRREGULAR_PAST = {
+    "give": "gave", "make": "made", "deal": "dealt", "build": "built",
+    "set": "set", "take": "took", "go": "went", "see": "saw",
+    "run": "ran", "get": "got", "put": "put", "let": "let",
+    "keep": "kept", "hold": "held", "tell": "told", "find": "found",
+    "have": "had", "do": "did", "say": "said", "come": "came",
+    "show": "showed", "prove": "proved", "drive": "drove",
+}
+
+
+def _inflect_verb(word: str, form: str) -> str:
+    """Inflect a single verb to a target form: 'past', '3sg', 'gerund', or 'base'."""
+    if form == "base":
+        return word
+    w = word.lower()
+    if form == "past":
+        if w in _IRREGULAR_PAST:
+            return _IRREGULAR_PAST[w]
+        if w.endswith("e"):
+            return w + "d"
+        if w.endswith("y") and len(w) > 2 and w[-2] not in "aeiou":
+            return w[:-1] + "ied"
+        return w + "ed"
+    if form == "3sg":
+        if w.endswith(("sh", "ch", "x", "z", "ss")):
+            return w + "es"
+        if w.endswith("y") and len(w) > 2 and w[-2] not in "aeiou":
+            return w[:-1] + "ies"
+        return w + "s"
+    if form == "gerund":
+        if w.endswith("ie"):
+            return w[:-2] + "ying"
+        if w.endswith("e") and not w.endswith("ee"):
+            return w[:-1] + "ing"
+        return w + "ing"
+    return word
+
+
+def _detect_verb_form(word: str) -> str:
+    """Detect grammatical form from a word's suffix: past, 3sg, gerund, or base."""
+    w = word.lower().rstrip()
+    if w.endswith("ing"):
+        return "gerund"
+    if w.endswith("ly") and len(w) > 4:
+        return "adverb"
+    if w.endswith("ied") or w.endswith("ed"):
+        return "past"
+    if w.endswith("d") and len(w) > 3 and w[-2] == "e":
+        return "past"
+    if w.endswith("es") and not w.endswith(("ness", "less")):
+        return "3sg"
+    if w.endswith("s") and not w.endswith(("ss", "us", "is", "ous", "ness")):
+        return "3sg"
+    return "base"
+
+
+def _match_form(matched: str, replacement: str) -> str:
+    """Inflect a base-form replacement to match the grammatical form of the matched word."""
+    form = _detect_verb_form(matched)
+    if form == "base":
+        return replacement
+    # Don't re-inflect if replacement is already in the target form
+    rep_form = _detect_verb_form(replacement.split(" ", 1)[0])
+    if rep_form == form:
+        return replacement
+    if form == "adverb" and not replacement.endswith("ly"):
+        return replacement + "ly"
+    if form in ("past", "3sg", "gerund"):
+        parts = replacement.split(" ", 1)
+        inflected = _inflect_verb(parts[0], form)
+        return inflected + (" " + parts[1] if len(parts) > 1 else "")
+    return replacement
 
 
 # ── Phase 2: Word-level diversity (Python-side post-processing) ──
@@ -127,7 +213,7 @@ AI_WORD_KILLS: list[tuple[str, str]] = [
     (r"\badditionally\b", "also"),
     (r"\bpivotal\b", "key"),
     (r"\bcrucial\b", "important"),
-    (r"\bunderscores?\b", "highlights"),
+    (r"\bunderscores?\b", "highlight"),
     (r"\bunderscoring\b", "highlighting"),
     (r"\bdelve[sd]?\b", "explore"),
     (r"\bdelving\b", "exploring"),
@@ -202,9 +288,9 @@ FILLER_CUTS = [
 
 
 def apply_ai_word_kill(text: str) -> str:
-    """Phase 2a: Kill AI-marker vocabulary."""
+    """Phase 2a: Kill AI-marker vocabulary with tense-aware replacement."""
     for pattern, replacement in AI_WORD_KILLS:
-        text = re.sub(pattern, replacement, text, flags=re.IGNORECASE)
+        text = re.sub(pattern, lambda m: _match_form(m.group(), replacement), text, flags=re.IGNORECASE)
     return text
 
 
@@ -225,41 +311,116 @@ DEEP_SYNONYMS: list[tuple[str, list[str]]] = [
     (r"\balgorithms\b", ["methods", "processes", "techniques", "approaches"]),
     (r"\bdisciplines?\b", ["fields", "areas", "branches", "domains"]),
     (r"\bintegration\b", ["adoption", "incorporation", "blending", "merging"]),
-    (r"\brequires?\b", ["needs", "calls for", "demands", "takes"]),
+    (r"\brequires?\b", ["need", "call for", "demand", "take"]),
+    (r"\brequired\b", ["needed", "called for", "demanded", "took"]),
     (r"\bapproach\b", ["strategy", "method", "plan", "framework"]),
     (r"\bensure\b", ["guarantee", "make sure", "confirm", "verify"]),
     (r"\badoption\b", ["uptake", "acceptance", "embrace", "rollout"]),
     (r"\boutcomes?\b", ["results", "findings", "effects", "impacts"]),
     (r"\bimpact\b", ["effect", "influence"]),
     (r"\bsystems?\b", ["setups", "frameworks", "structures", "platforms"]),
-    (r"\btechnolog(?:y|ies)\b", ["digital tools", "modern tools", "current tools"]),
+    (r"\btechnology\b", ["tech", "digital tooling", "modern solution"]),
+    (r"\btechnologies\b", ["digital tools", "modern tools", "current tools"]),
     (r"\btechnological\b", ["digital", "modern", "current", "technical"]),
-    (r"\bprovide[sd]?\b", ["offer", "give", "supply", "deliver"]),
+    (r"\bprovides?\b", ["offer", "give", "supply", "deliver"]),
+    (r"\bprovided\b", ["offered", "gave", "supplied", "delivered"]),
     (r"\bproviding\b", ["offering", "giving", "supplying"]),
     (r"\bchallenges?\b", ["problems", "hurdles", "issues", "difficulties"]),
-    (r"\beffective(?:ly)?\b", ["useful", "practical", "successful", "working"]),
-    (r"\bsubstantial(?:ly)?\b", ["large", "major", "big", "sizable"]),
+    (r"\beffectively\b", ["usefully", "in practice", "successfully", "well"]),
+    (r"\beffective\b", ["useful", "practical", "successful", "working"]),
+    (r"\bsubstantially\b", ["largely", "to a great extent", "considerably", "markedly"]),
+    (r"\bsubstantial\b", ["large", "major", "big", "sizable"]),
     (r"\bconsiderable\b", ["major", "large", "notable", "real"]),
     (r"\bimportant\b", ["key", "central", "significant", "vital"]),
-    (r"\bessential(?:ly)?\b", ["key", "needed", "critical", "required"]),
+    (r"\bessentially\b", ["at its core", "in essence", "basically", "really"]),
+    (r"\bessential\b", ["key", "needed", "critical", "required"]),
     (r"\bvarious\b", ["several", "different", "a number of", "assorted"]),
     (r"\bnumerous\b", ["many", "several", "a lot of", "plenty of"]),
     (r"\bspecifically\b", ["in particular", "namely", "to be precise"]),
-    (r"\bimprove[sd]?\b", ["better", "boost", "raise", "lift"]),
+    (r"\bimproves?\b", ["betters", "boosts", "raises", "lifts"]),
+    (r"\bimproved\b", ["bettered", "boosted", "raised", "lifted"]),
     (r"\bimproving\b", ["bettering", "boosting", "raising"]),
     (r"\bbenefits?\b", ["gains", "advantages", "perks", "upsides"]),
-    (r"\bfundamental(?:ly)?\b", ["basic", "core", "central", "at heart"]),
-    (r"\baddress(?:es|ed)?\b", ["tackle", "handle", "deal with", "confront"]),
+    (r"\bfundamentally\b", ["basically", "at its core", "at a deep level", "in essence"]),
+    (r"\bfundamental\b", ["basic", "core", "central"]),
+    (r"\baddress(?:es)?\b", ["tackle", "handle", "deal with", "confront"]),
+    (r"\baddressed\b", ["tackled", "handled", "dealt with", "confronted"]),
     (r"\baddressing\b", ["tackling", "handling", "dealing with", "confronting"]),
     (r"\bmethods?\b", ["ways", "techniques", "means", "strategies"]),
     (r"\banalysi[sz]\b", ["study", "review", "examination", "assessment"]),
     (r"\bresearch\b", ["study", "investigation", "work", "inquiry"]),
     (r"\bconsequences?\b", ["effects", "results", "impacts", "fallout"]),
-    (r"\bestablish(?:ed|es)?\b", ["set up", "create", "form", "build"]),
+    (r"\bestablish(?:es)?\b", ["set up", "create", "form", "build"]),
+    (r"\bestablished\b", ["set up", "created", "formed", "built"]),
     (r"\bestablishing\b", ["setting up", "creating", "forming", "building"]),
     (r"\bsignificant\b", ["major", "notable", "meaningful", "real"]),
     (r"\bmodern\b", ["current", "present-day", "today's", "recent"]),
     (r"\bacross\b", ["throughout", "over", "spanning", "covering"]),
+    # Additional coverage for common academic/AI vocabulary
+    (r"\bfocuses\b", ["centers on", "concentrates on", "zeroes in on", "homes in on"]),
+    (r"\bfocused\b", ["centered", "concentrated", "zeroed in", "homed in"]),
+    (r"\bfocusing\b", ["centering", "concentrating", "zeroing in", "homing in"]),
+    (r"\butiliz(?:e[sd]?|ation)\b", ["use", "usage", "application", "employment"]),
+    (r"\bdemonstrates?\b", ["show", "reveal", "prove", "make clear"]),
+    (r"\bdemonstrated\b", ["showed", "revealed", "proved", "made clear"]),
+    (r"\bdemonstrating\b", ["showing", "revealing", "proving", "making clear"]),
+    (r"\bfunction(?:s)?\b", ["work", "operate", "serve", "act"]),
+    (r"\bfunctioned\b", ["worked", "operated", "served", "acted"]),
+    (r"\bfunctioning\b", ["working", "operating", "serving", "acting"]),
+    (r"\bcapabilit(?:y|ies)\b", ["ability", "skill", "power", "capacity"]),
+    (r"\bprocesses\b", ["handles", "manages", "works through", "deals with"]),
+    (r"\bprocessed\b", ["handled", "managed", "worked through", "dealt with"]),
+    (r"\bprocessing\b", ["handling", "managing", "working through", "running"]),
+    (r"\bgenerates?\b", ["create", "produce", "make", "yield"]),
+    (r"\bgenerated\b", ["created", "produced", "made", "yielded"]),
+    (r"\bgenerating\b", ["creating", "producing", "making", "yielding"]),
+    (r"\boptimizes?\b", ["improve", "refine", "fine-tune", "streamline"]),
+    (r"\boptimized\b", ["improved", "refined", "fine-tuned", "streamlined"]),
+    (r"\boptimization\b", ["improvement", "refinement", "fine-tuning", "streamlining"]),
+    (r"\boptimizing\b", ["improving", "refining", "fine-tuning", "streamlining"]),
+    (r"\baccuracy\b", ["precision", "correctness", "exactness", "reliability"]),
+    (r"\befficiency\b", ["productivity", "speed", "performance", "throughput"]),
+    (r"\binteraction(?:s)?\b", ["exchange", "engagement", "communication", "dialogue"]),
+    (r"\bimplements?\b", ["put in place", "roll out", "set up", "apply"]),
+    (r"\bimplemented\b", ["put in place", "rolled out", "set up", "applied"]),
+    (r"\bimplementing\b", ["putting in place", "rolling out", "setting up", "applying"]),
+    (r"\bstrateg(?:y|ies)\b", ["plan", "approach", "tactic", "game plan"]),
+    (r"\bphenomen(?:on|a)\b", ["trend", "occurrence", "event", "pattern"]),
+    (r"\bcontributes?\b", ["add", "give", "help", "pitch in"]),
+    (r"\bcontributed\b", ["added", "gave", "helped", "pitched in"]),
+    (r"\bcontribution\b", ["addition", "input", "effort", "part"]),
+    (r"\bcontributing\b", ["adding", "giving", "helping", "pitching in"]),
+    (r"\binfluences?\b", ["shape", "affect", "sway", "steer"]),
+    (r"\binfluenced\b", ["shaped", "affected", "swayed", "steered"]),
+    (r"\binfluencing\b", ["shaping", "affecting", "swaying", "steering"]),
+    (r"\bperspective(?:s)?\b", ["view", "angle", "standpoint", "take"]),
+    (r"\bexperienced\b", ["faced", "went through", "encountered", "saw"]),
+    (r"\bexperiencing\b", ["facing", "going through", "encountering", "seeing"]),
+    (r"\bcommunicates?\b", ["share", "convey", "pass along", "relay"]),
+    (r"\bcommunicated\b", ["shared", "conveyed", "passed along", "relayed"]),
+    (r"\bcommunication\b", ["exchange", "discussion", "dialogue", "contact"]),
+    (r"\bcommunicating\b", ["sharing", "conveying", "passing along", "relaying"]),
+    (r"\bcomplex(?:ity)?\b", ["complicated", "involved", "intricate", "layered"]),
+    (r"\bcritically\b", ["vitally", "crucially", "decisively"]),
+    (r"\bcritical\b", ["vital", "key", "central", "decisive"]),
+    (r"\brapidly\b", ["fast", "quickly", "swiftly", "at speed"]),
+    (r"\brapid\b", ["fast", "quick", "swift", "speedy"]),
+    (r"\bsophisticated\b", ["advanced", "refined", "elaborate", "complex"]),
+    (r"\bunprecedented\b", ["unmatched", "historic", "extraordinary", "remarkable"]),
+    (r"\bpotential\b", ["promise", "capacity", "ability", "prospect"]),
+    (r"\bscenario(?:s)?\b", ["situation", "case", "setting", "condition"]),
+    (r"\bcontext\b", ["setting", "backdrop", "circumstances", "situation"]),
+    (r"\benvironment(?:s)?\b", ["setting", "surrounding", "space", "habitat"]),
+    (r"\bincorporates?\b", ["include", "blend in", "fold in", "add"]),
+    (r"\bincorporated\b", ["included", "blended in", "folded in", "added"]),
+    (r"\bincorporating\b", ["including", "blending in", "folding in", "adding"]),
+    (r"\bsignaling\b", ["pointing to", "showing", "indicating", "suggesting"]),
+    (r"\bfacilitatd?\b", ["helped", "enabled", "supported", "made easier"]),
+    (r"\benabled\b", ["allowed", "let", "made possible", "empowered"]),
+    (r"\benabling\b", ["allowing", "giving the ability for", "making it possible for", "empowering"]),
+    (r"\benables?\b", ["allows", "gives the ability to", "makes possible", "empowers"]),
+    (r"\bprecisely\b", ["exactly", "specifically", "accurately"]),
+    (r"\bprecise\b", ["exact", "specific", "accurate", "pinpoint"]),
 ]
 
 
@@ -307,6 +468,136 @@ def restructure_sentence(sentence: str) -> str:
         return f"{adv.capitalize()}, {combined[0].lower()}{combined[1:]}."
 
     return sentence
+
+
+# ── Heavy Sentence Rewriter (rule-based paraphrasing when T5 fails) ──
+
+# Structural templates: detect sentence patterns and rewrite them
+SENTENCE_REWRITES: list[tuple[str, str]] = [
+    # "X has Y" → "Y can be seen in X" / "X shows Y"
+    (r"^(.+?)\s+has\s+(significantly|greatly|notably|fundamentally|dramatically)\s+(.+)$",
+     r"When it comes to \1, there has been a \2 \3"),
+    # "The X of Y has Z" → "Y has seen its X Z"
+    (r"^The\s+(\w+)\s+of\s+(.+?)\s+has\s+(.+)$",
+     r"\2 has experienced \1 that \3"),
+    # "X enables/allows Y to Z" → "Through X, Y can Z"
+    (r"^(.+?)\s+(?:enables?|allows?)\s+(.+?)\s+to\s+(.+)$",
+     r"Through \1, \2 can \3"),
+    # "X provides Y with Z" → "Thanks to X, Y gets Z" (only when "with" is present)
+    (r"^(.+?)\s+(?:provides?|offers?|gives?)\s+(.+?)\s+with\s+(.+)$",
+     r"With \1, \2 gains \3"),
+    # "It is [adj] that X" → "X is [adj]" or "Clearly, X"
+    (r"^It\s+is\s+(\w+)\s+that\s+(.+)$",
+     r"\2 — this is \1"),
+    # "X and Y have Z" → "Both X and Y have Z"
+    (r"^(\w[\w\s]{5,30}?)\s+and\s+(\w[\w\s]{5,30}?)\s+have\s+(.+)$",
+     r"Both \1 and \2 show \3"),
+]
+
+# Voice switchers: active→passive and vice versa
+VOICE_PATTERNS: list[tuple[str, str]] = [
+    # "X created Y" → "Y was created by X"
+    (r"^(.{8,40}?)\s+(created|developed|designed|built|produced|introduced|established|launched)\s+(.{8,})$",
+     r"\3 was \2 by \1"),
+    # "Y was created by X" → "X created Y"
+    (r"^(.{8,40}?)\s+(?:was|were)\s+(created|developed|designed|built|produced|introduced|established)\s+by\s+(.{8,})$",
+     r"\3 \2 \1"),
+    # "X improved Y" → "Y saw improvement from X"
+    (r"^(.{8,40}?)\s+(improved|enhanced|boosted|advanced|strengthened)\s+(.{8,})$",
+     r"\3 saw \2ment from \1"),
+    # "Researchers found that X" → "X was found by researchers"
+    (r"^(Researchers|Scientists|Studies|Experts|Analysts)\s+(found|showed|demonstrated|revealed|discovered|confirmed)\s+that\s+(.+)$",
+     r"\3 — as \1 have \2"),
+]
+
+# Sentence opener variations to break AI-uniform patterns
+OPENER_VARIATIONS = [
+    ("In addition,", ["On top of that,", "Beyond this,", "What is more,", "Added to this,"]),
+    ("However,", ["That said,", "On the flip side,", "Even so,", "At the same time,"]),
+    ("Therefore,", ["Because of this,", "For this reason,", "As a result,", "This means"]),
+    ("For example,", ["Take, for instance,", "Consider this:", "A case in point:", "To illustrate,"]),
+    ("Similarly,", ["In the same way,", "Along those lines,", "Likewise,", "Comparably,"]),
+    ("Specifically,", ["More precisely,", "To be exact,", "In particular,", "Narrowing this down,"]),
+    ("As a result,", ["Because of this,", "This led to", "The outcome was that", "From this,"]),
+    ("In contrast,", ["Conversely,", "On the other hand,", "Alternatively,", "Then again,"]),
+    ("Generally,", ["Broadly speaking,", "For the most part,", "By and large,", "As a rule,"]),
+    ("Importantly,", ["What matters here is", "A key point:", "Crucially,", "Of note,"]),
+    ("Notably,", ["It stands out that", "Worth mentioning,", "One highlight:", "Strikingly,"]),
+    ("Ultimately,", ["At the end of the day,", "When all is said and done,", "In the final analysis,", "The bottom line is"]),
+]
+
+
+def heavy_rewrite_sentence(sentence: str) -> str:
+    """Aggressive rule-based sentence rewriting — used when T5 barely changes input.
+    
+    Applies structural pattern matching to fundamentally restructure sentences
+    while preserving meaning.
+    """
+    result = sentence
+    applied = False
+    
+    # 1. Try opener variations first (high probability — breaks uniformity)
+    for original_opener, alternatives in OPENER_VARIATIONS:
+        if result.startswith(original_opener):
+            result = result.replace(original_opener, random.choice(alternatives), 1)
+            applied = True
+            break
+    
+    # 2. Try structural rewrites (moderate probability)
+    if not applied and random.random() < 0.6:
+        for pattern, replacement in SENTENCE_REWRITES:
+            m = re.match(pattern, result, re.IGNORECASE)
+            if m:
+                try:
+                    result = re.sub(pattern, replacement, result, count=1, flags=re.IGNORECASE)
+                    applied = True
+                    break
+                except Exception:
+                    pass
+    
+    # 3. Try voice switching (moderate probability)
+    if not applied and random.random() < 0.5:
+        for pattern, replacement in VOICE_PATTERNS:
+            m = re.match(pattern, result, re.IGNORECASE)
+            if m:
+                try:
+                    result = re.sub(pattern, replacement, result, count=1, flags=re.IGNORECASE)
+                    applied = True
+                    break
+                except Exception:
+                    pass
+    
+    # 4. Word-level scramble: swap independent clauses around commas
+    # Only swap if both parts look like complete clauses (have a verb)
+    if not applied and ',' in result and random.random() < 0.3:
+        parts = result.split(',', 1)
+        if (len(parts) == 2 
+            and len(parts[0].split()) >= 5 and len(parts[1].split()) >= 5
+            and any(w in parts[1].lower().split() for w in ['is','are','was','were','has','have','had','can','will','may'])):
+            p1 = parts[0].strip().rstrip('.')
+            p2 = parts[1].strip().rstrip('.')
+            result = f"{p2[0].upper()}{p2[1:]}, {p1[0].lower()}{p1[1:]}."
+            applied = True
+    
+    # 5. Always apply deep synonyms when other rewrites fail
+    if not applied:
+        result = deep_synonym_replace(result, 0.85)
+    
+    # Grammar safety: fix common issues from rule-based rewrites
+    result = fix_t5_grammar(result)
+    # Fix "the the", "a a" doubles from chained replacements
+    result = re.sub(r'\b(the|a|an|in|of|to|for|and|or|is|are|was|were)\s+\1\b', r'\1', result, flags=re.IGNORECASE)
+    # Fix "verb verb" from bad synonym chains
+    result = re.sub(r'\b(\w{3,}ing)\s+\1\b', r'\1', result)
+    
+    # Fix capitalization
+    result = result.strip()
+    if result and result[0].islower():
+        result = result[0].upper() + result[1:]
+    if result and result[-1] not in '.!?':
+        result += '.'
+    
+    return result
 
 
 # ── Grammar fixes for T5 output ──
@@ -584,51 +875,124 @@ def t5_generate_sentence(sentence: str, num_beams: int = 4,
     
     CRITICAL: This model ONLY works with greedy/beam search.
     Sampling (do_sample=True) produces garbage at any temperature.
+    
+    Strategy: generate multiple diverse candidates, pick the one with
+    highest change ratio that still preserves meaning.
     """
+    # Apply model prefix if configured (e.g. "paraphrase: " for paraphrase models)
+    input_text = f"{model_prefix}{sentence}" if model_prefix else sentence
+    
     inputs = tokenizer(
-        sentence,
+        input_text,
         return_tensors="pt",
         max_length=512,
         truncation=True,
         padding=True,
     ).to(device)
     
+    max_new = min(768, max(len(sentence.split()) * 4, 128))
+    
+    # Generate multiple candidates by running beam search with varied parameters
+    # This avoids the group-beam-search dependency while still producing diverse outputs
+    candidates = []
+    
+    # Run 1: Standard beam search with given params
     outputs = model.generate(
         **inputs,
-        max_new_tokens=min(768, max(len(sentence.split()) * 4, 128)),  # Increased for longer outputs
+        max_new_tokens=max_new,
         num_beams=num_beams,
-        do_sample=False,           # NEVER sample with this model
+        do_sample=False,
         no_repeat_ngram_size=no_repeat_ngram,
         length_penalty=length_penalty,
         repetition_penalty=repetition_penalty,
         early_stopping=True,
     )
-    
     decoded = tokenizer.decode(outputs[0], skip_special_tokens=True).strip()
-    return decoded
+    if decoded:
+        candidates.append(decoded)
+    
+    # Run 2: Higher repetition penalty → forces more word variety
+    if num_beams >= 4:
+        outputs2 = model.generate(
+            **inputs,
+            max_new_tokens=max_new,
+            num_beams=num_beams,
+            do_sample=False,
+            no_repeat_ngram_size=min(no_repeat_ngram + 1, 5),
+            length_penalty=length_penalty * 1.2,
+            repetition_penalty=min(repetition_penalty + 0.5, 2.5),
+            early_stopping=True,
+        )
+        decoded2 = tokenizer.decode(outputs2[0], skip_special_tokens=True).strip()
+        if decoded2 and decoded2 != decoded:
+            candidates.append(decoded2)
+    
+    # Run 3: Fewer beams + higher rep penalty → greedy-ish with forced diversity
+    if num_beams >= 4:
+        outputs3 = model.generate(
+            **inputs,
+            max_new_tokens=max_new,
+            num_beams=2,
+            do_sample=False,
+            no_repeat_ngram_size=no_repeat_ngram,
+            length_penalty=length_penalty,
+            repetition_penalty=min(repetition_penalty + 1.0, 3.0),
+            early_stopping=True,
+        )
+        decoded3 = tokenizer.decode(outputs3[0], skip_special_tokens=True).strip()
+        if decoded3 and decoded3 not in candidates:
+            candidates.append(decoded3)
+    
+    # Decode all candidates and pick the best
+    candidates = []
+    for i in range(outputs.shape[0]):
+        decoded = tokenizer.decode(outputs[i], skip_special_tokens=True).strip()
+        if decoded:
+            candidates.append(decoded)
+    
+    if not candidates:
+        return sentence
+    
+    # Pick candidate with highest word-level change that still preserves meaning
+    best = candidates[0]
+    best_score = -1.0
+    for cand in candidates:
+        change = measure_change(sentence, cand)
+        meaning = measure_meaning_overlap(sentence, cand)
+        # Score: reward change, penalize meaning loss
+        # Reject if meaning overlap < 0.35 (hallucination)
+        if meaning < 0.35:
+            continue
+        # Score balances change (want high) and meaning preservation (want ≥ 0.5)
+        score = change * 0.7 + min(meaning, 0.8) * 0.3
+        if score > best_score:
+            best_score = score
+            best = cand
+    
+    return best
 
 
 # ── Quality mode presets ──
 MODE_PRESETS = {
     "quality": {
-        "num_beams": 4,
+        "num_beams": 8,
         "no_repeat_ngram": 3,
-        "length_penalty": 1.5,       # Penalize short outputs to prevent clause truncation
-        "repetition_penalty": 1.2,
+        "length_penalty": 1.5,
+        "repetition_penalty": 1.8,    # Higher forces more diverse word choices
         "max_retries": 5,
     },
     "fast": {
-        "num_beams": 1,       # greedy = faster
+        "num_beams": 4,               # Use diverse beam even in fast mode
         "no_repeat_ngram": 2,
         "length_penalty": 1.3,
-        "repetition_penalty": 1.1,
+        "repetition_penalty": 1.5,
         "max_retries": 2,
     },
     "aggressive": {
-        "num_beams": 6,
+        "num_beams": 8,
         "no_repeat_ngram": 4,
         "length_penalty": 1.5,
-        "repetition_penalty": 1.5,
+        "repetition_penalty": 2.0,    # Maximum diversity pressure
         "max_retries": 8,
     },
 }
@@ -763,24 +1127,27 @@ def humanize_sentence(original: str, preset: dict, min_change: float,
         if ratio >= min_change:
             break
 
-        # Slight variation for retry
+        # Slight variation for retry — escalate aggression
         preset = {**preset}
-        preset["repetition_penalty"] = min(2.0, preset["repetition_penalty"] + 0.2)
-        if preset["num_beams"] < 6:
-            preset["num_beams"] += 1
+        preset["repetition_penalty"] = min(2.5, preset["repetition_penalty"] + 0.3)
+        if preset["num_beams"] < 8:
+            preset["num_beams"] += 2
 
-    # Phase 4: If still below threshold, apply deep synonym replacement + restructuring
-    # (these are fast, no T5 calls, so we can retry more aggressively)
+    # Phase 4: If still below threshold, use heavy rule-based rewriting
+    # (these are fast, no T5 calls, so we can retry aggressively)
     if best_ratio < min_change:
-        fallback = best_result
-        for fb_attempt in range(max_retries - t5_retries):
+        # First try: heavy rewrite on T5 output
+        for fb_attempt in range(max(max_retries - t5_retries, 3)):
             attempts += 1
-            intensity = 0.5 + (fb_attempt * 0.1)  # get more aggressive each retry
-            fallback = deep_synonym_replace(best_result, min(intensity, 0.9))
-            fallback = restructure_sentence(fallback)
+            # Start from best T5 result, apply heavy rewriting
+            fallback = heavy_rewrite_sentence(best_result)
+            # Also apply synonym replacement on top
+            intensity = 0.6 + (fb_attempt * 0.1)
+            fallback = deep_synonym_replace(fallback, min(intensity, 0.95))
+            fallback = apply_ai_word_kill(fallback)
             fallback = fix_t5_grammar(fallback)
             fallback = fallback.strip()
-            if fallback and not fallback[-1] in '.!?':
+            if fallback and fallback[-1] not in '.!?':
                 fallback += '.'
             if fallback and fallback[0].islower():
                 fallback = fallback[0].upper() + fallback[1:]
@@ -791,6 +1158,28 @@ def humanize_sentence(original: str, preset: dict, min_change: float,
                 best_ratio = ratio
             if ratio >= min_change:
                 break
+        
+        # Second try: if still below, rewrite from ORIGINAL (not T5 output)
+        if best_ratio < min_change:
+            for fb2 in range(3):
+                attempts += 1
+                fallback = heavy_rewrite_sentence(original)
+                fallback = deep_synonym_replace(fallback, 0.95)
+                fallback = apply_ai_word_kill(fallback)
+                fallback = apply_filler_cuts(fallback)
+                fallback = fix_t5_grammar(fallback)
+                fallback = fallback.strip()
+                if fallback and fallback[-1] not in '.!?':
+                    fallback += '.'
+                if fallback and fallback[0].islower():
+                    fallback = fallback[0].upper() + fallback[1:]
+                
+                ratio = measure_change(original, fallback)
+                if ratio > best_ratio:
+                    best_result = fallback
+                    best_ratio = ratio
+                if ratio >= min_change:
+                    break
     
     return best_result, {
         "attempts": attempts,
@@ -1113,7 +1502,8 @@ async def humanize_endpoint(req: HumanizeRequest):
 
 @app.on_event("startup")
 async def startup():
-    load_model()
+    if model is None:
+        load_model()
 
 
 if __name__ == "__main__":

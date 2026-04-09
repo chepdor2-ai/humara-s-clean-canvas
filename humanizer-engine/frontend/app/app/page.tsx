@@ -256,7 +256,7 @@ export default function EditorPage() {
 
   // Oxygen model v2 controls
   const [oxygenMode, setOxygenMode] = useState<'quality' | 'fast' | 'aggressive'>('quality');
-  const [oxygenSentenceBySentence, setOxygenSentenceBySentence] = useState(true);
+  const [oxygenSentenceBySentence, setOxygenSentenceBySentence] = useState(false);
   const [oxygenMinChangeRatio, setOxygenMinChangeRatio] = useState(0.40);
   const [oxygenMaxRetries, setOxygenMaxRetries] = useState(5);
   const [oxygenAdvancedOpen, setOxygenAdvancedOpen] = useState(false);
@@ -623,7 +623,7 @@ export default function EditorPage() {
 
   /* ── Popup helpers ──────────────────────────────────────────────────── */
   const closePopup = useCallback(() => {
-    setPopupType(null); setSelectionInfo(null); setSynonyms([]); setSentenceAlternatives([]);
+    setPopupType(null); setSelectionInfo(null); setSynonyms([]); setSentenceAlternatives([]); setPendingAlternatives(false);
   }, []);
 
   const getContainingSentence = (t: string, cursor: number) => {
@@ -639,6 +639,7 @@ export default function EditorPage() {
   };
 
   const selectionTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [pendingAlternatives, setPendingAlternatives] = useState(false);
 
   const handleOutputSelect = useCallback(() => {
     if (selectionTimer.current) clearTimeout(selectionTimer.current);
@@ -647,15 +648,10 @@ export default function EditorPage() {
       if (!el || !result) return;
       const start = el.selectionStart;
       const end = el.selectionEnd;
+      // Cursor placement only (no selection) → allow direct editing, close any popup
       if (start === end) {
-        const bounds = getContainingSentence(result, start);
-        if (!bounds) return;
-        const sentence = result.slice(bounds.start, bounds.end).trim();
-        el.setSelectionRange(bounds.start, bounds.end);
-        const rect = el.getBoundingClientRect();
-        const la = result.slice(0, bounds.start).split('\n').length - 1;
-        setSelectionInfo({ text: sentence, start: bounds.start, end: bounds.end, rect: { x: rect.left + rect.width / 2, y: rect.top + window.scrollY + Math.min(la * 22 + 40, rect.height - 40) }, type: 'sentence' });
-        fetchSentenceAlternatives(sentence, 4);
+        closePopup();
+        setPendingAlternatives(false);
         return;
       }
       const sel = result.slice(start, end).trim();
@@ -664,10 +660,26 @@ export default function EditorPage() {
       const la = result.slice(0, start).split('\n').length - 1;
       const isWord = !/\s/.test(sel) && !/[.!?]/.test(sel);
       setSelectionInfo({ text: sel, start, end, rect: { x: rect.left + rect.width / 2, y: rect.top + window.scrollY + Math.min(la * 22 + 40, rect.height - 40) }, type: isWord ? 'word' : 'sentence' });
-      if (isWord) fetchSynonyms(sel); else fetchSentenceAlternatives(sel);
-    }, 120);
+      if (isWord) {
+        // Single word → auto-fetch synonyms (fast, expected behavior)
+        fetchSynonyms(sel);
+      } else {
+        // Sentence/paragraph selection → show "Get Alternatives" button, don't auto-fetch
+        setPopupType('sentence');
+        setSentenceAlternatives([]);
+        setLoadingPopup(false);
+        setPendingAlternatives(true);
+      }
+    }, 200);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [result]);
+
+  const handleRequestAlternatives = useCallback(() => {
+    if (!selectionInfo) return;
+    setPendingAlternatives(false);
+    fetchSentenceAlternatives(selectionInfo.text);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectionInfo]);
 
   const fetchSynonyms = async (word: string) => {
     setPopupType('synonym'); setLoadingPopup(true); setSynonyms([]);
@@ -715,12 +727,12 @@ export default function EditorPage() {
 
   /* ── Render ───────────────────────────────────────────────────────────── */
   return (
-    <div className="flex flex-col gap-4 animate-in fade-in duration-500">
+    <div className="flex flex-col gap-5 animate-in fade-in duration-500 max-w-7xl mx-auto">
       {/* Header */}
       <header className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-bold text-slate-900 dark:text-white tracking-tight">AI Humanizer</h1>
-          <p className="text-[13px] text-slate-500 dark:text-slate-400">Make AI text undetectable</p>
+          <h1 className="text-2xl font-extrabold text-slate-900 dark:text-white tracking-tight bg-gradient-to-r from-slate-900 to-slate-600 dark:from-white dark:to-slate-300 bg-clip-text text-transparent">AI Humanizer</h1>
+          <p className="text-[13px] text-slate-500 dark:text-slate-400 mt-0.5">Transform AI text into undetectable human writing</p>
         </div>
 
       </header>
@@ -730,7 +742,7 @@ export default function EditorPage() {
 
       {/* Settings Bar */}
       <div
-        className={`flex flex-wrap items-center gap-x-5 gap-y-2 bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-700 rounded-xl px-4 py-2.5 ${planColor ? 'plan-glow' : ''}`}
+        className={`flex flex-wrap items-center gap-x-5 gap-y-2 bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-700 rounded-2xl px-5 py-3 shadow-sm ${planColor ? 'plan-glow' : ''}`}
         style={planColor ? { '--plan-color': planColor } as React.CSSProperties : undefined}
       >
         <div className="flex items-center gap-2 relative">
@@ -804,7 +816,7 @@ export default function EditorPage() {
         </label>
         <div className="w-px h-5 bg-slate-200 dark:bg-zinc-700 hidden sm:block" />
         <button onClick={handleHumanize} disabled={!text.trim() || loading || rephrasing}
-          className="ml-auto bg-brand-600 hover:bg-brand-700 text-white text-xs font-bold rounded-lg px-5 py-2 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center gap-1.5 shadow-sm hover:shadow-md active:scale-[0.98]">
+          className="ml-auto bg-gradient-to-r from-brand-600 to-brand-500 hover:from-brand-700 hover:to-brand-600 text-white text-xs font-bold rounded-xl px-6 py-2.5 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center gap-2 shadow-md hover:shadow-lg active:scale-[0.97]">
           {loading ? <RotateCcw className="w-3.5 h-3.5 animate-spin" /> : <Zap className="w-3.5 h-3.5" />}
           {loading ? 'Humanizing…' : 'Humanize'}
         </button>
@@ -940,7 +952,7 @@ export default function EditorPage() {
               <button
                 onClick={() => {
                   setOxygenMode('quality');
-                  setOxygenSentenceBySentence(true);
+                  setOxygenSentenceBySentence(false);
                   setOxygenMinChangeRatio(0.40);
                   setOxygenMaxRetries(5);
                 }}
@@ -954,16 +966,22 @@ export default function EditorPage() {
       )}
 
       {/* Editor Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
         {/* Input Panel */}
-        <div className="bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-700 rounded-xl overflow-hidden flex flex-col">
-          <div className="flex items-center justify-between px-4 py-2.5 border-b border-slate-100 dark:border-zinc-800 bg-slate-50/50 dark:bg-zinc-800/50">
-            <div className="flex items-center gap-2">
-              <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">Input</span>
+        <div className="bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-700 rounded-2xl overflow-hidden flex flex-col shadow-sm hover:shadow-md transition-shadow">
+          <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100 dark:border-zinc-800 bg-gradient-to-r from-slate-50 to-white dark:from-zinc-800/80 dark:to-zinc-900">
+            <div className="flex items-center gap-2.5">
+              <div className="w-2 h-2 rounded-full bg-blue-400 dark:bg-blue-500 animate-pulse" style={{ animationDuration: '3s' }} />
+              <span className="text-sm font-bold text-slate-800 dark:text-slate-100 tracking-tight">Input</span>
+              {inputDetection && (
+                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${inputAvgAi > 50 ? 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400' : 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400'}`}>
+                  {Math.round(inputAvgAi)}% AI
+                </span>
+              )}
             </div>
-            <div className="flex items-center gap-2">
-              <span className="text-[11px] text-slate-400 tabular-nums">{inputWords} words</span>
-              <button onClick={handleClear} className="text-xs font-medium text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 px-1.5 py-0.5 rounded-md hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors flex items-center gap-1">
+            <div className="flex items-center gap-2.5">
+              <span className="text-[11px] text-slate-400 dark:text-zinc-500 tabular-nums font-medium">{inputWords} words</span>
+              <button onClick={handleClear} className="text-xs font-medium text-slate-500 hover:text-red-500 dark:text-slate-400 dark:hover:text-red-400 px-2 py-1 rounded-lg hover:bg-red-50 dark:hover:bg-red-950/30 transition-all flex items-center gap-1">
                 <Eraser className="w-3 h-3" /> Clear
               </button>
             </div>
@@ -973,27 +991,43 @@ export default function EditorPage() {
           <div className="flex-1">
             <textarea ref={inputRef} value={text}
               onChange={(e) => setText(e.target.value)}
-              className="w-full min-h-[380px] bg-transparent outline-none resize-none text-[14px] leading-relaxed text-slate-800 dark:text-slate-200 p-4"
+              className="w-full min-h-[420px] bg-transparent outline-none resize-none text-[14px] leading-[1.8] text-slate-800 dark:text-slate-200 p-5 placeholder:text-slate-300 dark:placeholder:text-zinc-600"
               placeholder="Paste your AI-generated text here…" />
           </div>
 
         </div>
 
         {/* Output Panel */}
-        <div className="bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-700 rounded-xl overflow-hidden flex flex-col relative">
-          <div className="flex items-center justify-between px-4 py-2.5 border-b border-slate-100 dark:border-zinc-800 bg-slate-50/50 dark:bg-zinc-800/50">
-            <div className="flex items-center gap-2">
-              <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">Output</span>
+        <div className={`bg-white dark:bg-zinc-900 border rounded-2xl overflow-hidden flex flex-col relative shadow-sm hover:shadow-md transition-shadow ${result && !loading && !rephrasing ? 'border-emerald-200 dark:border-emerald-800/50' : 'border-slate-200 dark:border-zinc-700'}`}>
+          <div className={`flex items-center justify-between px-4 py-3 border-b ${result && !loading && !rephrasing ? 'border-emerald-100 dark:border-emerald-900/30 bg-gradient-to-r from-emerald-50/80 to-white dark:from-emerald-950/20 dark:to-zinc-900' : 'border-slate-100 dark:border-zinc-800 bg-gradient-to-r from-slate-50 to-white dark:from-zinc-800/80 dark:to-zinc-900'}`}>
+            <div className="flex items-center gap-2.5">
+              <div className={`w-2 h-2 rounded-full ${result && !loading ? 'bg-emerald-400 dark:bg-emerald-500' : 'bg-slate-300 dark:bg-zinc-600'}`} />
+              <span className="text-sm font-bold text-slate-800 dark:text-slate-100 tracking-tight">Output</span>
               {result && !loading && !rephrasing && (
-                <span className="text-[10px] text-emerald-600/70 dark:text-emerald-400/60 font-medium italic">proofread &amp; edit here</span>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[10px] font-medium text-emerald-600/80 dark:text-emerald-400/70 bg-emerald-50 dark:bg-emerald-900/20 px-2 py-0.5 rounded-full">
+                    Editable — click to edit, select text for alternatives
+                  </span>
+                </div>
+              )}
+              {outputDetection && (
+                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${outputAvgAi <= 20 ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400' : 'bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400'}`}>
+                  {Math.round(outputAvgAi)}% AI
+                </span>
               )}
             </div>
             <div className="flex items-center gap-2">
-              <span className="text-[11px] text-slate-400 tabular-nums">{outputWords} words</span>
+              <span className="text-[11px] text-slate-400 dark:text-zinc-500 tabular-nums font-medium">{outputWords} words</span>
               {result && !isAnimating && (
                 <>
+                  <button onClick={handleRehumanizeFlagged} disabled={rehumanizing || loading}
+                    className="text-[11px] font-semibold text-amber-600 hover:text-amber-700 dark:text-amber-400 px-2 py-1 rounded-lg hover:bg-amber-50 dark:hover:bg-amber-950/30 transition-all flex items-center gap-1 disabled:opacity-50"
+                    title="Fix flagged AI sentences">
+                    <AlertTriangle className={`w-3 h-3 ${rehumanizing ? 'animate-pulse' : ''}`} />
+                    {rehumanizing ? 'Fixing…' : 'Fix AI'}
+                  </button>
                   <button onClick={handleRephrase} disabled={rephrasing || loading}
-                    className="text-[11px] font-semibold text-brand-600 hover:text-brand-700 dark:text-brand-400 px-2 py-1 rounded-md hover:bg-brand-50 dark:hover:bg-brand-950 transition-colors flex items-center gap-1 disabled:opacity-50"
+                    className="text-[11px] font-semibold text-brand-600 hover:text-brand-700 dark:text-brand-400 px-2 py-1 rounded-lg hover:bg-brand-50 dark:hover:bg-brand-950/30 transition-all flex items-center gap-1 disabled:opacity-50"
                     title="Rephrase output">
                     <RefreshCw className={`w-3 h-3 ${rephrasing ? 'animate-spin' : ''}`} />
                     {rephrasing ? 'Rephrasing…' : 'Rephrase'}
@@ -1016,26 +1050,30 @@ export default function EditorPage() {
             />
           ) : result ? (
             <div className="relative flex-1">
-              <div className="absolute inset-0 bg-emerald-50/40 dark:bg-emerald-950/20 pointer-events-none rounded-b-xl" />
+              <div className="absolute inset-0 bg-emerald-50/30 dark:bg-emerald-950/10 pointer-events-none rounded-b-2xl" />
               <textarea ref={outputRef} value={result}
                 onChange={(e) => setResult(e.target.value)} onSelect={handleOutputSelect}
-                className="relative z-10 flex-1 w-full min-h-[380px] bg-transparent outline-none resize-none text-[14px] leading-relaxed text-slate-800 dark:text-slate-200 p-4"
+                className="relative z-10 flex-1 w-full min-h-[420px] bg-transparent outline-none resize-none text-[14px] leading-[1.8] text-slate-800 dark:text-slate-200 p-5 cursor-text"
                 style={{ fontFamily: 'inherit' }}
                 placeholder="Output appears here…" />
             </div>
           ) : (
-            <div className="flex flex-col items-center justify-center min-h-[380px] text-slate-200 dark:text-slate-700 gap-3 px-6 text-center">
-              <Zap className="w-6 h-6" />
-              <span className="text-xs text-slate-300 dark:text-slate-600">Output appears here</span>
-              <span className="text-[11px] text-slate-400 dark:text-slate-500 max-w-xs leading-relaxed">Bring text from Stealth or any humanizer — kill all AI in one beat</span>
+            <div className="flex flex-col items-center justify-center min-h-[420px] text-slate-200 dark:text-slate-700 gap-4 px-8 text-center">
+              <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-brand-100 to-brand-50 dark:from-brand-900/30 dark:to-brand-950/20 flex items-center justify-center">
+                <Zap className="w-5 h-5 text-brand-400 dark:text-brand-500" />
+              </div>
+              <div className="space-y-1">
+                <span className="text-sm font-medium text-slate-400 dark:text-slate-500 block">Humanized text will appear here</span>
+                <span className="text-[11px] text-slate-300 dark:text-slate-600 max-w-xs leading-relaxed block">Paste text on the left and click Humanize to transform it</span>
+              </div>
             </div>
           )}
 
           {/* Synonym Popup */}
           {popupType === 'synonym' && selectionInfo && (
-            <div ref={popupRef} className="fixed z-50 bg-white border border-slate-200 rounded-xl shadow-xl py-1.5 w-[200px]"
+            <div ref={popupRef} className="fixed z-50 bg-white dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-xl shadow-xl py-1.5 w-[200px]"
               style={{ left: `${Math.min(selectionInfo.rect.x, window.innerWidth - 220)}px`, top: `${selectionInfo.rect.y}px`, transform: 'translateX(-50%)' }}>
-              <div className="px-3 py-1.5 text-xs font-medium text-slate-400 border-b border-slate-100 flex items-center gap-1.5">
+              <div className="px-3 py-1.5 text-xs font-medium text-slate-400 dark:text-zinc-400 border-b border-slate-100 dark:border-zinc-700 flex items-center gap-1.5">
                 <Type className="w-3 h-3" /> Synonyms for &ldquo;{selectionInfo.text}&rdquo;
               </div>
               <div className="max-h-56 overflow-y-auto">
@@ -1060,29 +1098,43 @@ export default function EditorPage() {
 
           {/* Sentence Alternatives Popup */}
           {popupType === 'sentence' && selectionInfo && (
-            <div ref={popupRef} className="fixed z-50 bg-white border border-slate-200 rounded-xl shadow-xl py-1.5 w-[480px] max-w-[90vw]"
+            <div ref={popupRef} className="fixed z-50 bg-white dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-xl shadow-xl py-1.5 w-[480px] max-w-[90vw]"
               style={{ left: `${Math.min(selectionInfo.rect.x, window.innerWidth - 500)}px`, top: `${selectionInfo.rect.y}px`, transform: 'translateX(-50%)' }}>
-              <div className="px-3 py-1.5 text-xs font-medium text-slate-400 border-b border-slate-100 flex items-center gap-1.5">
-                <AlignLeft className="w-3 h-3" /> Alternatives
+              <div className="px-3 py-1.5 text-xs font-medium text-slate-400 dark:text-zinc-400 border-b border-slate-100 dark:border-zinc-700 flex items-center gap-1.5">
+                <AlignLeft className="w-3 h-3" /> Selected text
               </div>
+              {pendingAlternatives ? (
+                <div className="px-3 py-3 flex flex-col items-center gap-2">
+                  <p className="text-xs text-slate-500 dark:text-zinc-400 text-center leading-relaxed max-w-xs">
+                    Select text and click below to generate alternative phrasings
+                  </p>
+                  <button
+                    onClick={handleRequestAlternatives}
+                    className="px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white text-xs font-bold rounded-lg transition-all shadow-sm hover:shadow-md active:scale-[0.98] flex items-center gap-1.5"
+                  >
+                    <RefreshCw className="w-3 h-3" /> Get Alternatives
+                  </button>
+                </div>
+              ) : (
               <div className="max-h-[350px] overflow-y-auto">
                 {loadingPopup ? (
-                  <div className="px-3 py-5 text-xs text-slate-400 text-center flex flex-col items-center gap-2">
+                  <div className="px-3 py-5 text-xs text-slate-400 dark:text-zinc-500 text-center flex flex-col items-center gap-2">
                     <RotateCcw className="w-4 h-4 animate-spin" /> Generating…
                   </div>
                 ) : sentenceAlternatives.length > 0 ? (
                   sentenceAlternatives.map((alt, idx) => (
                     <button key={idx} onClick={() => applyReplacement(alt.text)}
-                      className="w-full text-left px-3 py-2.5 text-sm border-b border-slate-50 last:border-0 hover:bg-brand-50 transition-colors">
+                      className="w-full text-left px-3 py-2.5 text-sm border-b border-slate-50 dark:border-zinc-700/50 last:border-0 hover:bg-brand-50 dark:hover:bg-brand-900/20 transition-colors">
                       <div className="flex items-start gap-2.5">
-                        <span className="text-xs font-semibold text-brand-600 bg-brand-50 px-1.5 py-0.5 rounded mt-0.5 shrink-0">{idx + 1}</span>
-                        <span className="flex-1 text-slate-700 leading-relaxed">{alt.text}</span>
-                        <span className="text-xs text-slate-400 font-medium whitespace-nowrap mt-0.5">{Math.round(alt.score * 100)}%</span>
+                        <span className="text-xs font-semibold text-brand-600 bg-brand-50 dark:bg-brand-900/30 px-1.5 py-0.5 rounded mt-0.5 shrink-0">{idx + 1}</span>
+                        <span className="flex-1 text-slate-700 dark:text-zinc-200 leading-relaxed">{alt.text}</span>
+                        <span className="text-xs text-slate-400 dark:text-zinc-500 font-medium whitespace-nowrap mt-0.5">{Math.round(alt.score * 100)}%</span>
                       </div>
                     </button>
                   ))
-                ) : <div className="px-3 py-4 text-xs text-slate-400 text-center">No alternatives available</div>}
+                ) : <div className="px-3 py-4 text-xs text-slate-400 dark:text-zinc-500 text-center">No alternatives available</div>}
               </div>
+              )}
             </div>
           )}
         </div>

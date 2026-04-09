@@ -141,6 +141,15 @@ function pick<T>(arr: T[]): T {
 
 const SUBORDINATE_CONJ = /\b(because|since|although|though|while|whereas|unless|until|after|before|when|if|given that|provided that)\b/i;
 
+/** Quick coherence check — detects garbled clause reordering */
+function isGarbledReorder(result: string, original: string): boolean {
+  if (/^(?:do|does|did|is|are|was|were|has|have|had)\s+\w+\s+(?:from|in|at|by|of|to)\b/i.test(result) && !/^(?:do|does|did)\s+(?:not|n't)\b/i.test(result)) return true;
+  if (/\b(?:that|which|this|these|those|the|a|an)\.\s*$/i.test(result)) return true;
+  if (result.length < original.length * 0.7) return true;
+  if (/\b(?:because|since|although|while|whereas|unless|when|if)\s+[^,]{0,20}\b(?:because|since|although|while|whereas|unless|when|if)\b/i.test(result)) return true;
+  return false;
+}
+
 function reorderClauses(sentence: string): string {
   const words = sentence.split(/\s+/);
   if (words.length < 10 || words.length > 40) return sentence;
@@ -155,8 +164,7 @@ function reorderClauses(sentence: string): string {
     const fixedConj = conj[0].toUpperCase() + conj.slice(1).toLowerCase();
     const fixedSub = sub.replace(/[.!?]+$/, '').trim();
     const result = `${fixedConj} ${fixedSub}, ${cleanMain[0].toLowerCase()}${cleanMain.slice(1)}.`;
-    // Sanity check
-    if (result.split(/\s+/).length >= 5) return result;
+    if (result.split(/\s+/).length >= 5 && !isGarbledReorder(result, sentence)) return result;
   }
 
   // Strategy: Move trailing prepositional phrase to front
@@ -166,7 +174,8 @@ function reorderClauses(sentence: string): string {
   if (ppMatch) {
     const [, mainPart, pp] = ppMatch;
     const cleanMain = mainPart.replace(/,\s*$/, '').trim();
-    return `${pp[0].toUpperCase()}${pp.slice(1)}, ${cleanMain[0].toLowerCase()}${cleanMain.slice(1)}.`;
+    const result = `${pp[0].toUpperCase()}${pp.slice(1)}, ${cleanMain[0].toLowerCase()}${cleanMain.slice(1)}.`;
+    if (!isGarbledReorder(result, sentence)) return result;
   }
 
   return sentence;

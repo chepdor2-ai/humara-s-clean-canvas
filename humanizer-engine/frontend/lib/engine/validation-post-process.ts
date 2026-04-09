@@ -445,6 +445,17 @@ const ALWAYS_LOWERCASE_MID_SENTENCE = new Set([
   // Transition words/phrases
   'according', 'regarding', 'concerning', 'including', 'following', 'given',
   'based', 'rather', 'instead', 'answering', 'responding',
+  // Commonly mis-capitalized mid-sentence words
+  'spurious', 'dubious', 'specious', 'plausible', 'logical', 'causal',
+  'correlational', 'coincidental', 'statistical', 'foundational', 'observational',
+  'experimental', 'empirical', 'anecdotal', 'hypothetical', 'theoretical',
+  'methodological', 'analytical', 'computational', 'quantitative', 'qualitative',
+  'nominal', 'marginal', 'incremental', 'exponential', 'proportional',
+  'tangential', 'peripheral', 'supplementary', 'complementary', 'preliminary',
+  'dietary', 'nutritional', 'behavioral', 'cognitive', 'psychological',
+  'physiological', 'biological', 'ecological', 'geographical', 'historical',
+  'philosophical', 'sociological', 'anthropological', 'economic', 'fiscal',
+  'monetary', 'legislative', 'judicial', 'constitutional', 'regulatory',
 ]);
 
 /**

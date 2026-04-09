@@ -200,6 +200,19 @@ function extractTopicKeywords(sentences: string[]): Set<string> {
 /** Subordinating conjunctions that mark clause boundaries for restructuring */
 const CLAUSE_SPLITTERS = /\b(because|since|although|though|while|whereas|unless|until|after|before|when|if|even though|given that|provided that|so that|in order to)\b/i;
 
+/** Quick coherence check — detects garbled clause reordering */
+function isGarbledReorder(result: string, original: string): boolean {
+  // Starts with auxiliary verb without subject ("do deaths from...")
+  if (/^(?:do|does|did|is|are|was|were|has|have|had)\s+\w+\s+(?:from|in|at|by|of|to)\b/i.test(result) && !/^(?:do|does|did)\s+(?:not|n't)\b/i.test(result)) return true;
+  // Ends with dangling function word ("that." "which.")
+  if (/\b(?:that|which|this|these|those|the|a|an)\.\s*$/i.test(result)) return true;
+  // Lost significant content (>30%)
+  if (result.length < original.length * 0.7) return true;
+  // Multiple subordinating conjunctions adjacent
+  if (/\b(?:because|since|although|while|whereas|unless|when|if)\s+[^,]{0,20}\b(?:because|since|although|while|whereas|unless|when|if)\b/i.test(result)) return true;
+  return false;
+}
+
 /** Reorder clauses in a single sentence while preserving topic keywords */
 function restructureSingleSentence(sent: string, topicKeywords: Set<string>): string {
   const words = sent.split(/\s+/);
@@ -212,10 +225,13 @@ function restructureSingleSentence(sent: string, topicKeywords: Set<string>): st
     const main = sent.slice(0, match.index!).trim();
     if (subordinate.split(/\s+/).length >= 4 && main.split(/\s+/).length >= 4) {
       const reordered = subordinate.replace(/\.$/, "") + ", " + safeDowncaseFirst(main);
+      let candidate: string;
       if (reordered[0] !== reordered[0].toUpperCase()) {
-        return reordered[0].toUpperCase() + reordered.slice(1) + (reordered.endsWith(".") ? "" : ".");
+        candidate = reordered[0].toUpperCase() + reordered.slice(1) + (reordered.endsWith(".") ? "" : ".");
+      } else {
+        candidate = reordered + (reordered.endsWith(".") ? "" : ".");
       }
-      return reordered + (reordered.endsWith(".") ? "" : ".");
+      if (!isGarbledReorder(candidate, sent)) return candidate;
     }
   }
 
@@ -228,7 +244,7 @@ function restructureSingleSentence(sent: string, topicKeywords: Set<string>): st
     if (phrase.split(/\s+/).length >= 3 && rest.split(/\s+/).length >= 5) {
       let result = phrase[0].toUpperCase() + phrase.slice(1) + ", " + safeDowncaseFirst(rest);
       if (!/[.!?]$/.test(result)) result += ".";
-      return result;
+      if (!isGarbledReorder(result, sent)) return result;
     }
   }
 
@@ -247,7 +263,7 @@ function restructureSingleSentence(sent: string, topicKeywords: Set<string>): st
           const swapConj = conj === ", and " ? ", and " : conj === ", but " ? ", though " : conj === ", yet " ? ", and yet " : ", while ";
           let result = clause2.replace(/\.$/, "")[0].toUpperCase() + clause2.replace(/\.$/, "").slice(1) + swapConj + safeDowncaseFirst(clause1);
           if (!/[.!?]$/.test(result)) result += ".";
-          return result;
+          if (!isGarbledReorder(result, sent)) return result;
         }
       }
     }

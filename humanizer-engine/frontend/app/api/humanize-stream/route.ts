@@ -16,9 +16,11 @@ import { humanizeV11 } from '@/lib/engine/v11';
 import { humaraHumanize } from '@/lib/humara';
 import { nuruHumanize } from '@/lib/engine/nuru-humanizer';
 import { omegaHumanize } from '@/lib/engine/omega-humanizer';
-import { deepRestructure, voiceShift, tenseVariation } from '@/lib/engine/advanced-transforms';
+import { easyHumanize } from '@/lib/engine/easy-humanizer';
 import { synonymReplace } from '@/lib/engine/utils';
 import { applyAIWordKill } from '@/lib/engine/shared-dictionaries';
+import { postCleanGrammar } from '@/lib/engine/grammar-cleaner';
+import { fixMidSentenceCapitalization } from '@/lib/engine/validation-post-process';
 
 export const maxDuration = 120;
 
@@ -154,7 +156,37 @@ export async function POST(req: Request) {
           let humanized: string;
           const eng = engine ?? 'ghost_mini';
 
-          if (eng === 'humara_v1_3') {
+          if (eng === 'easy') {
+            const easyResult = await easyHumanize(normalizedText, strength ?? 'medium', tone ?? 'academic');
+            humanized = easyResult.humanized;
+          } else if (eng === 'oxygen') {
+            const oxygenUrl = process.env.OXYGEN_SERVER_URL || 'http://127.0.0.1:5001';
+            const oxygenMode = strength === 'light' ? 'fast' : strength === 'strong' ? 'aggressive' : 'quality';
+            const oxygenParams = {
+              text: normalizedText,
+              strength: strength ?? 'medium',
+              mode: (body as Record<string, unknown>).oxygen_mode || oxygenMode,
+              min_change_ratio: (body as Record<string, unknown>).oxygen_min_change_ratio || 0.40,
+              max_retries: (body as Record<string, unknown>).oxygen_max_retries || 3,
+              sentence_by_sentence: (body as Record<string, unknown>).oxygen_sentence_by_sentence !== undefined
+                ? (body as Record<string, unknown>).oxygen_sentence_by_sentence
+                : false,
+            };
+            const resp = await fetch(`${oxygenUrl}/humanize`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(oxygenParams),
+              signal: AbortSignal.timeout(300000),
+            });
+            if (!resp.ok) {
+              const errBody = await resp.text();
+              sendSSE(controller, { type: 'error', error: `Oxygen model error: ${errBody}` });
+              controller.close();
+              return;
+            }
+            const oxygenResult = await resp.json();
+            humanized = oxygenResult.humanized;
+          } else if (eng === 'humara_v1_3') {
             const { pipeline } = await import('@/lib/engine/humara-v1-3');
             humanized = await pipeline(normalizedText, (tone ?? 'academic') as string, strength === 'strong' ? 10 : strength === 'light' ? 4 : 7);
           } else if (eng === 'omega') {
@@ -188,6 +220,42 @@ export async function POST(req: Request) {
           await emitSentencesStaggered(controller, engineSentences, 'Engine', 80);
           await flushDelay(200); // pause between stages
 
+          // ── OXYGEN POLISH PASS ────────────────────────────────
+          // Easy engine's output is passed through the Oxygen T5 model
+          // as a second phase for cleaner, more natural output.
+          if (eng === 'easy') {
+            try {
+              sendSSE(controller, { type: 'stage', stage: 'Oxygen Polish' });
+              await flushDelay(80);
+              const oxygenUrl = process.env.OXYGEN_SERVER_URL || 'http://127.0.0.1:5001';
+              const oxygenPolishParams = {
+                text: humanized,
+                strength: 'light',
+                mode: 'fast',
+                min_change_ratio: 0.15,
+                max_retries: 2,
+                sentence_by_sentence: false,
+              };
+              const oxygenResp = await fetch(`${oxygenUrl}/humanize`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(oxygenPolishParams),
+                signal: AbortSignal.timeout(120000),
+              });
+              if (oxygenResp.ok) {
+                const oxygenResult = await oxygenResp.json();
+                if (oxygenResult.humanized && oxygenResult.humanized.trim().length > 0) {
+                  humanized = oxygenResult.humanized;
+                  const { sentences: oxygenSents } = splitIntoIndexedSentences(humanized);
+                  await emitSentencesStaggered(controller, oxygenSents, 'Oxygen Polish', 80);
+                }
+              }
+            } catch {
+              // Oxygen polish is best-effort — never block the pipeline
+            }
+            await flushDelay(200);
+          }
+
           // 4. Unified Sentence Process
           const FIRST_PERSON_RE_EARLY = /\b(I|me|my|mine|myself|we|us|our|ours|ourselves)\b/i;
           const earlyFirstPerson = FIRST_PERSON_RE_EARLY.test(text);
@@ -195,7 +263,7 @@ export async function POST(req: Request) {
           const inputAnalysis = detector.analyze(text);
           const inputAiScore = inputAnalysis.summary.overall_ai_score;
 
-          if (eng !== 'humara' && eng !== 'humara_v1_3' && eng !== 'nuru' && eng !== 'omega') {
+          if (eng !== 'humara' && eng !== 'humara_v1_3' && eng !== 'nuru' && eng !== 'omega' && eng !== 'oxygen') {
             sendSSE(controller, { type: 'stage', stage: 'Sentence Processing' });
             await flushDelay(80);
             humanized = unifiedSentenceProcess(humanized, earlyFirstPerson, inputAiScore);
@@ -222,9 +290,6 @@ export async function POST(req: Request) {
                 let s = humanizedSents[i];
                 s = applyAIWordKill(s);
                 s = synonymReplace(s, 0.5, usedWords);
-                if (measureSentenceChange(origSents[bestOrigIdx], s) < RESTRUCTURE_MIN) s = deepRestructure(s, 0.4);
-                if (measureSentenceChange(origSents[bestOrigIdx], s) < RESTRUCTURE_MIN) s = voiceShift(s, 0.5);
-                if (measureSentenceChange(origSents[bestOrigIdx], s) < RESTRUCTURE_MIN) s = tenseVariation(s, 0.2);
                 if (s !== humanizedSents[i]) { humanizedSents[i] = s; changed = true; }
               }
             }
@@ -256,10 +321,8 @@ export async function POST(req: Request) {
             humanized = structuralPostProcess(humanized);
           }
 
-          // 10. Structure preservation
-          if (eng !== 'humara' && eng !== 'humara_v1_3' && eng !== 'nuru' && eng !== 'omega' && eng !== 'ghost_pro') {
-            humanized = preserveInputStructure(text, humanized);
-          }
+          // 10. Structure preservation — apply to ALL engines
+          humanized = preserveInputStructure(normalizedText, humanized);
 
           // 11. Contraction & em-dash enforcement
           humanized = expandContractions(humanized);
@@ -294,6 +357,47 @@ export async function POST(req: Request) {
           humanized = humanized.replace(/\bHealthcare care\b/g, "Healthcare");
           humanized = humanized.replace(/\bquislingism\b/gi, "collaboration");
           humanized = humanized.replace(/\bquisling\b/gi, "collaborator");
+
+          // Post-clean grammar check (universal for ALL engines)
+          humanized = postCleanGrammar(humanized);
+
+          // Last-mile meaning validation (2 iterations max)
+          {
+            const origSentsM = robustSentenceSplit(text);
+            const STOPWORDS_M = new Set(['the','a','an','is','are','was','were','be','been','being','have','has','had','do','does','did','will','would','could','should','may','might','can','shall','to','of','in','for','on','with','at','by','from','as','into','through','during','before','after','above','below','between','out','off','over','under','again','further','then','once','here','there','when','where','why','how','all','each','every','both','few','more','most','other','some','such','no','nor','not','only','own','same','so','than','too','very','just','because','but','and','or','if','while','that','this','these','those','it','its','they','them','their','we','our','he','she','his','her','which','what','who','whom','about','also']);
+            const getContentWordsM = (t: string) => t.toLowerCase().replace(/[^a-z0-9\s]/g, '').split(/\s+/).filter(w => w.length >= 3 && !STOPWORDS_M.has(w));
+            for (let meaningIter = 0; meaningIter < 2; meaningIter++) {
+              const humanSentsM = robustSentenceSplit(humanized);
+              let anyFixed = false;
+              for (let i = 0; i < humanSentsM.length; i++) {
+                let bestOverlap = 0;
+                let bestOrigIdx = 0;
+                for (let j = 0; j < origSentsM.length; j++) {
+                  const origW = new Set(getContentWordsM(origSentsM[j]));
+                  const modW = new Set(getContentWordsM(humanSentsM[i]));
+                  if (origW.size === 0) continue;
+                  let matches = 0;
+                  for (const w of origW) { if (modW.has(w)) matches++; }
+                  const overlap = matches / origW.size;
+                  if (overlap > bestOverlap) { bestOverlap = overlap; bestOrigIdx = j; }
+                }
+                if (bestOverlap < 0.35) {
+                  let fixed = applyAIWordKill(origSentsM[bestOrigIdx]);
+                  const usedW = new Set<string>();
+                  fixed = synonymReplace(fixed, 0.35, usedW);
+                  humanSentsM[i] = fixed;
+                  anyFixed = true;
+                }
+              }
+              if (!anyFixed) break;
+              humanized = humanSentsM.join(' ');
+              humanized = preserveInputStructure(normalizedText, humanized);
+            }
+          }
+
+          // Final sentence-initial caps + mid-sentence caps fix
+          humanized = humanized.replace(/(^|[.!?]\s+)([a-z])/g, (_m: string, pre: string, ch: string) => pre + ch.toUpperCase());
+          humanized = fixMidSentenceCapitalization(humanized, text);
 
           // Emit polished sentences
           {

@@ -24,6 +24,7 @@ import { robustSentenceSplit } from '@/lib/engine/content-protection';
 // import { deepRestructure, voiceShift, tenseVariation } from '@/lib/engine/advanced-transforms';
 import { synonymReplace } from '@/lib/engine/utils';
 import { applyAIWordKill } from '@/lib/engine/shared-dictionaries';
+import { postCleanGrammar } from '@/lib/engine/grammar-cleaner';
 
 export const maxDuration = 120; // LLM engines need more time
 
@@ -393,7 +394,7 @@ export async function POST(req: Request) {
         mode: body.oxygen_mode || oxygenMode,
         min_change_ratio: body.oxygen_min_change_ratio || 0.40,
         max_retries: body.oxygen_max_retries || 3,
-        sentence_by_sentence: body.oxygen_sentence_by_sentence !== false,
+        sentence_by_sentence: body.oxygen_sentence_by_sentence === true,
       };
       
       const resp = await fetch(`${oxygenUrl}/humanize`, {
@@ -498,6 +499,38 @@ export async function POST(req: Request) {
       });
     }
 
+    // ── OXYGEN POLISH PASS ────────────────────────────────────
+    // Easy engine's output is passed through the Oxygen T5 model
+    // as a second phase for cleaner, more natural output.
+    if (engine === 'easy') {
+      try {
+        const oxygenUrl = process.env.OXYGEN_SERVER_URL || 'http://127.0.0.1:5001';
+        const oxygenPolishParams = {
+          text: humanized,
+          strength: 'light',
+          mode: 'fast',
+          min_change_ratio: 0.15,
+          max_retries: 2,
+          sentence_by_sentence: false,
+        };
+        const oxygenResp = await fetch(`${oxygenUrl}/humanize`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(oxygenPolishParams),
+          signal: AbortSignal.timeout(120000),
+        });
+        if (oxygenResp.ok) {
+          const oxygenResult = await oxygenResp.json();
+          if (oxygenResult.humanized && oxygenResult.humanized.trim().length > 0) {
+            humanized = oxygenResult.humanized;
+          }
+        }
+        // If Oxygen server is unavailable, silently continue with the engine output
+      } catch {
+        // Oxygen polish is best-effort — never block the pipeline
+      }
+    }
+
     // ── Unified Sentence Processor ──────────────────────────────
     // Every engine's output flows through per-sentence protection,
     // humanization, 60%-change enforcement, and post-assembly AI
@@ -545,13 +578,11 @@ export async function POST(req: Request) {
       humanized = structuralPostProcess(humanized);
     }
 
-    // Restore the original title/paragraph layout for every engine output.
-    // Skip for humara/nuru/omega: they have their own structure-preserving pipeline
-    // Skip for ghost_pro: it preserves headings internally via LLM prompt — re-applying
-    // preserveInputStructure causes double headings and sentence redistribution artifacts
-    if (engine !== 'humara' && engine !== 'humara_v1_3' && engine !== 'nuru' && engine !== 'omega' && engine !== 'ghost_pro' && engine !== 'oxygen') {
-      humanized = preserveInputStructure(text, humanized);
-    }
+    // Restore the original title/paragraph layout for EVERY engine output.
+    // This is the universal safety net that ensures titles, paragraph breaks,
+    // and document structure from the input are preserved in the output.
+    // Even engines with their own structure handling benefit from this final pass.
+    humanized = preserveInputStructure(normalizedText, humanized);
 
     // ── FINAL SAFETY NET: Zero-contraction enforcement ──────────
     // Expand any contractions that may have slipped through ANY engine
@@ -634,7 +665,25 @@ export async function POST(req: Request) {
     }
     // Helper: normalize text for fuzzy comparison
     const normWords = (s: string) => s.toLowerCase().replace(/[^a-z0-9\s]/g, '').split(/\s+/).filter(w => w.length > 2);
-    // Remove any body line that starts with a heading text (exact or fuzzy match)
+    // First pass: deduplicate near-duplicate heading lines
+    {
+      const seenNorm = new Set<string>();
+      for (let i = 0; i < hdLines.length; i++) {
+        const t = hdLines[i].trim();
+        if (!t || t.split(/\s+/).length > 12 || /[.!?]$/.test(t)) continue;
+        if (t.length < 8) continue;
+        const nw = normWords(t);
+        const key = nw.join(' ');
+        let isDup = false;
+        for (const seen of seenNorm) {
+          const sWords = seen.split(' ');
+          const overlap = nw.filter(w => sWords.includes(w)).length;
+          if (overlap >= Math.min(nw.length, sWords.length) * 0.6) { isDup = true; break; }
+        }
+        if (isDup) { hdLines[i] = ''; } else { seenNorm.add(key); }
+      }
+    }
+    // Second pass: remove any body line that starts with a heading text (exact or fuzzy match)
     for (let i = 0; i < hdLines.length; i++) {
       const t = hdLines[i].trim();
       if (!t) continue;
@@ -651,7 +700,7 @@ export async function POST(req: Request) {
         }
         // Fuzzy match: check if first N words of body line overlap 70%+ with heading words
         const hWords = normWords(heading);
-        if (hWords.length >= 4) {
+        if (hWords.length >= 2) {
           // Extract first sentence from body line (up to first period)
           const dotIdx = t.indexOf('.');
           if (dotIdx > 10) {
@@ -677,6 +726,11 @@ export async function POST(req: Request) {
     // 13. Fix colons before list continuations: "AI: and global" → "AI, and global"
     humanized = humanized.replace(/:\s+(and|or|but)\s+/gi, ', $1 ');
 
+    // ── POST-CLEAN GRAMMAR CHECK ────────────────────────────────
+    // Universal grammar cleaner: irregular verbs, subject-verb agreement,
+    // collocation errors, structural fixes, tense consistency.
+    humanized = postCleanGrammar(humanized);
+
     // ── ABSOLUTE FINAL SAFETY NET ──────────────────────────────
     // Runs after ALL engine processing AND all post-processors.
     // Catches patterns that any step may have (re-)introduced.
@@ -697,14 +751,69 @@ export async function POST(req: Request) {
     humanized = humanized.replace(/\bquislingism\b/gi, "collaboration");
     humanized = humanized.replace(/\bquisling\b/gi, "collaborator");
 
-    // ── LAST-MILE MEANING VALIDATOR ─────────────────────────────
+    // ── LAST-MILE MEANING VALIDATOR (2 iterations) ─────────────────
     // Applies to ALL humanizers. Compares each output sentence against
     // the original to ensure the content still communicates the same idea.
     // If any sentence has drifted too far, it gets reprocessed with
-    // lighter transforms that preserve meaning.
-    // Skip for Oxygen: it has its own Python-side validation/repair
-    if (engine !== 'oxygen') {
+    // lighter transforms that preserve meaning. Runs up to 2 iterations
+    // to catch sentences that still drift after the first pass.
+    for (let meaningIter = 0; meaningIter < 2; meaningIter++) {
+      const beforeFix = humanized;
       humanized = lastMileMeaningValidator(text, humanized, 0.35);
+      if (humanized === beforeFix) break; // no changes needed, stop iterating
+    }
+
+    // ── COHERENCE SAFETY NET ─────────────────────────────────
+    // Catch any garbled sentences that slipped through engine-level checks.
+    // Replace them with the best-matching original sentence (natural > garbled).
+    {
+      const isLikelyGarbled = (s: string): boolean => {
+        const st = s.trim().replace(/^["'\u201C\u201D\u2018\u2019\s]+/, '').replace(/["'\u201C\u201D\u2018\u2019\s]+$/, '');
+        const w = st.split(/\s+/);
+        if (w.length <= 3) return false;
+        if (/^(?:do|does|did|is|are|was|were|has|have|had)\s+\w+\s+(?:from|in|at|by|of|to)\b/i.test(st) && !/^(?:do|does|did)\s+(?:not|n't)\b/i.test(st)) return true;
+        if (/\b(?:that|which|this|the|a|an)\.\s*$/i.test(st)) return true;
+        if (/\b(?:chosed|choosed|runned|comed|goed|taked|takened|gived|writed|speaked|leaved|thinked|sayed|tolded|keeped|bringed|buyed|felted|cutted|putted|setted|becomed|choosened)\b/i.test(st)) return true;
+        if (/\b(?:by|of|in|on|at|for|to)\s+(?:by|of|in|on|at|for|to)\s+/i.test(st)) return true;
+        if (/\b(\w{4,})\s+\1\b/i.test(st)) return true;
+        // Broken passive ending with bare noun agent (no determiner)
+        if (/\b(?:is|are|was|were)\s+\w+(?:ed|en|wn|ne|ght)\s+by\s+\w+\s+\w+[.,]\s*$/i.test(st)) {
+          const pm = st.match(/by\s+(\w+\s+\w+)[.,]\s*$/i);
+          if (pm && !/^(?:the|a|an|this|that|these|those|some|many|most|its|his|her|their|our|my|your)\b/i.test(pm[1])) return true;
+        }
+        // "Because for" double conjunction
+        if (/^Because\s+for\b/i.test(st)) return true;
+        // Dangling PP + modal: "Before bedtime might..."
+        if (/^(?:Before|After|During|At)\s+\w+\s+(?:might|could|can|would|should|will)\b/i.test(st)) return true;
+        // "What Recognizing" / "What [Verb]ing" — broken fragment
+        if (/^What\s+[A-Z][a-z]+ing\b/.test(st)) return true;
+        // Ending with broken parenthetical: "(such." or ", such."
+        if (/[,(]\s*such\.\s*$/i.test(st)) return true;
+        // Dangling "such" at end
+        if (/\bsuch[.!?]\s*$/i.test(st)) return true;
+        if (w.length > 6 && !/\b(?:is|are|was|were|has|have|had|do|does|did|can|could|will|would|shall|should|may|might|must|seems?|appears?|shows?|suggests?|indicates?|involves?|requires?|provides?|leads?|makes?|plays?|helps?|causes?|includes?|implies?|highlights?|considers?|happens?|chose|know|think|find|get|go|come|see|said|told|give|take|remain|allow|ensure|represent|describe|explain|illustrate|demonstrate|affect|increase|decrease|relate|connect|compare|examine|analyze|identify|define|affect|create|develop|establish|maintain|occur|produce|result|change|reflect|support|present)\b/i.test(st)) return true;
+        return false;
+      };
+      const origSents = text.match(/[^.!?]+[.!?]+/g) || [];
+      const paragraphs = humanized.split(/\n\s*\n/);
+      humanized = paragraphs.map(para => {
+        const sents = para.match(/[^.!?]+[.!?]+|[^.!?]+$/g) || [];
+        return sents.map(sent => {
+          const t = sent.trim();
+          if (!t || !isLikelyGarbled(t)) return sent;
+          // Find best-matching original sentence by word overlap
+          const sentWords = new Set(t.toLowerCase().split(/\s+/).filter(x => x.length > 3));
+          let bestMatch = sent;
+          let bestOverlap = 0;
+          for (const orig of origSents) {
+            const oWords = new Set(orig.trim().toLowerCase().split(/\s+/).filter(x => x.length > 3));
+            let overlap = 0;
+            for (const ww of sentWords) if (oWords.has(ww)) overlap++;
+            if (overlap > bestOverlap) { bestOverlap = overlap; bestMatch = orig; }
+          }
+          return bestOverlap > 0 ? bestMatch : sent;
+        }).join(' ');
+      }).join('\n\n');
     }
 
     // Fix sentence-initial lowercase after all processing

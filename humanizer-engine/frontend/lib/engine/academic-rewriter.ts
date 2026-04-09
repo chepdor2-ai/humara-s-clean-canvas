@@ -396,12 +396,18 @@ export function academicPostProcess(text: string): string {
   // Reset tracking
   resetConnectorTracking();
 
-  // Split into sentences
-  const sentences = robustSentenceSplit(text);
-  const cleaned = sentences.filter(s => s.length > 0);
+  // Process paragraph by paragraph to preserve structure (headings, blank lines)
+  const paragraphs = text.split(/\n\s*\n/);
+  const processed = paragraphs.map(para => {
+    const trimmed = para.trim();
+    if (!trimmed) return '';
+    // Skip short headings (no sentence-ending punctuation, ≤10 words)
+    if (trimmed.split(/\s+/).length <= 10 && !/[.!?]$/.test(trimmed)) return trimmed;
+    const sentences = robustSentenceSplit(trimmed);
+    const cleaned = sentences.filter(s => s.length > 0);
+    const bursty = injectBurstiness(cleaned);
+    return bursty.join(' ');
+  });
 
-  // Inject burstiness (short sentences after long ones)
-  const bursty = injectBurstiness(cleaned);
-
-  return bursty.join(' ');
+  return processed.join('\n\n');
 }
