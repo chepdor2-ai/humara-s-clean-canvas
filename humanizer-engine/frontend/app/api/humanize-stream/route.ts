@@ -18,10 +18,12 @@ import { nuruHumanize } from '@/lib/engine/nuru-humanizer';
 import { omegaHumanize } from '@/lib/engine/omega-humanizer';
 import { easyHumanize } from '@/lib/engine/easy-humanizer';
 import { ozoneHumanize } from '@/lib/engine/ozone-humanizer';
+import { oxygenHumanize } from '@/lib/engine/oxygen-humanizer';
 import { synonymReplace } from '@/lib/engine/utils';
 import { applyAIWordKill } from '@/lib/engine/shared-dictionaries';
 import { postCleanGrammar } from '@/lib/engine/grammar-cleaner';
 import { fixMidSentenceCapitalization } from '@/lib/engine/validation-post-process';
+import { createServiceClient } from '@/lib/supabase';
 
 export const maxDuration = 120;
 
@@ -122,11 +124,47 @@ export async function POST(req: Request) {
       enable_post_processing?: boolean; premium?: boolean;
     };
 
+    // 30% aggressiveness boost: when "Keep Meaning" is unchecked, bump strength one level
+    const effectiveStrength = (!strict_meaning && strength === 'light') ? 'medium'
+      : (!strict_meaning && (strength ?? 'medium') === 'medium') ? 'strong'
+      : (strength ?? 'medium');
+
     if (!text || typeof text !== 'string' || text.trim().length === 0) {
       return new Response('data: ' + JSON.stringify({ type: 'error', error: 'Text is required' }) + '\n\n', {
         status: 400,
         headers: { 'Content-Type': 'text/event-stream' },
       });
+    }
+
+    // Auth + quota enforcement
+    let userId: string | null = null;
+    const authHeader = req.headers.get('authorization');
+    if (authHeader) {
+      try {
+        const supa = createServiceClient();
+        const { data: { user: authUser } } = await supa.auth.getUser(authHeader.replace('Bearer ', ''));
+        if (authUser) userId = authUser.id;
+      } catch { /* auth optional */ }
+    }
+
+    if (userId) {
+      try {
+        const supa = createServiceClient();
+        const engineType = (engine ?? 'ghost_mini') === 'ozone' ? 'stealth' : 'fast';
+        const inputWordCount = text.trim().split(/\s+/).length;
+        const { data: stats } = await supa.rpc('get_usage_stats', { p_user_id: userId });
+        if (stats) {
+          const remaining = engineType === 'stealth'
+            ? (stats.words_limit_stealth - stats.words_used_stealth)
+            : (stats.words_limit_fast - stats.words_used_fast);
+          if (remaining < inputWordCount) {
+            return new Response(
+              'data: ' + JSON.stringify({ type: 'error', error: `Daily ${engineType} word limit reached. ${Math.max(0, remaining)} words remaining.` }) + '\n\n',
+              { status: 200, headers: { 'Content-Type': 'text/event-stream' } }
+            );
+          }
+        }
+      } catch { /* quota check non-blocking */ }
     }
 
     const stream = new ReadableStream({
@@ -158,39 +196,26 @@ export async function POST(req: Request) {
           const eng = engine ?? 'ghost_mini';
 
           if (eng === 'easy') {
-            const easyResult = await easyHumanize(normalizedText, strength ?? 'medium', tone ?? 'academic');
+            const easySBS = (body as Record<string, unknown>).easy_sentence_by_sentence === true;
+            const easyResult = await easyHumanize(normalizedText, effectiveStrength, tone ?? 'academic', easySBS);
             humanized = easyResult.humanized;
           } else if (eng === 'ozone') {
-            const ozoneSBS = (body as Record<string, unknown>).ozone_sentence_by_sentence === true;
+            // Ozone: External API with undetectable mode — then full post-processing pipeline
+            // Default sentence-by-sentence to TRUE so titles/headings are preserved during API call
+            const ozoneSBS = (body as Record<string, unknown>).ozone_sentence_by_sentence !== false;
             const ozoneResult = await ozoneHumanize(normalizedText, ozoneSBS);
             humanized = ozoneResult.humanized;
           } else if (eng === 'oxygen') {
-            const oxygenUrl = process.env.OXYGEN_SERVER_URL || 'http://127.0.0.1:5001';
-            const oxygenMode = strength === 'light' ? 'fast' : strength === 'strong' ? 'aggressive' : 'quality';
-            const oxygenParams = {
-              text: normalizedText,
-              strength: strength ?? 'medium',
-              mode: (body as Record<string, unknown>).oxygen_mode || oxygenMode,
-              min_change_ratio: (body as Record<string, unknown>).oxygen_min_change_ratio || 0.40,
-              max_retries: (body as Record<string, unknown>).oxygen_max_retries || 3,
-              sentence_by_sentence: (body as Record<string, unknown>).oxygen_sentence_by_sentence !== undefined
-                ? (body as Record<string, unknown>).oxygen_sentence_by_sentence
+            // Oxygen: Pure TypeScript multi-phase humanizer (runs serverless in Vercel)
+            const oxygenMode = (body as Record<string, unknown>).oxygen_mode as string || (effectiveStrength === 'light' ? 'fast' : effectiveStrength === 'strong' ? 'aggressive' : 'quality');
+            humanized = oxygenHumanize(
+              normalizedText,
+              effectiveStrength,
+              oxygenMode,
+              (body as Record<string, unknown>).oxygen_sentence_by_sentence !== undefined
+                ? Boolean((body as Record<string, unknown>).oxygen_sentence_by_sentence)
                 : false,
-            };
-            const resp = await fetch(`${oxygenUrl}/humanize`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify(oxygenParams),
-              signal: AbortSignal.timeout(300000),
-            });
-            if (!resp.ok) {
-              const errBody = await resp.text();
-              sendSSE(controller, { type: 'error', error: `Oxygen model error: ${errBody}` });
-              controller.close();
-              return;
-            }
-            const oxygenResult = await resp.json();
-            humanized = oxygenResult.humanized;
+            );
           } else if (eng === 'humara_v1_3') {
             const { pipeline } = await import('@/lib/engine/humara-v1-3');
             humanized = await pipeline(normalizedText, (tone ?? 'academic') as string, strength === 'strong' ? 10 : strength === 'light' ? 4 : 7);
@@ -224,42 +249,6 @@ export async function POST(req: Request) {
           const { sentences: engineSentences } = splitIntoIndexedSentences(humanized);
           await emitSentencesStaggered(controller, engineSentences, 'Engine', 80);
           await flushDelay(200); // pause between stages
-
-          // ── OXYGEN POLISH PASS ────────────────────────────────
-          // Easy engine's output is passed through the Oxygen T5 model
-          // as a second phase for cleaner, more natural output.
-          if (eng === 'easy') {
-            try {
-              sendSSE(controller, { type: 'stage', stage: 'Oxygen Polish' });
-              await flushDelay(80);
-              const oxygenUrl = process.env.OXYGEN_SERVER_URL || 'http://127.0.0.1:5001';
-              const oxygenPolishParams = {
-                text: humanized,
-                strength: 'light',
-                mode: 'fast',
-                min_change_ratio: 0.15,
-                max_retries: 2,
-                sentence_by_sentence: false,
-              };
-              const oxygenResp = await fetch(`${oxygenUrl}/humanize`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(oxygenPolishParams),
-                signal: AbortSignal.timeout(120000),
-              });
-              if (oxygenResp.ok) {
-                const oxygenResult = await oxygenResp.json();
-                if (oxygenResult.humanized && oxygenResult.humanized.trim().length > 0) {
-                  humanized = oxygenResult.humanized;
-                  const { sentences: oxygenSents } = splitIntoIndexedSentences(humanized);
-                  await emitSentencesStaggered(controller, oxygenSents, 'Oxygen Polish', 80);
-                }
-              }
-            } catch {
-              // Oxygen polish is best-effort — never block the pipeline
-            }
-            await flushDelay(200);
-          }
 
           // 4. Unified Sentence Process
           const FIRST_PERSON_RE_EARLY = /\b(I|me|my|mine|myself|we|us|our|ours|ourselves)\b/i;
@@ -404,6 +393,25 @@ export async function POST(req: Request) {
           humanized = humanized.replace(/(^|[.!?]\s+)([a-z])/g, (_m: string, pre: string, ch: string) => pre + ch.toUpperCase());
           humanized = fixMidSentenceCapitalization(humanized, text);
 
+          // ── OXYGEN POLISH PASS (FINAL PHASE) ──────────────────────────
+          // Easy engine's output is polished through the Oxygen TS engine
+          // as the LAST step after all post-processing, for final cleanup.
+          if (eng === 'easy') {
+            try {
+              sendSSE(controller, { type: 'stage', stage: 'Oxygen Polish' });
+              await flushDelay(80);
+              const polished = oxygenHumanize(humanized, 'light', 'fast', false);
+              if (polished && polished.trim().length > 0) {
+                humanized = polished;
+                const { sentences: oxygenSents } = splitIntoIndexedSentences(humanized);
+                await emitSentencesStaggered(controller, oxygenSents, 'Oxygen Polish', 80);
+              }
+            } catch {
+              // Oxygen polish is best-effort — never block the pipeline
+            }
+            await flushDelay(200);
+          }
+
           // Emit polished sentences
           {
             sendSSE(controller, { type: 'stage', stage: 'Polishing' });
@@ -450,6 +458,28 @@ export async function POST(req: Request) {
               })),
             },
           });
+
+          // Track usage + save document
+          if (userId) {
+            try {
+              const supa = createServiceClient();
+              const engineType = eng === 'ozone' ? 'stealth' : 'fast';
+              const toneDb = ({ neutral: 'natural', academic: 'academic', professional: 'business', simple: 'direct' } as Record<string, string>)[tone ?? 'neutral'] ?? 'natural';
+              await Promise.all([
+                supa.rpc('increment_usage', { p_user_id: userId, p_words: outputWords, p_engine_type: engineType }),
+                supa.from('documents').insert({
+                  user_id: userId, title: text.slice(0, 60).replace(/\n/g, ' ').trim() + (text.length > 60 ? '…' : ''),
+                  input_text: text, output_text: humanized,
+                  input_word_count: inputWords, output_word_count: outputWords,
+                  engine_used: eng, strength: effectiveStrength, tone: toneDb,
+                  meaning_preserved: meaningCheck.isSafe, meaning_similarity: meaningCheck.similarity,
+                  input_ai_score: inputAnalysis.summary.overall_ai_score,
+                  output_ai_score: outputAnalysis.summary.overall_ai_score,
+                  detector_results: { input: inputAnalysis.detectors, output: outputAnalysis.detectors },
+                }),
+              ]);
+            } catch (e) { console.error('Usage tracking error:', e); }
+          }
 
           controller.close();
         } catch (err) {

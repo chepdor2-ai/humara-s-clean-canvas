@@ -92,14 +92,15 @@ export default function DocumentsPage() {
 
   const engineLabel = (e: string) => {
     const map: Record<string, string> = {
-      ghost_mini: 'Ghost Mini', ghost_pro: 'Ghost Pro', ninja: 'Ninja Stealth',
-      undetectable: 'Undetectable', humara: 'Humara', fast_v11: 'Fast V1.1',
+      ghost_mini: 'Fast', ghost_pro: 'Standard', ninja: 'Stealth',
+      undetectable: 'Undetectable', humara: 'Humara v1.1', fast_v11: 'Fast v1.1',
+      oxygen: 'Humara 2.0', ozone: 'Humara 2.1', easy: 'Humara 2.2',
     };
     return map[e] || e || '—';
   };
 
   const scoreColor = (score: number | null) => {
-    if (score === null) return 'text-slate-400';
+    if (score === null) return 'text-zinc-500';
     if (score <= 20) return 'text-emerald-600';
     if (score <= 50) return 'text-amber-600';
     return 'text-red-600';
@@ -110,21 +111,21 @@ export default function DocumentsPage() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
         <div>
-          <h1 className="text-2xl font-semibold text-slate-900 dark:text-white">Documents</h1>
-          <p className="text-sm text-slate-500 dark:text-zinc-400 mt-1">{total} humanized document{total !== 1 ? 's' : ''}</p>
+          <h1 className="text-2xl font-semibold text-white">Documents</h1>
+          <p className="text-sm text-zinc-400 mt-1">{total} humanized document{total !== 1 ? 's' : ''}</p>
         </div>
         <div className="flex items-center gap-3">
           <div className="relative">
-            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" />
             <input
               type="text"
               placeholder="Search documents..."
               value={search}
               onChange={e => setSearch(e.target.value)}
-              className="pl-9 pr-4 py-2 text-sm border border-slate-200 dark:border-zinc-700 rounded-lg bg-white dark:bg-zinc-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500 w-56"
+              className="pl-9 pr-4 py-2 text-sm border border-zinc-700 rounded-lg bg-zinc-800 text-white focus:outline-none focus:ring-2 focus:ring-brand-500 w-56"
             />
           </div>
-          <button onClick={exportCSV} className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-slate-700 dark:text-zinc-300 bg-white dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-lg hover:bg-slate-50 dark:hover:bg-zinc-700 transition-colors">
+          <button onClick={exportCSV} className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-zinc-300 bg-zinc-800 border border-zinc-700 rounded-lg hover:bg-zinc-700 transition-colors">
             <Download className="w-4 h-4" /> Export
           </button>
         </div>
@@ -136,42 +137,42 @@ export default function DocumentsPage() {
           <RotateCcw className="w-6 h-6 text-brand-600 animate-spin" />
         </div>
       ) : filteredDocs.length === 0 ? (
-        <div className="text-center py-20 bg-white dark:bg-zinc-900 rounded-xl border border-slate-200 dark:border-zinc-800">
-          <FileText className="w-12 h-12 text-slate-300 dark:text-zinc-600 mx-auto mb-4" />
-          <p className="text-slate-500 dark:text-zinc-400 font-medium">No documents yet</p>
-          <p className="text-sm text-slate-400 dark:text-zinc-500 mt-1">Humanized texts will appear here automatically.</p>
+        <div className="text-center py-20 bg-zinc-900 rounded-xl border border-zinc-800">
+          <FileText className="w-12 h-12 text-zinc-600 mx-auto mb-4" />
+          <p className="text-zinc-400 font-medium">No documents yet</p>
+          <p className="text-sm text-zinc-500 mt-1">Humanized texts will appear here automatically.</p>
         </div>
       ) : (
         <>
-          <div className="bg-white dark:bg-zinc-900 rounded-xl border border-slate-200 dark:border-zinc-800 overflow-hidden">
+          <div className="bg-zinc-900 rounded-xl border border-zinc-800 overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b border-slate-100 dark:border-zinc-800 bg-slate-50 dark:bg-zinc-800/50">
-                    <th className="text-left px-4 py-3 font-medium text-slate-500 dark:text-zinc-400">Title</th>
-                    <th className="text-left px-4 py-3 font-medium text-slate-500 dark:text-zinc-400 hidden sm:table-cell">Engine</th>
-                    <th className="text-center px-4 py-3 font-medium text-slate-500 dark:text-zinc-400 hidden md:table-cell">Words</th>
-                    <th className="text-center px-4 py-3 font-medium text-slate-500 dark:text-zinc-400 hidden lg:table-cell">AI Before</th>
-                    <th className="text-center px-4 py-3 font-medium text-slate-500 dark:text-zinc-400 hidden lg:table-cell">AI After</th>
-                    <th className="text-left px-4 py-3 font-medium text-slate-500 dark:text-zinc-400 hidden sm:table-cell">Date</th>
-                    <th className="text-center px-4 py-3 font-medium text-slate-500 dark:text-zinc-400 w-16"></th>
+                  <tr className="border-b border-zinc-800 bg-zinc-800/50">
+                    <th className="text-left px-4 py-3 font-medium text-zinc-400">Title</th>
+                    <th className="text-left px-4 py-3 font-medium text-zinc-400 hidden sm:table-cell">Engine</th>
+                    <th className="text-center px-4 py-3 font-medium text-zinc-400 hidden md:table-cell">Words</th>
+                    <th className="text-center px-4 py-3 font-medium text-zinc-400 hidden lg:table-cell">AI Before</th>
+                    <th className="text-center px-4 py-3 font-medium text-zinc-400 hidden lg:table-cell">AI After</th>
+                    <th className="text-left px-4 py-3 font-medium text-zinc-400 hidden sm:table-cell">Date</th>
+                    <th className="text-center px-4 py-3 font-medium text-zinc-400 w-16"></th>
                   </tr>
                 </thead>
                 <tbody>
                   {filteredDocs.map((doc) => (
-                    <tr key={doc.id} className="border-b border-slate-50 dark:border-zinc-800/50 hover:bg-slate-50 dark:hover:bg-zinc-800/30 transition-colors">
+                    <tr key={doc.id} className="border-b border-zinc-800/50 hover:bg-zinc-800/30 transition-colors">
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-2">
-                          <FileText className="w-4 h-4 text-slate-400 shrink-0" />
-                          <span className="font-medium text-slate-900 dark:text-white truncate max-w-[200px]">{doc.title}</span>
+                          <FileText className="w-4 h-4 text-zinc-500 shrink-0" />
+                          <span className="font-medium text-white truncate max-w-[200px]">{doc.title}</span>
                         </div>
                       </td>
                       <td className="px-4 py-3 hidden sm:table-cell">
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-brand-50 dark:bg-brand-900/30 text-brand-700 dark:text-brand-300">
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-brand-900/30 text-brand-300">
                           <Zap className="w-3 h-3" /> {engineLabel(doc.engine_used)}
                         </span>
                       </td>
-                      <td className="px-4 py-3 text-center text-slate-600 dark:text-zinc-400 hidden md:table-cell">
+                      <td className="px-4 py-3 text-center text-zinc-400 hidden md:table-cell">
                         {doc.input_word_count} → {doc.output_word_count || '—'}
                       </td>
                       <td className={`px-4 py-3 text-center font-medium hidden lg:table-cell ${scoreColor(doc.input_ai_score)}`}>
@@ -180,14 +181,14 @@ export default function DocumentsPage() {
                       <td className={`px-4 py-3 text-center font-medium hidden lg:table-cell ${scoreColor(doc.output_ai_score)}`}>
                         {doc.output_ai_score !== null ? `${doc.output_ai_score}%` : '—'}
                       </td>
-                      <td className="px-4 py-3 text-slate-500 dark:text-zinc-400 hidden sm:table-cell">
+                      <td className="px-4 py-3 text-zinc-400 hidden sm:table-cell">
                         <span className="flex items-center gap-1"><Clock className="w-3 h-3" /> {new Date(doc.created_at).toLocaleDateString()}</span>
                       </td>
                       <td className="px-4 py-3 text-center">
                         <button
                           onClick={() => handleDelete(doc.id)}
                           disabled={deleting === doc.id}
-                          className="p-1.5 text-slate-400 hover:text-red-600 dark:hover:text-red-400 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors disabled:opacity-50"
+                          className="p-1.5 text-zinc-500 hover:text-red-400 rounded-lg hover:bg-red-900/20 transition-colors disabled:opacity-50"
                           title="Delete document"
                         >
                           {deleting === doc.id ? <RotateCcw className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
@@ -203,14 +204,14 @@ export default function DocumentsPage() {
           {/* Pagination */}
           {totalPages > 1 && (
             <div className="flex items-center justify-between mt-6">
-              <p className="text-sm text-slate-500 dark:text-zinc-400">
+              <p className="text-sm text-zinc-400">
                 Page {page} of {totalPages}
               </p>
               <div className="flex items-center gap-2">
-                <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page <= 1} className="p-2 rounded-lg border border-slate-200 dark:border-zinc-700 text-slate-600 dark:text-zinc-400 hover:bg-slate-50 dark:hover:bg-zinc-800 disabled:opacity-40 transition-colors">
+                <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page <= 1} className="p-2 rounded-lg border border-zinc-700 text-zinc-400 hover:bg-zinc-800 disabled:opacity-40 transition-colors">
                   <ChevronLeft className="w-4 h-4" />
                 </button>
-                <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page >= totalPages} className="p-2 rounded-lg border border-slate-200 dark:border-zinc-700 text-slate-600 dark:text-zinc-400 hover:bg-slate-50 dark:hover:bg-zinc-800 disabled:opacity-40 transition-colors">
+                <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page >= totalPages} className="p-2 rounded-lg border border-zinc-700 text-zinc-400 hover:bg-zinc-800 disabled:opacity-40 transition-colors">
                   <ChevronRight className="w-4 h-4" />
                 </button>
               </div>

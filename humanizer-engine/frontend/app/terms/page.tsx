@@ -3,8 +3,8 @@ import { Shield, AlertCircle, Lock, Server, Users, FileText } from 'lucide-react
 import Link from 'next/link';
 
 export const metadata: Metadata = {
-  title: 'Terms of Service',
-  description: 'HumaraGPT terms of service � acceptable use, content policies, liability, and user responsibilities.',
+  title: 'Terms of Service — HumaraGPT',
+  description: 'HumaraGPT terms of service — acceptable use policies, strict academic prohibition, content guidelines, liability, and user responsibilities for AI text humanization.',
   alternates: { canonical: 'https://humaragpt.com/terms' },
 };
 
@@ -75,6 +75,51 @@ export default function TermsPage() {
                   <span>Comply with academic integrity policies where applicable</span>
                 </li>
               </ul>
+            </div>
+
+            {/* ACADEMIC PROHIBITION */}
+            <div className="space-y-4 bg-red-50 border-2 border-red-200 rounded-xl p-8 -mx-2">
+              <div className="flex items-center gap-3 mb-4">
+                <AlertCircle className="w-6 h-6 text-red-600 flex-shrink-0" strokeWidth={2} />
+                <h2 className="text-2xl font-bold text-red-800">Strict Academic Use Prohibition</h2>
+              </div>
+              <p className="text-red-800 text-lg leading-relaxed font-bold">
+                HumaraGPT strictly prohibits the use of its services for any academic purpose. This is a zero-tolerance policy.
+              </p>
+              <p className="text-gray-700 text-base leading-relaxed font-medium">
+                By using HumaraGPT, you agree that you will <strong>not</strong> use the service for any of the following:
+              </p>
+              <ul className="space-y-3 text-gray-700 font-medium">
+                <li className="flex items-start gap-3">
+                  <span className="inline-block w-2 h-2 bg-red-600 rounded-full mt-2 flex-shrink-0" />
+                  <span>Essays, dissertations, theses, or any written academic assignments</span>
+                </li>
+                <li className="flex items-start gap-3">
+                  <span className="inline-block w-2 h-2 bg-red-600 rounded-full mt-2 flex-shrink-0" />
+                  <span>Homework, coursework, or any graded academic submissions</span>
+                </li>
+                <li className="flex items-start gap-3">
+                  <span className="inline-block w-2 h-2 bg-red-600 rounded-full mt-2 flex-shrink-0" />
+                  <span>Research papers, journal submissions, or conference papers</span>
+                </li>
+                <li className="flex items-start gap-3">
+                  <span className="inline-block w-2 h-2 bg-red-600 rounded-full mt-2 flex-shrink-0" />
+                  <span>Exam responses, take-home tests, or lab reports</span>
+                </li>
+                <li className="flex items-start gap-3">
+                  <span className="inline-block w-2 h-2 bg-red-600 rounded-full mt-2 flex-shrink-0" />
+                  <span>Any content intended to bypass academic integrity detection systems for graded work</span>
+                </li>
+                <li className="flex items-start gap-3">
+                  <span className="inline-block w-2 h-2 bg-red-600 rounded-full mt-2 flex-shrink-0" />
+                  <span>Any other form of academic dishonesty or fraud</span>
+                </li>
+              </ul>
+              <div className="bg-red-100 border border-red-300 p-4 rounded-lg mt-4">
+                <p className="text-sm text-red-800 font-bold">
+                  Violation of this policy will result in immediate and permanent account termination without refund. HumaraGPT reserves the right to report violations to relevant academic institutions and cooperate with institutional investigations.
+                </p>
+              </div>
             </div>
 
             {/* Data Privacy */}

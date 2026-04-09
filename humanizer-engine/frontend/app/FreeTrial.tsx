@@ -3,7 +3,7 @@ import { useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { Zap, RotateCcw, Copy, Check } from 'lucide-react';
 
-const MAX_WORDS = 250;
+const MAX_WORDS = 150;
 const MAX_FREE_ATTEMPTS = 2;
 const STORAGE_KEY = 'humara_free_attempts';
 
@@ -67,25 +67,25 @@ export default function FreeTrial() {
     <div className="max-w-4xl mx-auto">
       <div className="grid md:grid-cols-2 gap-4">
         {/* Input */}
-        <div className="bg-white rounded-xl border border-slate-200 overflow-hidden flex flex-col">
-          <div className="flex items-center justify-between px-4 py-2.5 border-b border-slate-100 bg-slate-50/50">
-            <span className="text-sm font-semibold text-slate-900">Paste AI Text</span>
-            <span className={`text-[11px] tabular-nums ${wordCount > MAX_WORDS ? 'text-red-500 font-bold' : 'text-slate-400'}`}>{wordCount}/{MAX_WORDS} words</span>
+        <div className="bg-zinc-900 rounded-xl border border-zinc-800 overflow-hidden flex flex-col">
+          <div className="flex items-center justify-between px-4 py-2.5 border-b border-zinc-800 bg-zinc-900/80">
+            <span className="text-sm font-semibold text-white">Paste AI Text</span>
+            <span className={`text-[11px] tabular-nums ${wordCount > MAX_WORDS ? 'text-red-400 font-bold' : 'text-zinc-500'}`}>{wordCount}/{MAX_WORDS} words</span>
           </div>
           <textarea
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            className="flex-1 min-h-[200px] bg-transparent outline-none resize-none text-[14px] leading-relaxed text-slate-800 p-4"
+            className="flex-1 min-h-[200px] bg-transparent outline-none resize-none text-[14px] leading-relaxed text-zinc-200 p-4 placeholder-zinc-600"
             placeholder="Paste your AI-generated text here…"
           />
         </div>
 
         {/* Output */}
-        <div className="bg-white rounded-xl border border-slate-200 overflow-hidden flex flex-col">
-          <div className="flex items-center justify-between px-4 py-2.5 border-b border-slate-100 bg-slate-50/50">
-            <span className="text-sm font-semibold text-slate-900">Humanized Output</span>
+        <div className="bg-zinc-900 rounded-xl border border-zinc-800 overflow-hidden flex flex-col">
+          <div className="flex items-center justify-between px-4 py-2.5 border-b border-zinc-800 bg-zinc-900/80">
+            <span className="text-sm font-semibold text-white">Humanized Output</span>
             {output && (
-              <button onClick={handleCopy} className="p-1 text-brand-600 hover:bg-brand-50 rounded-md transition-colors" title="Copy">
+              <button onClick={handleCopy} className="p-1 text-purple-400 hover:bg-purple-950/50 rounded-md transition-colors" title="Copy">
                 {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
               </button>
             )}
@@ -99,11 +99,11 @@ export default function FreeTrial() {
             </div>
           ) : output ? (
             <div className="relative flex-1">
-              <div className="absolute inset-0 bg-emerald-50/40 pointer-events-none rounded-b-xl" />
-              <div className="relative z-10 min-h-[200px] text-[14px] leading-relaxed text-slate-800 p-4 whitespace-pre-wrap">{output}</div>
+              <div className="absolute inset-0 bg-emerald-950/20 pointer-events-none rounded-b-xl" />
+              <div className="relative z-10 min-h-[200px] text-[14px] leading-relaxed text-zinc-200 p-4 whitespace-pre-wrap">{output}</div>
             </div>
           ) : (
-            <div className="flex-1 min-h-[200px] flex items-center justify-center text-slate-300">
+            <div className="flex-1 min-h-[200px] flex items-center justify-center text-zinc-600">
               <span className="text-xs">Output appears here</span>
             </div>
           )}
@@ -118,15 +118,15 @@ export default function FreeTrial() {
             {loading ? <RotateCcw className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4" />}
             {loading ? 'Humanizing…' : 'Humanize Free'}
           </button>
-          <span className="text-xs text-slate-400">{remaining > 0 ? `${remaining} free attempt${remaining === 1 ? '' : 's'} remaining` : 'Free attempts used'}</span>
+          <span className="text-xs text-zinc-500">{remaining > 0 ? `${remaining} free attempt${remaining === 1 ? '' : 's'} remaining` : 'Free attempts used'}</span>
         </div>
-        <p className="text-[11px] text-slate-400 text-center sm:text-right">
-          Fine-tuned to beat <span className="font-semibold text-slate-500">GPTZero</span> · Stealth engine · No signup required
+        <p className="text-[11px] text-zinc-500 text-center sm:text-right">
+          Fine-tuned to beat <span className="font-semibold text-zinc-400">GPTZero</span> · Stealth engine · No signup required
         </p>
       </div>
 
       {error && (
-        <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-600 flex items-center gap-2">
+        <div className="mt-3 p-3 bg-red-950/30 border border-red-900 rounded-lg text-sm text-red-400 flex items-center gap-2">
           <div className="w-1.5 h-1.5 bg-red-500 rounded-full" /> {error}
         </div>
       )}

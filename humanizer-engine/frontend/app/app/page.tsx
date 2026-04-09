@@ -143,25 +143,20 @@ const splitSentences = (text: string): { text: string; start: number; end: numbe
 /* ── Constants ──────────────────────────────────────────────────────────── */
 // Full engine registry — admin controls which are visible/premium via Supabase engine_config
 const ALL_ENGINES: EngineConfig[] = [
-  { id: 'easy', label: 'Easy', premium: false },
-  { id: 'ozone', label: 'Ozone', premium: false },
-  { id: 'oxygen', label: 'Oxygen', premium: false },
-  { id: 'omega', label: 'Omega', premium: false },
-  { id: 'nuru', label: 'Nuru', premium: false },
-  { id: 'humara_v1_3', label: 'Humara v1.3', premium: false },
-  { id: 'ghost_mini', label: 'Ghost Mini', premium: false },
-  { id: 'ghost_mini_v1_2', label: 'Ghost Mini v1.2', premium: false },
-  { id: 'ghost_pro', label: 'Ghost Pro', premium: false },
-  { id: 'ninja', label: 'Ninja', premium: false },
-  { id: 'undetectable', label: 'Undetectable', premium: false },
-  { id: 'fast_v11', label: 'V1.1', premium: true },
-  { id: 'humara', label: 'Humara', premium: true },
+  { id: 'oxygen', label: 'Humara 2.0' },
+  { id: 'ozone', label: 'Humara 2.1' },
+  { id: 'easy', label: 'Humara 2.2' },
 ];
+
+const ENGINE_GUIDES: Record<string, string> = {
+  oxygen: 'Primarily trained against GPTZero. Ideal for papers that have refused to bypass GPTZero — add your humanized paper for a second pass.',
+  ozone: 'Trained against ZeroGPT, Surfer and other common detectors. Solves persistent AI detection in ZeroGPT and Surfer.',
+  easy: 'Trained to beat all detectors broadly. May compromise score on some individual detectors.',
+};
 
 interface EngineConfig {
   id: string;
   label: string;
-  premium: boolean;
 }
 const STRENGTHS = [
   { id: 'light', label: 'Light' },
@@ -177,7 +172,7 @@ const TONES = [
 
 /* ── Page ───────────────────────────────────────────────────────────────── */
 export default function EditorPage() {
-  const { user } = useAuth();
+  const { user, session } = useAuth();
   const isAdmin = user?.email ? ADMIN_EMAILS.includes(user.email) : false;
   const [text, setText] = useState('');
   const [result, setResult] = useState('');
@@ -186,12 +181,11 @@ export default function EditorPage() {
   const [error, setError] = useState('');
   const [rephrasing, setRephrasing] = useState(false);
 
-  const [engine, setEngine] = useState('humara_v1_3');
+  const [engine, setEngine] = useState('ozone');
   const [engineDropdownOpen, setEngineDropdownOpen] = useState(false);
   const [strength, setStrength] = useState('medium');
   const [tone, setTone] = useState('academic');
   const [strictMeaning, setStrictMeaning] = useState(true);
-  const [premium, setPremium] = useState(false);
 
   // Admin-controlled engine visibility
   const [engineConfig, setEngineConfig] = useState<Record<string, { enabled: boolean; premium: boolean; sort_order: number }>>({});
@@ -223,10 +217,6 @@ export default function EditorPage() {
     if (!hasConfig) return ALL_ENGINES;
     return ALL_ENGINES
       .filter(e => engineConfig[e.id]?.enabled !== false)
-      .map(e => ({
-        ...e,
-        premium: engineConfig[e.id]?.premium ?? e.premium,
-      }))
       .sort((a, b) => (engineConfig[a.id]?.sort_order ?? 99) - (engineConfig[b.id]?.sort_order ?? 99));
   }, [engineConfig, engineConfigLoaded]);
 
@@ -236,8 +226,8 @@ export default function EditorPage() {
   const [_sentenceScores, setSentenceScores] = useState<ScoredSentence[]>([]);
   const [_meaningScore, setMeaningScore] = useState<number | null>(null);
 
-  const { usage } = useUsage();
-  const PLAN_COLORS: Record<string, string> = { Starter: '#64748b', Creator: '#6366f1', Professional: '#10b981', Business: '#f59e0b' };
+  const { usage, refresh: refreshUsage } = useUsage();
+  const PLAN_COLORS: Record<string, string> = { Starter: '#64748b', Creator: '#a855f7', Professional: '#10b981', Business: '#f59e0b' };
   const planColor = usage ? PLAN_COLORS[usage.planName] || '' : '';
 
   const [selectionInfo, setSelectionInfo] = useState<SelectionInfo | null>(null);
@@ -261,8 +251,12 @@ export default function EditorPage() {
   const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [historyOpen, setHistoryOpen] = useState(false);
 
-  // Ozone engine controls
-  const [ozoneSentenceBySentence, setOzoneSentenceBySentence] = useState(false);
+  // Easy engine controls
+  const [easySentenceBySentence, setEasySentenceBySentence] = useState(false);
+
+  // Ozone engine controls — sentence-by-sentence ON by default to protect titles
+  const [ozoneSentenceBySentence, setOzoneSentenceBySentence] = useState(true);
+  const [ozoneUndetectWarning, setOzoneUndetectWarning] = useState(false);
 
   // Oxygen model v2 controls
   const [oxygenMode, setOxygenMode] = useState<'quality' | 'fast' | 'aggressive'>('quality');
@@ -278,16 +272,6 @@ export default function EditorPage() {
 
   const inputWords = useMemo(() => (text.trim() ? text.trim().split(/\s+/).length : 0), [text]);
   const outputWords = useMemo(() => (result.trim() ? result.trim().split(/\s+/).length : 0), [result]);
-
-  // Handle premium toggle - switch to non-premium engine if current is premium
-  useEffect(() => {
-    const currentEngine = ENGINES.find(e => e.id === engine);
-    if (!premium && currentEngine?.premium) {
-      // Switch to first non-premium engine
-      const fallbackEngine = ENGINES.find(e => !e.premium);
-      if (fallbackEngine) setEngine(fallbackEngine.id);
-    }
-  }, [premium, engine]);
 
   const inputAvgAi = useMemo(() => {
     if (!inputDetection) return 0;
@@ -383,8 +367,12 @@ export default function EditorPage() {
       tone,
       strict_meaning: strictMeaning,
       enable_post_processing: true,
-      premium,
     };
+
+    // Add Easy controls if Easy engine is selected
+    if (engine === 'easy') {
+      requestBody.easy_sentence_by_sentence = easySentenceBySentence;
+    }
 
     // Add Ozone controls if Ozone engine is selected
     if (engine === 'ozone') {
@@ -399,9 +387,12 @@ export default function EditorPage() {
       requestBody.oxygen_max_retries = oxygenMaxRetries;
     }
 
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (session?.access_token) headers['Authorization'] = `Bearer ${session.access_token}`;
+
     const res = await fetch('/api/humanize-stream', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify(requestBody),
       signal,
     });
@@ -461,6 +452,16 @@ export default function EditorPage() {
   const handleHumanize = async () => {
     if (!text.trim()) return;
     if (inputWords < 10) { setError('Please enter at least 10 words.'); return; }
+    if (usage) {
+      const isStealthEngine = engine === 'ozone';
+      const remaining = isStealthEngine
+        ? usage.wordsLimitStealth - usage.wordsUsedStealth
+        : usage.wordsLimitFast - usage.wordsUsedFast;
+      if (remaining < inputWords) {
+        setError(`Daily ${isStealthEngine ? 'stealth' : 'standard'} word limit reached. ${Math.max(0, remaining).toLocaleString()} words remaining.`);
+        return;
+      }
+    }
     setLoading(true); setError(''); setResult(''); setOutputDetection(null); setMeaningScore(null); setIterationCount(0); setPreGeneratedAlts({});
     // Reset streaming state and start animation
     setStreamSentences([]);
@@ -497,6 +498,7 @@ export default function EditorPage() {
         const finalAi = finalData.output_detector_results ? (finalData.output_detector_results as { overall: number }).overall : 0;
         const inputAi = finalData.input_detector_results ? (finalData.input_detector_results as { overall: number }).overall : 0;
         addToHistory(text, currentResult, (finalData.engine_used as string) || engine, inputAi, finalAi, (finalData.word_count as number) || outputWords);
+        refreshUsage();
       }
     } catch (err) {
       if ((err as Error).name !== 'AbortError') {
@@ -532,6 +534,7 @@ export default function EditorPage() {
           const d = finalData.output_detector_results as { overall: number; detectors: DetectorScore[] };
           setOutputDetection({ overallAi: d.overall, overallHuman: 100 - d.overall, detectors: d.detectors });
         }
+        refreshUsage();
       }
     } catch (err) {
       if ((err as Error).name !== 'AbortError') {
@@ -602,7 +605,6 @@ export default function EditorPage() {
                 tone,
                 strict_meaning: strictMeaning,
                 enable_post_processing: true,
-                premium,
               }),
             }).then(r => r.json()).then((d: HumanizeResponse) => ({
               original: s.text,
@@ -742,12 +744,12 @@ export default function EditorPage() {
 
   /* ── Render ───────────────────────────────────────────────────────────── */
   return (
-    <div className="flex flex-col gap-5 animate-in fade-in duration-500 max-w-7xl mx-auto">
+    <div className="flex flex-col gap-6 animate-in fade-in duration-500 max-w-7xl mx-auto">
       {/* Header */}
       <header className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-extrabold text-slate-900 dark:text-white tracking-tight bg-gradient-to-r from-slate-900 to-slate-600 dark:from-white dark:to-slate-300 bg-clip-text text-transparent">AI Humanizer</h1>
-          <p className="text-[13px] text-slate-500 dark:text-slate-400 mt-0.5">Transform AI text into undetectable human writing</p>
+          <h1 className="text-2xl font-extrabold text-white tracking-tight brand-glow">HumaraGPT</h1>
+          <p className="text-[13px] text-zinc-500 mt-0.5">Transform AI text into undetectable human writing</p>
         </div>
         <div className="flex items-center gap-2">
           {isAdmin && (
@@ -760,7 +762,7 @@ export default function EditorPage() {
           )}
           <Link
             href="/app/settings"
-            className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-white rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+            className="p-2 text-zinc-500 hover:text-white rounded-lg hover:bg-zinc-800/50 transition-colors"
           >
             <Settings className="w-4 h-4" />
           </Link>
@@ -770,36 +772,72 @@ export default function EditorPage() {
       {/* Daily Usage */}
       <UsageBar />
 
+      {/* Model Usage Ticker */}
+      <div className="glass-card rounded-2xl overflow-hidden">
+        <div className="relative h-10 flex items-center overflow-hidden">
+          <div className="absolute inset-0 bg-gradient-to-r from-zinc-900 via-transparent to-zinc-900 pointer-events-none z-10" />
+          <div className="ticker-animate flex items-center gap-8 whitespace-nowrap px-4">
+            {[
+              { engine: 'Oxygen', use: 'Blog Posts & SEO Content' },
+              { engine: 'Nuru', use: 'Academic Essays (Non-Submission)' },
+              { engine: 'Humara v1.3', use: 'Long-Form Articles' },
+              { engine: 'Ghost Mini', use: 'Social Media Captions' },
+              { engine: 'Ghost Pro', use: 'Marketing Copy & Ads' },
+              { engine: 'Ninja', use: 'Technical Documentation' },
+              { engine: 'Undetectable', use: 'Product Descriptions' },
+              { engine: 'Omega', use: 'Email Newsletters' },
+              { engine: 'V1.1 Premium', use: 'High-Stakes Business Writing' },
+              { engine: 'Humara Premium', use: 'Enterprise Reports' },
+            ].concat([
+              { engine: 'Oxygen', use: 'Blog Posts & SEO Content' },
+              { engine: 'Nuru', use: 'Academic Essays (Non-Submission)' },
+              { engine: 'Humara v1.3', use: 'Long-Form Articles' },
+              { engine: 'Ghost Mini', use: 'Social Media Captions' },
+              { engine: 'Ghost Pro', use: 'Marketing Copy & Ads' },
+              { engine: 'Ninja', use: 'Technical Documentation' },
+              { engine: 'Undetectable', use: 'Product Descriptions' },
+              { engine: 'Omega', use: 'Email Newsletters' },
+              { engine: 'V1.1 Premium', use: 'High-Stakes Business Writing' },
+              { engine: 'Humara Premium', use: 'Enterprise Reports' },
+            ]).map((item, i) => (
+              <div key={i} className="flex items-center gap-2 shrink-0">
+                <span className="text-xs font-bold text-brand-400">{item.engine}</span>
+                <span className="text-zinc-600">→</span>
+                <span className="text-[11px] text-zinc-400">{item.use}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
       {/* Settings Bar */}
       <div
-        className={`flex flex-wrap items-center gap-x-5 gap-y-2 bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-700 rounded-2xl px-5 py-3 shadow-sm ${planColor ? 'plan-glow' : ''}`}
+        className={`flex flex-wrap items-center gap-x-6 gap-y-3 bg-[#0c0c14] border border-zinc-800/60 rounded-2xl px-6 py-4 ${planColor ? 'plan-glow' : ''}`}
         style={planColor ? { '--plan-color': planColor } as React.CSSProperties : undefined}
       >
         <div className="flex items-center gap-2 relative">
-          <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Engine</span>
+          <span className="text-[11px] font-semibold text-zinc-500 uppercase tracking-wider">Engine</span>
           <div className="relative group">
             <button
               type="button"
               onClick={() => setEngineDropdownOpen(!engineDropdownOpen)}
-              className="flex items-center gap-2 bg-white dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-lg px-3 py-1.5 text-xs font-semibold text-slate-700 dark:text-zinc-300 outline-none focus:border-brand-400 hover:border-brand-300 transition-colors min-w-[140px]"
+              className="flex items-center gap-2 bg-[#0c0c14] border border-zinc-800/60 rounded-lg px-3 py-1.5 text-xs font-semibold text-zinc-300 outline-none focus:border-purple-500 hover:border-zinc-600 transition-colors min-w-[140px]"
             >
               <span>{ENGINES.find(e => e.id === engine)?.label}</span>
-              {ENGINES.find(e => e.id === engine)?.premium && <span className="text-[9px] font-bold px-1 py-0.5 rounded bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400">PRO</span>}
-              <svg className={`ml-auto w-3.5 h-3.5 text-slate-400 transition-transform ${engineDropdownOpen ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+              <svg className={`ml-auto w-3.5 h-3.5 text-zinc-500 transition-transform ${engineDropdownOpen ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
             </button>
             {engineDropdownOpen && (
               <>
                 <div className="fixed inset-0 z-40" onClick={() => setEngineDropdownOpen(false)} />
-                <div className="absolute left-0 top-full mt-1 z-50 w-[200px] bg-white dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-xl shadow-xl overflow-hidden animate-in fade-in slide-in-from-top-1 duration-150 max-h-[320px] overflow-y-auto">
-                  {ENGINES.filter(e => premium || !e.premium).map(e => (
+                <div className="absolute left-0 top-full mt-1 z-50 w-[200px] bg-[#0c0c14] border border-zinc-800/60 rounded-xl shadow-xl overflow-hidden animate-in fade-in slide-in-from-top-1 duration-150 max-h-[320px] overflow-y-auto">
+                  {ENGINES.map(e => (
                     <button
                       key={e.id}
                       type="button"
                       onClick={() => { setEngine(e.id); setEngineDropdownOpen(false); }}
-                      className={`w-full text-left px-3 py-2 hover:bg-slate-50 dark:hover:bg-zinc-700/50 transition-colors border-b border-slate-100 dark:border-zinc-700/50 last:border-b-0 flex items-center gap-2 ${engine === e.id ? 'bg-brand-50 dark:bg-brand-900/20' : ''}`}
+                      className={`w-full text-left px-3 py-2 hover:bg-zinc-800/50 transition-colors border-b border-zinc-800/40 last:border-b-0 flex items-center gap-2 ${engine === e.id ? 'bg-purple-950/20' : ''}`}
                     >
-                      <span className="text-sm font-medium text-slate-800 dark:text-zinc-200">{e.label}</span>
-                      {e.premium && <span className="text-[9px] font-bold px-1 py-0.5 rounded bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400">PRO</span>}
+                      <span className="text-sm font-medium text-zinc-200">{e.label}</span>
                       {engine === e.id && <svg className="ml-auto w-4 h-4 text-brand-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>}
                     </button>
                   ))}
@@ -808,43 +846,35 @@ export default function EditorPage() {
             )}
           </div>
         </div>
-        <div className="w-px h-5 bg-slate-200 dark:bg-slate-700 hidden sm:block" />
+        <div className="w-px h-5 bg-zinc-800 hidden sm:block" />
         <div className="flex items-center gap-2">
-          <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Depth</span>
-          <div className="flex bg-slate-100 dark:bg-zinc-800 rounded-lg p-0.5">
+          <span className="text-[11px] font-semibold text-zinc-500 uppercase tracking-wider">Depth</span>
+          <div className="flex bg-[#0c0c14] rounded-lg p-0.5 border border-zinc-800/60">
             {STRENGTHS.map(s => (
               <button key={s.id} onClick={() => setStrength(s.id)}
-                className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-all ${strength === s.id ? 'bg-white dark:bg-zinc-700 text-slate-900 dark:text-white shadow-sm' : 'text-slate-500 dark:text-zinc-400 hover:text-slate-700 dark:hover:text-white'}`}>
+                className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-all ${strength === s.id ? 'bg-zinc-800 text-white' : 'text-zinc-500 hover:text-zinc-300'}`}>
                 {s.label}
               </button>
             ))}
           </div>
         </div>
-        <div className="w-px h-5 bg-slate-200 dark:bg-zinc-700 hidden sm:block" />
+        <div className="w-px h-5 bg-zinc-800 hidden sm:block" />
         <div className="flex items-center gap-2">
-          <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Tone</span>
+          <span className="text-[11px] font-semibold text-zinc-500 uppercase tracking-wider">Tone</span>
           <select value={tone} onChange={(e) => setTone(e.target.value)} title="Tone"
-            className="bg-white dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-slate-700 dark:text-zinc-300 outline-none focus:border-brand-400">
+            className="bg-[#0c0c14] border border-zinc-800/60 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-zinc-300 outline-none focus:border-purple-500">
             {TONES.map(t => <option key={t.id} value={t.id}>{t.label}</option>)}
           </select>
         </div>
-        <div className="w-px h-5 bg-slate-200 dark:bg-zinc-700 hidden sm:block" />
+        <div className="w-px h-5 bg-zinc-800 hidden sm:block" />
         <label className="flex items-center gap-2 cursor-pointer select-none">
-          <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Keep Meaning</span>
+          <span className="text-[11px] font-semibold text-zinc-500 uppercase tracking-wider">Keep Meaning</span>
           <button onClick={() => setStrictMeaning(!strictMeaning)} title={strictMeaning ? 'On' : 'Off'}
-            className={`w-8 h-[18px] rounded-full transition-all relative ${strictMeaning ? 'bg-brand-600' : 'bg-slate-200 dark:bg-zinc-600'}`}>
+            className={`w-8 h-[18px] rounded-full transition-all relative ${strictMeaning ? 'bg-purple-600' : 'bg-zinc-700'}`}>
             <div className={`w-3 h-3 bg-white rounded-full absolute top-[3px] transition-all shadow-sm ${strictMeaning ? 'left-[15px]' : 'left-[3px]'}`} />
           </button>
         </label>
-        <div className="w-px h-5 bg-slate-200 dark:bg-zinc-700 hidden sm:block" />
-        <label className="flex items-center gap-2 cursor-pointer select-none">
-          <span className="text-[11px] font-semibold text-amber-500 dark:text-amber-400 uppercase tracking-wider">Premium</span>
-          <button onClick={() => setPremium(!premium)} title={premium ? 'Premium Engines Enabled' : 'Standard Engines Only'}
-            className={`w-8 h-[18px] rounded-full transition-all relative ${premium ? 'bg-amber-500' : 'bg-slate-200 dark:bg-zinc-600'}`}>
-            <div className={`w-3 h-3 bg-white rounded-full absolute top-[3px] transition-all shadow-sm ${premium ? 'left-[15px]' : 'left-[3px]'}`} />
-          </button>
-        </label>
-        <div className="w-px h-5 bg-slate-200 dark:bg-zinc-700 hidden sm:block" />
+        <div className="w-px h-5 bg-zinc-800 hidden sm:block" />
         <button onClick={handleHumanize} disabled={!text.trim() || loading || rephrasing}
           className="ml-auto bg-gradient-to-r from-brand-600 to-brand-500 hover:from-brand-700 hover:to-brand-600 text-white text-xs font-bold rounded-xl px-6 py-2.5 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center gap-2 shadow-md hover:shadow-lg active:scale-[0.97]">
           {loading ? <RotateCcw className="w-3.5 h-3.5 animate-spin" /> : <Zap className="w-3.5 h-3.5" />}
@@ -862,45 +892,124 @@ export default function EditorPage() {
         </div>
       )}
 
-      {/* Ozone Controls */}
-      {engine === 'ozone' && (
-        <div className="bg-gradient-to-br from-teal-50 to-cyan-50 dark:from-teal-950/30 dark:to-cyan-950/30 border border-teal-200 dark:border-teal-800 rounded-xl overflow-hidden px-4 py-3">
+      {/* Engine Guide */}
+      {ENGINE_GUIDES[engine] && (
+        <div className="bg-[#0c0c14] border border-zinc-800/60 rounded-xl px-4 py-3">
+          <div className="flex items-start gap-2.5">
+            <div className="w-5 h-5 rounded-md bg-purple-900/40 flex items-center justify-center shrink-0 mt-0.5">
+              <Zap className="w-3 h-3 text-brand-500" />
+            </div>
+            <div className="space-y-1 min-w-0">
+              <p className="text-[11px] font-bold text-purple-400 tracking-tight">
+                {ENGINES.find(e => e.id === engine)?.label}
+              </p>
+              <p className="text-[11px] text-zinc-400 leading-relaxed">
+                {ENGINE_GUIDES[engine]}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Easy Controls */}
+      {engine === 'easy' && (
+        <div className="bg-[#0c0c14] border border-purple-800/40 rounded-xl overflow-hidden px-4 py-3">
           <div className="space-y-1">
-            <label className="flex items-center justify-between text-xs font-semibold text-teal-900 dark:text-teal-200">
+            <label className="flex items-center justify-between text-xs font-semibold text-purple-900 dark:text-purple-200">
               <span>Sentence-by-Sentence Processing</span>
               <button
-                onClick={() => setOzoneSentenceBySentence(!ozoneSentenceBySentence)}
+                onClick={() => setEasySentenceBySentence(!easySentenceBySentence)}
                 className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                  ozoneSentenceBySentence
-                    ? 'bg-teal-600 dark:bg-teal-500'
-                    : 'bg-gray-200 dark:bg-gray-700'
+                  easySentenceBySentence
+                    ? 'bg-purple-600'
+                    : 'bg-zinc-700'
                 }`}
               >
                 <span
                   className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                    ozoneSentenceBySentence ? 'translate-x-6' : 'translate-x-1'
+                    easySentenceBySentence ? 'translate-x-6' : 'translate-x-1'
                   }`}
                 />
               </button>
             </label>
-            <p className="text-[10px] text-teal-600 dark:text-teal-400">
-              {ozoneSentenceBySentence
+            <p className="text-[10px] text-purple-600 dark:text-purple-400">
+              {easySentenceBySentence
                 ? 'Each sentence processed independently — preserves titles and paragraph structure'
-                : 'Whole paper sent as one request — faster but may alter formatting'}
+                : 'Whole paper sent as one request — faster processing'}
             </p>
+          </div>
+        </div>
+      )}
+
+      {/* Humara 2.1 Controls */}
+      {engine === 'ozone' && (
+        <div className="bg-[#0c0c14] border border-teal-800/40 rounded-xl overflow-hidden px-4 py-3">
+          <div className="space-y-3">
+            {/* Undetectability Mode — always on, locked */}
+            <div className="space-y-1">
+              <label className="flex items-center justify-between text-xs font-semibold text-teal-900 dark:text-teal-200">
+                <span className="flex items-center gap-1.5">
+                  🛡️ Undetectability Mode
+                  <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-teal-200 dark:bg-teal-900/60 text-teal-700 dark:text-teal-300 font-bold uppercase tracking-wider">Required</span>
+                </span>
+                <button
+                  onClick={() => { setOzoneUndetectWarning(true); setTimeout(() => setOzoneUndetectWarning(false), 3000); }}
+                  className="relative inline-flex h-6 w-11 items-center rounded-full bg-teal-600 dark:bg-teal-500 cursor-not-allowed opacity-90"
+                  title="Undetectability mode is always enabled for this engine"
+                >
+                  <span className="inline-block h-4 w-4 transform rounded-full bg-white translate-x-6" />
+                </button>
+              </label>
+              <p className="text-[10px] text-teal-600 dark:text-teal-400">
+                Humara 2.1 always runs in undetectable mode — trained to bypass ZeroGPT, Surfer &amp; other AI detectors.
+              </p>
+              {ozoneUndetectWarning && (
+                <div className="flex items-start gap-1.5 px-2.5 py-2 bg-amber-50 dark:bg-amber-950/50 border border-amber-200 dark:border-amber-800 rounded-lg mt-1 animate-pulse">
+                  <span className="text-amber-500 text-xs mt-0.5">⚠️</span>
+                  <p className="text-[10px] text-amber-700 dark:text-amber-300 leading-relaxed font-medium">
+                    Undetectability mode cannot be disabled for this engine. This is required to ensure maximum AI detection bypass.
+                  </p>
+                </div>
+              )}
+            </div>
+            {/* Sentence-by-Sentence Processing */}
+            <div className="space-y-1">
+              <label className="flex items-center justify-between text-xs font-semibold text-teal-900 dark:text-teal-200">
+                <span>Sentence-by-Sentence Processing</span>
+                <button
+                  onClick={() => setOzoneSentenceBySentence(!ozoneSentenceBySentence)}
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                    ozoneSentenceBySentence
+                      ? 'bg-teal-600'
+                      : 'bg-zinc-700'
+                  }`}
+                >
+                  <span
+                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                      ozoneSentenceBySentence ? 'translate-x-6' : 'translate-x-1'
+                    }`}
+                  />
+                </button>
+              </label>
+              <p className="text-[10px] text-teal-600 dark:text-teal-400">
+                {ozoneSentenceBySentence
+                  ? 'Each sentence processed independently — preserves titles and paragraph structure'
+                  : 'Whole paper sent as one request — faster but may alter formatting'}
+              </p>
+            </div>
           </div>
         </div>
       )}
 
       {/* Oxygen Advanced Controls */}
       {engine === 'oxygen' && (
-        <div className="bg-gradient-to-br from-purple-50 to-blue-50 dark:from-purple-950/30 dark:to-blue-950/30 border border-purple-200 dark:border-purple-800 rounded-xl overflow-hidden">
+        <div className="bg-[#0c0c14] border border-purple-800/40 rounded-xl overflow-hidden">
           <button
             onClick={() => setOxygenAdvancedOpen(!oxygenAdvancedOpen)}
-            className="w-full flex items-center justify-between px-4 py-3 hover:bg-white/50 dark:hover:bg-black/20 transition-colors"
+            className="w-full flex items-center justify-between px-4 py-3 hover:bg-zinc-800/30 transition-colors"
           >
             <div className="flex items-center gap-2">
-              <span className="text-xs font-bold text-purple-700 dark:text-purple-300">⚙️ Oxygen Pipeline Controls</span>
+              <span className="text-xs font-bold text-purple-400">⚙️ Oxygen Pipeline Controls</span>
               <span className="text-[10px] px-2 py-0.5 rounded-full bg-purple-200 dark:bg-purple-900/50 text-purple-700 dark:text-purple-300">Multi-phase AI kill</span>
             </div>
             <ChevronDown className={`w-4 h-4 text-purple-500 transition-transform ${oxygenAdvancedOpen ? 'rotate-180' : ''}`} />
@@ -925,7 +1034,7 @@ export default function EditorPage() {
                       className={`flex-1 px-3 py-2 rounded-lg border transition-all text-xs ${
                         oxygenMode === mode.id
                           ? 'bg-purple-600 text-white border-purple-600 shadow-md'
-                          : 'bg-white dark:bg-zinc-800 text-slate-600 dark:text-zinc-300 border-slate-200 dark:border-zinc-700 hover:border-purple-300'
+                          : 'bg-[#0c0c14] text-zinc-300 border-zinc-800/60 hover:border-purple-500/50'
                       }`}
                     >
                       <div className="font-bold">{mode.label}</div>
@@ -943,8 +1052,8 @@ export default function EditorPage() {
                     onClick={() => setOxygenSentenceBySentence(!oxygenSentenceBySentence)}
                     className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
                       oxygenSentenceBySentence 
-                        ? 'bg-purple-600 dark:bg-purple-500' 
-                        : 'bg-gray-200 dark:bg-gray-700'
+                        ? 'bg-purple-600' 
+                        : 'bg-zinc-700'
                     }`}
                   >
                     <span
@@ -1028,20 +1137,15 @@ export default function EditorPage() {
       {/* Editor Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
         {/* Input Panel */}
-        <div className="bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-700 rounded-2xl overflow-hidden flex flex-col shadow-sm hover:shadow-md transition-shadow">
-          <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100 dark:border-zinc-800 bg-gradient-to-r from-slate-50 to-white dark:from-zinc-800/80 dark:to-zinc-900">
+        <div className="bg-[#0c0c14] border border-zinc-800/60 rounded-2xl overflow-hidden flex flex-col hover:border-zinc-700/60 transition-all">
+          <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-800/50">
             <div className="flex items-center gap-2.5">
-              <div className="w-2 h-2 rounded-full bg-blue-400 dark:bg-blue-500 animate-pulse" style={{ animationDuration: '3s' }} />
-              <span className="text-sm font-bold text-slate-800 dark:text-slate-100 tracking-tight">Input</span>
-              {inputDetection && (
-                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${inputAvgAi > 50 ? 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400' : 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400'}`}>
-                  {Math.round(inputAvgAi)}% AI
-                </span>
-              )}
+              <div className="w-2 h-2 rounded-full bg-purple-400 animate-pulse" style={{ animationDuration: '3s' }} />
+              <span className="text-sm font-semibold text-zinc-200 tracking-tight">Input</span>
             </div>
             <div className="flex items-center gap-2.5">
-              <span className="text-[11px] text-slate-400 dark:text-zinc-500 tabular-nums font-medium">{inputWords} words</span>
-              <button onClick={handleClear} className="text-xs font-medium text-slate-500 hover:text-red-500 dark:text-slate-400 dark:hover:text-red-400 px-2 py-1 rounded-lg hover:bg-red-50 dark:hover:bg-red-950/30 transition-all flex items-center gap-1">
+              <span className="text-[11px] text-zinc-500 tabular-nums font-medium">{inputWords} words</span>
+              <button onClick={handleClear} className="text-xs font-medium text-zinc-500 hover:text-red-400 px-2 py-1 rounded-lg hover:bg-red-950/30 transition-all flex items-center gap-1">
                 <Eraser className="w-3 h-3" /> Clear
               </button>
             </div>
@@ -1051,33 +1155,28 @@ export default function EditorPage() {
           <div className="flex-1">
             <textarea ref={inputRef} value={text}
               onChange={(e) => setText(e.target.value)}
-              className="w-full min-h-[420px] bg-transparent outline-none resize-none text-[14px] leading-[1.8] text-slate-800 dark:text-slate-200 p-5 placeholder:text-slate-300 dark:placeholder:text-zinc-600"
+              className="w-full min-h-[420px] bg-transparent outline-none resize-none text-[14px] leading-[1.8] text-zinc-200 p-5 placeholder:text-zinc-600"
               placeholder="Paste your AI-generated text here…" />
           </div>
 
         </div>
 
         {/* Output Panel */}
-        <div className={`bg-white dark:bg-zinc-900 border rounded-2xl overflow-hidden flex flex-col relative shadow-sm hover:shadow-md transition-shadow ${result && !loading && !rephrasing ? 'border-emerald-200 dark:border-emerald-800/50' : 'border-slate-200 dark:border-zinc-700'}`}>
-          <div className={`flex items-center justify-between px-4 py-3 border-b ${result && !loading && !rephrasing ? 'border-emerald-100 dark:border-emerald-900/30 bg-gradient-to-r from-emerald-50/80 to-white dark:from-emerald-950/20 dark:to-zinc-900' : 'border-slate-100 dark:border-zinc-800 bg-gradient-to-r from-slate-50 to-white dark:from-zinc-800/80 dark:to-zinc-900'}`}>
+        <div className={`bg-[#0c0c14] border rounded-2xl overflow-hidden flex flex-col relative hover:border-zinc-700/60 transition-all ${result && !loading && !rephrasing ? 'border-emerald-500/20' : 'border-zinc-800/60'}`}>
+          <div className={`flex items-center justify-between px-4 py-3 border-b ${result && !loading && !rephrasing ? 'border-emerald-900/30' : 'border-zinc-800/50'}`}>
             <div className="flex items-center gap-2.5">
-              <div className={`w-2 h-2 rounded-full ${result && !loading ? 'bg-emerald-400 dark:bg-emerald-500' : 'bg-slate-300 dark:bg-zinc-600'}`} />
-              <span className="text-sm font-bold text-slate-800 dark:text-slate-100 tracking-tight">Output</span>
+              <div className={`w-2 h-2 rounded-full ${result && !loading ? 'bg-emerald-400' : 'bg-zinc-600'}`} />
+              <span className="text-sm font-semibold text-zinc-200 tracking-tight">Output</span>
               {result && !loading && !rephrasing && (
                 <div className="flex items-center gap-1.5">
-                  <span className="text-[10px] font-medium text-emerald-600/80 dark:text-emerald-400/70 bg-emerald-50 dark:bg-emerald-900/20 px-2 py-0.5 rounded-full">
+                  <span className="text-[10px] font-medium text-emerald-400/70 bg-emerald-900/20 px-2 py-0.5 rounded-full">
                     Editable — click to edit, select text for alternatives
                   </span>
                 </div>
               )}
-              {outputDetection && (
-                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${outputAvgAi <= 20 ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400' : 'bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400'}`}>
-                  {Math.round(outputAvgAi)}% AI
-                </span>
-              )}
             </div>
             <div className="flex items-center gap-2">
-              <span className="text-[11px] text-slate-400 dark:text-zinc-500 tabular-nums font-medium">{outputWords} words</span>
+              <span className="text-[11px] text-zinc-500 tabular-nums font-medium">{outputWords} words</span>
               {result && !isAnimating && (
                 <>
                   <button onClick={handleRehumanizeFlagged} disabled={rehumanizing || loading}
@@ -1110,62 +1209,62 @@ export default function EditorPage() {
             />
           ) : result ? (
             <div className="relative flex-1">
-              <div className="absolute inset-0 bg-emerald-50/30 dark:bg-emerald-950/10 pointer-events-none rounded-b-2xl" />
+              <div className="absolute inset-0 bg-emerald-950/10 pointer-events-none rounded-b-2xl" />
               <textarea ref={outputRef} value={result}
                 onChange={(e) => setResult(e.target.value)} onSelect={handleOutputSelect}
-                className="relative z-10 flex-1 w-full min-h-[420px] bg-transparent outline-none resize-none text-[14px] leading-[1.8] text-slate-800 dark:text-slate-200 p-5 cursor-text"
+                className="relative z-10 flex-1 w-full min-h-[420px] bg-transparent outline-none resize-none text-[14px] leading-[1.8] text-zinc-200 p-5 cursor-text"
                 style={{ fontFamily: 'inherit' }}
                 placeholder="Output appears here…" />
             </div>
           ) : (
-            <div className="flex flex-col items-center justify-center min-h-[420px] text-slate-200 dark:text-slate-700 gap-4 px-8 text-center">
-              <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-brand-100 to-brand-50 dark:from-brand-900/30 dark:to-brand-950/20 flex items-center justify-center">
-                <Zap className="w-5 h-5 text-brand-400 dark:text-brand-500" />
+            <div className="flex flex-col items-center justify-center min-h-[420px] text-zinc-700 gap-4 px-8 text-center">
+              <div className="w-12 h-12 rounded-2xl bg-purple-950/30 flex items-center justify-center">
+                <Zap className="w-5 h-5 text-purple-500" />
               </div>
               <div className="space-y-1">
-                <span className="text-sm font-medium text-slate-400 dark:text-slate-500 block">Humanized text will appear here</span>
-                <span className="text-[11px] text-slate-300 dark:text-slate-600 max-w-xs leading-relaxed block">Paste text on the left and click Humanize to transform it</span>
+                <span className="text-sm font-medium text-zinc-400 block">Humanized text will appear here</span>
+                <span className="text-[11px] text-zinc-600 max-w-xs leading-relaxed block">Paste text on the left and click Humanize to transform it</span>
               </div>
             </div>
           )}
 
           {/* Synonym Popup */}
           {popupType === 'synonym' && selectionInfo && (
-            <div ref={popupRef} className="fixed z-50 bg-white dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-xl shadow-xl py-1.5 w-[200px]"
+            <div ref={popupRef} className="fixed z-50 bg-[#0c0c14] border border-zinc-800/60 rounded-xl shadow-xl py-1.5 w-[200px]"
               style={{ left: `${Math.min(selectionInfo.rect.x, window.innerWidth - 220)}px`, top: `${selectionInfo.rect.y}px`, transform: 'translateX(-50%)' }}>
-              <div className="px-3 py-1.5 text-xs font-medium text-slate-400 dark:text-zinc-400 border-b border-slate-100 dark:border-zinc-700 flex items-center gap-1.5">
+              <div className="px-3 py-1.5 text-xs font-medium text-zinc-400 border-b border-zinc-800/60 flex items-center gap-1.5">
                 <Type className="w-3 h-3" /> Synonyms for &ldquo;{selectionInfo.text}&rdquo;
               </div>
               <div className="max-h-56 overflow-y-auto">
                 {loadingPopup ? (
-                  <div className="px-3 py-4 text-xs text-slate-400 text-center flex items-center justify-center gap-1.5">
+                  <div className="px-3 py-4 text-xs text-zinc-500 text-center flex items-center justify-center gap-1.5">
                     <RotateCcw className="w-3 h-3 animate-spin" /> Finding…
                   </div>
                 ) : synonyms.length > 0 ? (
                   synonyms.map((syn, idx) => (
                     <button key={idx} onClick={() => applyReplacement(syn.word)}
                       className={`w-full text-left px-3 py-2 text-sm transition-colors flex items-center justify-between ${
-                        syn.isOriginal ? 'text-red-500 font-medium bg-red-50 hover:bg-red-100' : 'text-slate-700 hover:bg-brand-50'
+                        syn.isOriginal ? 'text-red-400 font-medium bg-red-950/30 hover:bg-red-950/50' : 'text-zinc-300 hover:bg-zinc-800/50'
                       }`}>
                       <span>{syn.word}</span>
-                      {syn.isOriginal && <span className="text-[10px] bg-red-100 text-red-400 px-1.5 py-0.5 rounded-full font-medium">original</span>}
+                      {syn.isOriginal && <span className="text-[10px] bg-red-900/30 text-red-400 px-1.5 py-0.5 rounded-full font-medium">original</span>}
                     </button>
                   ))
-                ) : <div className="px-3 py-3 text-xs text-slate-400 text-center">No synonyms found</div>}
+                ) : <div className="px-3 py-3 text-xs text-zinc-500 text-center">No synonyms found</div>}
               </div>
             </div>
           )}
 
           {/* Sentence Alternatives Popup */}
           {popupType === 'sentence' && selectionInfo && (
-            <div ref={popupRef} className="fixed z-50 bg-white dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-xl shadow-xl py-1.5 w-[480px] max-w-[90vw]"
+            <div ref={popupRef} className="fixed z-50 bg-[#0c0c14] border border-zinc-800/60 rounded-xl shadow-xl py-1.5 w-[480px] max-w-[90vw]"
               style={{ left: `${Math.min(selectionInfo.rect.x, window.innerWidth - 500)}px`, top: `${selectionInfo.rect.y}px`, transform: 'translateX(-50%)' }}>
-              <div className="px-3 py-1.5 text-xs font-medium text-slate-400 dark:text-zinc-400 border-b border-slate-100 dark:border-zinc-700 flex items-center gap-1.5">
+              <div className="px-3 py-1.5 text-xs font-medium text-zinc-400 border-b border-zinc-800/60 flex items-center gap-1.5">
                 <AlignLeft className="w-3 h-3" /> Selected text
               </div>
               {pendingAlternatives ? (
                 <div className="px-3 py-3 flex flex-col items-center gap-2">
-                  <p className="text-xs text-slate-500 dark:text-zinc-400 text-center leading-relaxed max-w-xs">
+                  <p className="text-xs text-zinc-400 text-center leading-relaxed max-w-xs">
                     Select text and click below to generate alternative phrasings
                   </p>
                   <button
@@ -1178,21 +1277,21 @@ export default function EditorPage() {
               ) : (
               <div className="max-h-[350px] overflow-y-auto">
                 {loadingPopup ? (
-                  <div className="px-3 py-5 text-xs text-slate-400 dark:text-zinc-500 text-center flex flex-col items-center gap-2">
+                  <div className="px-3 py-5 text-xs text-zinc-500 text-center flex flex-col items-center gap-2">
                     <RotateCcw className="w-4 h-4 animate-spin" /> Generating…
                   </div>
                 ) : sentenceAlternatives.length > 0 ? (
                   sentenceAlternatives.map((alt, idx) => (
                     <button key={idx} onClick={() => applyReplacement(alt.text)}
-                      className="w-full text-left px-3 py-2.5 text-sm border-b border-slate-50 dark:border-zinc-700/50 last:border-0 hover:bg-brand-50 dark:hover:bg-brand-900/20 transition-colors">
+                      className="w-full text-left px-3 py-2.5 text-sm border-b border-zinc-800/40 last:border-0 hover:bg-purple-900/20 transition-colors">
                       <div className="flex items-start gap-2.5">
-                        <span className="text-xs font-semibold text-brand-600 bg-brand-50 dark:bg-brand-900/30 px-1.5 py-0.5 rounded mt-0.5 shrink-0">{idx + 1}</span>
-                        <span className="flex-1 text-slate-700 dark:text-zinc-200 leading-relaxed">{alt.text}</span>
-                        <span className="text-xs text-slate-400 dark:text-zinc-500 font-medium whitespace-nowrap mt-0.5">{Math.round(alt.score * 100)}%</span>
+                        <span className="text-xs font-semibold text-purple-400 bg-purple-900/30 px-1.5 py-0.5 rounded mt-0.5 shrink-0">{idx + 1}</span>
+                        <span className="flex-1 text-zinc-200 leading-relaxed">{alt.text}</span>
+                        <span className="text-xs text-zinc-500 font-medium whitespace-nowrap mt-0.5">{Math.round(alt.score * 100)}%</span>
                       </div>
                     </button>
                   ))
-                ) : <div className="px-3 py-4 text-xs text-slate-400 dark:text-zinc-500 text-center">No alternatives available</div>}
+                ) : <div className="px-3 py-4 text-xs text-zinc-500 text-center">No alternatives available</div>}
               </div>
               )}
             </div>
@@ -1202,27 +1301,27 @@ export default function EditorPage() {
 
       {/* Error */}
       {error && (
-        <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-600 flex items-center gap-2">
+        <div className="p-3 bg-red-950/30 border border-red-800/40 rounded-lg text-sm text-red-400 flex items-center gap-2">
           <div className="w-1.5 h-1.5 bg-red-500 rounded-full" /> {error}
         </div>
       )}
 
       {/* Temporary History (auto-expires after 4 min) */}
       {history.length > 0 && (
-        <div className="bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-700 rounded-xl overflow-hidden">
+        <div className="bg-[#0c0c14] border border-zinc-800/60 rounded-xl overflow-hidden">
           <button
             onClick={() => setHistoryOpen(!historyOpen)}
-            className="w-full flex items-center justify-between px-4 py-3 hover:bg-slate-50 dark:hover:bg-zinc-800 transition-colors"
+            className="w-full flex items-center justify-between px-4 py-3 hover:bg-zinc-800/30 transition-colors"
           >
             <div className="flex items-center gap-2">
-              <Clock className="w-3.5 h-3.5 text-slate-400" />
-              <span className="text-xs font-semibold text-slate-700 dark:text-zinc-300">Recent ({history.length})</span>
-              <span className="text-[10px] text-slate-400 dark:text-zinc-500">auto-clears in a few minutes</span>
+              <Clock className="w-3.5 h-3.5 text-zinc-500" />
+              <span className="text-xs font-semibold text-zinc-300">Recent ({history.length})</span>
+              <span className="text-[10px] text-zinc-500">auto-clears in a few minutes</span>
             </div>
-            {historyOpen ? <ChevronUp className="w-3.5 h-3.5 text-slate-400" /> : <ChevronDown className="w-3.5 h-3.5 text-slate-400" />}
+            {historyOpen ? <ChevronUp className="w-3.5 h-3.5 text-zinc-500" /> : <ChevronDown className="w-3.5 h-3.5 text-zinc-500" />}
           </button>
           {historyOpen && (
-            <div className="border-t border-slate-100 dark:border-zinc-800 divide-y divide-slate-50 dark:divide-zinc-800 max-h-[300px] overflow-y-auto">
+            <div className="border-t border-zinc-800/60 divide-y divide-zinc-800/40 max-h-[300px] overflow-y-auto">
               {history.map(h => {
                 const ago = Math.round((Date.now() - h.timestamp) / 1000);
                 const agoStr = ago < 60 ? `${ago}s ago` : `${Math.round(ago / 60)}m ago`;
@@ -1232,25 +1331,18 @@ export default function EditorPage() {
                   <button
                     key={h.id}
                     onClick={() => { setText(h.fullInput); setResult(h.fullOutput); }}
-                    className="w-full text-left px-4 py-2.5 hover:bg-slate-50 dark:hover:bg-zinc-800 transition-colors group"
+                    className="w-full text-left px-4 py-2.5 hover:bg-zinc-800/30 transition-colors group"
                   >
                     <div className="flex items-center justify-between mb-1">
-                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{h.engine}</span>
+                      <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider">{h.engine}</span>
                       <div className="flex items-center gap-2">
-                        <span className="text-[10px] text-slate-400">{agoStr}</span>
+                        <span className="text-[10px] text-zinc-500">{agoStr}</span>
                         <span className="text-[10px] text-amber-500 font-medium">{remainStr}</span>
                       </div>
                     </div>
-                    <p className="text-xs text-slate-600 dark:text-zinc-400 truncate">{h.inputSnippet}</p>
+                    <p className="text-xs text-zinc-400 truncate">{h.inputSnippet}</p>
                     <div className="flex items-center gap-3 mt-1">
-                      <span className={`text-[10px] font-bold ${h.aiScoreBefore > 50 ? 'text-red-500' : 'text-amber-500'}`}>
-                        {Math.round(h.aiScoreBefore)}% AI
-                      </span>
-                      <span className="text-[10px] text-slate-300 dark:text-zinc-600">→</span>
-                      <span className={`text-[10px] font-bold ${h.aiScoreAfter <= 20 ? 'text-emerald-600' : 'text-amber-500'}`}>
-                        {Math.round(h.aiScoreAfter)}% AI
-                      </span>
-                      <span className="text-[10px] text-slate-400">{h.wordCount} words</span>
+                      <span className="text-[10px] text-zinc-500">{h.wordCount} words</span>
                     </div>
                   </button>
                 );

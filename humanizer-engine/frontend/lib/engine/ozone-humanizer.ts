@@ -171,24 +171,41 @@ export async function ozoneHumanize(
   }
 
   // Sentence-by-sentence mode: preserve titles and paragraph structure
+  // Process all sentences CONCURRENTLY for speed
   const segments = segmentText(text);
+  const sentenceSegments = segments.filter(seg => seg.type === 'sentence');
+
+  // Fire all sentence API calls in parallel (batches of 10 to avoid rate limits)
+  const BATCH_SIZE = 10;
+  const results: { index: number; data: Awaited<ReturnType<typeof callOzoneAPI>> | null }[] = [];
+
+  for (let batchStart = 0; batchStart < sentenceSegments.length; batchStart += BATCH_SIZE) {
+    const batch = sentenceSegments.slice(batchStart, batchStart + BATCH_SIZE);
+    const batchResults = await Promise.allSettled(
+      batch.map((seg, i) =>
+        callOzoneAPI(seg.text, apiKey).then(data => ({ index: batchStart + i, data }))
+      )
+    );
+    for (const r of batchResults) {
+      if (r.status === 'fulfilled') {
+        results.push(r.value);
+      }
+    }
+  }
+
+  // Apply results back to segments
   let totalInputWords = 0;
   let totalOutputWords = 0;
   let totalLatency = 0;
   let lastQuota = { used: 0, limit: 0, remaining: 0 };
 
-  for (const seg of segments) {
-    if (seg.type !== 'sentence') continue; // skip titles and blanks
-
-    try {
-      const data = await callOzoneAPI(seg.text, apiKey);
-      seg.text = data.text;
-      totalInputWords += data.input_words;
-      totalOutputWords += data.output_words;
-      totalLatency += data.latency_ms;
-      lastQuota = data.quota ?? lastQuota;
-    } catch {
-      // If a single sentence fails, keep the original text
+  for (const r of results) {
+    if (r.data) {
+      sentenceSegments[r.index].text = r.data.text;
+      totalInputWords += r.data.input_words;
+      totalOutputWords += r.data.output_words;
+      totalLatency += r.data.latency_ms;
+      lastQuota = r.data.quota ?? lastQuota;
     }
   }
 

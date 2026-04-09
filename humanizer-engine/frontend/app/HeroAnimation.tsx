@@ -25,14 +25,14 @@ const AnimBar = ({ name, aiScore, animate }: { name: string; aiScore: number; an
   const humanScore = 100 - val;
   return (
     <div className="flex items-center gap-2">
-      <span className="text-[11px] font-medium text-slate-500 w-[85px] truncate">{name}</span>
-      <div className="flex-1 h-2 bg-emerald-400 rounded-full overflow-hidden flex">
+      <span className="text-[11px] font-medium text-gray-400 w-[85px] truncate">{name}</span>
+      <div className="flex-1 h-2 bg-emerald-400/20 rounded-full overflow-hidden flex">
         <div className="h-full bg-red-400 rounded-l-full" style={{ width: `${val}%`, transition: 'width 1.2s cubic-bezier(.4,0,.2,1)' }} />
       </div>
       <div className="flex items-center gap-1 w-[80px] justify-end">
-        <span className="text-[10px] font-bold text-red-500 tabular-nums">{Math.round(val)}%</span>
-        <span className="text-[10px] text-slate-300">/</span>
-        <span className="text-[10px] font-bold text-emerald-600 tabular-nums">{Math.round(humanScore)}%</span>
+        <span className="text-[10px] font-bold text-red-400 tabular-nums">{Math.round(val)}%</span>
+        <span className="text-[10px] text-gray-600">/</span>
+        <span className="text-[10px] font-bold text-emerald-400 tabular-nums">{Math.round(humanScore)}%</span>
       </div>
     </div>
   );
@@ -100,26 +100,26 @@ export default function HeroAnimation() {
   const isDone = phase === 'complete';
 
   return (
-    <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-lg">
+    <div className="bg-[#0F0F17] border border-white/10 rounded-xl overflow-hidden shadow-2xl shadow-purple-900/10">
       {/* Title bar */}
-      <div className="flex items-center gap-2 px-5 py-3 border-b border-slate-100 bg-slate-50">
-        <div className="w-2.5 h-2.5 bg-slate-200 rounded-full" />
-        <div className="w-2.5 h-2.5 bg-slate-200 rounded-full" />
-        <div className="w-2.5 h-2.5 bg-slate-200 rounded-full" />
-        <span className="text-xs text-slate-400 ml-2">HumaraGPT Humanizer</span>
+      <div className="flex items-center gap-2 px-5 py-3 border-b border-white/5 bg-[#0A0A12]">
+        <div className="w-2.5 h-2.5 bg-red-500/80 rounded-full" />
+        <div className="w-2.5 h-2.5 bg-yellow-500/80 rounded-full" />
+        <div className="w-2.5 h-2.5 bg-green-500/80 rounded-full" />
+        <span className="text-xs text-gray-500 ml-2">HumaraGPT Humanizer</span>
         {isScanning && (
-          <span className="ml-auto text-[10px] font-medium text-brand-600 flex items-center gap-1">
-            <div className="w-2 h-2 border border-brand-600 border-t-transparent rounded-full animate-spin" />
+          <span className="ml-auto text-[10px] font-medium text-purple-400 flex items-center gap-1">
+            <div className="w-2 h-2 border border-purple-400 border-t-transparent rounded-full animate-spin" />
             Scanning detectors…
           </span>
         )}
         {isHumanizing && (
-          <span className="ml-auto text-[10px] font-medium text-brand-600 flex items-center gap-1">
+          <span className="ml-auto text-[10px] font-medium text-purple-400 flex items-center gap-1">
             <Zap className="w-3 h-3" /> Humanizing…
           </span>
         )}
         {isDone && (
-          <span className="ml-auto text-[10px] font-medium text-emerald-600 flex items-center gap-1">
+          <span className="ml-auto text-[10px] font-medium text-emerald-400 flex items-center gap-1">
             <CheckCircle2 className="w-3 h-3" /> Complete
           </span>
         )}
@@ -127,20 +127,20 @@ export default function HeroAnimation() {
 
       <div className="grid grid-cols-1 md:grid-cols-2">
         {/* Input side */}
-        <div className="p-6 border-r border-slate-100">
-          <span className="text-xs font-medium text-slate-400 uppercase tracking-wider">Input</span>
+        <div className="p-6 border-r border-white/5">
+          <span className="text-xs font-medium text-gray-500 uppercase tracking-wider">Input</span>
           <p className={`text-sm mt-3 leading-relaxed transition-colors duration-700 ${
-            isScanning || isHumanizing || isDone ? 'text-red-400/70' : 'text-slate-400'
+            isScanning || isHumanizing || isDone ? 'text-red-400/60' : 'text-gray-500'
           }`}>
             {INPUT_TEXT}
           </p>
 
           {/* Before scores */}
           {(isScanning || isHumanizing || isDone) && (
-            <div className="mt-5 pt-4 border-t border-slate-100 space-y-1.5">
+            <div className="mt-5 pt-4 border-t border-white/5 space-y-1.5">
               <div className="flex items-center justify-between mb-2">
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Before</span>
-                <span className="text-[10px] font-bold text-red-500">95% AI</span>
+                <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Before</span>
+                <span className="text-[10px] font-bold text-red-400">95% AI</span>
               </div>
               {DETECTORS.map(d => (
                 <AnimBar key={`before-${d.name}`} name={d.name} aiScore={d.beforeAi} animate={isScanning || isHumanizing || isDone} />
@@ -150,24 +150,24 @@ export default function HeroAnimation() {
         </div>
 
         {/* Output side */}
-        <div className={`p-6 transition-colors duration-700 ${isDone ? 'bg-emerald-50/30' : 'bg-slate-50/50'}`}>
-          <span className={`text-xs font-medium uppercase tracking-wider transition-colors duration-500 ${isDone ? 'text-emerald-600' : 'text-brand-600'}`}>Output</span>
+        <div className={`p-6 transition-colors duration-700 ${isDone ? 'bg-emerald-500/[0.04]' : ''}`}>
+          <span className={`text-xs font-medium uppercase tracking-wider transition-colors duration-500 ${isDone ? 'text-emerald-400' : 'text-purple-400'}`}>Output</span>
 
           {isHumanizing || isDone ? (
-            <p className="text-sm mt-3 leading-relaxed text-slate-700">
+            <p className="text-sm mt-3 leading-relaxed text-gray-200">
               {outputText}
-              {isHumanizing && <span className="inline-block w-0.5 h-4 bg-brand-600 ml-0.5 animate-pulse align-text-bottom" />}
+              {isHumanizing && <span className="inline-block w-0.5 h-4 bg-purple-400 ml-0.5 animate-pulse align-text-bottom" />}
             </p>
           ) : (
-            <p className="text-sm mt-3 leading-relaxed text-slate-300 italic">Output appears here…</p>
+            <p className="text-sm mt-3 leading-relaxed text-gray-600 italic">Output appears here…</p>
           )}
 
           {/* After scores */}
           {isDone && (
-            <div className="mt-5 pt-4 border-t border-emerald-100 space-y-1.5">
+            <div className="mt-5 pt-4 border-t border-emerald-500/10 space-y-1.5">
               <div className="flex items-center justify-between mb-2">
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">After</span>
-                <span className="text-[10px] font-bold text-emerald-600">2% AI</span>
+                <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">After</span>
+                <span className="text-[10px] font-bold text-emerald-400">2% AI</span>
               </div>
               {DETECTORS.map(d => (
                 <AnimBar key={`after-${d.name}`} name={d.name} aiScore={d.afterAi} animate={isDone} />
@@ -178,15 +178,15 @@ export default function HeroAnimation() {
       </div>
 
       {/* Bottom status */}
-      <div className="px-5 py-2.5 border-t border-slate-100 bg-slate-50 flex items-center justify-between">
+      <div className="px-5 py-2.5 border-t border-white/5 bg-[#0A0A12] flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <span className="text-[10px] text-slate-400">
-            {isScanning ? 'Running 7 detectors…' : isHumanizing ? 'Rewriting with Ghost Pro…' : isDone ? 'Meaning preserved: 97%' : 'Ready'}
+          <span className="text-[10px] text-gray-500">
+            {isScanning ? 'Running 7 detectors…' : isHumanizing ? 'Rewriting with Standard…' : isDone ? 'Meaning preserved: 97%' : 'Ready'}
           </span>
         </div>
         <div className="flex items-center gap-1.5">
-          <div className={`w-1.5 h-1.5 rounded-full transition-colors duration-500 ${isDone ? 'bg-emerald-500' : isScanning || isHumanizing ? 'bg-brand-500 animate-pulse' : 'bg-slate-300'}`} />
-          <span className="text-[10px] text-slate-400">
+          <div className={`w-1.5 h-1.5 rounded-full transition-colors duration-500 ${isDone ? 'bg-emerald-500 shadow-sm shadow-emerald-500/50' : isScanning || isHumanizing ? 'bg-purple-500 animate-pulse shadow-sm shadow-purple-500/50' : 'bg-gray-600'}`} />
+          <span className="text-[10px] text-gray-500">
             {isDone ? 'Human' : isScanning || isHumanizing ? 'Processing' : 'Idle'}
           </span>
         </div>

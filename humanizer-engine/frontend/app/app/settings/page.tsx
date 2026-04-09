@@ -1,8 +1,15 @@
-﻿'use client';
+'use client';
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { CreditCard, LogOut, Settings, User, Bell, Key, HelpCircle, CheckCircle2, Copy, Check, Plus, Trash2, RotateCcw, Save, Mail, Shield, ExternalLink } from 'lucide-react';
+import { CreditCard, LogOut, Settings, User, Bell, Key, HelpCircle, CheckCircle2, Copy, Check, Plus, Trash2, RotateCcw, Save, Mail, Shield, ExternalLink, Crown } from 'lucide-react';
 import { useAuth } from '../../AuthProvider';
+
+const PLAN_COLORS: Record<string, string> = {
+  starter: '#64748b',
+  creator: '#6366f1',
+  professional: '#10b981',
+  business: '#f59e0b',
+};
 
 type Tab = 'profile' | 'billing' | 'api-keys' | 'notifications' | 'support';
 
@@ -152,15 +159,15 @@ export default function SettingsPage() {
   return (
     <div className="max-w-5xl mx-auto flex flex-col gap-5">
       <header>
-        <h1 className="text-xl font-semibold text-slate-900 dark:text-white flex items-center gap-2">
+        <h1 className="text-xl font-semibold text-white flex items-center gap-2">
           <Settings className="text-brand-600 w-5 h-5" /> Settings
         </h1>
-        <p className="text-sm text-slate-500 dark:text-zinc-400 mt-0.5">Manage account, billing, and preferences</p>
+        <p className="text-sm text-zinc-400 mt-0.5">Manage account, billing, and preferences</p>
       </header>
 
-      <div className="flex bg-white dark:bg-zinc-900 rounded-xl border border-slate-200 dark:border-zinc-800 overflow-hidden flex-col lg:flex-row min-h-[500px]">
+      <div className="flex bg-zinc-900 rounded-xl border border-zinc-800 overflow-hidden flex-col lg:flex-row min-h-[500px]">
         {/* Sidebar navigation */}
-        <nav className="w-full lg:w-56 bg-slate-50 dark:bg-zinc-800/50 p-4 border-b lg:border-b-0 lg:border-r border-slate-200 dark:border-zinc-800 space-y-0.5">
+        <nav className="w-full lg:w-56 bg-zinc-800/50 p-4 border-b lg:border-b-0 lg:border-r border-zinc-800 space-y-0.5">
           {NAV_ITEMS.map((item) => {
             const Icon = item.icon;
             const isActive = activeTab === item.id;
@@ -169,7 +176,7 @@ export default function SettingsPage() {
                 key={item.id}
                 onClick={() => setActiveTab(item.id)}
                 className={`w-full text-left px-3 py-2.5 text-sm font-medium transition-colors flex items-center gap-2.5 rounded-lg ${
-                  isActive ? 'bg-brand-50 dark:bg-brand-950 text-brand-700 dark:text-brand-300' : 'text-slate-600 dark:text-zinc-400 hover:bg-white dark:hover:bg-zinc-800 hover:text-slate-900 dark:hover:text-white'
+                  isActive ? 'bg-brand-950 text-brand-300' : 'text-zinc-400 hover:bg-zinc-800 hover:text-white'
                 }`}
               >
                 <Icon className="w-4 h-4" />
@@ -177,8 +184,8 @@ export default function SettingsPage() {
               </button>
             );
           })}
-          <div className="pt-4 mt-4 border-t border-slate-200 dark:border-zinc-700">
-            <button onClick={handleSignOut} className="w-full text-left px-3 py-2.5 text-sm font-medium text-red-500 hover:bg-red-50 dark:hover:bg-red-950 flex items-center gap-2.5 transition-colors rounded-lg">
+          <div className="pt-4 mt-4 border-t border-zinc-700">
+            <button onClick={handleSignOut} className="w-full text-left px-3 py-2.5 text-sm font-medium text-red-500 hover:bg-red-950 flex items-center gap-2.5 transition-colors rounded-lg">
               <LogOut className="w-4 h-4" /> Sign Out
             </button>
           </div>
@@ -187,45 +194,45 @@ export default function SettingsPage() {
         {/* Content area */}
         <section className="flex-1 p-6 overflow-y-auto">
 
-          {/* ── Profile Tab ── */}
+          {/* -- Profile Tab -- */}
           {activeTab === 'profile' && (
             <div className="space-y-6">
               <div>
-                <h2 className="text-lg font-semibold text-slate-900 dark:text-white mb-1">Profile</h2>
-                <p className="text-sm text-slate-500 dark:text-zinc-400">Update your personal information</p>
+                <h2 className="text-lg font-semibold text-white mb-1">Profile</h2>
+                <p className="text-sm text-zinc-400">Update your personal information</p>
               </div>
               {profileLoading ? (
                 <div className="flex items-center justify-center py-12"><RotateCcw className="w-5 h-5 text-brand-600 animate-spin" /></div>
               ) : (
                 <div className="space-y-5">
-                  <div className="flex items-center gap-4 p-4 bg-slate-50 dark:bg-zinc-800 rounded-xl border border-slate-200 dark:border-zinc-700">
-                    <div className="w-14 h-14 bg-brand-100 dark:bg-brand-900 rounded-full flex items-center justify-center text-brand-600 dark:text-brand-300 text-xl font-semibold">
+                  <div className="flex items-center gap-4 p-4 bg-zinc-800 rounded-xl border border-zinc-700">
+                    <div className="w-14 h-14 bg-brand-900 rounded-full flex items-center justify-center text-brand-300 text-xl font-semibold">
                       {fullName ? fullName.charAt(0).toUpperCase() : (profile?.email?.charAt(0)?.toUpperCase() || 'U')}
                     </div>
                     <div>
-                      <p className="text-sm font-medium text-slate-900 dark:text-white">{fullName || 'No name set'}</p>
-                      <p className="text-xs text-slate-400 flex items-center gap-1"><Mail className="w-3 h-3" /> {profile?.email}</p>
+                      <p className="text-sm font-medium text-white">{fullName || 'No name set'}</p>
+                      <p className="text-xs text-zinc-500 flex items-center gap-1"><Mail className="w-3 h-3" /> {profile?.email}</p>
                     </div>
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-slate-700 dark:text-zinc-300 mb-1.5">Full Name</label>
+                    <label className="block text-sm font-medium text-zinc-300 mb-1.5">Full Name</label>
                     <input
                       type="text"
                       value={fullName}
                       onChange={e => setFullName(e.target.value)}
                       placeholder="Enter your name"
-                      className="w-full px-3 py-2.5 text-sm border border-slate-200 dark:border-zinc-700 rounded-lg bg-white dark:bg-zinc-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500"
+                      className="w-full px-3 py-2.5 text-sm border border-zinc-700 rounded-lg bg-zinc-800 text-white focus:outline-none focus:ring-2 focus:ring-brand-500"
                     />
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-slate-700 dark:text-zinc-300 mb-1.5">Primary Use Case</label>
+                    <label className="block text-sm font-medium text-zinc-300 mb-1.5">Primary Use Case</label>
                     <select
                       value={useCase}
                       onChange={e => setUseCase(e.target.value)}
                       title="Select use case"
-                      className="w-full px-3 py-2.5 text-sm border border-slate-200 dark:border-zinc-700 rounded-lg bg-white dark:bg-zinc-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500"
+                      className="w-full px-3 py-2.5 text-sm border border-zinc-700 rounded-lg bg-zinc-800 text-white focus:outline-none focus:ring-2 focus:ring-brand-500"
                     >
                       <option value="">Select use case</option>
                       <option value="academic">Academic</option>
@@ -246,63 +253,77 @@ export default function SettingsPage() {
             </div>
           )}
 
-          {/* ── Billing & Plans Tab ── */}
+          {/* -- Billing & Plans Tab -- */}
           {activeTab === 'billing' && (
             <div className="space-y-8">
               <div>
-                <h2 className="text-lg font-semibold text-slate-900 dark:text-white mb-1">Billing & Plans</h2>
-                <p className="text-sm text-slate-500 dark:text-zinc-400">
+                <h2 className="text-lg font-semibold text-white mb-1">Billing & Plans</h2>
+                <p className="text-sm text-zinc-400">
                   {plan ? <>You are on the <strong className="text-brand-600">{plan.display_name} (${plan.price_monthly}/mo)</strong>.</> : 'Loading plan details...'}
                 </p>
               </div>
 
-              {plan && (
-                <div className="p-5 border border-brand-200 dark:border-brand-800 bg-brand-50/50 dark:bg-brand-950/30 rounded-xl relative">
-                  <span className="absolute -top-2.5 right-4 bg-brand-600 text-white text-[10px] font-semibold px-2.5 py-0.5 rounded-full">Current Plan</span>
-                  <h3 className="text-base font-semibold text-slate-900 dark:text-white">{plan.display_name}</h3>
-                  <div className="text-2xl font-semibold text-slate-900 dark:text-white my-3">${plan.price_monthly} <span className="text-sm text-slate-400 font-normal">/month</span></div>
-                  <ul className="space-y-2 text-sm text-slate-600 dark:text-zinc-400 mb-5">
-                    {planFeatures.map((f, i) => (
-                      <li key={i} className="flex items-start gap-2"><CheckCircle2 className="w-4 h-4 text-brand-600 shrink-0 mt-0.5" /> {f}</li>
-                    ))}
-                  </ul>
-                  <a href="/pricing" className="inline-block w-full text-center py-2 bg-white dark:bg-zinc-800 text-slate-700 dark:text-zinc-300 text-sm font-medium hover:bg-slate-50 dark:hover:bg-zinc-700 transition-colors border border-slate-200 dark:border-zinc-700 rounded-lg">View All Plans</a>
-                </div>
-              )}
+              {plan && (() => {
+                const pColor = PLAN_COLORS[plan.name?.toLowerCase()] || PLAN_COLORS.starter;
+                return (
+                  <div
+                    className="plan-glow-strong p-6 rounded-2xl relative z-10 glass-card"
+                    style={{ '--plan-color': pColor } as React.CSSProperties}
+                  >
+                    <span
+                      className="absolute -top-3 right-4 text-white text-[10px] font-bold uppercase tracking-wider px-3 py-1 rounded-full shadow-lg flex items-center gap-1"
+                      style={{ backgroundColor: pColor, boxShadow: `0 4px 14px ${pColor}40` }}
+                    >
+                      <Crown className="w-3 h-3" /> Current Plan
+                    </span>
+                    <h3 className="text-lg font-bold text-white">{plan.display_name}</h3>
+                    <div className="text-3xl font-bold text-white my-3 tracking-tight">${plan.price_monthly} <span className="text-sm text-zinc-500 font-normal">/month</span></div>
+                    <ul className="space-y-2.5 text-sm text-zinc-400 mb-6">
+                      {planFeatures.map((f, i) => (
+                        <li key={i} className="flex items-start gap-2.5">
+                          <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5" style={{ color: pColor }} />
+                          {f}
+                        </li>
+                      ))}
+                    </ul>
+                    <a href="/pricing" className="inline-block w-full text-center py-2.5 bg-zinc-800 text-zinc-300 text-sm font-semibold hover:bg-zinc-700 transition-all border border-zinc-700 rounded-xl hover:shadow-md">View All Plans</a>
+                  </div>
+                );
+              })()}
 
-              <div className="pt-6 border-t border-slate-100 dark:border-zinc-800 space-y-4">
-                <h3 className="text-sm font-semibold text-slate-900 dark:text-white">Payment Methods</h3>
-                <div className="flex items-center justify-between p-4 bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-xl">
+              <div className="pt-6 border-t border-zinc-800 space-y-4">
+                <h3 className="text-sm font-semibold text-white">Payment Methods</h3>
+                <div className="flex items-center justify-between p-4 bg-zinc-800 border border-zinc-700 rounded-xl">
                   <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-slate-900 dark:bg-zinc-700 flex items-center justify-center text-white rounded-lg">
+                    <div className="w-10 h-10 bg-zinc-700 flex items-center justify-center text-white rounded-lg">
                       <CreditCard className="w-5 h-5" />
                     </div>
                     <div>
-                      <p className="text-sm font-medium text-slate-900 dark:text-white">Mastercard ending in 4242</p>
-                      <p className="text-xs text-slate-400">Expires 12/26</p>
+                      <p className="text-sm font-medium text-white">Mastercard ending in 4242</p>
+                      <p className="text-xs text-zinc-500">Expires 12/26</p>
                     </div>
                   </div>
-                  <button className="px-3 py-1.5 bg-white dark:bg-zinc-700 text-slate-600 dark:text-zinc-300 border border-slate-200 dark:border-zinc-600 text-xs font-medium hover:bg-slate-50 dark:hover:bg-zinc-600 transition-colors rounded-lg">Edit</button>
+                  <button className="px-3 py-1.5 bg-zinc-700 text-zinc-300 border border-zinc-600 text-xs font-medium hover:bg-zinc-600 transition-colors rounded-lg">Edit</button>
                 </div>
                 <button className="text-brand-600 hover:text-brand-700 text-sm font-medium">+ Add payment method</button>
               </div>
             </div>
           )}
 
-          {/* ── API Keys Tab ── */}
+          {/* -- API Keys Tab -- */}
           {activeTab === 'api-keys' && (
             <div className="space-y-6">
               <div>
-                <h2 className="text-lg font-semibold text-slate-900 dark:text-white mb-1">API Keys</h2>
-                <p className="text-sm text-slate-500 dark:text-zinc-400">Create and manage API keys for programmatic access</p>
+                <h2 className="text-lg font-semibold text-white mb-1">API Keys</h2>
+                <p className="text-sm text-zinc-400">Create and manage API keys for programmatic access</p>
               </div>
 
               {/* New key alert */}
               {newKeyValue && (
-                <div className="p-4 bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 rounded-xl space-y-2">
-                  <p className="text-sm font-medium text-emerald-800 dark:text-emerald-300 flex items-center gap-2"><Shield className="w-4 h-4" /> Your new API key (copy it now — it won&apos;t be shown again):</p>
+                <div className="p-4 bg-emerald-950/30 border border-emerald-800 rounded-xl space-y-2">
+                  <p className="text-sm font-medium text-emerald-300 flex items-center gap-2"><Shield className="w-4 h-4" /> Your new API key (copy it now � it won&apos;t be shown again):</p>
                   <div className="flex items-center gap-2">
-                    <code className="flex-1 text-xs bg-white dark:bg-zinc-800 px-3 py-2 rounded-lg border border-emerald-200 dark:border-zinc-700 text-slate-900 dark:text-white font-mono break-all">{newKeyValue}</code>
+                    <code className="flex-1 text-xs bg-zinc-800 px-3 py-2 rounded-lg border border-zinc-700 text-white font-mono break-all">{newKeyValue}</code>
                     <button onClick={copyKey} className="p-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition-colors">
                       {copiedKey ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
                     </button>
@@ -318,7 +339,7 @@ export default function SettingsPage() {
                   value={newKeyName}
                   onChange={e => setNewKeyName(e.target.value)}
                   placeholder="Key name (e.g. My App)"
-                  className="flex-1 px-3 py-2.5 text-sm border border-slate-200 dark:border-zinc-700 rounded-lg bg-white dark:bg-zinc-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500"
+                  className="flex-1 px-3 py-2.5 text-sm border border-zinc-700 rounded-lg bg-zinc-800 text-white focus:outline-none focus:ring-2 focus:ring-brand-500"
                   onKeyDown={e => e.key === 'Enter' && createApiKey()}
                 />
                 <button
@@ -335,24 +356,24 @@ export default function SettingsPage() {
               {keysLoading ? (
                 <div className="flex items-center justify-center py-12"><RotateCcw className="w-5 h-5 text-brand-600 animate-spin" /></div>
               ) : apiKeys.length === 0 ? (
-                <div className="text-center py-12 bg-slate-50 dark:bg-zinc-800 rounded-xl border border-slate-200 dark:border-zinc-700">
-                  <Key className="w-10 h-10 text-slate-300 dark:text-zinc-600 mx-auto mb-3" />
-                  <p className="text-sm text-slate-500 dark:text-zinc-400">No API keys yet</p>
-                  <p className="text-xs text-slate-400 dark:text-zinc-500 mt-1">Create one above to get started</p>
+                <div className="text-center py-12 bg-zinc-800 rounded-xl border border-zinc-700">
+                  <Key className="w-10 h-10 text-zinc-600 mx-auto mb-3" />
+                  <p className="text-sm text-zinc-400">No API keys yet</p>
+                  <p className="text-xs text-zinc-500 mt-1">Create one above to get started</p>
                 </div>
               ) : (
                 <div className="space-y-2">
                   {apiKeys.map(k => (
-                    <div key={k.id} className={`flex items-center justify-between p-4 rounded-xl border transition-colors ${k.is_active ? 'bg-white dark:bg-zinc-800 border-slate-200 dark:border-zinc-700' : 'bg-slate-50 dark:bg-zinc-800/50 border-slate-100 dark:border-zinc-800 opacity-60'}`}>
+                    <div key={k.id} className={`flex items-center justify-between p-4 rounded-xl border transition-colors ${k.is_active ? 'bg-zinc-800 border-zinc-700' : 'bg-zinc-800/50 border-zinc-800 opacity-60'}`}>
                       <div className="flex items-center gap-3">
-                        <Key className={`w-4 h-4 ${k.is_active ? 'text-brand-600' : 'text-slate-300'}`} />
+                        <Key className={`w-4 h-4 ${k.is_active ? 'text-brand-600' : 'text-zinc-500'}`} />
                         <div>
-                          <p className="text-sm font-medium text-slate-900 dark:text-white">{k.name}</p>
-                          <p className="text-xs text-slate-400 font-mono">{k.key_prefix} · {k.requests} requests · Created {new Date(k.created_at).toLocaleDateString()}</p>
+                          <p className="text-sm font-medium text-white">{k.name}</p>
+                          <p className="text-xs text-zinc-500 font-mono">{k.key_prefix} � {k.requests} requests � Created {new Date(k.created_at).toLocaleDateString()}</p>
                         </div>
                       </div>
                       {k.is_active ? (
-                        <button onClick={() => revokeApiKey(k.id)} className="p-2 text-red-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950 rounded-lg transition-colors" title="Revoke key">
+                        <button onClick={() => revokeApiKey(k.id)} className="p-2 text-red-400 hover:text-red-600 hover:bg-red-950 rounded-lg transition-colors" title="Revoke key">
                           <Trash2 className="w-4 h-4" />
                         </button>
                       ) : (
@@ -365,12 +386,12 @@ export default function SettingsPage() {
             </div>
           )}
 
-          {/* ── Notifications Tab ── */}
+          {/* -- Notifications Tab -- */}
           {activeTab === 'notifications' && (
             <div className="space-y-6">
               <div>
-                <h2 className="text-lg font-semibold text-slate-900 dark:text-white mb-1">Notifications</h2>
-                <p className="text-sm text-slate-500 dark:text-zinc-400">Choose what you want to be notified about</p>
+                <h2 className="text-lg font-semibold text-white mb-1">Notifications</h2>
+                <p className="text-sm text-zinc-400">Choose what you want to be notified about</p>
               </div>
               <div className="space-y-4">
                 {[
@@ -379,15 +400,15 @@ export default function SettingsPage() {
                   { label: 'Security Alerts', desc: 'Sign-in from new devices, password changes, and unusual activity', value: notifSecurity, set: setNotifSecurity },
                   { label: 'Marketing', desc: 'Tips, best practices, and promotional offers', value: notifMarketing, set: setNotifMarketing },
                 ].map(item => (
-                  <div key={item.label} className="flex items-center justify-between p-4 bg-white dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-xl">
+                  <div key={item.label} className="flex items-center justify-between p-4 bg-zinc-800 border border-zinc-700 rounded-xl">
                     <div>
-                      <p className="text-sm font-medium text-slate-900 dark:text-white">{item.label}</p>
-                      <p className="text-xs text-slate-400 mt-0.5">{item.desc}</p>
+                      <p className="text-sm font-medium text-white">{item.label}</p>
+                      <p className="text-xs text-zinc-500 mt-0.5">{item.desc}</p>
                     </div>
                     <button
                       onClick={() => item.set(!item.value)}
                       aria-label={`Toggle ${item.label}`}
-                      className={`relative w-11 h-6 rounded-full transition-colors ${item.value ? 'bg-brand-600' : 'bg-slate-300 dark:bg-zinc-600'}`}
+                      className={`relative w-11 h-6 rounded-full transition-colors ${item.value ? 'bg-brand-600' : 'bg-zinc-600'}`}
                     >
                       <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${item.value ? 'translate-x-5' : ''}`} />
                     </button>
@@ -397,37 +418,37 @@ export default function SettingsPage() {
             </div>
           )}
 
-          {/* ── Support Tab ── */}
+          {/* -- Support Tab -- */}
           {activeTab === 'support' && (
             <div className="space-y-6">
               <div>
-                <h2 className="text-lg font-semibold text-slate-900 dark:text-white mb-1">Support</h2>
-                <p className="text-sm text-slate-500 dark:text-zinc-400">Get help from our team</p>
+                <h2 className="text-lg font-semibold text-white mb-1">Support</h2>
+                <p className="text-sm text-zinc-400">Get help from our team</p>
               </div>
               <div className="space-y-4">
-                <a href="/contact" className="flex items-center justify-between p-5 bg-white dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-xl hover:border-brand-300 dark:hover:border-brand-700 transition-colors group">
+                <a href="/contact" className="flex items-center justify-between p-5 bg-zinc-800 border border-zinc-700 rounded-xl hover:border-brand-700 transition-colors group">
                   <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-brand-50 dark:bg-brand-950 flex items-center justify-center rounded-lg"><Mail className="w-5 h-5 text-brand-600" /></div>
+                    <div className="w-10 h-10 bg-brand-950 flex items-center justify-center rounded-lg"><Mail className="w-5 h-5 text-brand-600" /></div>
                     <div>
-                      <p className="text-sm font-medium text-slate-900 dark:text-white">Contact Us</p>
-                      <p className="text-xs text-slate-400">Send a message to our support team</p>
+                      <p className="text-sm font-medium text-white">Contact Us</p>
+                      <p className="text-xs text-zinc-500">Send a message to our support team</p>
                     </div>
                   </div>
-                  <ExternalLink className="w-4 h-4 text-slate-300 group-hover:text-brand-600 transition-colors" />
+                  <ExternalLink className="w-4 h-4 text-zinc-500 group-hover:text-brand-600 transition-colors" />
                 </a>
-                <a href="mailto:support@humaragpt.com" className="flex items-center justify-between p-5 bg-white dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-xl hover:border-brand-300 dark:hover:border-brand-700 transition-colors group">
+                <a href="mailto:support@humaragpt.com" className="flex items-center justify-between p-5 bg-zinc-800 border border-zinc-700 rounded-xl hover:border-brand-700 transition-colors group">
                   <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-blue-50 dark:bg-blue-950 flex items-center justify-center rounded-lg"><Mail className="w-5 h-5 text-blue-600" /></div>
+                    <div className="w-10 h-10 bg-purple-950 flex items-center justify-center rounded-lg"><Mail className="w-5 h-5 text-purple-600" /></div>
                     <div>
-                      <p className="text-sm font-medium text-slate-900 dark:text-white">Email Support</p>
-                      <p className="text-xs text-slate-400">support@humaragpt.com</p>
+                      <p className="text-sm font-medium text-white">Email Support</p>
+                      <p className="text-xs text-zinc-500">support@humaragpt.com</p>
                     </div>
                   </div>
-                  <ExternalLink className="w-4 h-4 text-slate-300 group-hover:text-brand-600 transition-colors" />
+                  <ExternalLink className="w-4 h-4 text-zinc-500 group-hover:text-brand-600 transition-colors" />
                 </a>
-                <div className="p-5 bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-xl">
-                  <p className="text-sm font-medium text-slate-900 dark:text-white mb-1">Response Times</p>
-                  <div className="space-y-1 text-xs text-slate-500 dark:text-zinc-400">
+                <div className="p-5 bg-zinc-800 border border-zinc-700 rounded-xl">
+                  <p className="text-sm font-medium text-white mb-1">Response Times</p>
+                  <div className="space-y-1 text-xs text-zinc-400">
                     <p>Starter plan: within 48 hours</p>
                     <p>Creator plan: within 24 hours</p>
                     <p>Professional+ plans: within 4 hours (priority)</p>

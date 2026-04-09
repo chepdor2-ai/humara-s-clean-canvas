@@ -1,7 +1,7 @@
 """
-Generate branded Humara icons from the source logo.
-Colorizes the black silhouette with Humara brand colors:
-  - Left-to-right gradient: indigo #6366f1 → deep navy #312e81
+Generate branded HumaraGPT icons from the source logo.
+Colorizes the black silhouette with Humara brand purple colors:
+  - Left-to-right gradient: purple #a855f7 (brand-400) → deeper purple #7e22ce (brand-700)
   - Transparent background
 Outputs: favicon.ico, favicon.png, icon.png (256), apple-touch-icon.png (180), logo.png (512)
 """
@@ -13,10 +13,10 @@ import os
 SRC = os.path.join("humanizer-engine", "frontend", "public", "logo-source-new.png")
 OUT = os.path.join("humanizer-engine", "frontend", "public")
 
-# Humara brand colors (from globals.css)
-COLOR_LEFT  = (99, 102, 241)   # #6366f1  brand-500 (indigo)
-COLOR_RIGHT = (49, 46, 129)    # #312e81  brand-900 (deep navy)
-COLOR_MID   = (79, 70, 229)    # #4f46e5  brand-600
+# HumaraGPT brand purple colors (matching globals.css brand-400 to brand-700)
+COLOR_LEFT  = (168, 85, 247)   # #a855f7  brand-400 (purple)
+COLOR_RIGHT = (126, 34, 206)   # #7e22ce  brand-700 (deep purple)
+COLOR_MID   = (147, 51, 234)   # #9333ea  brand-600
 
 def hex_to_rgb(h):
     return tuple(int(h[i:i+2], 16) for i in (1, 3, 5))

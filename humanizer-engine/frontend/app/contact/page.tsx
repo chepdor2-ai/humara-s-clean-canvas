@@ -71,7 +71,7 @@ export default function ContactPage() {
               { q: 'Is my text stored after processing?', a: 'No. Your text is processed in memory and discarded immediately after humanization. We never store your content unless you explicitly opt in for model improvement.' },
               { q: 'Can HumaraGPT bypass Turnitin?', a: 'Yes. Our multi-pass rewriting engine consistently achieves 95-100% human scores on Turnitin, GPTZero, Originality.AI, Copyleaks, and Winston AI.' },
               { q: 'Do you offer refunds?', a: 'Yes. If you are not satisfied within the first 7 days of a paid plan, contact us for a full refund — no questions asked.' },
-              { q: 'Is there an API?', a: 'API access is available on our Ninja plan. Contact enterprise@humaragpt.com for custom API integrations and volume pricing.' },
+              { q: 'Is there an API?', a: 'API access is available on our Professional plan. Contact enterprise@humaragpt.com for custom API integrations and volume pricing.' },
             ].map((faq) => (
               <div key={faq.q} className="bg-slate-50 rounded-xl border border-slate-100 p-6">
                 <h3 className="text-sm font-semibold text-slate-900 mb-2">{faq.q}</h3>

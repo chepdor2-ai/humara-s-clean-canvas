@@ -11,41 +11,31 @@ const TIERS = [
     name: 'Starter',
     monthly: 5,
     yearly: 4.25,
-    description: 'For casual users and light writing.',
-    features: ['20,000 words/day (Fast & Standard)', '10,000 words/day (Stealth)', 'Basic AI Detection', '30 Day Access', 'Email Support'],
+    description: 'For casual users and light writing needs.',
+    features: ['10,000 words/day', 'All 3 models (Humara 2.0, 2.1, 2.2)', 'All strength & tone modes', '30 Day Access', 'Email Support'],
     cta: 'Get Started',
     featured: false,
-    color: '#64748b',
+    color: '#9333ea',
   },
   {
     name: 'Creator',
     monthly: 10,
     yearly: 8.50,
     description: 'For students and content creators.',
-    features: ['40,000 words/day (Fast & Standard)', '20,000 words/day (Stealth)', 'Full Detector Suite', 'Style Memory (3 slots)', 'Priority Support'],
+    features: ['20,000 words/day', 'All 3 models (Humara 2.0, 2.1, 2.2)', 'All strength & tone modes', 'Style Memory (3 slots)', 'Priority Support'],
     cta: 'Get Started',
     featured: true,
-    color: '#6366f1',
+    color: '#7c3aed',
   },
   {
     name: 'Professional',
     monthly: 20,
     yearly: 17,
     description: 'For power users and agencies.',
-    features: ['80,000 words/day (Fast & Standard)', '40,000 words/day (Stealth)', 'All Engine Modes', 'Style Memory (5 slots)', 'API Access', 'Priority Support'],
+    features: ['40,000 words/day', 'All 3 models (Humara 2.0, 2.1, 2.2)', 'All strength & tone modes', 'Style Memory (5 slots)', 'API Access', 'Dedicated Support'],
     cta: 'Get Started',
     featured: false,
-    color: '#10b981',
-  },
-  {
-    name: 'Business',
-    monthly: 35,
-    yearly: 29.75,
-    description: 'For teams and enterprise.',
-    features: ['150,000 words/day (Fast & Standard)', '75,000 words/day (Stealth)', 'All Engine Modes', 'Unlimited Style Profiles', 'Full API Access', 'Dedicated Manager'],
-    cta: 'Get Started',
-    featured: false,
-    color: '#f59e0b',
+    color: '#a855f7',
   },
 ];
 
@@ -129,25 +119,29 @@ export default function PricingCards() {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           {TIERS.map((tier, i) => {
             const price = yearly ? tier.yearly : tier.monthly;
             return (
-              <div key={i} className={`rounded-xl border p-7 flex flex-col transition-all duration-300 relative overflow-hidden ${
-                tier.featured
-                  ? 'bg-slate-900 dark:bg-zinc-800 text-white border-slate-800 dark:border-zinc-700 shadow-xl scale-[1.02]'
-                  : 'bg-white dark:bg-zinc-900 text-slate-900 dark:text-white border-slate-200 dark:border-zinc-700 hover:border-brand-200 hover:shadow-md'
-              }`}>
-                {/* Color line on top */}
-                <div className="absolute top-0 left-0 right-0 h-1 rounded-t-xl" style={{ backgroundColor: tier.color }} />
+              <div
+                key={i}
+                className={`rounded-2xl p-7 flex flex-col relative z-10 ${
+                  tier.featured
+                    ? 'tier-glow-featured bg-slate-900 dark:bg-zinc-800 text-white shadow-2xl shadow-brand-500/15 scale-[1.03]'
+                    : 'tier-glow bg-white dark:bg-zinc-900 text-slate-900 dark:text-white border border-slate-200/80 dark:border-zinc-700/60'
+                }`}
+                style={{ '--tier-color': tier.color } as React.CSSProperties}
+              >
+                {/* Gradient line on top */}
+                <div className="absolute top-0 left-4 right-4 h-[2px] rounded-full" style={{ background: `linear-gradient(90deg, transparent, ${tier.color}, transparent)` }} />
                 {tier.featured && (
-                  <span className="absolute -top-2.5 left-6 bg-brand-600 text-white text-[10px] font-semibold uppercase tracking-wider py-1 px-2.5 rounded-full">Popular</span>
+                  <span className="absolute -top-3 left-1/2 -translate-x-1/2 bg-gradient-to-r from-brand-600 to-brand-500 text-white text-[10px] font-bold uppercase tracking-wider py-1 px-3 rounded-full shadow-lg shadow-brand-500/25">Most Popular</span>
                 )}
-                <h3 className={`text-xs font-semibold uppercase tracking-wider mb-2 ${tier.featured ? 'text-brand-400' : 'text-slate-400'}`}>{tier.name}</h3>
+                <h3 className={`text-xs font-bold uppercase tracking-wider mb-2 ${tier.featured ? 'text-brand-400' : ''}`} style={!tier.featured ? { color: tier.color } : {}}>{tier.name}</h3>
                 <p className={`text-sm mb-5 ${tier.featured ? 'text-slate-400' : 'text-slate-500 dark:text-slate-400'}`}>{tier.description}</p>
 
                 <div className="mb-6">
-                  <span className="text-4xl font-semibold tracking-tight">{formatPrice(price)}</span>
+                  <span className="text-4xl font-bold tracking-tight">{formatPrice(price)}</span>
                   <span className={`text-sm ml-1 ${tier.featured ? 'text-slate-500' : 'text-slate-400'}`}>/mo</span>
                   {yearly && <span className="block text-[11px] text-slate-400 mt-0.5">billed {formatPrice(price * 12)}/year</span>}
                 </div>
@@ -164,10 +158,10 @@ export default function PricingCards() {
                 <button
                   onClick={() => handleCheckout(tier.name)}
                   disabled={loadingPlan === tier.name}
-                  className={`w-full py-3 rounded-lg text-sm font-medium text-center transition-colors disabled:opacity-60 ${
+                  className={`w-full py-3 rounded-xl text-sm font-semibold text-center transition-all disabled:opacity-60 ${
                     tier.featured
-                      ? 'bg-brand-600 text-white hover:bg-brand-700'
-                      : 'bg-white dark:bg-zinc-800 text-slate-700 dark:text-white border border-slate-200 dark:border-zinc-700 hover:bg-slate-50 dark:hover:bg-zinc-700'
+                      ? 'bg-gradient-to-r from-purple-600 to-purple-500 text-white hover:from-purple-700 hover:to-purple-600 shadow-lg shadow-purple-500/25'
+                      : 'bg-purple-600/10 text-purple-400 border border-purple-500/30 hover:bg-purple-600/20 hover:shadow-md hover:shadow-purple-500/10'
                   }`}
                 >
                   {loadingPlan === tier.name ? 'Processing...' : tier.cta}

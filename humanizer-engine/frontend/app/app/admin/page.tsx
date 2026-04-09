@@ -246,7 +246,7 @@ export default function AdminDashboard() {
           {[
             { label: 'Total Users', val: stats.totalUsers, icon: Users, color: 'text-brand-600' },
             { label: 'Active Subs', val: stats.activeSubscriptions, icon: CreditCard, color: 'text-emerald-600' },
-            { label: 'Documents', val: stats.totalDocuments, icon: FileText, color: 'text-blue-600' },
+            { label: 'Documents', val: stats.totalDocuments, icon: FileText, color: 'text-purple-600' },
             { label: 'Feedback', val: stats.totalFeedback, icon: MessageSquare, color: 'text-amber-600' },
             { label: 'Revenue', val: `$${stats.revenueThisMonth.toFixed(0)}`, icon: BarChart3, color: 'text-purple-600' },
           ].map(s => (
@@ -276,7 +276,7 @@ export default function AdminDashboard() {
             <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-4">
               <div className="flex items-center justify-between mb-2">
                 <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Free Tier</span>
-                <Cpu className="w-4 h-4 text-blue-500" />
+                <Cpu className="w-4 h-4 text-purple-500" />
               </div>
               <p className="text-2xl font-bold text-slate-900 dark:text-white">{freeCount}</p>
             </div>

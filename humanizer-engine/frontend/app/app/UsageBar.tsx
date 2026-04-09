@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '../AuthProvider';
 import { supabase } from '../../lib/supabase';
 
@@ -10,6 +10,34 @@ interface UsageData {
   wordsLimitStealth: number;
   daysRemaining: number;
   planName: string;
+}
+
+function useCountUp(target: number, duration: number = 1000) {
+  const [count, setCount] = useState(0);
+  const prevTargetRef = useRef(target);
+
+  useEffect(() => {
+    if (prevTargetRef.current === target) return;
+    
+    const start = prevTargetRef.current;
+    const increment = (target - start) / (duration / 16);
+    const startTime = Date.now();
+    
+    const timer = setInterval(() => {
+      const elapsed = Date.now() - startTime;
+      if (elapsed >= duration) {
+        setCount(target);
+        prevTargetRef.current = target;
+        clearInterval(timer);
+      } else {
+        setCount(Math.floor(start + increment * (elapsed / 16)));
+      }
+    }, 16);
+    
+    return () => clearInterval(timer);
+  }, [target, duration]);
+
+  return count;
 }
 
 export function useUsage() {
@@ -38,13 +66,20 @@ export function useUsage() {
     }
   }, [user]);
 
-  useEffect(() => { refresh(); }, [refresh]);
+  useEffect(() => { 
+    refresh(); 
+    // Auto-refresh every 10 seconds
+    const interval = setInterval(refresh, 10000);
+    return () => clearInterval(interval);
+  }, [refresh]);
 
   return { usage, loading, refresh };
 }
 
 export default function UsageBar() {
   const { usage, loading } = useUsage();
+  const fastCount = useCountUp(usage?.wordsUsedFast || 0, 800);
+  const stealthCount = useCountUp(usage?.wordsUsedStealth || 0, 800);
 
   if (loading || !usage) return null;
 
@@ -52,36 +87,39 @@ export default function UsageBar() {
   const stealthPct = usage.wordsLimitStealth > 0 ? Math.min(100, (usage.wordsUsedStealth / usage.wordsLimitStealth) * 100) : 0;
 
   return (
-    <div className="bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-700 rounded-xl px-4 py-3">
-      <div className="flex items-center justify-between mb-2">
-        <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Daily Usage</span>
-        <div className="flex items-center gap-2">
-          <span className="text-[11px] font-medium text-brand-600 dark:text-brand-400">{usage.planName}</span>
-          <span className="text-[10px] text-slate-400">{usage.daysRemaining}d left</span>
+    <div className="glass-card rounded-2xl px-5 py-4">
+      <div className="flex items-center justify-between mb-3.5">
+        <div className="flex items-center gap-3">
+          <span className="text-[11px] font-bold text-zinc-500 uppercase tracking-wider">Current Package</span>
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-extrabold text-brand-400 bg-brand-950/30 px-3 py-1 rounded-lg border border-brand-800/40">{usage.planName}</span>
+            <span className="text-[10px] text-zinc-400 bg-zinc-800/50 px-2 py-1 rounded-full">{usage.daysRemaining}d remaining</span>
+          </div>
         </div>
+        <div className="text-[10px] text-zinc-500 font-medium">Real-time usage tracking</div>
       </div>
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-2 gap-5">
         <div>
-          <div className="flex items-center justify-between mb-1">
-            <span className="text-[10px] text-slate-500">Fast & Standard</span>
-            <span className="text-[10px] font-bold text-slate-600 dark:text-slate-300 tabular-nums">
-              {usage.wordsUsedFast.toLocaleString()}/{usage.wordsLimitFast.toLocaleString()}
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-[10px] font-semibold text-zinc-400 uppercase tracking-wide">Fast & Standard</span>
+            <span className="text-[11px] font-bold text-zinc-300 tabular-nums">
+              {fastCount.toLocaleString()}<span className="text-zinc-600">/{usage.wordsLimitFast.toLocaleString()}</span>
             </span>
           </div>
-          <div className="h-1.5 bg-slate-100 dark:bg-zinc-800 rounded-full overflow-hidden">
-            <div className={`h-full rounded-full transition-all duration-500 ${fastPct > 90 ? 'bg-red-500' : fastPct > 70 ? 'bg-amber-500' : 'bg-brand-500'}`}
+          <div className="h-2.5 bg-zinc-800/50 rounded-full overflow-hidden ring-1 ring-zinc-700/30">
+            <div className={`h-full rounded-full transition-all duration-700 ease-out relative usage-shimmer ${fastPct > 90 ? 'bg-red-500' : fastPct > 70 ? 'bg-amber-500' : 'bg-brand-500'}`}
               style={{ width: `${fastPct}%` }} />
           </div>
         </div>
         <div>
-          <div className="flex items-center justify-between mb-1">
-            <span className="text-[10px] text-slate-500">Stealth</span>
-            <span className="text-[10px] font-bold text-slate-600 dark:text-zinc-300 tabular-nums">
-              {usage.wordsUsedStealth.toLocaleString()}/{usage.wordsLimitStealth.toLocaleString()}
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-[10px] font-semibold text-zinc-400 uppercase tracking-wide">Stealth Premium</span>
+            <span className="text-[11px] font-bold text-zinc-300 tabular-nums">
+              {stealthCount.toLocaleString()}<span className="text-zinc-600">/{usage.wordsLimitStealth.toLocaleString()}</span>
             </span>
           </div>
-          <div className="h-1.5 bg-slate-100 dark:bg-zinc-800 rounded-full overflow-hidden">
-            <div className={`h-full rounded-full transition-all duration-500 ${stealthPct > 90 ? 'bg-red-500' : stealthPct > 70 ? 'bg-amber-500' : 'bg-emerald-500'}`}
+          <div className="h-2.5 bg-zinc-800/50 rounded-full overflow-hidden ring-1 ring-zinc-700/30">
+            <div className={`h-full rounded-full transition-all duration-700 ease-out relative usage-shimmer ${stealthPct > 90 ? 'bg-red-500' : stealthPct > 70 ? 'bg-amber-500' : 'bg-emerald-500'}`}
               style={{ width: `${stealthPct}%` }} />
           </div>
         </div>

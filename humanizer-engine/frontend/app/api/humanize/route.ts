@@ -20,6 +20,7 @@ import { nuruHumanize } from '@/lib/engine/nuru-humanizer';
 import { omegaHumanize } from '@/lib/engine/omega-humanizer';
 import { easyHumanize } from '@/lib/engine/easy-humanizer';
 import { ozoneHumanize } from '@/lib/engine/ozone-humanizer';
+import { oxygenHumanize } from '@/lib/engine/oxygen-humanizer';
 import { robustSentenceSplit } from '@/lib/engine/content-protection';
 // deepRestructure, voiceShift, tenseVariation disabled — they garble sentence structure
 // import { deepRestructure, voiceShift, tenseVariation } from '@/lib/engine/advanced-transforms';
@@ -340,6 +341,11 @@ export async function POST(req: Request) {
     }
     const { text, engine, strength, tone, strict_meaning, no_contractions, enable_post_processing, premium } = body;
 
+    // 30% aggressiveness boost: when "Keep Meaning" is unchecked, bump strength one level
+    const effectiveStrength = (!strict_meaning && strength === 'light') ? 'medium'
+      : (!strict_meaning && (strength ?? 'medium') === 'medium') ? 'strong'
+      : (strength ?? 'medium');
+
     if (!text || typeof text !== 'string' || text.trim().length === 0) {
       return NextResponse.json({ error: 'Text is required' }, { status: 400 });
     }
@@ -373,49 +379,32 @@ export async function POST(req: Request) {
 
     if (engine === 'easy') {
       // Easy: EssayWritingSupport external API — instant processing, no LLM
+      const easySBS = body.easy_sentence_by_sentence === true;
       const easyResult = await easyHumanize(
         normalizedText,
-        strength ?? 'medium',
+        effectiveStrength,
         tone ?? 'academic',
+        easySBS,
       );
       humanized = easyResult.humanized;
       // Easy flows through all post-processing below
     } else if (engine === 'ozone') {
-      // Ozone: External Ozone API — always uses "undetectable" mode
-      const ozoneSentenceBySentence = body.ozone_sentence_by_sentence === true;
+      // Ozone: External API with undetectable mode — then full post-processing pipeline
+      // Default sentence-by-sentence to TRUE so titles/headings are preserved during API call
+      const ozoneSentenceBySentence = body.ozone_sentence_by_sentence !== false;
       const ozoneResult = await ozoneHumanize(normalizedText, ozoneSentenceBySentence);
       humanized = ozoneResult.humanized;
+      // Ozone now flows through ALL post-processing below
     } else if (engine === 'oxygen') {
-      // Oxygen v2: T5 model + multi-phase pipeline + full TS post-processing
-      const oxygenUrl = process.env.OXYGEN_SERVER_URL || 'http://127.0.0.1:5001';
-      
-      // Map strength to mode presets
-      const oxygenMode = strength === 'light' ? 'fast'
-        : strength === 'strong' ? 'aggressive'
-        : 'quality';
-      
-      const oxygenParams = {
-        text: normalizedText,
-        strength: strength ?? 'medium',
-        mode: body.oxygen_mode || oxygenMode,
-        min_change_ratio: body.oxygen_min_change_ratio || 0.40,
-        max_retries: body.oxygen_max_retries || 3,
-        sentence_by_sentence: body.oxygen_sentence_by_sentence === true,
-      };
-      
-      const resp = await fetch(`${oxygenUrl}/humanize`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(oxygenParams),
-        signal: AbortSignal.timeout(300000), // 5 min — T5 on CPU is slow
-      });
-      if (!resp.ok) {
-        const errBody = await resp.text();
-        return NextResponse.json({ error: `Oxygen model error: ${errBody}` }, { status: 502 });
-      }
-      const oxygenResult = await resp.json();
-      humanized = oxygenResult.humanized;
-      // Oxygen now flows through ALL post-processing below (no longer skipped)
+      // Oxygen: Pure TypeScript multi-phase humanizer (runs serverless in Vercel)
+      const oxygenMode = (body.oxygen_mode as string) || (effectiveStrength === 'light' ? 'fast' : effectiveStrength === 'strong' ? 'aggressive' : 'quality');
+      humanized = oxygenHumanize(
+        normalizedText,
+        effectiveStrength,
+        oxygenMode,
+        body.oxygen_sentence_by_sentence === true,
+      );
+      // Oxygen now flows through ALL post-processing below
     } else if (engine === 'humara_v1_3') {
       // Humara v1.3: Stealth Humanizer Engine v5 from coursework-champ
       const { pipeline } = await import('@/lib/engine/humara-v1-3');
@@ -503,38 +492,6 @@ export async function POST(req: Request) {
         enablePostProcessing: enable_post_processing !== false,
         stealth: true,
       });
-    }
-
-    // ── OXYGEN POLISH PASS ────────────────────────────────────
-    // Easy engine's output is passed through the Oxygen T5 model
-    // as a second phase for cleaner, more natural output.
-    if (engine === 'easy') {
-      try {
-        const oxygenUrl = process.env.OXYGEN_SERVER_URL || 'http://127.0.0.1:5001';
-        const oxygenPolishParams = {
-          text: humanized,
-          strength: 'light',
-          mode: 'fast',
-          min_change_ratio: 0.15,
-          max_retries: 2,
-          sentence_by_sentence: false,
-        };
-        const oxygenResp = await fetch(`${oxygenUrl}/humanize`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(oxygenPolishParams),
-          signal: AbortSignal.timeout(120000),
-        });
-        if (oxygenResp.ok) {
-          const oxygenResult = await oxygenResp.json();
-          if (oxygenResult.humanized && oxygenResult.humanized.trim().length > 0) {
-            humanized = oxygenResult.humanized;
-          }
-        }
-        // If Oxygen server is unavailable, silently continue with the engine output
-      } catch {
-        // Oxygen polish is best-effort — never block the pipeline
-      }
     }
 
     // ── Unified Sentence Processor ──────────────────────────────
@@ -830,6 +787,20 @@ export async function POST(req: Request) {
     // re-introduced by enforceRestructuringThreshold, fixCapitalization,
     // preserveInputStructure, unifiedSentenceProcess, etc.
     humanized = fixMidSentenceCapitalization(humanized, text);
+
+    // ── OXYGEN POLISH PASS (FINAL PHASE) ──────────────────────────
+    // Easy engine's output is polished through the Oxygen TS engine
+    // as the LAST step after all post-processing, for cleaner output.
+    if (engine === 'easy') {
+      try {
+        const polished = oxygenHumanize(humanized, 'light', 'fast', false);
+        if (polished && polished.trim().length > 0) {
+          humanized = polished;
+        }
+      } catch {
+        // Oxygen polish is best-effort — never block the pipeline
+      }
+    }
 
     // Generate per-sentence alternatives (3 candidates each, best already picked by engines)
     const FIRST_PERSON_RE = /\b(I|me|my|mine|myself|we|us|our|ours|ourselves)\b/i;
