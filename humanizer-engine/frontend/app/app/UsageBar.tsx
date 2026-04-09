@@ -106,6 +106,7 @@ export default function UsageBar() {
           <div className="flex items-center gap-2.5">
             <span className="text-sm font-extrabold text-brand-400 bg-brand-950/30 px-3.5 py-1.5 rounded-lg border border-brand-800/40">{usage.planName}</span>
             <span className="text-[10px] text-zinc-400 bg-zinc-800/50 px-2.5 py-1 rounded-full">{usage.daysRemaining}d remaining</span>
+            <span className="text-[9px] text-zinc-500 bg-zinc-900/50 px-2 py-0.5 rounded-full border border-zinc-800/40">Humara 2.0, 2.1, 2.2</span>
           </div>
         </div>
         <div className="text-[10px] text-zinc-500 font-medium">Real-time usage tracking</div>
