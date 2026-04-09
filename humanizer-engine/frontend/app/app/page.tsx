@@ -818,6 +818,14 @@ export default function EditorPage() {
               <span>{ENGINES.find(e => e.id === engine)?.label}</span>
               <svg className={`ml-auto w-3.5 h-3.5 text-zinc-500 transition-transform ${engineDropdownOpen ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
             </button>
+            {/* Inline Engine Guide Tooltip */}
+            {ENGINE_GUIDES[engine] && (
+              <div className="absolute left-0 top-full mt-2 z-30 w-[280px] bg-[#0c0c14] border border-purple-800/60 rounded-lg px-3 py-2 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none shadow-lg">
+                <p className="text-[10px] text-zinc-400 leading-relaxed">
+                  <span className="font-bold text-purple-400">{ENGINES.find(e => e.id === engine)?.label}:</span> {ENGINE_GUIDES[engine]}
+                </p>
+              </div>
+            )}
             {engineDropdownOpen && (
               <>
                 <div className="fixed inset-0 z-40" onClick={() => setEngineDropdownOpen(false)} />
@@ -874,253 +882,157 @@ export default function EditorPage() {
         </button>
       </div>
 
-      {/* Depth Note */}
+      {/* Compact Engine-Specific Controls */}
+      {(engine === 'easy' || engine === 'ozone') && (
+        <div className="flex flex-wrap items-center gap-x-6 gap-y-2 bg-[#0c0c14] border border-zinc-800/60 rounded-xl px-4 py-2.5">
+          {engine === 'ozone' && (
+            <>
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] font-semibold text-zinc-500 uppercase tracking-wider">🛡️ Undetectable</span>
+                <div className="relative inline-flex h-5 w-9 items-center rounded-full bg-teal-600 opacity-90">
+                  <span className="inline-block h-3 w-3 transform rounded-full bg-white translate-x-5" />
+                </div>
+                <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-teal-900/60 text-teal-300 font-bold uppercase">Required</span>
+              </div>
+              <div className="w-px h-4 bg-zinc-800" />
+            </>
+          )}
+          <label className="flex items-center gap-2 cursor-pointer">
+            <span className="text-[10px] font-semibold text-zinc-400">Sentence-by-Sentence</span>
+            <button
+              onClick={() => engine === 'easy' ? setEasySentenceBySentence(!easySentenceBySentence) : setOzoneSentenceBySentence(!ozoneSentenceBySentence)}
+              className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${
+                (engine === 'easy' ? easySentenceBySentence : ozoneSentenceBySentence)
+                  ? 'bg-purple-600'
+                  : 'bg-zinc-700'
+              }`}
+            >
+              <span
+                className={`inline-block h-3 w-3 transform rounded-full bg-white transition-transform ${
+                  (engine === 'easy' ? easySentenceBySentence : ozoneSentenceBySentence) ? 'translate-x-5' : 'translate-x-1'
+                }`}
+              />
+            </button>
+          </label>
+          <span className="text-[9px] text-zinc-500">Preserves structure</span>
+        </div>
+      )}
+
+      {/* Depth Warning (Compact) */}
       {strength === 'strong' && (
-        <div className="flex items-start gap-1.5 px-3 py-2 bg-amber-50/60 dark:bg-amber-950/40 border border-amber-100 dark:border-amber-900 rounded-lg max-w-md">
-          <AlertTriangle className="w-3 h-3 text-amber-500 mt-0.5 shrink-0" />
-          <p className="text-[11px] text-amber-700 dark:text-amber-300 leading-relaxed">
-            <span className="font-bold">Strong depth</span> focuses on beating AI detectors rather than preserving meaning. For best meaning retention, use Light or Medium.
+        <div className="flex items-center gap-2 px-3 py-1.5 bg-amber-950/40 border border-amber-900 rounded-lg">
+          <AlertTriangle className="w-3 h-3 text-amber-500 shrink-0" />
+          <p className="text-[10px] text-amber-300">
+            <span className="font-bold">Strong mode:</span> Prioritizes detection bypass over meaning retention
           </p>
         </div>
       )}
 
-      {/* Engine Guide */}
-      {ENGINE_GUIDES[engine] && (
-        <div className="bg-[#0c0c14] border border-zinc-800/60 rounded-xl px-4 py-3">
-          <div className="flex items-start gap-2.5">
-            <div className="w-5 h-5 rounded-md bg-purple-900/40 flex items-center justify-center shrink-0 mt-0.5">
-              <Zap className="w-3 h-3 text-brand-500" />
-            </div>
-            <div className="space-y-1 min-w-0">
-              <p className="text-[11px] font-bold text-purple-400 tracking-tight">
-                {ENGINES.find(e => e.id === engine)?.label}
-              </p>
-              <p className="text-[11px] text-zinc-400 leading-relaxed">
-                {ENGINE_GUIDES[engine]}
-              </p>
-            </div>
-          </div>
+      {/* Ozone Warning (if needed) */}
+      {ozoneUndetectWarning && (
+        <div className="flex items-center gap-2 px-3 py-1.5 bg-amber-950/50 border border-amber-800 rounded-lg animate-pulse">
+          <span className="text-amber-500 text-xs">⚠️</span>
+          <p className="text-[10px] text-amber-300 font-medium">
+            Undetectability mode is always enabled for Humara 2.1
+          </p>
         </div>
       )}
 
-      {/* Easy Controls */}
-      {engine === 'easy' && (
-        <div className="bg-[#0c0c14] border border-purple-800/40 rounded-xl overflow-hidden px-4 py-3">
-          <div className="space-y-1">
-            <label className="flex items-center justify-between text-xs font-semibold text-purple-900 dark:text-purple-200">
-              <span>Sentence-by-Sentence Processing</span>
-              <button
-                onClick={() => setEasySentenceBySentence(!easySentenceBySentence)}
-                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                  easySentenceBySentence
-                    ? 'bg-purple-600'
-                    : 'bg-zinc-700'
-                }`}
-              >
-                <span
-                  className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                    easySentenceBySentence ? 'translate-x-6' : 'translate-x-1'
-                  }`}
-                />
-              </button>
-            </label>
-            <p className="text-[10px] text-purple-600 dark:text-purple-400">
-              {easySentenceBySentence
-                ? 'Each sentence processed independently — preserves titles and paragraph structure'
-                : 'Whole paper sent as one request — faster processing'}
-            </p>
-          </div>
-        </div>
-      )}
-
-      {/* Humara 2.1 Controls */}
-      {engine === 'ozone' && (
-        <div className="bg-[#0c0c14] border border-teal-800/40 rounded-xl overflow-hidden px-4 py-3">
-          <div className="space-y-3">
-            {/* Undetectability Mode — always on, locked */}
-            <div className="space-y-1">
-              <label className="flex items-center justify-between text-xs font-semibold text-teal-900 dark:text-teal-200">
-                <span className="flex items-center gap-1.5">
-                  🛡️ Undetectability Mode
-                  <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-teal-200 dark:bg-teal-900/60 text-teal-700 dark:text-teal-300 font-bold uppercase tracking-wider">Required</span>
-                </span>
-                <button
-                  onClick={() => { setOzoneUndetectWarning(true); setTimeout(() => setOzoneUndetectWarning(false), 3000); }}
-                  className="relative inline-flex h-6 w-11 items-center rounded-full bg-teal-600 dark:bg-teal-500 cursor-not-allowed opacity-90"
-                  title="Undetectability mode is always enabled for this engine"
-                >
-                  <span className="inline-block h-4 w-4 transform rounded-full bg-white translate-x-6" />
-                </button>
-              </label>
-              <p className="text-[10px] text-teal-600 dark:text-teal-400">
-                Humara 2.1 always runs in undetectable mode — trained to bypass ZeroGPT, Surfer &amp; other AI detectors.
-              </p>
-              {ozoneUndetectWarning && (
-                <div className="flex items-start gap-1.5 px-2.5 py-2 bg-amber-50 dark:bg-amber-950/50 border border-amber-200 dark:border-amber-800 rounded-lg mt-1 animate-pulse">
-                  <span className="text-amber-500 text-xs mt-0.5">⚠️</span>
-                  <p className="text-[10px] text-amber-700 dark:text-amber-300 leading-relaxed font-medium">
-                    Undetectability mode cannot be disabled for this engine. This is required to ensure maximum AI detection bypass.
-                  </p>
-                </div>
-              )}
-            </div>
-            {/* Sentence-by-Sentence Processing */}
-            <div className="space-y-1">
-              <label className="flex items-center justify-between text-xs font-semibold text-teal-900 dark:text-teal-200">
-                <span>Sentence-by-Sentence Processing</span>
-                <button
-                  onClick={() => setOzoneSentenceBySentence(!ozoneSentenceBySentence)}
-                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                    ozoneSentenceBySentence
-                      ? 'bg-teal-600'
-                      : 'bg-zinc-700'
-                  }`}
-                >
-                  <span
-                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                      ozoneSentenceBySentence ? 'translate-x-6' : 'translate-x-1'
-                    }`}
-                  />
-                </button>
-              </label>
-              <p className="text-[10px] text-teal-600 dark:text-teal-400">
-                {ozoneSentenceBySentence
-                  ? 'Each sentence processed independently — preserves titles and paragraph structure'
-                  : 'Whole paper sent as one request — faster but may alter formatting'}
-              </p>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Oxygen Advanced Controls */}
+      {/* Oxygen Advanced Controls (Compact) */}
       {engine === 'oxygen' && (
         <div className="bg-[#0c0c14] border border-purple-800/40 rounded-xl overflow-hidden">
           <button
             onClick={() => setOxygenAdvancedOpen(!oxygenAdvancedOpen)}
-            className="w-full flex items-center justify-between px-4 py-3 hover:bg-zinc-800/30 transition-colors"
+            className="w-full flex items-center justify-between px-4 py-2 hover:bg-zinc-800/30 transition-colors"
           >
             <div className="flex items-center gap-2">
-              <span className="text-xs font-bold text-purple-400">⚙️ Oxygen Pipeline Controls</span>
-              <span className="text-[10px] px-2 py-0.5 rounded-full bg-purple-200 dark:bg-purple-900/50 text-purple-700 dark:text-purple-300">Multi-phase AI kill</span>
+              <span className="text-[11px] font-bold text-purple-400">⚙️ Pipeline Controls</span>
+              <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-purple-900/50 text-purple-300">Advanced</span>
             </div>
-            <ChevronDown className={`w-4 h-4 text-purple-500 transition-transform ${oxygenAdvancedOpen ? 'rotate-180' : ''}`} />
+            <ChevronDown className={`w-3.5 h-3.5 text-purple-500 transition-transform ${oxygenAdvancedOpen ? 'rotate-180' : ''}`} />
           </button>
           
           {oxygenAdvancedOpen && (
-            <div className="px-4 pb-4 space-y-4 border-t border-purple-200 dark:border-purple-800 pt-4">
-              {/* Pipeline Mode */}
-              <div className="space-y-1.5">
-                <label className="block text-xs font-semibold text-purple-900 dark:text-purple-200">
+            <div className="px-4 pb-3 space-y-3 border-t border-purple-800 pt-3">
+              {/* Compact Pipeline Mode */}
+              <div className="space-y-1">
+                <label className="block text-[10px] font-semibold text-purple-400 uppercase tracking-wider">
                   Pipeline Mode
                 </label>
-                <div className="flex gap-2">
+                <div className="flex gap-1.5">
                   {[
-                    { id: 'quality', label: 'Quality', desc: 'Beam=4, 5 retries' },
-                    { id: 'fast', label: 'Fast', desc: 'Greedy, 2 retries' },
-                    { id: 'aggressive', label: 'Aggressive', desc: 'Beam=6, 8 retries' },
+                    { id: 'quality', label: 'Quality', desc: 'Beam=4' },
+                    { id: 'fast', label: 'Fast', desc: 'Greedy' },
+                    { id: 'aggressive', label: 'Aggressive', desc: 'Beam=6' },
                   ].map(mode => (
                     <button
                       key={mode.id}
                       onClick={() => setOxygenMode(mode.id as typeof oxygenMode)}
-                      className={`flex-1 px-3 py-2 rounded-lg border transition-all text-xs ${
+                      className={`flex-1 px-2 py-1.5 rounded-lg border transition-all ${
                         oxygenMode === mode.id
-                          ? 'bg-purple-600 text-white border-purple-600 shadow-md'
-                          : 'bg-[#0c0c14] text-zinc-300 border-zinc-800/60 hover:border-purple-500/50'
+                          ? 'bg-purple-600 text-white border-purple-600'
+                          : 'bg-[#0c0c14] text-zinc-400 border-zinc-800/60 hover:border-purple-500/50'
                       }`}
                     >
-                      <div className="font-bold">{mode.label}</div>
-                      <div className="text-[10px] opacity-80">{mode.desc}</div>
+                      <div className="text-[10px] font-bold">{mode.label}</div>
+                      <div className="text-[8px] opacity-70">{mode.desc}</div>
                     </button>
                   ))}
                 </div>
               </div>
 
-              {/* Sentence-by-Sentence Toggle */}
-              <div className="space-y-1">
-                <label className="flex items-center justify-between text-xs font-semibold text-purple-900 dark:text-purple-200">
-                  <span>Sentence-by-Sentence Processing</span>
-                  <button
-                    onClick={() => setOxygenSentenceBySentence(!oxygenSentenceBySentence)}
-                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                      oxygenSentenceBySentence 
-                        ? 'bg-purple-600' 
-                        : 'bg-zinc-700'
+              {/* Compact Sentence Toggle */}
+              <label className="flex items-center justify-between cursor-pointer">
+                <span className="text-[10px] font-semibold text-purple-400">Sentence-by-Sentence</span>
+                <button
+                  onClick={() => setOxygenSentenceBySentence(!oxygenSentenceBySentence)}
+                  className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${
+                    oxygenSentenceBySentence 
+                      ? 'bg-purple-600' 
+                      : 'bg-zinc-700'
+                  }`}
+                >
+                  <span
+                    className={`inline-block h-3 w-3 transform rounded-full bg-white transition-transform ${
+                      oxygenSentenceBySentence ? 'translate-x-5' : 'translate-x-1'
                     }`}
-                  >
-                    <span
-                      className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                        oxygenSentenceBySentence ? 'translate-x-6' : 'translate-x-1'
-                      }`}
-                    />
-                  </button>
-                </label>
-                <p className="text-[10px] text-purple-600 dark:text-purple-400">
-                  Each sentence processed independently with retry loop until change threshold met
-                </p>
-              </div>
+                  />
+                </button>
+              </label>
 
-              {/* Min Change Ratio */}
-              <div className="space-y-1">
-                <label className="block text-xs font-semibold text-purple-900 dark:text-purple-200">
-                  Minimum Change Threshold: {(oxygenMinChangeRatio * 100).toFixed(0)}%
-                </label>
-                <input
-                  type="range"
-                  min="0.2"
-                  max="0.8"
-                  step="0.05"
-                  value={oxygenMinChangeRatio}
-                  onChange={(e) => setOxygenMinChangeRatio(parseFloat(e.target.value))}
-                  className="w-full h-2 bg-purple-200 dark:bg-purple-900/50 rounded-lg appearance-none cursor-pointer accent-purple-600"
-                />
-                <p className="text-[10px] text-purple-600 dark:text-purple-400">
-                  At least {(oxygenMinChangeRatio * 100).toFixed(0)}% of words must change per sentence
-                </p>
+              {/* Compact Advanced Sliders */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="flex items-center justify-between text-[10px] font-semibold text-purple-400">
+                    <span>Change Threshold</span>
+                    <span className="text-purple-300">{(oxygenMinChangeRatio * 100).toFixed(0)}%</span>
+                  </label>
+                  <input
+                    type="range"
+                    min="0.2"
+                    max="0.8"
+                    step="0.05"
+                    value={oxygenMinChangeRatio}
+                    onChange={(e) => setOxygenMinChangeRatio(parseFloat(e.target.value))}
+                    className="w-full h-1.5 bg-purple-900/50 rounded-lng appearance-none cursor-pointer accent-purple-600"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="flex items-center justify-between text-[10px] font-semibold text-purple-400">
+                    <span>Max Retries</span>
+                    <span className="text-purple-300">{oxygenMaxRetries}</span>
+                  </label>
+                  <input
+                    type="range"
+                    min="1"
+                    max="15"
+                    step="1"
+                    value={oxygenMaxRetries}
+                    onChange={(e) => setOxygenMaxRetries(parseInt(e.target.value))}
+                    className="w-full h-1.5 bg-purple-900/50 rounded-lg appearance-none cursor-pointer accent-purple-600"
+                  />
+                </div>
               </div>
-
-              {/* Max Retries */}
-              <div className="space-y-1">
-                <label className="block text-xs font-semibold text-purple-900 dark:text-purple-200">
-                  Max Retries per Sentence: {oxygenMaxRetries}
-                </label>
-                <input
-                  type="range"
-                  min="1"
-                  max="15"
-                  step="1"
-                  value={oxygenMaxRetries}
-                  onChange={(e) => setOxygenMaxRetries(parseInt(e.target.value))}
-                  className="w-full h-2 bg-purple-200 dark:bg-purple-900/50 rounded-lg appearance-none cursor-pointer accent-purple-600"
-                />
-                <p className="text-[10px] text-purple-600 dark:text-purple-400">
-                  Retry T5 generation until {(oxygenMinChangeRatio * 100).toFixed(0)}% change is achieved (max {oxygenMaxRetries} attempts)
-                </p>
-              </div>
-
-              {/* Pipeline Info */}
-              <div className="bg-purple-100/50 dark:bg-purple-900/20 rounded-lg p-3 text-[10px] text-purple-700 dark:text-purple-300 space-y-1">
-                <p className="font-bold">Pipeline Phases:</p>
-                <p>1. T5 beam-search paraphrase (per sentence)</p>
-                <p>2. AI word kill (60+ markers) + filler removal</p>
-                <p>3. Structural variance (clause fronting, splitting)</p>
-                <p>4. Quality gate (retry loop for min change)</p>
-                <p>5. TypeScript post-processing (10-phase signal attack)</p>
-                <p>6. Grammar sanitizer + contraction expansion</p>
-              </div>
-
-              {/* Reset Button */}
-              <button
-                onClick={() => {
-                  setOxygenMode('quality');
-                  setOxygenSentenceBySentence(false);
-                  setOxygenMinChangeRatio(0.40);
-                  setOxygenMaxRetries(5);
-                }}
-                className="w-full py-2 text-xs font-semibold text-purple-600 dark:text-purple-300 hover:bg-purple-100 dark:hover:bg-purple-900/30 rounded-lg transition-colors"
-              >
-                ↻ Reset to Defaults
-              </button>
             </div>
           )}
         </div>
