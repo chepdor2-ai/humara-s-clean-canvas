@@ -744,302 +744,215 @@ export default function EditorPage() {
 
   /* ── Render ───────────────────────────────────────────────────────────── */
   return (
-    <div className="flex flex-col gap-8 animate-in fade-in duration-500 max-w-7xl mx-auto">
-      {/* Header */}
-      <header className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-extrabold text-white tracking-tight brand-glow">HumaraGPT</h1>
-          <p className="text-[13px] text-zinc-500 mt-1">Transform AI text into undetectable human writing</p>
-        </div>
-        <div className="flex items-center gap-2">
-          {isAdmin && (
-            <Link
-              href="/app/admin"
-              className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-lg hover:bg-amber-100 dark:hover:bg-amber-900/30 transition-colors"
-            >
-              <Shield className="w-3.5 h-3.5" /> Admin
-            </Link>
-          )}
-          <Link
-            href="/app/settings"
-            className="p-2 text-zinc-500 hover:text-white rounded-lg hover:bg-zinc-800/50 transition-colors"
-          >
-            <Settings className="w-4 h-4" />
-          </Link>
-        </div>
-      </header>
+    <div className="flex flex-col gap-4 animate-in fade-in duration-500 max-w-5xl mx-auto">
 
-      {/* Daily Usage */}
-      <UsageBar />
-
-      {/* Model Usage Ticker */}
-      <div className="glass-card rounded-2xl overflow-hidden">
-        <div className="relative h-12 flex items-center overflow-hidden">
-          <div className="absolute inset-0 bg-gradient-to-r from-zinc-900 via-transparent to-zinc-900 pointer-events-none z-10" />
-          <div className="ticker-animate flex items-center gap-8 whitespace-nowrap px-4">
-            {ENGINES.flatMap(eng => {
-              const useCases: Record<string, string> = {
-                oxygen: 'Clear GPTZero signals from stealthy humanized text',
-                ozone: 'Eliminate ZeroGPT & Surfer AI detection markers',
-                easy: 'Broad-spectrum detection bypass for all major platforms',
-              };
-              return [{ engine: eng.label, use: useCases[eng.id] || 'Advanced humanization' }];
-            }).concat(ENGINES.flatMap(eng => {
-              const useCases: Record<string, string> = {
-                oxygen: 'Clear GPTZero signals from stealthy humanized text',
-                ozone: 'Eliminate ZeroGPT & Surfer AI detection markers',
-                easy: 'Broad-spectrum detection bypass for all major platforms',
-              };
-              return [{ engine: eng.label, use: useCases[eng.id] || 'Advanced humanization' }];
-            })).map((item, i) => (
-              <div key={i} className="flex items-center gap-2 shrink-0">
-                <span className="text-xs font-bold text-brand-400">{item.engine}</span>
-                <span className="text-zinc-600">→</span>
-                <span className="text-[11px] text-zinc-400">{item.use}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      {/* Settings Bar */}
+      {/* ═══ Combined Control Card ═══ */}
       <div
-        className={`flex flex-wrap items-center gap-x-8 gap-y-4 bg-[#0c0c14] border border-zinc-800/60 rounded-2xl px-7 py-5 ${planColor ? 'plan-glow' : ''}`}
+        className={`bg-[#0c0c14] border border-zinc-800/60 rounded-2xl ${planColor ? 'plan-glow' : ''}`}
         style={planColor ? { '--plan-color': planColor } as React.CSSProperties : undefined}
       >
-        <div className="flex items-center gap-2 relative">
-          <span className="text-[11px] font-semibold text-zinc-500 uppercase tracking-wider">Engine</span>
-          <div className="relative group">
-            <button
-              type="button"
-              onClick={() => setEngineDropdownOpen(!engineDropdownOpen)}
-              className="flex items-center gap-2 bg-[#0c0c14] border border-zinc-800/60 rounded-lg px-3 py-1.5 text-xs font-semibold text-zinc-300 outline-none focus:border-purple-500 hover:border-zinc-600 transition-colors min-w-[140px]"
-            >
-              <span>{ENGINES.find(e => e.id === engine)?.label}</span>
-              <svg className={`ml-auto w-3.5 h-3.5 text-zinc-500 transition-transform ${engineDropdownOpen ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
-            </button>
-            {/* Inline Engine Guide Tooltip */}
-            {ENGINE_GUIDES[engine] && (
-              <div className="absolute left-0 top-full mt-2 z-30 w-[280px] bg-[#0c0c14] border border-purple-800/60 rounded-lg px-3 py-2 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none shadow-lg">
-                <p className="text-[10px] text-zinc-400 leading-relaxed">
-                  <span className="font-bold text-purple-400">{ENGINES.find(e => e.id === engine)?.label}:</span> {ENGINE_GUIDES[engine]}
-                </p>
-              </div>
+        {/* Row 1: Brand + Usage + Nav */}
+        <div className="flex items-center justify-between px-5 py-3 border-b border-zinc-800/40">
+          <div className="flex items-center gap-4">
+            <h1 className="text-lg font-extrabold text-white tracking-tight brand-glow">HumaraGPT</h1>
+            <div className="w-px h-4 bg-zinc-800" />
+            <UsageBar />
+          </div>
+          <div className="flex items-center gap-1.5">
+            {isAdmin && (
+              <Link href="/app/admin"
+                className="flex items-center gap-1 px-2 py-1.5 text-[10px] font-semibold text-amber-400 bg-amber-950/30 border border-amber-800 rounded-lg hover:bg-amber-900/30 transition-colors">
+                <Shield className="w-3 h-3" /> Admin
+              </Link>
             )}
-            {engineDropdownOpen && (
-              <>
-                <div className="fixed inset-0 z-40" onClick={() => setEngineDropdownOpen(false)} />
-                <div className="absolute left-0 top-full mt-1 z-50 w-[200px] bg-[#0c0c14] border border-zinc-800/60 rounded-xl shadow-xl overflow-hidden animate-in fade-in slide-in-from-top-1 duration-150 max-h-[320px] overflow-y-auto">
-                  {ENGINES.map(e => (
-                    <button
-                      key={e.id}
-                      type="button"
-                      onClick={() => { setEngine(e.id); setEngineDropdownOpen(false); }}
-                      className={`w-full text-left px-3 py-2 hover:bg-zinc-800/50 transition-colors border-b border-zinc-800/40 last:border-b-0 flex items-center gap-2 ${engine === e.id ? 'bg-purple-950/20' : ''}`}
-                    >
-                      <span className="text-sm font-medium text-zinc-200">{e.label}</span>
-                      {engine === e.id && <svg className="ml-auto w-4 h-4 text-brand-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>}
-                    </button>
-                  ))}
-                </div>
-              </>
-            )}
+            <Link href="/app/settings" className="p-1.5 text-zinc-500 hover:text-white rounded-lg hover:bg-zinc-800/50 transition-colors">
+              <Settings className="w-3.5 h-3.5" />
+            </Link>
           </div>
         </div>
-        <div className="w-px h-5 bg-zinc-800 hidden sm:block" />
-        <div className="flex items-center gap-2">
-          <span className="text-[11px] font-semibold text-zinc-500 uppercase tracking-wider">Depth</span>
-          <div className="flex bg-[#0c0c14] rounded-lg p-0.5 border border-zinc-800/60">
-            {STRENGTHS.map(s => (
-              <button key={s.id} onClick={() => setStrength(s.id)}
-                className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-all ${strength === s.id ? 'bg-zinc-800 text-white' : 'text-zinc-500 hover:text-zinc-300'}`}>
-                {s.label}
-              </button>
-            ))}
-          </div>
-        </div>
-        <div className="w-px h-5 bg-zinc-800 hidden sm:block" />
-        <div className="flex items-center gap-2">
-          <span className="text-[11px] font-semibold text-zinc-500 uppercase tracking-wider">Tone</span>
-          <select value={tone} onChange={(e) => setTone(e.target.value)} title="Tone"
-            className="bg-[#0c0c14] border border-zinc-800/60 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-zinc-300 outline-none focus:border-purple-500">
-            {TONES.map(t => <option key={t.id} value={t.id}>{t.label}</option>)}
-          </select>
-        </div>
-        <div className="w-px h-5 bg-zinc-800 hidden sm:block" />
-        <label className="flex items-center gap-2 cursor-pointer select-none">
-          <span className="text-[11px] font-semibold text-zinc-500 uppercase tracking-wider">Keep Meaning</span>
-          <button onClick={() => setStrictMeaning(!strictMeaning)} title={strictMeaning ? 'On' : 'Off'}
-            className={`w-8 h-[18px] rounded-full transition-all relative ${strictMeaning ? 'bg-purple-600' : 'bg-zinc-700'}`}>
-            <div className={`w-3 h-3 bg-white rounded-full absolute top-[3px] transition-all shadow-sm ${strictMeaning ? 'left-[15px]' : 'left-[3px]'}`} />
-          </button>
-        </label>
-        <div className="w-px h-5 bg-zinc-800 hidden sm:block" />
-        <button onClick={handleHumanize} disabled={!text.trim() || loading || rephrasing}
-          className="ml-auto bg-gradient-to-r from-brand-600 to-brand-500 hover:from-brand-700 hover:to-brand-600 text-white text-xs font-bold rounded-xl px-6 py-2.5 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center gap-2 shadow-md hover:shadow-lg active:scale-[0.97]">
-          {loading ? <RotateCcw className="w-3.5 h-3.5 animate-spin" /> : <Zap className="w-3.5 h-3.5" />}
-          {loading ? 'Humanizing…' : 'Humanize'}
-        </button>
-      </div>
 
-      {/* Compact Engine-Specific Controls */}
-      {(engine === 'easy' || engine === 'ozone') && (
-        <div className="flex flex-wrap items-center gap-x-6 gap-y-2 bg-[#0c0c14] border border-zinc-800/60 rounded-xl px-4 py-2.5">
-          {engine === 'ozone' && (
-            <>
-              <div className="flex items-center gap-2">
-                <span className="text-[10px] font-semibold text-zinc-500 uppercase tracking-wider">🛡️ Undetectable</span>
-                <div className="relative inline-flex h-5 w-9 items-center rounded-full bg-teal-600 opacity-90">
-                  <span className="inline-block h-3 w-3 transform rounded-full bg-white translate-x-5" />
+        {/* Row 2: Engine + Depth + Tone + Meaning + Humanize */}
+        <div className="flex flex-wrap items-center gap-x-5 gap-y-2 px-5 py-2.5">
+          <div className="flex items-center gap-1.5 relative">
+            <span className="text-[10px] font-semibold text-zinc-500 uppercase">Engine</span>
+            <div className="relative group">
+              <button type="button" onClick={() => setEngineDropdownOpen(!engineDropdownOpen)}
+                className="flex items-center gap-1.5 bg-zinc-900/50 border border-zinc-800/60 rounded-md px-2 py-1 text-[11px] font-semibold text-zinc-300 outline-none hover:border-zinc-600 transition-colors min-w-[110px]">
+                <span>{ENGINES.find(e => e.id === engine)?.label}</span>
+                <svg className={`ml-auto w-3 h-3 text-zinc-500 transition-transform ${engineDropdownOpen ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+              </button>
+              {ENGINE_GUIDES[engine] && (
+                <div className="absolute left-0 top-full mt-2 z-30 w-[260px] bg-[#0c0c14] border border-purple-800/60 rounded-lg px-3 py-2 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none shadow-lg">
+                  <p className="text-[10px] text-zinc-400 leading-relaxed"><span className="font-bold text-purple-400">{ENGINES.find(e => e.id === engine)?.label}:</span> {ENGINE_GUIDES[engine]}</p>
                 </div>
-                <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-teal-900/60 text-teal-300 font-bold uppercase">Required</span>
-              </div>
-              <div className="w-px h-4 bg-zinc-800" />
-            </>
-          )}
-          <label className="flex items-center gap-2 cursor-pointer">
-            <span className="text-[10px] font-semibold text-zinc-400">Sentence-by-Sentence</span>
-            <button
-              onClick={() => engine === 'easy' ? setEasySentenceBySentence(!easySentenceBySentence) : setOzoneSentenceBySentence(!ozoneSentenceBySentence)}
-              className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${
-                (engine === 'easy' ? easySentenceBySentence : ozoneSentenceBySentence)
-                  ? 'bg-purple-600'
-                  : 'bg-zinc-700'
-              }`}
-            >
-              <span
-                className={`inline-block h-3 w-3 transform rounded-full bg-white transition-transform ${
-                  (engine === 'easy' ? easySentenceBySentence : ozoneSentenceBySentence) ? 'translate-x-5' : 'translate-x-1'
-                }`}
-              />
+              )}
+              {engineDropdownOpen && (
+                <>
+                  <div className="fixed inset-0 z-40" onClick={() => setEngineDropdownOpen(false)} />
+                  <div className="absolute left-0 top-full mt-1 z-50 w-[180px] bg-[#0c0c14] border border-zinc-800/60 rounded-xl shadow-xl overflow-hidden animate-in fade-in slide-in-from-top-1 duration-150">
+                    {ENGINES.map(e => (
+                      <button key={e.id} type="button" onClick={() => { setEngine(e.id); setEngineDropdownOpen(false); }}
+                        className={`w-full text-left px-3 py-1.5 hover:bg-zinc-800/50 transition-colors border-b border-zinc-800/40 last:border-b-0 flex items-center gap-2 ${engine === e.id ? 'bg-purple-950/20' : ''}`}>
+                        <span className="text-xs font-medium text-zinc-200">{e.label}</span>
+                        {engine === e.id && <svg className="ml-auto w-3.5 h-3.5 text-brand-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>}
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+          <div className="w-px h-4 bg-zinc-800 hidden sm:block" />
+          <div className="flex items-center gap-1.5">
+            <span className="text-[10px] font-semibold text-zinc-500 uppercase">Depth</span>
+            <div className="flex bg-zinc-900/50 rounded-md p-0.5 border border-zinc-800/60">
+              {STRENGTHS.map(s => (
+                <button key={s.id} onClick={() => setStrength(s.id)}
+                  className={`px-2 py-1 text-[10px] font-semibold rounded transition-all ${strength === s.id ? 'bg-zinc-700 text-white' : 'text-zinc-500 hover:text-zinc-300'}`}>
+                  {s.label}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="w-px h-4 bg-zinc-800 hidden sm:block" />
+          <div className="flex items-center gap-1.5">
+            <span className="text-[10px] font-semibold text-zinc-500 uppercase">Tone</span>
+            <select value={tone} onChange={(e) => setTone(e.target.value)} title="Tone"
+              className="bg-zinc-900/50 border border-zinc-800/60 rounded-md px-2 py-1 text-[10px] font-semibold text-zinc-300 outline-none focus:border-purple-500">
+              {TONES.map(t => <option key={t.id} value={t.id}>{t.label}</option>)}
+            </select>
+          </div>
+          <div className="w-px h-4 bg-zinc-800 hidden sm:block" />
+          <label className="flex items-center gap-1.5 cursor-pointer select-none">
+            <span className="text-[10px] font-semibold text-zinc-500 uppercase">Meaning</span>
+            <button onClick={() => setStrictMeaning(!strictMeaning)} title={strictMeaning ? 'On' : 'Off'}
+              className={`w-7 h-[16px] rounded-full transition-all relative ${strictMeaning ? 'bg-purple-600' : 'bg-zinc-700'}`}>
+              <div className={`w-2.5 h-2.5 bg-white rounded-full absolute top-[3px] transition-all shadow-sm ${strictMeaning ? 'left-[13px]' : 'left-[3px]'}`} />
             </button>
           </label>
-          <span className="text-[9px] text-zinc-500">Preserves structure</span>
-        </div>
-      )}
-
-      {/* Depth Warning (Compact) */}
-      {strength === 'strong' && (
-        <div className="flex items-center gap-2 px-3 py-1.5 bg-amber-950/40 border border-amber-900 rounded-lg">
-          <AlertTriangle className="w-3 h-3 text-amber-500 shrink-0" />
-          <p className="text-[10px] text-amber-300">
-            <span className="font-bold">Strong mode:</span> Prioritizes detection bypass over meaning retention
-          </p>
-        </div>
-      )}
-
-      {/* Ozone Warning (if needed) */}
-      {ozoneUndetectWarning && (
-        <div className="flex items-center gap-2 px-3 py-1.5 bg-amber-950/50 border border-amber-800 rounded-lg animate-pulse">
-          <span className="text-amber-500 text-xs">⚠️</span>
-          <p className="text-[10px] text-amber-300 font-medium">
-            Undetectability mode is always enabled for Humara 2.1
-          </p>
-        </div>
-      )}
-
-      {/* Oxygen Advanced Controls (Compact) */}
-      {engine === 'oxygen' && (
-        <div className="bg-[#0c0c14] border border-purple-800/40 rounded-xl overflow-hidden">
-          <button
-            onClick={() => setOxygenAdvancedOpen(!oxygenAdvancedOpen)}
-            className="w-full flex items-center justify-between px-4 py-2 hover:bg-zinc-800/30 transition-colors"
-          >
-            <div className="flex items-center gap-2">
-              <span className="text-[11px] font-bold text-purple-400">⚙️ Pipeline Controls</span>
-              <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-purple-900/50 text-purple-300">Advanced</span>
-            </div>
-            <ChevronDown className={`w-3.5 h-3.5 text-purple-500 transition-transform ${oxygenAdvancedOpen ? 'rotate-180' : ''}`} />
+          <button onClick={handleHumanize} disabled={!text.trim() || loading || rephrasing}
+            className="ml-auto bg-gradient-to-r from-brand-600 to-brand-500 hover:from-brand-700 hover:to-brand-600 text-white text-[11px] font-bold rounded-lg px-4 py-2 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center gap-1.5 shadow-md hover:shadow-lg active:scale-[0.97]">
+            {loading ? <RotateCcw className="w-3 h-3 animate-spin" /> : <Zap className="w-3 h-3" />}
+            {loading ? 'Humanizing…' : 'Humanize'}
           </button>
-          
-          {oxygenAdvancedOpen && (
-            <div className="px-4 pb-3 space-y-3 border-t border-purple-800 pt-3">
-              {/* Compact Pipeline Mode */}
-              <div className="space-y-1">
-                <label className="block text-[10px] font-semibold text-purple-400 uppercase tracking-wider">
-                  Pipeline Mode
-                </label>
-                <div className="flex gap-1.5">
-                  {[
-                    { id: 'quality', label: 'Quality', desc: 'Beam=4' },
-                    { id: 'fast', label: 'Fast', desc: 'Greedy' },
-                    { id: 'aggressive', label: 'Aggressive', desc: 'Beam=6' },
-                  ].map(mode => (
-                    <button
-                      key={mode.id}
-                      onClick={() => setOxygenMode(mode.id as typeof oxygenMode)}
-                      className={`flex-1 px-2 py-1.5 rounded-lg border transition-all ${
-                        oxygenMode === mode.id
-                          ? 'bg-purple-600 text-white border-purple-600'
-                          : 'bg-[#0c0c14] text-zinc-400 border-zinc-800/60 hover:border-purple-500/50'
-                      }`}
-                    >
-                      <div className="text-[10px] font-bold">{mode.label}</div>
-                      <div className="text-[8px] opacity-70">{mode.desc}</div>
-                    </button>
-                  ))}
-                </div>
-              </div>
+        </div>
+      </div>
 
-              {/* Compact Sentence Toggle */}
-              <label className="flex items-center justify-between cursor-pointer">
-                <span className="text-[10px] font-semibold text-purple-400">Sentence-by-Sentence</span>
-                <button
-                  onClick={() => setOxygenSentenceBySentence(!oxygenSentenceBySentence)}
-                  className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${
-                    oxygenSentenceBySentence 
-                      ? 'bg-purple-600' 
-                      : 'bg-zinc-700'
-                  }`}
-                >
-                  <span
-                    className={`inline-block h-3 w-3 transform rounded-full bg-white transition-transform ${
-                      oxygenSentenceBySentence ? 'translate-x-5' : 'translate-x-1'
-                    }`}
-                  />
-                </button>
-              </label>
-
-              {/* Compact Advanced Sliders */}
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <label className="flex items-center justify-between text-[10px] font-semibold text-purple-400">
-                    <span>Change Threshold</span>
-                    <span className="text-purple-300">{(oxygenMinChangeRatio * 100).toFixed(0)}%</span>
-                  </label>
-                  <input
-                    type="range"
-                    min="0.2"
-                    max="0.8"
-                    step="0.05"
-                    value={oxygenMinChangeRatio}
-                    onChange={(e) => setOxygenMinChangeRatio(parseFloat(e.target.value))}
-                    className="w-full h-1.5 bg-purple-900/50 rounded-lng appearance-none cursor-pointer accent-purple-600"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="flex items-center justify-between text-[10px] font-semibold text-purple-400">
-                    <span>Max Retries</span>
-                    <span className="text-purple-300">{oxygenMaxRetries}</span>
-                  </label>
-                  <input
-                    type="range"
-                    min="1"
-                    max="15"
-                    step="1"
-                    value={oxygenMaxRetries}
-                    onChange={(e) => setOxygenMaxRetries(parseInt(e.target.value))}
-                    className="w-full h-1.5 bg-purple-900/50 rounded-lg appearance-none cursor-pointer accent-purple-600"
-                  />
-                </div>
-              </div>
+      {/* Model Ticker (no card) */}
+      <div className="relative h-8 flex items-center overflow-hidden -mx-1">
+        <div className="absolute inset-0 bg-gradient-to-r from-zinc-950 via-transparent to-zinc-950 pointer-events-none z-10" />
+        <div className="ticker-animate flex items-center gap-8 whitespace-nowrap px-4">
+          {ENGINES.flatMap(eng => {
+            const useCases: Record<string, string> = {
+              oxygen: 'Clear GPTZero signals from stealthy humanized text',
+              ozone: 'Eliminate ZeroGPT & Surfer AI detection markers',
+              easy: 'Broad-spectrum detection bypass for all major platforms',
+            };
+            return [{ engine: eng.label, use: useCases[eng.id] || 'Advanced humanization' }];
+          }).concat(ENGINES.flatMap(eng => {
+            const useCases: Record<string, string> = {
+              oxygen: 'Clear GPTZero signals from stealthy humanized text',
+              ozone: 'Eliminate ZeroGPT & Surfer AI detection markers',
+              easy: 'Broad-spectrum detection bypass for all major platforms',
+            };
+            return [{ engine: eng.label, use: useCases[eng.id] || 'Advanced humanization' }];
+          })).map((item, i) => (
+            <div key={i} className="flex items-center gap-2 shrink-0">
+              <span className="text-[10px] font-bold text-brand-400">{item.engine}</span>
+              <span className="text-zinc-700">→</span>
+              <span className="text-[10px] text-zinc-500">{item.use}</span>
             </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Compact Engine-Specific Controls (inline) */}
+      {(engine === 'easy' || engine === 'ozone') && (
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 px-1">
+          {engine === 'ozone' && (
+            <>
+              <div className="flex items-center gap-1.5">
+                <span className="text-[9px] font-semibold text-zinc-500 uppercase">🛡️ Undetectable</span>
+                <div className="relative inline-flex h-4 w-7 items-center rounded-full bg-teal-600 opacity-90">
+                  <span className="inline-block h-2.5 w-2.5 transform rounded-full bg-white translate-x-3.5" />
+                </div>
+                <span className="text-[8px] px-1 py-0.5 rounded-full bg-teal-900/60 text-teal-300 font-bold uppercase">On</span>
+              </div>
+              <div className="w-px h-3 bg-zinc-800" />
+            </>
           )}
+          <label className="flex items-center gap-1.5 cursor-pointer">
+            <span className="text-[9px] font-semibold text-zinc-500">Sentence-by-Sentence</span>
+            <button
+              onClick={() => engine === 'easy' ? setEasySentenceBySentence(!easySentenceBySentence) : setOzoneSentenceBySentence(!ozoneSentenceBySentence)}
+              className={`relative inline-flex h-4 w-7 items-center rounded-full transition-colors ${
+                (engine === 'easy' ? easySentenceBySentence : ozoneSentenceBySentence) ? 'bg-purple-600' : 'bg-zinc-700'
+              }`}
+            >
+              <span className={`inline-block h-2.5 w-2.5 transform rounded-full bg-white transition-transform ${
+                (engine === 'easy' ? easySentenceBySentence : ozoneSentenceBySentence) ? 'translate-x-3.5' : 'translate-x-0.5'
+              }`} />
+            </button>
+          </label>
+        </div>
+      )}
+      {strength === 'strong' && (
+        <div className="flex items-center gap-1.5 px-1">
+          <AlertTriangle className="w-2.5 h-2.5 text-amber-500 shrink-0" />
+          <p className="text-[9px] text-amber-400"><span className="font-bold">Strong:</span> Prioritizes detection bypass over meaning</p>
+        </div>
+      )}
+      {ozoneUndetectWarning && (
+        <div className="flex items-center gap-1.5 px-1 animate-pulse">
+          <span className="text-amber-500 text-[9px]">⚠️</span>
+          <p className="text-[9px] text-amber-400 font-medium">Undetectability always enabled for Humara 2.1</p>
         </div>
       )}
 
-      {/* Editor Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+      {/* Oxygen Advanced Controls (Inline) */}
+      {engine === 'oxygen' && (
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-1">
+          <div className="flex items-center gap-1.5">
+            <span className="text-[9px] font-bold text-purple-400 uppercase">Pipeline</span>
+            <div className="flex gap-1">
+              {[
+                { id: 'quality', label: 'Quality' },
+                { id: 'fast', label: 'Fast' },
+                { id: 'aggressive', label: 'Aggressive' },
+              ].map(mode => (
+                <button key={mode.id} onClick={() => setOxygenMode(mode.id as typeof oxygenMode)}
+                  className={`px-2 py-0.5 rounded text-[9px] font-semibold transition-all ${
+                    oxygenMode === mode.id ? 'bg-purple-600 text-white' : 'bg-zinc-800/60 text-zinc-500 hover:text-zinc-300'
+                  }`}>{mode.label}</button>
+              ))}
+            </div>
+          </div>
+          <div className="w-px h-3 bg-zinc-800" />
+          <label className="flex items-center gap-1.5 cursor-pointer">
+            <span className="text-[9px] font-semibold text-zinc-500">Sentence</span>
+            <button onClick={() => setOxygenSentenceBySentence(!oxygenSentenceBySentence)}
+              className={`relative inline-flex h-4 w-7 items-center rounded-full transition-colors ${oxygenSentenceBySentence ? 'bg-purple-600' : 'bg-zinc-700'}`}>
+              <span className={`inline-block h-2.5 w-2.5 transform rounded-full bg-white transition-transform ${oxygenSentenceBySentence ? 'translate-x-3.5' : 'translate-x-0.5'}`} />
+            </button>
+          </label>
+          <div className="w-px h-3 bg-zinc-800" />
+          <div className="flex items-center gap-2">
+            <span className="text-[9px] text-purple-400">Threshold <span className="font-bold">{(oxygenMinChangeRatio * 100).toFixed(0)}%</span></span>
+            <input type="range" min="0.2" max="0.8" step="0.05" value={oxygenMinChangeRatio}
+              onChange={(e) => setOxygenMinChangeRatio(parseFloat(e.target.value))}
+              className="w-16 h-1 bg-purple-900/50 rounded appearance-none cursor-pointer accent-purple-600" />
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-[9px] text-purple-400">Retries <span className="font-bold">{oxygenMaxRetries}</span></span>
+            <input type="range" min="1" max="15" step="1" value={oxygenMaxRetries}
+              onChange={(e) => setOxygenMaxRetries(parseInt(e.target.value))}
+              className="w-16 h-1 bg-purple-900/50 rounded appearance-none cursor-pointer accent-purple-600" />
+          </div>
+        </div>
+      )}
+
+      {/* Editor Stack */}
+      <div className="flex flex-col gap-4">
         {/* Input Panel */}
         <div className="bg-[#0c0c14] border border-zinc-800/60 rounded-2xl overflow-hidden flex flex-col hover:border-zinc-700/60 transition-all">
           <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-800/50">
@@ -1059,7 +972,7 @@ export default function EditorPage() {
           <div className="flex-1">
             <textarea ref={inputRef} value={text}
               onChange={(e) => setText(e.target.value)}
-              className="w-full min-h-[420px] bg-transparent outline-none resize-none text-[14px] leading-[1.8] text-zinc-200 p-5 placeholder:text-zinc-600"
+              className="w-full min-h-[260px] bg-transparent outline-none resize-none text-[14px] leading-[1.8] text-zinc-200 p-5 placeholder:text-zinc-600"
               placeholder="Paste your AI-generated text here…" />
           </div>
 
@@ -1116,18 +1029,18 @@ export default function EditorPage() {
               <div className="absolute inset-0 bg-emerald-950/10 pointer-events-none rounded-b-2xl" />
               <textarea ref={outputRef} value={result}
                 onChange={(e) => setResult(e.target.value)} onSelect={handleOutputSelect}
-                className="relative z-10 flex-1 w-full min-h-[420px] bg-transparent outline-none resize-none text-[14px] leading-[1.8] text-zinc-200 p-5 cursor-text"
+                className="relative z-10 flex-1 w-full min-h-[260px] bg-transparent outline-none resize-none text-[14px] leading-[1.8] text-zinc-200 p-5 cursor-text"
                 style={{ fontFamily: 'inherit' }}
                 placeholder="Output appears here…" />
             </div>
           ) : (
-            <div className="flex flex-col items-center justify-center min-h-[420px] text-zinc-700 gap-4 px-8 text-center">
+            <div className="flex flex-col items-center justify-center min-h-[260px] text-zinc-700 gap-4 px-8 text-center">
               <div className="w-12 h-12 rounded-2xl bg-purple-950/30 flex items-center justify-center">
                 <Zap className="w-5 h-5 text-purple-500" />
               </div>
               <div className="space-y-1">
                 <span className="text-sm font-medium text-zinc-400 block">Humanized text will appear here</span>
-                <span className="text-[11px] text-zinc-600 max-w-xs leading-relaxed block">Paste text on the left and click Humanize to transform it</span>
+                <span className="text-[11px] text-zinc-600 max-w-xs leading-relaxed block">Paste text above and click Humanize to transform it</span>
               </div>
             </div>
           )}

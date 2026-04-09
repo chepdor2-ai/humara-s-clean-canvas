@@ -96,46 +96,26 @@ export default function UsageBar() {
   const planColor = planColors[usage.planName] || '#a855f7';
 
   return (
-    <div 
-      className="glass-card rounded-2xl px-6 py-5 plan-glow"
-      style={{ '--plan-color': planColor } as React.CSSProperties}
-    >
-      <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center gap-4">
-          <span className="text-[11px] font-bold text-zinc-500 uppercase tracking-wider">Current Package</span>
-          <div className="flex items-center gap-2.5">
-            <span className="text-sm font-extrabold text-brand-400 bg-brand-950/30 px-3.5 py-1.5 rounded-lg border border-brand-800/40">{usage.planName}</span>
-            <span className="text-[10px] text-zinc-400 bg-zinc-800/50 px-2.5 py-1 rounded-full">{usage.daysRemaining}d remaining</span>
-            <span className="text-[9px] text-zinc-500 bg-zinc-900/50 px-2 py-0.5 rounded-full border border-zinc-800/40">Humara 2.0, 2.1, 2.2</span>
-          </div>
-        </div>
-        <div className="text-[10px] text-zinc-500 font-medium">Real-time usage tracking</div>
+    <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
+      <div className="flex items-center gap-2">
+        <span className="text-sm font-extrabold text-brand-400 bg-brand-950/30 px-2.5 py-1 rounded-lg border border-brand-800/40">{usage.planName}</span>
+        <span className="text-[10px] text-zinc-500">{usage.daysRemaining}d left</span>
       </div>
-      <div className="grid grid-cols-2 gap-6">
-        <div>
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-[10px] font-semibold text-zinc-400 uppercase tracking-wide">Fast & Standard</span>
-            <span className="text-[11px] font-bold text-zinc-300 tabular-nums">
-              {fastCount.toLocaleString()}<span className="text-zinc-600">/{usage.wordsLimitFast.toLocaleString()}</span>
-            </span>
-          </div>
-          <div className="h-2.5 bg-zinc-800/50 rounded-full overflow-hidden ring-1 ring-zinc-700/30">
-            <div className={`h-full rounded-full transition-all duration-700 ease-out relative usage-shimmer ${fastPct > 90 ? 'bg-red-500' : fastPct > 70 ? 'bg-amber-500' : 'bg-brand-500'}`}
-              style={{ width: `${fastPct}%` }} />
-          </div>
+      <div className="flex items-center gap-1.5 min-w-[180px]">
+        <span className="text-[9px] font-semibold text-zinc-500 uppercase">Fast</span>
+        <div className="flex-1 h-1.5 bg-zinc-800/50 rounded-full overflow-hidden">
+          <div className={`h-full rounded-full transition-all duration-700 ${fastPct > 90 ? 'bg-red-500' : fastPct > 70 ? 'bg-amber-500' : 'bg-brand-500'}`}
+            style={{ width: `${fastPct}%` }} />
         </div>
-        <div>
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-[10px] font-semibold text-zinc-400 uppercase tracking-wide">Stealth Premium</span>
-            <span className="text-[11px] font-bold text-zinc-300 tabular-nums">
-              {stealthCount.toLocaleString()}<span className="text-zinc-600">/{usage.wordsLimitStealth.toLocaleString()}</span>
-            </span>
-          </div>
-          <div className="h-2.5 bg-zinc-800/50 rounded-full overflow-hidden ring-1 ring-zinc-700/30">
-            <div className={`h-full rounded-full transition-all duration-700 ease-out relative usage-shimmer ${stealthPct > 90 ? 'bg-red-500' : stealthPct > 70 ? 'bg-amber-500' : 'bg-emerald-500'}`}
-              style={{ width: `${stealthPct}%` }} />
-          </div>
+        <span className="text-[9px] text-zinc-500 tabular-nums">{fastCount.toLocaleString()}/{usage.wordsLimitFast.toLocaleString()}</span>
+      </div>
+      <div className="flex items-center gap-1.5 min-w-[180px]">
+        <span className="text-[9px] font-semibold text-zinc-500 uppercase">Stealth</span>
+        <div className="flex-1 h-1.5 bg-zinc-800/50 rounded-full overflow-hidden">
+          <div className={`h-full rounded-full transition-all duration-700 ${stealthPct > 90 ? 'bg-red-500' : stealthPct > 70 ? 'bg-amber-500' : 'bg-emerald-500'}`}
+            style={{ width: `${stealthPct}%` }} />
         </div>
+        <span className="text-[9px] text-zinc-500 tabular-nums">{stealthCount.toLocaleString()}/{usage.wordsLimitStealth.toLocaleString()}</span>
       </div>
     </div>
   );
