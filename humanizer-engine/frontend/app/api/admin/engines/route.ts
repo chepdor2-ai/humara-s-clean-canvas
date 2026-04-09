@@ -1,6 +1,21 @@
 import { NextResponse } from 'next/server';
 import { createServiceClient } from '../../../../lib/supabase';
 
+// Hardcoded engine defaults — used when engine_config table doesn't exist yet
+const DEFAULT_ENGINES = [
+  { engine_id: 'oxygen', label: 'Oxygen', enabled: true, premium: false, sort_order: 1 },
+  { engine_id: 'omega', label: 'Omega', enabled: true, premium: false, sort_order: 2 },
+  { engine_id: 'nuru', label: 'Nuru', enabled: true, premium: false, sort_order: 3 },
+  { engine_id: 'humara_v1_3', label: 'Humara v1.3', enabled: true, premium: false, sort_order: 4 },
+  { engine_id: 'ghost_mini', label: 'Ghost Mini', enabled: true, premium: false, sort_order: 5 },
+  { engine_id: 'ghost_mini_v1_2', label: 'Ghost Mini v1.2', enabled: true, premium: false, sort_order: 6 },
+  { engine_id: 'ghost_pro', label: 'Ghost Pro', enabled: true, premium: false, sort_order: 7 },
+  { engine_id: 'ninja', label: 'Ninja', enabled: true, premium: false, sort_order: 8 },
+  { engine_id: 'undetectable', label: 'Undetectable', enabled: true, premium: false, sort_order: 9 },
+  { engine_id: 'fast_v11', label: 'V1.1', enabled: true, premium: true, sort_order: 10 },
+  { engine_id: 'humara', label: 'Humara', enabled: true, premium: true, sort_order: 11 },
+];
+
 function getToken(authHeader: string | null) {
   if (!authHeader) return null;
   return authHeader.replace('Bearer ', '');
@@ -31,8 +46,11 @@ export async function GET(request: Request) {
       .select('*')
       .order('sort_order', { ascending: true });
 
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-    return NextResponse.json({ engines: data });
+    // If table doesn't exist, return defaults with a flag
+    if (error) {
+      return NextResponse.json({ engines: DEFAULT_ENGINES, tableExists: false });
+    }
+    return NextResponse.json({ engines: data && data.length > 0 ? data : DEFAULT_ENGINES, tableExists: !!(data && data.length > 0) });
   } catch {
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
   }

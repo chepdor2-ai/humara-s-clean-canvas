@@ -19,6 +19,7 @@ import { removeEmDashes } from '@/lib/engine/v13-shared-techniques';
 import { nuruHumanize } from '@/lib/engine/nuru-humanizer';
 import { omegaHumanize } from '@/lib/engine/omega-humanizer';
 import { easyHumanize } from '@/lib/engine/easy-humanizer';
+import { ozoneHumanize } from '@/lib/engine/ozone-humanizer';
 import { robustSentenceSplit } from '@/lib/engine/content-protection';
 // deepRestructure, voiceShift, tenseVariation disabled — they garble sentence structure
 // import { deepRestructure, voiceShift, tenseVariation } from '@/lib/engine/advanced-transforms';
@@ -379,6 +380,11 @@ export async function POST(req: Request) {
       );
       humanized = easyResult.humanized;
       // Easy flows through all post-processing below
+    } else if (engine === 'ozone') {
+      // Ozone: External Ozone API — always uses "undetectable" mode
+      const ozoneSentenceBySentence = body.ozone_sentence_by_sentence === true;
+      const ozoneResult = await ozoneHumanize(normalizedText, ozoneSentenceBySentence);
+      humanized = ozoneResult.humanized;
     } else if (engine === 'oxygen') {
       // Oxygen v2: T5 model + multi-phase pipeline + full TS post-processing
       const oxygenUrl = process.env.OXYGEN_SERVER_URL || 'http://127.0.0.1:5001';

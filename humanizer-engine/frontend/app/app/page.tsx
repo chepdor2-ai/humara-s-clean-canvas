@@ -1,9 +1,13 @@
 'use client';
 import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import dynamic from 'next/dynamic';
-import { Copy, Check, Zap, Eraser, RotateCcw, Type, AlignLeft, RefreshCw, AlertTriangle, Clock, ChevronDown, ChevronUp } from 'lucide-react';
+import { Copy, Check, Zap, Eraser, RotateCcw, Type, AlignLeft, RefreshCw, AlertTriangle, Clock, ChevronDown, ChevronUp, Shield, Settings } from 'lucide-react';
 import UsageBar, { useUsage } from './UsageBar';
 import { supabase } from '../../lib/supabase';
+import { useAuth } from '../AuthProvider';
+import Link from 'next/link';
+
+const ADMIN_EMAILS = ['maguna956@gmail.com', 'maxwellotieno11@gmail.com'];
 
 const ProcessingAnimation = dynamic(() => import('../ProcessingAnimation'), { ssr: false });
 const LiveTextTransition = dynamic(() => import('./LiveTextTransition'), { ssr: false });
@@ -140,6 +144,7 @@ const splitSentences = (text: string): { text: string; start: number; end: numbe
 // Full engine registry — admin controls which are visible/premium via Supabase engine_config
 const ALL_ENGINES: EngineConfig[] = [
   { id: 'easy', label: 'Easy', premium: false },
+  { id: 'ozone', label: 'Ozone', premium: false },
   { id: 'oxygen', label: 'Oxygen', premium: false },
   { id: 'omega', label: 'Omega', premium: false },
   { id: 'nuru', label: 'Nuru', premium: false },
@@ -172,6 +177,8 @@ const TONES = [
 
 /* ── Page ───────────────────────────────────────────────────────────────── */
 export default function EditorPage() {
+  const { user } = useAuth();
+  const isAdmin = user?.email ? ADMIN_EMAILS.includes(user.email) : false;
   const [text, setText] = useState('');
   const [result, setResult] = useState('');
   const [loading, setLoading] = useState(false);
@@ -253,6 +260,9 @@ export default function EditorPage() {
   // Temporary history (auto-expires)
   const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [historyOpen, setHistoryOpen] = useState(false);
+
+  // Ozone engine controls
+  const [ozoneSentenceBySentence, setOzoneSentenceBySentence] = useState(false);
 
   // Oxygen model v2 controls
   const [oxygenMode, setOxygenMode] = useState<'quality' | 'fast' | 'aggressive'>('quality');
@@ -375,6 +385,11 @@ export default function EditorPage() {
       enable_post_processing: true,
       premium,
     };
+
+    // Add Ozone controls if Ozone engine is selected
+    if (engine === 'ozone') {
+      requestBody.ozone_sentence_by_sentence = ozoneSentenceBySentence;
+    }
 
     // Add Oxygen v2 controls if Oxygen engine is selected
     if (engine === 'oxygen') {
@@ -734,7 +749,22 @@ export default function EditorPage() {
           <h1 className="text-2xl font-extrabold text-slate-900 dark:text-white tracking-tight bg-gradient-to-r from-slate-900 to-slate-600 dark:from-white dark:to-slate-300 bg-clip-text text-transparent">AI Humanizer</h1>
           <p className="text-[13px] text-slate-500 dark:text-slate-400 mt-0.5">Transform AI text into undetectable human writing</p>
         </div>
-
+        <div className="flex items-center gap-2">
+          {isAdmin && (
+            <Link
+              href="/app/admin"
+              className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-lg hover:bg-amber-100 dark:hover:bg-amber-900/30 transition-colors"
+            >
+              <Shield className="w-3.5 h-3.5" /> Admin
+            </Link>
+          )}
+          <Link
+            href="/app/settings"
+            className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-white rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+          >
+            <Settings className="w-4 h-4" />
+          </Link>
+        </div>
       </header>
 
       {/* Daily Usage */}
@@ -829,6 +859,36 @@ export default function EditorPage() {
           <p className="text-[11px] text-amber-700 dark:text-amber-300 leading-relaxed">
             <span className="font-bold">Strong depth</span> focuses on beating AI detectors rather than preserving meaning. For best meaning retention, use Light or Medium.
           </p>
+        </div>
+      )}
+
+      {/* Ozone Controls */}
+      {engine === 'ozone' && (
+        <div className="bg-gradient-to-br from-teal-50 to-cyan-50 dark:from-teal-950/30 dark:to-cyan-950/30 border border-teal-200 dark:border-teal-800 rounded-xl overflow-hidden px-4 py-3">
+          <div className="space-y-1">
+            <label className="flex items-center justify-between text-xs font-semibold text-teal-900 dark:text-teal-200">
+              <span>Sentence-by-Sentence Processing</span>
+              <button
+                onClick={() => setOzoneSentenceBySentence(!ozoneSentenceBySentence)}
+                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                  ozoneSentenceBySentence
+                    ? 'bg-teal-600 dark:bg-teal-500'
+                    : 'bg-gray-200 dark:bg-gray-700'
+                }`}
+              >
+                <span
+                  className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                    ozoneSentenceBySentence ? 'translate-x-6' : 'translate-x-1'
+                  }`}
+                />
+              </button>
+            </label>
+            <p className="text-[10px] text-teal-600 dark:text-teal-400">
+              {ozoneSentenceBySentence
+                ? 'Each sentence processed independently — preserves titles and paragraph structure'
+                : 'Whole paper sent as one request — faster but may alter formatting'}
+            </p>
+          </div>
         </div>
       )}
 

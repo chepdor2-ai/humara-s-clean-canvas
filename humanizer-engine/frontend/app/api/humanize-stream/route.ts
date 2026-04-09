@@ -17,6 +17,7 @@ import { humaraHumanize } from '@/lib/humara';
 import { nuruHumanize } from '@/lib/engine/nuru-humanizer';
 import { omegaHumanize } from '@/lib/engine/omega-humanizer';
 import { easyHumanize } from '@/lib/engine/easy-humanizer';
+import { ozoneHumanize } from '@/lib/engine/ozone-humanizer';
 import { synonymReplace } from '@/lib/engine/utils';
 import { applyAIWordKill } from '@/lib/engine/shared-dictionaries';
 import { postCleanGrammar } from '@/lib/engine/grammar-cleaner';
@@ -159,6 +160,10 @@ export async function POST(req: Request) {
           if (eng === 'easy') {
             const easyResult = await easyHumanize(normalizedText, strength ?? 'medium', tone ?? 'academic');
             humanized = easyResult.humanized;
+          } else if (eng === 'ozone') {
+            const ozoneSBS = (body as Record<string, unknown>).ozone_sentence_by_sentence === true;
+            const ozoneResult = await ozoneHumanize(normalizedText, ozoneSBS);
+            humanized = ozoneResult.humanized;
           } else if (eng === 'oxygen') {
             const oxygenUrl = process.env.OXYGEN_SERVER_URL || 'http://127.0.0.1:5001';
             const oxygenMode = strength === 'light' ? 'fast' : strength === 'strong' ? 'aggressive' : 'quality';

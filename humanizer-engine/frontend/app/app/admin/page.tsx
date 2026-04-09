@@ -2,7 +2,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../../AuthProvider';
 import { supabase } from '../../../lib/supabase';
-import { Users, CreditCard, FileText, BarChart3, MessageSquare, Shield, Search, RefreshCw, ChevronDown, Cpu, GripVertical, Eye, EyeOff, Crown, Save, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { Users, CreditCard, FileText, BarChart3, MessageSquare, Shield, Search, RefreshCw, ChevronDown, Cpu, GripVertical, Eye, EyeOff, Crown, Save, AlertCircle, CheckCircle2, Copy, ExternalLink } from 'lucide-react';
 
 /* ── Types ──────────────────────────────────────────────────────────── */
 interface AdminStats { totalUsers: number; activeSubscriptions: number; totalDocuments: number; totalFeedback: number; revenueThisMonth: number; }
@@ -34,6 +34,8 @@ export default function AdminDashboard() {
   const [engineMessage, setEngineMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [engineDirty, setEngineDirty] = useState(false);
   const [dragIdx, setDragIdx] = useState<number | null>(null);
+  const [engineTableExists, setEngineTableExists] = useState(true);
+  const [setupSqlCopied, setSetupSqlCopied] = useState(false);
 
   const isAdmin = user?.email && ADMIN_EMAILS.includes(user.email);
 
@@ -88,6 +90,7 @@ export default function AdminDashboard() {
       });
       if (res.ok) {
         const data = await res.json();
+        setEngineTableExists(data.tableExists !== false);
         const sorted = (data.engines || []).sort((a: EngineConfigRow, b: EngineConfigRow) => a.sort_order - b.sort_order);
         setEngines(sorted);
         setEngineDraft(sorted.map((e: EngineConfigRow) => ({ ...e })));
@@ -151,6 +154,10 @@ export default function AdminDashboard() {
   const handleDragEnd = () => setDragIdx(null);
 
   const saveEngines = async () => {
+    if (!engineTableExists) {
+      setEngineMessage({ type: 'error', text: 'Cannot save — the engine_config table does not exist yet. See the setup instructions above.' });
+      return;
+    }
     const enabledCount = engineDraft.filter(e => e.enabled).length;
     if (enabledCount === 0) {
       setEngineMessage({ type: 'error', text: 'At least one engine must remain enabled.' });
@@ -281,6 +288,90 @@ export default function AdminDashboard() {
               <p className="text-2xl font-bold text-slate-900 dark:text-white">{premiumCount}</p>
             </div>
           </div>
+
+          {/* Database setup banner when engine_config table doesn't exist */}
+          {!engineTableExists && (
+            <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-xl p-5">
+              <div className="flex items-start gap-3">
+                <AlertCircle className="w-5 h-5 text-amber-500 mt-0.5 shrink-0" />
+                <div className="flex-1 space-y-3">
+                  <div>
+                    <h3 className="text-sm font-bold text-amber-800 dark:text-amber-200">Database Setup Required</h3>
+                    <p className="text-xs text-amber-700 dark:text-amber-300 mt-1">
+                      The <code className="bg-amber-100 dark:bg-amber-900 px-1 rounded text-[11px]">engine_config</code> table doesn&apos;t exist in your Supabase database yet. 
+                      The engines below are showing hardcoded defaults &mdash; changes won&apos;t persist until the table is created.
+                    </p>
+                  </div>
+                  <details className="group">
+                    <summary className="cursor-pointer text-xs font-semibold text-amber-700 dark:text-amber-300 hover:text-amber-900 dark:hover:text-amber-100 select-none">
+                      Show setup SQL &darr;
+                    </summary>
+                    <pre className="mt-2 bg-slate-900 text-green-300 text-[11px] leading-relaxed rounded-lg p-4 overflow-x-auto max-h-64 overflow-y-auto font-mono">{`CREATE TABLE IF NOT EXISTS public.engine_config (
+  id          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  engine_id   TEXT NOT NULL UNIQUE,
+  label       TEXT NOT NULL,
+  enabled     BOOLEAN NOT NULL DEFAULT TRUE,
+  premium     BOOLEAN NOT NULL DEFAULT FALSE,
+  sort_order  INTEGER NOT NULL DEFAULT 0,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+INSERT INTO public.engine_config (engine_id, label, enabled, premium, sort_order) VALUES
+  ('oxygen','Oxygen',true,false,1),
+  ('omega','Omega',true,false,2),
+  ('nuru','Nuru',true,false,3),
+  ('humara_v1_3','Humara v1.3',true,false,4),
+  ('ghost_mini','Ghost Mini',true,false,5),
+  ('ghost_mini_v1_2','Ghost Mini v1.2',true,false,6),
+  ('ghost_pro','Ghost Pro',true,false,7),
+  ('ninja','Ninja',true,false,8),
+  ('undetectable','Undetectable',true,false,9),
+  ('fast_v11','V1.1',true,true,10),
+  ('humara','Humara',true,true,11)
+ON CONFLICT (engine_id) DO NOTHING;
+
+ALTER TABLE public.engine_config ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Anyone can read engine_config"
+  ON public.engine_config FOR SELECT USING (true);
+
+CREATE POLICY "Service role can manage engine_config"
+  ON public.engine_config FOR ALL
+  USING (auth.role() = 'service_role')
+  WITH CHECK (auth.role() = 'service_role');`}</pre>
+                  </details>
+                  <div className="flex items-center gap-3">
+                    <button
+                      onClick={() => {
+                        const sql = `CREATE TABLE IF NOT EXISTS public.engine_config (\n  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),\n  engine_id TEXT NOT NULL UNIQUE,\n  label TEXT NOT NULL,\n  enabled BOOLEAN NOT NULL DEFAULT TRUE,\n  premium BOOLEAN NOT NULL DEFAULT FALSE,\n  sort_order INTEGER NOT NULL DEFAULT 0,\n  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),\n  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()\n);\n\nINSERT INTO public.engine_config (engine_id, label, enabled, premium, sort_order) VALUES\n  ('oxygen','Oxygen',true,false,1),('omega','Omega',true,false,2),('nuru','Nuru',true,false,3),('humara_v1_3','Humara v1.3',true,false,4),('ghost_mini','Ghost Mini',true,false,5),('ghost_mini_v1_2','Ghost Mini v1.2',true,false,6),('ghost_pro','Ghost Pro',true,false,7),('ninja','Ninja',true,false,8),('undetectable','Undetectable',true,false,9),('fast_v11','V1.1',true,true,10),('humara','Humara',true,true,11)\nON CONFLICT (engine_id) DO NOTHING;\n\nALTER TABLE public.engine_config ENABLE ROW LEVEL SECURITY;\n\nCREATE POLICY "Anyone can read engine_config" ON public.engine_config FOR SELECT USING (true);\n\nCREATE POLICY "Service role can manage engine_config" ON public.engine_config FOR ALL USING (auth.role() = 'service_role') WITH CHECK (auth.role() = 'service_role');`;
+                        navigator.clipboard.writeText(sql);
+                        setSetupSqlCopied(true);
+                        setTimeout(() => setSetupSqlCopied(false), 2000);
+                      }}
+                      className="flex items-center gap-1.5 px-4 py-2 text-xs font-bold bg-amber-600 hover:bg-amber-700 text-white rounded-lg transition-colors"
+                    >
+                      {setupSqlCopied ? <><CheckCircle2 className="w-3.5 h-3.5" /> Copied!</> : <><Copy className="w-3.5 h-3.5" /> Copy SQL</>}
+                    </button>
+                    <a
+                      href="https://supabase.com/dashboard/project/lqkpjghjermvxzgkocne/sql/new"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-1.5 px-4 py-2 text-xs font-bold bg-slate-800 hover:bg-slate-900 text-white rounded-lg transition-colors"
+                    >
+                      <ExternalLink className="w-3.5 h-3.5" /> Open SQL Editor
+                    </a>
+                    <button
+                      onClick={fetchEngines}
+                      className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-amber-700 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-900/30 rounded-lg transition-colors"
+                    >
+                      <RefreshCw className="w-3.5 h-3.5" /> Verify Setup
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Status message */}
           {engineMessage && (
