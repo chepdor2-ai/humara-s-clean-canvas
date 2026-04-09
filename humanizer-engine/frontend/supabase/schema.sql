@@ -38,13 +38,13 @@ CREATE TABLE public.plans (
   created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- Seed the five tiers (no free plan)
+-- Seed plans with unified word counts per day
 INSERT INTO public.plans (name, display_name, price_monthly, price_yearly, daily_words_fast, daily_words_stealth, duration_days, max_style_profiles, engines, features) VALUES
-  ('starter',      'Starter',       5.00,  4.25, 20000, 10000, 30, 1, '{"ghost_mini","ghost_pro"}',                       '["20,000 words/day (Fast & Standard)","10,000 words/day (Stealth)","Basic AI Detection","30 Day Access","Email Support"]'),
-  ('creator',      'Creator',      10.00,  8.50, 40000, 20000, 30, 3, '{"ghost_mini","ghost_pro","ninja"}',               '["40,000 words/day (Fast & Standard)","20,000 words/day (Stealth)","Full Detector Suite","Style Memory (3 slots)","Priority Support"]'),
-  ('professional', 'Professional', 20.00, 17.00, 80000, 40000, 30, 5, '{"ghost_mini","ghost_pro","ninja","undetectable"}', '["80,000 words/day (Fast & Standard)","40,000 words/day (Stealth)","All Engine Modes","Style Memory (5 slots)","API Access","Priority Support"]'),
-  ('business',     'Business',     35.00, 29.75, 150000, 75000, 30, -1, '{"ghost_mini","ghost_pro","ninja","undetectable"}', '["150,000 words/day (Fast & Standard)","75,000 words/day (Stealth)","All Engine Modes","Unlimited Style Profiles","Full API Access","Dedicated Manager"]'),
-  ('custom',       'Custom',        0.00,  0.00,     0,     0, 30, -1, '{"ghost_mini","ghost_pro","ninja","undetectable"}', '["Custom word limits","Custom engines","Custom integrations","SLA","Dedicated support"]');
+  ('free',         'Free',           0.00,  0.00,  1000,     0, 0, 1, '{"oxygen","ozone","easy"}',  '["1,000 words/day","All Engines","Basic AI Detection"]'),
+  ('starter',      'Starter',        5.00,  4.25,  10000,    0, 30, 1, '{"oxygen","ozone","easy"}',  '["10,000 words/day","All Engines","Full Detector Suite","Email Support"]'),
+  ('creator',      'Creator',       10.00,  8.50,  30000,    0, 30, 3, '{"oxygen","ozone","easy"}',  '["30,000 words/day","All Engines","Style Memory (3 slots)","Priority Support"]'),
+  ('professional', 'Professional',  20.00, 17.00,  80000,    0, 30, 5, '{"oxygen","ozone","easy"}',  '["80,000 words/day","All Engines","Style Memory (5 slots)","API Access","Priority Support"]'),
+  ('business',     'Business',      35.00, 29.75, 200000,    0, 30, -1, '{"oxygen","ozone","easy"}', '["200,000 words/day","All Engines","Unlimited Style Profiles","Full API Access","Dedicated Manager"]');
 
 -- ── 2. User Profiles ───────────────────────────────────────
 CREATE TABLE public.profiles (
@@ -363,8 +363,8 @@ BEGIN
   WHERE s.user_id = p_user_id AND s.status = 'active'
   ORDER BY s.created_at DESC LIMIT 1;
 
-  IF v_limit_fast IS NULL THEN v_limit_fast := 20000; END IF;
-  IF v_limit_stealth IS NULL THEN v_limit_stealth := 10000; END IF;
+  IF v_limit_fast IS NULL THEN v_limit_fast := 1000; END IF;
+  IF v_limit_stealth IS NULL THEN v_limit_stealth := 0; END IF;
 
   -- Upsert daily usage record
   INSERT INTO public.usage (user_id, usage_date, words_used_fast, words_used_stealth, words_limit_fast, words_limit_stealth, requests)
@@ -454,11 +454,11 @@ BEGIN
   RETURN jsonb_build_object(
     'words_used_fast', COALESCE(v_usage.words_used_fast, 0),
     'words_used_stealth', COALESCE(v_usage.words_used_stealth, 0),
-    'words_limit_fast', COALESCE(v_plan.daily_words_fast, 20000),
-    'words_limit_stealth', COALESCE(v_plan.daily_words_stealth, 10000),
+    'words_limit_fast', COALESCE(v_plan.daily_words_fast, 1000),
+    'words_limit_stealth', COALESCE(v_plan.daily_words_stealth, 0),
     'requests_today', COALESCE(v_usage.requests, 0),
     'days_remaining', v_days_remaining,
-    'plan_name', COALESCE(v_plan.display_name, 'Starter'),
+    'plan_name', COALESCE(v_plan.display_name, 'Free'),
     'total_documents', v_doc_count,
     'total_words_humanized', v_total_words,
     'avg_ai_defeated', ROUND(v_avg_ai_defeated, 1)

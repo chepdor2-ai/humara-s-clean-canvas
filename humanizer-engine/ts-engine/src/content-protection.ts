@@ -595,6 +595,9 @@ export function robustSentenceSplit(text: string): string[] {
   // Shield single-letter initials: A. B. C.
   t = t.replace(/\b[A-Z]\./g, m => shield(m));
 
+  // Shield Roman numeral headings: III. IV. VII. XII. etc.
+  t = t.replace(/\b[IVXLCDM]{2,}\.\s/g, m => shield(m));
+
   // Shield URLs (http://... or www....)
   t = t.replace(/https?:\/\/[^\s]+/gi, m => shield(m));
   t = t.replace(/www\.[^\s]+/gi, m => shield(m));

@@ -150,21 +150,33 @@ export async function POST(req: Request) {
     if (userId) {
       try {
         const supa = createServiceClient();
-        const engineType = (engine ?? 'ghost_mini') === 'ozone' ? 'stealth' : 'fast';
         const inputWordCount = text.trim().split(/\s+/).length;
-        const { data: stats } = await supa.rpc('get_usage_stats', { p_user_id: userId });
-        if (stats) {
-          const remaining = engineType === 'stealth'
-            ? (stats.words_limit_stealth - stats.words_used_stealth)
-            : (stats.words_limit_fast - stats.words_used_fast);
-          if (remaining < inputWordCount) {
-            return new Response(
-              'data: ' + JSON.stringify({ type: 'error', error: `Daily ${engineType} word limit reached. ${Math.max(0, remaining)} words remaining.` }) + '\n\n',
-              { status: 200, headers: { 'Content-Type': 'text/event-stream' } }
-            );
-          }
+        const { data: stats, error: statsError } = await supa.rpc('get_usage_stats', { p_user_id: userId });
+
+        // Default free-tier limits when RPC fails or missing
+        let totalUsed = 0;
+        let totalLimit = 1000;
+
+        if (!statsError && stats) {
+          totalUsed = (stats.words_used_fast || 0) + (stats.words_used_stealth || 0);
+          const rawLimit = (stats.words_limit_fast || 0) + (stats.words_limit_stealth || 0);
+          const hasSub = (stats.days_remaining || 0) > 0;
+          // If no active subscription, cap at free tier (1000)
+          // This handles stale DB function defaults (20000/10000)
+          totalLimit = hasSub ? (rawLimit || 1000) : 1000;
         }
-      } catch { /* quota check non-blocking */ }
+
+        const remaining = Math.max(0, totalLimit - totalUsed);
+        if (remaining < inputWordCount) {
+          return new Response(
+            'data: ' + JSON.stringify({ type: 'error', error: `Word limit reached. ${remaining} words remaining of ${totalLimit} daily words.` }) + '\n\n',
+            { status: 200, headers: { 'Content-Type': 'text/event-stream' } }
+          );
+        }
+      } catch (err) {
+        console.error('Quota pre-check error:', err);
+        // On error, allow the request but log it
+      }
     }
 
     const stream = new ReadableStream({
@@ -181,11 +193,17 @@ export async function POST(req: Request) {
 
           // 2. Heading normalization
           let normalizedText = text;
+          // Add blank line AFTER heading lines (Roman numerals, markdown, Part/Section/Chapter)
           normalizedText = normalizedText.replace(
             /^((?:#{1,6}\s.+|[IVXLCDM]+\.\s.+|(?:Part|Section|Chapter)\s+\d+.*))\n(?!\n)/gim, "$1\n\n"
           );
+          // Add blank line AFTER short non-punctuation-ending lines followed by uppercase (likely headings)
           normalizedText = normalizedText.replace(
             /^([^\n]{1,80}[^.!?\n])\n(?!\n)(?=[A-Z])/gm, "$1\n\n"
+          );
+          // Add blank line BEFORE heading lines that follow sentence-ending punctuation
+          normalizedText = normalizedText.replace(
+            /([.!?])\n(?!\n)(?=(?:[IVXLCDM]+\.\s|[A-Z]\.\s|#{1,6}\s|(?:Part|Section|Chapter)\s+\d))/gim, "$1\n\n"
           );
 
           // 3. Engine stage — the main humanization
@@ -193,7 +211,7 @@ export async function POST(req: Request) {
           await flushDelay(80);
 
           let humanized: string;
-          const eng = engine ?? 'ghost_mini';
+          const eng = engine ?? 'oxygen';
 
           if (eng === 'easy') {
             const easySBS = (body as Record<string, unknown>).easy_sentence_by_sentence === true;
@@ -201,8 +219,8 @@ export async function POST(req: Request) {
             humanized = easyResult.humanized;
           } else if (eng === 'ozone') {
             // Ozone: External API with undetectable mode — then full post-processing pipeline
-            // Default sentence-by-sentence to TRUE so titles/headings are preserved during API call
-            const ozoneSBS = (body as Record<string, unknown>).ozone_sentence_by_sentence !== false;
+            // Default sentence-by-sentence to FALSE (whole-document mode saves quota; SBS uses 1 call per sentence)
+            const ozoneSBS = (body as Record<string, unknown>).ozone_sentence_by_sentence === true;
             const ozoneResult = await ozoneHumanize(normalizedText, ozoneSBS);
             humanized = ozoneResult.humanized;
           } else if (eng === 'oxygen') {
@@ -214,7 +232,7 @@ export async function POST(req: Request) {
               oxygenMode,
               (body as Record<string, unknown>).oxygen_sentence_by_sentence !== undefined
                 ? Boolean((body as Record<string, unknown>).oxygen_sentence_by_sentence)
-                : false,
+                : true,
             );
           } else if (eng === 'humara_v1_3') {
             const { pipeline } = await import('@/lib/engine/humara-v1-3');
@@ -266,29 +284,40 @@ export async function POST(req: Request) {
             await flushDelay(200);
           }
 
-          // 5. 60% Restructuring enforcement
+          // 5. 40% Restructuring enforcement
           sendSSE(controller, { type: 'stage', stage: 'Restructuring' });
           await flushDelay(80);
           {
-            const origSents = robustSentenceSplit(text);
-            const humanizedSents = robustSentenceSplit(humanized);
-            const RESTRUCTURE_MIN = 0.25;
+            const { sentences: origSents } = splitIntoIndexedSentences(normalizedText);
+            const { sentences: humanizedSents, paragraphBoundaries: humanParaBounds } = splitIntoIndexedSentences(humanized);
+            const isHeadingSent = (s: string) => s.trim().length < 120 && !/[.!?]$/.test(s.trim()) && s.trim().split(/\s+/).length <= 15;
+            const RESTRUCTURE_MIN = 0.40;
             const usedWords = new Set<string>();
             let changed = false;
             for (let i = 0; i < humanizedSents.length; i++) {
-              const bestOrigIdx = origSents.reduce((best, _, j) => {
+              if (isHeadingSent(humanizedSents[i])) continue; // Skip headings
+              // Only compare against non-heading original sentences
+              let bestOrigIdx = -1;
+              let bestScore = Infinity;
+              for (let j = 0; j < origSents.length; j++) {
+                if (isHeadingSent(origSents[j])) continue;
                 const r = measureSentenceChange(origSents[j], humanizedSents[i]);
-                return r < measureSentenceChange(origSents[best], humanizedSents[i]) ? j : best;
-              }, 0);
-              if (measureSentenceChange(origSents[bestOrigIdx], humanizedSents[i]) < RESTRUCTURE_MIN) {
+                if (r < bestScore) { bestScore = r; bestOrigIdx = j; }
+              }
+              if (bestOrigIdx >= 0 && bestScore < RESTRUCTURE_MIN) {
                 let s = humanizedSents[i];
                 s = applyAIWordKill(s);
-                s = synonymReplace(s, 0.5, usedWords);
+                s = synonymReplace(s, 0.85, usedWords);
+                // Re-check after synonym pass; apply more aggressive pass if still below
+                const recheck = measureSentenceChange(origSents[bestOrigIdx], s);
+                if (recheck < RESTRUCTURE_MIN) {
+                  s = synonymReplace(s, 1.0, usedWords);
+                }
                 if (s !== humanizedSents[i]) { humanizedSents[i] = s; changed = true; }
               }
             }
             if (changed) {
-              humanized = reassembleText(humanizedSents, paragraphBoundaries.length ? paragraphBoundaries : [0]);
+              humanized = reassembleText(humanizedSents, humanParaBounds.length ? humanParaBounds : [0]);
               const { sentences: restructuredSents } = splitIntoIndexedSentences(humanized);
               await emitSentencesStaggered(controller, restructuredSents, 'Restructuring', 80);
             }
@@ -357,16 +386,19 @@ export async function POST(req: Request) {
 
           // Last-mile meaning validation (2 iterations max)
           {
-            const origSentsM = robustSentenceSplit(text);
+            const { sentences: origSentsM } = splitIntoIndexedSentences(normalizedText);
+            const isHeadingM = (s: string) => s.trim().length < 120 && !/[.!?]$/.test(s.trim()) && s.trim().split(/\s+/).length <= 15;
             const STOPWORDS_M = new Set(['the','a','an','is','are','was','were','be','been','being','have','has','had','do','does','did','will','would','could','should','may','might','can','shall','to','of','in','for','on','with','at','by','from','as','into','through','during','before','after','above','below','between','out','off','over','under','again','further','then','once','here','there','when','where','why','how','all','each','every','both','few','more','most','other','some','such','no','nor','not','only','own','same','so','than','too','very','just','because','but','and','or','if','while','that','this','these','those','it','its','they','them','their','we','our','he','she','his','her','which','what','who','whom','about','also']);
             const getContentWordsM = (t: string) => t.toLowerCase().replace(/[^a-z0-9\s]/g, '').split(/\s+/).filter(w => w.length >= 3 && !STOPWORDS_M.has(w));
             for (let meaningIter = 0; meaningIter < 2; meaningIter++) {
-              const humanSentsM = robustSentenceSplit(humanized);
+              const { sentences: humanSentsM, paragraphBoundaries: humanMParaBounds } = splitIntoIndexedSentences(humanized);
               let anyFixed = false;
               for (let i = 0; i < humanSentsM.length; i++) {
+                if (isHeadingM(humanSentsM[i])) continue; // Skip headings
                 let bestOverlap = 0;
-                let bestOrigIdx = 0;
+                let bestOrigIdx = -1;
                 for (let j = 0; j < origSentsM.length; j++) {
+                  if (isHeadingM(origSentsM[j])) continue; // Don't match against headings
                   const origW = new Set(getContentWordsM(origSentsM[j]));
                   const modW = new Set(getContentWordsM(humanSentsM[i]));
                   if (origW.size === 0) continue;
@@ -375,7 +407,7 @@ export async function POST(req: Request) {
                   const overlap = matches / origW.size;
                   if (overlap > bestOverlap) { bestOverlap = overlap; bestOrigIdx = j; }
                 }
-                if (bestOverlap < 0.35) {
+                if (bestOrigIdx >= 0 && bestOverlap < 0.35) {
                   let fixed = applyAIWordKill(origSentsM[bestOrigIdx]);
                   const usedW = new Set<string>();
                   fixed = synonymReplace(fixed, 0.35, usedW);
@@ -384,7 +416,7 @@ export async function POST(req: Request) {
                 }
               }
               if (!anyFixed) break;
-              humanized = humanSentsM.join(' ');
+              humanized = reassembleText(humanSentsM, humanMParaBounds.length ? humanMParaBounds : [0]);
               humanized = preserveInputStructure(normalizedText, humanized);
             }
           }
@@ -422,6 +454,8 @@ export async function POST(req: Request) {
           }
 
           // 14. Detection & meaning check
+          // Final cleanup: collapse double spaces
+          humanized = humanized.replace(/ {2,}/g, ' ');
           sendSSE(controller, { type: 'stage', stage: 'Analyzing' });
           await flushDelay(50);
           const [outputAnalysis, meaningCheck] = await Promise.all([
@@ -463,7 +497,7 @@ export async function POST(req: Request) {
           if (userId) {
             try {
               const supa = createServiceClient();
-              const engineType = eng === 'ozone' ? 'stealth' : 'fast';
+              const engineType = 'fast'; // unified — all engines deduct from one pool
               const toneDb = ({ neutral: 'natural', academic: 'academic', professional: 'business', simple: 'direct' } as Record<string, string>)[tone ?? 'neutral'] ?? 'natural';
               await Promise.all([
                 supa.rpc('increment_usage', { p_user_id: userId, p_words: outputWords, p_engine_type: engineType }),

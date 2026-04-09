@@ -1,7 +1,7 @@
 'use client';
 import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import dynamic from 'next/dynamic';
-import { Copy, Check, Zap, Eraser, RotateCcw, Type, AlignLeft, RefreshCw, AlertTriangle, Clock, ChevronDown, ChevronUp, Shield, Settings } from 'lucide-react';
+import { Copy, Check, Zap, Eraser, RotateCcw, Type, AlignLeft, RefreshCw, AlertTriangle, Clock, ChevronDown, ChevronUp, Shield, Settings, ClipboardPaste } from 'lucide-react';
 import UsageBar, { useUsage } from './UsageBar';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../AuthProvider';
@@ -42,7 +42,7 @@ interface HistoryEntry {
   timestamp: number; // Date.now()
 }
 
-const HISTORY_TTL_MS = 4 * 60 * 1000; // 4 minutes
+const HISTORY_TTL_MS = 5 * 60 * 1000; // 5 minutes — files auto-delete to save storage
 
 /* ── Per-sentence AI scoring — same micro-signals as backend multi-detector ── */
 const AI_MARKER_WORDS = new Set([
@@ -195,29 +195,40 @@ export default function EditorPage() {
   useEffect(() => {
     (async () => {
       try {
-        const { data } = await supabase.from('engine_config').select('engine_id, enabled, premium, sort_order');
-        if (data && data.length > 0) {
+        const { data, error } = await supabase.from('engine_config').select('engine_id, enabled, premium, sort_order');
+        if (error) {
+          console.log('[Engine Config] Table does not exist or query failed, using defaults');
+        } else if (data && data.length > 0) {
           const config: Record<string, { enabled: boolean; premium: boolean; sort_order: number }> = {};
           for (const row of data) {
             config[row.engine_id] = { enabled: row.enabled, premium: row.premium, sort_order: row.sort_order ?? 0 };
           }
           setEngineConfig(config);
+          console.log('[Engine Config] Loaded from Supabase:', config);
+        } else {
+          console.log('[Engine Config] No data in table, using defaults');
         }
-      } catch {
-        // Fallback to defaults if table doesn't exist yet
+      } catch (e) {
+        console.log('[Engine Config] Error loading config:', e);
       }
       setEngineConfigLoaded(true);
     })();
   }, []);
 
-  // Compute visible engines: if admin config exists, use it; otherwise fall back to ALL_ENGINES defaults
+  // Compute visible engines: if admin config exists AND has data, use it; otherwise show ALL_ENGINES
   const ENGINES: EngineConfig[] = useMemo(() => {
-    if (!engineConfigLoaded) return ALL_ENGINES;
+    if (!engineConfigLoaded) return ALL_ENGINES; // Still loading
     const hasConfig = Object.keys(engineConfig).length > 0;
-    if (!hasConfig) return ALL_ENGINES;
-    return ALL_ENGINES
+    if (!hasConfig) {
+      console.log('[Engine Config] No admin config, showing all engines');
+      return ALL_ENGINES; // No config in DB, show all engines
+    }
+    // Config exists - filter and sort based on enabled status
+    const filtered = ALL_ENGINES
       .filter(e => engineConfig[e.id]?.enabled !== false)
       .sort((a, b) => (engineConfig[a.id]?.sort_order ?? 99) - (engineConfig[b.id]?.sort_order ?? 99));
+    console.log('[Engine Config] Filtered engines:', filtered.map(e => e.id));
+    return filtered;
   }, [engineConfig, engineConfigLoaded]);
 
   const [inputDetection, setInputDetection] = useState<DetectionResult | null>(null);
@@ -269,6 +280,7 @@ export default function EditorPage() {
   const outputRef = useRef<HTMLTextAreaElement>(null);
   const popupRef = useRef<HTMLDivElement>(null);
   const detectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const engineBtnRef = useRef<HTMLButtonElement>(null);
 
   const inputWords = useMemo(() => (text.trim() ? text.trim().split(/\s+/).length : 0), [text]);
   const outputWords = useMemo(() => (result.trim() ? result.trim().split(/\s+/).length : 0), [result]);
@@ -453,12 +465,9 @@ export default function EditorPage() {
     if (!text.trim()) return;
     if (inputWords < 10) { setError('Please enter at least 10 words.'); return; }
     if (usage) {
-      const isStealthEngine = engine === 'ozone';
-      const remaining = isStealthEngine
-        ? usage.wordsLimitStealth - usage.wordsUsedStealth
-        : usage.wordsLimitFast - usage.wordsUsedFast;
+      const remaining = usage.wordsLimit - usage.wordsUsed;
       if (remaining < inputWords) {
-        setError(`Daily ${isStealthEngine ? 'stealth' : 'standard'} word limit reached. ${Math.max(0, remaining).toLocaleString()} words remaining.`);
+        setError(`Word limit reached. ${Math.max(0, remaining).toLocaleString()} words remaining.`);
         return;
       }
     }
@@ -744,7 +753,7 @@ export default function EditorPage() {
 
   /* ── Render ───────────────────────────────────────────────────────────── */
   return (
-    <div className="flex flex-col gap-4 animate-in fade-in duration-500 max-w-5xl mx-auto">
+    <div className="flex flex-col gap-4 animate-in fade-in duration-500 w-full">
 
       {/* ═══ Combined Control Card ═══ */}
       <div
@@ -776,25 +785,31 @@ export default function EditorPage() {
           <div className="flex items-center gap-1.5 relative">
             <span className="text-[10px] font-semibold text-zinc-500 uppercase">Engine</span>
             <div className="relative group">
-              <button type="button" onClick={() => setEngineDropdownOpen(!engineDropdownOpen)}
+              <button ref={engineBtnRef} type="button" onClick={() => setEngineDropdownOpen(!engineDropdownOpen)}
                 className="flex items-center gap-1.5 bg-zinc-900/50 border border-zinc-800/60 rounded-md px-2 py-1 text-[11px] font-semibold text-zinc-300 outline-none hover:border-zinc-600 transition-colors min-w-[110px]">
                 <span>{ENGINES.find(e => e.id === engine)?.label}</span>
                 <svg className={`ml-auto w-3 h-3 text-zinc-500 transition-transform ${engineDropdownOpen ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
               </button>
-              {ENGINE_GUIDES[engine] && (
+              {ENGINE_GUIDES[engine] && !engineDropdownOpen && (
                 <div className="absolute left-0 top-full mt-2 z-30 w-[260px] bg-[#0c0c14] border border-purple-800/60 rounded-lg px-3 py-2 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none shadow-lg">
                   <p className="text-[10px] text-zinc-400 leading-relaxed"><span className="font-bold text-purple-400">{ENGINES.find(e => e.id === engine)?.label}:</span> {ENGINE_GUIDES[engine]}</p>
                 </div>
               )}
               {engineDropdownOpen && (
                 <>
-                  <div className="fixed inset-0 z-40" onClick={() => setEngineDropdownOpen(false)} />
-                  <div className="absolute left-0 top-full mt-1 z-50 w-[180px] bg-[#0c0c14] border border-zinc-800/60 rounded-xl shadow-xl overflow-hidden animate-in fade-in slide-in-from-top-1 duration-150">
+                  <div className="fixed inset-0 z-[9998]" onClick={() => setEngineDropdownOpen(false)} />
+                  <div
+                    className="fixed z-[9999] w-[200px] bg-[#0c0c14] border border-zinc-700/80 rounded-xl shadow-2xl shadow-black/60 overflow-hidden animate-in fade-in slide-in-from-top-1 duration-150"
+                    style={{
+                      top: engineBtnRef.current ? engineBtnRef.current.getBoundingClientRect().bottom + 6 : 0,
+                      left: engineBtnRef.current ? engineBtnRef.current.getBoundingClientRect().left : 0,
+                    }}
+                  >
                     {ENGINES.map(e => (
                       <button key={e.id} type="button" onClick={() => { setEngine(e.id); setEngineDropdownOpen(false); }}
-                        className={`w-full text-left px-3 py-1.5 hover:bg-zinc-800/50 transition-colors border-b border-zinc-800/40 last:border-b-0 flex items-center gap-2 ${engine === e.id ? 'bg-purple-950/20' : ''}`}>
-                        <span className="text-xs font-medium text-zinc-200">{e.label}</span>
-                        {engine === e.id && <svg className="ml-auto w-3.5 h-3.5 text-brand-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>}
+                        className={`w-full text-left px-3.5 py-2.5 hover:bg-zinc-800/60 transition-colors border-b border-zinc-800/40 last:border-b-0 flex items-center gap-2 ${engine === e.id ? 'bg-purple-950/30' : ''}`}>
+                        <span className="text-sm font-medium text-zinc-200">{e.label}</span>
+                        {engine === e.id && <svg className="ml-auto w-4 h-4 text-purple-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>}
                       </button>
                     ))}
                   </div>
@@ -969,11 +984,22 @@ export default function EditorPage() {
           </div>
 
           {/* Input textarea */}
-          <div className="flex-1">
+          <div className="flex-1 relative">
             <textarea ref={inputRef} value={text}
               onChange={(e) => setText(e.target.value)}
               className="w-full min-h-[260px] bg-transparent outline-none resize-none text-[14px] leading-[1.8] text-zinc-200 p-5 placeholder:text-zinc-600"
               placeholder="Paste your AI-generated text here…" />
+            {!text && (
+              <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                <button
+                  onClick={async () => { try { const t = await navigator.clipboard.readText(); if (t) setText(t); } catch {} }}
+                  className="pointer-events-auto flex items-center gap-2 px-5 py-3 rounded-xl bg-purple-950/40 border border-purple-800/40 text-purple-300 hover:bg-purple-900/40 hover:border-purple-700/60 transition-all text-sm font-medium"
+                >
+                  <ClipboardPaste className="w-4 h-4" />
+                  Paste from clipboard
+                </button>
+              </div>
+            )}
           </div>
 
         </div>

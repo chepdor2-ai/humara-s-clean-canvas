@@ -543,7 +543,7 @@ function deepSynonymReplace(text: string, intensity: number = 0.6): string {
 
 function clauseFront(sentence: string): string {
   const m = sentence.match(/^(.{20,}?)\s+(because|since|although|while|whereas|given that)\s+(.{10,})$/i);
-  if (m && Math.random() < 0.4) {
+  if (m && Math.random() < 0.7) {
     const main = m[1].replace(/[.,;]+$/, '');
     const conj = m[2];
     const sub = m[3].replace(/\.$/, '');
@@ -607,7 +607,7 @@ function fixGrammar(text: string): string {
 function restructureSentence(sentence: string): string {
   // Try "X of Y" → rephrase
   const m1 = sentence.match(/^(The\s+\w+)\s+of\s+([\w\s]+?)\s+(has|have|is|are|was|were)\s+(.+)$/i);
-  if (m1 && Math.random() < 0.5) {
+  if (m1 && Math.random() < 0.7) {
     const subjWord = m1[1].split(/\s+/).pop()?.toLowerCase() || '';
     const trimmed2 = m1[2].trim();
     if (!trimmed2) return sentence;
@@ -615,7 +615,7 @@ function restructureSentence(sentence: string): string {
   }
   // Move adverbial time/place phrases
   const m2 = sentence.match(/^(.{15,}?)\s+(in recent years|today|currently|nowadays|over time|in practice)\s*[,.]?\s*(.*)$/i);
-  if (m2 && Math.random() < 0.5) {
+  if (m2 && Math.random() < 0.7) {
     const combined = (m2[1].replace(/[.,;]+$/, '') + ' ' + m2[3]).trim().replace(/\.$/, '');
     if (!combined || !m2[2]) return sentence;
     return `${m2[2][0].toUpperCase() + m2[2].slice(1)}, ${combined[0].toLowerCase()}${combined.slice(1)}.`;
@@ -637,7 +637,7 @@ function heavyRewriteSentence(sentence: string): string {
   }
 
   // 2. Structural rewrites
-  if (!applied && Math.random() < 0.6) {
+  if (!applied && Math.random() < 0.85) {
     for (const [pattern, replacement] of SENTENCE_REWRITES) {
       if (pattern.test(result)) {
         pattern.lastIndex = 0;
@@ -650,7 +650,7 @@ function heavyRewriteSentence(sentence: string): string {
   }
 
   // 3. Voice switching
-  if (!applied && Math.random() < 0.5) {
+  if (!applied && Math.random() < 0.75) {
     for (const [pattern, replacement] of VOICE_PATTERNS) {
       if (pattern.test(result)) {
         pattern.lastIndex = 0;
@@ -663,7 +663,7 @@ function heavyRewriteSentence(sentence: string): string {
   }
 
   // 4. Clause swap around commas
-  if (!applied && result.includes(',') && Math.random() < 0.3) {
+  if (!applied && result.includes(',') && Math.random() < 0.5) {
     const commaIdx = result.indexOf(',');
     const p1 = result.slice(0, commaIdx).trim();
     const p2 = result.slice(commaIdx + 1).trim();
@@ -738,13 +738,15 @@ function humanizeSentence(
     }
   }
 
-  // Phase 4: Deep synonym + restructuring if still below threshold
-  if (bestRatio < minChange) {
-    // Apply deep synonyms with increasing intensity
+  // Phase 4: Always apply deep synonym + restructuring for maximum change
+  // Even if Phase 1-3 met the threshold, we want maximum differentiation
+  {
+    // Apply deep synonyms with high intensity from the start
     for (let fb = 0; fb < maxRetries && bestRatio < minChange; fb++) {
       attempts++;
       let fallback = heavyRewriteSentence(bestResult);
-      const intensity = Math.min(0.6 + fb * 0.1, 0.95);
+      fallback = restructureSentence(fallback);
+      const intensity = Math.min(0.85 + fb * 0.02, 1.0);
       fallback = deepSynonymReplace(fallback, intensity);
       fallback = applyAiWordKill(fallback);
       fallback = fixGrammar(fallback);
@@ -760,12 +762,13 @@ function humanizeSentence(
       }
     }
 
-    // Rewrite from original if still below
+    // Rewrite from original if still below (fresh start, not incremental)
     if (bestRatio < minChange) {
-      for (let fb2 = 0; fb2 < 3 && bestRatio < minChange; fb2++) {
+      for (let fb2 = 0; fb2 < 5 && bestRatio < minChange; fb2++) {
         attempts++;
         let fallback = heavyRewriteSentence(original);
-        fallback = deepSynonymReplace(fallback, 0.95);
+        fallback = restructureSentence(fallback);
+        fallback = deepSynonymReplace(fallback, 1.0);
         fallback = applyAiWordKill(fallback);
         fallback = applyFillerCuts(fallback);
         fallback = fixGrammar(fallback);
@@ -796,9 +799,9 @@ function humanizeSentence(
 // ── Mode presets ──
 
 const MODE_PRESETS: Record<string, { minChange: number; maxRetries: number }> = {
-  quality: { minChange: 0.40, maxRetries: 5 },
-  fast: { minChange: 0.30, maxRetries: 2 },
-  aggressive: { minChange: 0.50, maxRetries: 8 },
+  quality: { minChange: 0.45, maxRetries: 8 },
+  fast: { minChange: 0.35, maxRetries: 4 },
+  aggressive: { minChange: 0.55, maxRetries: 10 },
 };
 
 // ── Main export ──

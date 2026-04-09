@@ -92,8 +92,6 @@ export default function DocumentsPage() {
 
   const engineLabel = (e: string) => {
     const map: Record<string, string> = {
-      ghost_mini: 'Fast', ghost_pro: 'Standard', ninja: 'Stealth',
-      undetectable: 'Undetectable', humara: 'Humara v1.1', fast_v11: 'Fast v1.1',
       oxygen: 'Humara 2.0', ozone: 'Humara 2.1', easy: 'Humara 2.2',
     };
     return map[e] || e || '—';
