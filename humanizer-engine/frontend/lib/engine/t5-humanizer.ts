@@ -151,34 +151,27 @@ export async function t5Humanize(
   }
 
   const primaryUrl = T5_API_URL.replace(/\/$/, '');
-  const FAILOVER_TIMEOUT_MS = 10_000;
 
-  // Try primary with 10s timeout, then fall back to backup
-  try {
-    const result = await Promise.race([
-      runT5Pass(text, mode, sentenceBySentence, apiKey, primaryUrl),
-      new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error('T5 primary timed out after 10s')), FAILOVER_TIMEOUT_MS)
-      ),
-    ]);
-    return result;
-  } catch (primaryErr) {
-    console.warn(`[T5] Primary API failed: ${primaryErr instanceof Error ? primaryErr.message : primaryErr}`);
-
-    // Fallback to Cloud Run backup if configured
-    if (T5_BACKUP_URL) {
+  // If backup is configured, race primary against 10s timeout and failover
+  if (T5_BACKUP_URL) {
+    const FAILOVER_TIMEOUT_MS = 10_000;
+    try {
+      const result = await Promise.race([
+        runT5Pass(text, mode, sentenceBySentence, apiKey, primaryUrl),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('T5 primary timed out after 10s')), FAILOVER_TIMEOUT_MS)
+        ),
+      ]);
+      return result;
+    } catch (primaryErr) {
+      console.warn(`[T5] Primary failed/timed out, switching to backup: ${primaryErr instanceof Error ? primaryErr.message : primaryErr}`);
       const backupUrl = T5_BACKUP_URL.replace(/\/$/, '');
       const backupKey = T5_BACKUP_KEY || apiKey;
       console.log(`[T5] Falling back to backup: ${backupUrl}`);
-      try {
-        return await runT5Pass(text, mode, sentenceBySentence, backupKey, backupUrl);
-      } catch (backupErr) {
-        console.error(`[T5] Backup API also failed: ${backupErr instanceof Error ? backupErr.message : backupErr}`);
-        throw new Error(`T5 humanizer unavailable — primary and backup both failed`);
-      }
+      return await runT5Pass(text, mode, sentenceBySentence, backupKey, backupUrl);
     }
-
-    // No backup configured — re-throw original error
-    throw primaryErr;
   }
+
+  // No backup configured — run primary normally (no timeout race)
+  return await runT5Pass(text, mode, sentenceBySentence, apiKey, primaryUrl);
 }

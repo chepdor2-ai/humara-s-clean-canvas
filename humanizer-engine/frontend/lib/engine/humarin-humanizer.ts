@@ -143,33 +143,27 @@ export async function humarinHumanize(
   }
 
   const primaryUrl = HUMARIN_API_URL.replace(/\/$/, '');
-  const FAILOVER_TIMEOUT_MS = 10_000;
 
-  // Try primary with 10s timeout, then fall back to backup
-  try {
-    const result = await Promise.race([
-      runHumarinPass(text, mode, sentenceBySentence, apiKey, primaryUrl),
-      new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error('Humarin primary timed out after 10s')), FAILOVER_TIMEOUT_MS)
-      ),
-    ]);
-    return result;
-  } catch (primaryErr) {
-    console.warn(`[Humarin] Primary API failed: ${primaryErr instanceof Error ? primaryErr.message : primaryErr}`);
-
-    // Fallback to Cloud Run backup if configured
-    if (HUMARIN_BACKUP_URL) {
+  // If backup is configured, race primary against 10s timeout and failover
+  if (HUMARIN_BACKUP_URL) {
+    const FAILOVER_TIMEOUT_MS = 10_000;
+    try {
+      const result = await Promise.race([
+        runHumarinPass(text, mode, sentenceBySentence, apiKey, primaryUrl),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('Humarin primary timed out after 10s')), FAILOVER_TIMEOUT_MS)
+        ),
+      ]);
+      return result;
+    } catch (primaryErr) {
+      console.warn(`[Humarin] Primary failed/timed out, switching to backup: ${primaryErr instanceof Error ? primaryErr.message : primaryErr}`);
       const backupUrl = HUMARIN_BACKUP_URL.replace(/\/$/, '');
       const backupKey = HUMARIN_BACKUP_KEY || apiKey;
       console.log(`[Humarin] Falling back to backup: ${backupUrl}`);
-      try {
-        return await runHumarinPass(text, mode, sentenceBySentence, backupKey, backupUrl);
-      } catch (backupErr) {
-        console.error(`[Humarin] Backup API also failed: ${backupErr instanceof Error ? backupErr.message : backupErr}`);
-        throw new Error('Humarin humanizer unavailable — primary and backup both failed');
-      }
+      return await runHumarinPass(text, mode, sentenceBySentence, backupKey, backupUrl);
     }
-
-    throw primaryErr;
   }
+
+  // No backup configured — run primary normally (no timeout race)
+  return await runHumarinPass(text, mode, sentenceBySentence, apiKey, primaryUrl);
 }

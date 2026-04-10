@@ -230,32 +230,26 @@ export async function dipperHumanize(
   sentenceBySentence: boolean = false,
 ): Promise<DipperResult> {
   const primaryUrl = DIPPER_SPACE_URL.replace(/\/$/, '');
-  const FAILOVER_TIMEOUT_MS = 10_000;
 
-  // Try primary with 10s timeout, then fall back to backup
-  try {
-    const result = await Promise.race([
-      runDipperPass(text, strength, sentenceBySentence, primaryUrl),
-      new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error('Dipper primary timed out after 10s')), FAILOVER_TIMEOUT_MS)
-      ),
-    ]);
-    return result;
-  } catch (primaryErr) {
-    console.warn(`[Dipper] Primary API failed: ${primaryErr instanceof Error ? primaryErr.message : primaryErr}`);
-
-    // Fallback to Cloud Run backup if configured
-    if (DIPPER_BACKUP_URL) {
+  // If backup is configured, race primary against 10s timeout and failover
+  if (DIPPER_BACKUP_URL) {
+    const FAILOVER_TIMEOUT_MS = 10_000;
+    try {
+      const result = await Promise.race([
+        runDipperPass(text, strength, sentenceBySentence, primaryUrl),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('Dipper primary timed out after 10s')), FAILOVER_TIMEOUT_MS)
+        ),
+      ]);
+      return result;
+    } catch (primaryErr) {
+      console.warn(`[Dipper] Primary failed/timed out, switching to backup: ${primaryErr instanceof Error ? primaryErr.message : primaryErr}`);
       const backupUrl = DIPPER_BACKUP_URL.replace(/\/$/, '');
       console.log(`[Dipper] Falling back to backup: ${backupUrl}`);
-      try {
-        return await runDipperPass(text, strength, sentenceBySentence, backupUrl);
-      } catch (backupErr) {
-        console.error(`[Dipper] Backup API also failed: ${backupErr instanceof Error ? backupErr.message : backupErr}`);
-        throw new Error('Dipper humanizer unavailable — primary and backup both failed');
-      }
+      return await runDipperPass(text, strength, sentenceBySentence, backupUrl);
     }
-
-    throw primaryErr;
   }
+
+  // No backup configured — run primary normally (no timeout race)
+  return await runDipperPass(text, strength, sentenceBySentence, primaryUrl);
 }
