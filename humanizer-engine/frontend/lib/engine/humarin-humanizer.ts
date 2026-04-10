@@ -144,14 +144,14 @@ export async function humarinHumanize(
 
   const primaryUrl = HUMARIN_API_URL.replace(/\/$/, '');
 
-  // If backup is configured, race primary against 10s timeout and failover
+  // If backup is configured, race primary against 20s timeout and failover    
   if (HUMARIN_BACKUP_URL) {
-    const FAILOVER_TIMEOUT_MS = 10_000;
+    const FAILOVER_TIMEOUT_MS = 20_000;
     try {
       const result = await Promise.race([
-        runHumarinPass(text, mode, sentenceBySentence, apiKey, primaryUrl),
+        runHumarinPass(text, mode, sentenceBySentence, apiKey, primaryUrl),    
         new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error('Humarin primary timed out after 10s')), FAILOVER_TIMEOUT_MS)
+          setTimeout(() => reject(new Error('Humarin primary timed out after 20s')), FAILOVER_TIMEOUT_MS)
         ),
       ]);
       return result;

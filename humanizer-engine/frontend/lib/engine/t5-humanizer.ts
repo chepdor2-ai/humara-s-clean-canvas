@@ -152,14 +152,14 @@ export async function t5Humanize(
 
   const primaryUrl = T5_API_URL.replace(/\/$/, '');
 
-  // If backup is configured, race primary against 10s timeout and failover
+  // If backup is configured, race primary against 20s timeout and failover    
   if (T5_BACKUP_URL) {
-    const FAILOVER_TIMEOUT_MS = 10_000;
+    const FAILOVER_TIMEOUT_MS = 20_000;
     try {
       const result = await Promise.race([
         runT5Pass(text, mode, sentenceBySentence, apiKey, primaryUrl),
         new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error('T5 primary timed out after 10s')), FAILOVER_TIMEOUT_MS)
+          setTimeout(() => reject(new Error('T5 primary timed out after 20s')), FAILOVER_TIMEOUT_MS)
         ),
       ]);
       return result;
