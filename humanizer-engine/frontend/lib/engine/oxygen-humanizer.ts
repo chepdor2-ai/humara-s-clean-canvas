@@ -799,9 +799,9 @@ function humanizeSentence(
 // ── Mode presets ──
 
 const MODE_PRESETS: Record<string, { minChange: number; maxRetries: number }> = {
-  quality: { minChange: 0.45, maxRetries: 8 },
-  fast: { minChange: 0.35, maxRetries: 4 },
-  aggressive: { minChange: 0.55, maxRetries: 10 },
+  quality: { minChange: 0.50, maxRetries: 10 },
+  fast: { minChange: 0.40, maxRetries: 5 },
+  aggressive: { minChange: 0.60, maxRetries: 12 },
 };
 
 // ── Main export ──

@@ -143,27 +143,53 @@ export async function humarinHumanize(
   }
 
   const primaryUrl = HUMARIN_API_URL.replace(/\/$/, '');
+  const FAILOVER_TIMEOUT_MS = 20_000;
 
-  // If backup is configured, race primary against 20s timeout and failover    
+  // Phase 1: Try primary with 20s timeout
+  try {
+    const result = await Promise.race([
+      runHumarinPass(text, mode, sentenceBySentence, apiKey, primaryUrl),
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('Humarin primary timed out after 20s')), FAILOVER_TIMEOUT_MS)
+      ),
+    ]);
+    return result;
+  } catch (primaryErr) {
+    console.warn(`[Humarin] Primary failed/timed out: ${primaryErr instanceof Error ? primaryErr.message : primaryErr}`);
+  }
+
+  // Phase 2: Try backup URL if configured (with 20s timeout)
   if (HUMARIN_BACKUP_URL) {
-    const FAILOVER_TIMEOUT_MS = 20_000;
     try {
-      const result = await Promise.race([
-        runHumarinPass(text, mode, sentenceBySentence, apiKey, primaryUrl),    
-        new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error('Humarin primary timed out after 20s')), FAILOVER_TIMEOUT_MS)
-        ),
-      ]);
-      return result;
-    } catch (primaryErr) {
-      console.warn(`[Humarin] Primary failed/timed out, switching to backup: ${primaryErr instanceof Error ? primaryErr.message : primaryErr}`);
       const backupUrl = HUMARIN_BACKUP_URL.replace(/\/$/, '');
       const backupKey = HUMARIN_BACKUP_KEY || apiKey;
       console.log(`[Humarin] Falling back to backup: ${backupUrl}`);
-      return await runHumarinPass(text, mode, sentenceBySentence, backupKey, backupUrl);
+      const result = await Promise.race([
+        runHumarinPass(text, mode, sentenceBySentence, backupKey, backupUrl),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('Humarin backup timed out after 20s')), FAILOVER_TIMEOUT_MS)
+        ),
+      ]);
+      return result;
+    } catch (backupErr) {
+      console.warn(`[Humarin] Backup also failed: ${backupErr instanceof Error ? backupErr.message : backupErr}`);
     }
   }
 
-  // No backup configured — run primary normally (no timeout race)
-  return await runHumarinPass(text, mode, sentenceBySentence, apiKey, primaryUrl);
+  // Phase 3: Oxygen TS fallback — instant, serverless, always available
+  console.log('[Humarin] All API endpoints failed, falling back to Oxygen TS engine');
+  const { oxygenHumanize } = await import('@/lib/engine/oxygen-humanizer');
+  const oxygenStrength = mode === 'aggressive' ? 'strong' : mode === 'fast' || mode === 'turbo' ? 'light' : 'medium';
+  const oxygenMode = oxygenStrength === 'light' ? 'fast' : oxygenStrength === 'strong' ? 'aggressive' : 'quality';
+  const humanized = oxygenHumanize(text, oxygenStrength, oxygenMode, sentenceBySentence);
+  return {
+    humanized,
+    stats: {
+      mode: `oxygen-fallback-${mode || 'quality'}`,
+      total_sentences: humanized.split(/[.!?]+/).filter(s => s.trim()).length,
+      avg_change_ratio: 0.5,
+      met_threshold: 1,
+      threshold_ratio: 1.0,
+    },
+  };
 }

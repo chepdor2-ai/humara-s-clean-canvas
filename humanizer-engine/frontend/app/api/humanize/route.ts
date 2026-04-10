@@ -521,7 +521,7 @@ export async function POST(req: Request) {
     // Ensures at least 60% of sentences show meaningful word-level changes.
     // Applies additional transforms to under-changed sentences.
     if (engine !== 'oxygen' && engine !== 'apex') {
-      humanized = enforceRestructuringThreshold(text, humanized, 0.60);
+      humanized = enforceRestructuringThreshold(text, humanized, 0.70);
     }
 
     // Post-capitalization formatting — fix sentence casing for all engine outputs
@@ -808,6 +808,44 @@ export async function POST(req: Request) {
         }
       } catch {
         // Oxygen polish is best-effort — never block the pipeline
+      }
+    }
+
+    // ── DETECTOR FEEDBACK LOOP ────────────────────────────────
+    // After ALL post-processing, check AI score. If still above 5%,
+    // run progressively stronger Oxygen passes to drive it to 0%.
+    // Max 3 iterations to avoid infinite loops. Each pass uses
+    // increasing strength to break remaining AI patterns.
+    {
+      const FEEDBACK_MAX_ITERS = 3;
+      const FEEDBACK_AI_THRESHOLD = 5.0; // below 5% is acceptable
+      const FEEDBACK_STRENGTHS = ['light', 'medium', 'strong'] as const;
+
+      for (let fbIter = 0; fbIter < FEEDBACK_MAX_ITERS; fbIter++) {
+        const midAnalysis = detector.analyze(humanized);
+        const midScore = midAnalysis.summary.overall_ai_score;
+        console.log(`[Feedback Loop] Iteration ${fbIter + 1}: AI score = ${midScore.toFixed(1)}%`);
+
+        if (midScore <= FEEDBACK_AI_THRESHOLD) break; // target reached
+
+        try {
+          const fbStrength = FEEDBACK_STRENGTHS[Math.min(fbIter, FEEDBACK_STRENGTHS.length - 1)];
+          const fbMode = fbStrength === 'light' ? 'fast' : fbStrength === 'strong' ? 'aggressive' : 'quality';
+          const polished = oxygenHumanize(humanized, fbStrength, fbMode, true);
+          if (polished && polished.trim().length > 0) {
+            // Verify meaning not destroyed
+            const fbOverlap = contentWordOverlap(text, polished);
+            if (fbOverlap >= 0.30) {
+              humanized = polished;
+              // Re-apply critical safety nets after polish
+              humanized = expandContractions(humanized);
+              humanized = removeEmDashes(humanized);
+              humanized = humanized.replace(/(^|[.!?]\s+)([a-z])/g, (_m, pre, ch) => pre + ch.toUpperCase());
+            }
+          }
+        } catch {
+          break; // Oxygen error — stop feedback loop
+        }
       }
     }
 

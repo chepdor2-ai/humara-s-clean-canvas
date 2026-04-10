@@ -230,26 +230,48 @@ export async function dipperHumanize(
   sentenceBySentence: boolean = false,
 ): Promise<DipperResult> {
   const primaryUrl = DIPPER_SPACE_URL.replace(/\/$/, '');
+  const FAILOVER_TIMEOUT_MS = 20_000;
 
-  // If backup is configured, race primary against 20s timeout and failover    
+  // Phase 1: Try primary with 20s timeout
+  try {
+    const result = await Promise.race([
+      runDipperPass(text, strength, sentenceBySentence, primaryUrl),
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('Dipper primary timed out after 20s')), FAILOVER_TIMEOUT_MS)
+      ),
+    ]);
+    return result;
+  } catch (primaryErr) {
+    console.warn(`[Dipper] Primary failed/timed out: ${primaryErr instanceof Error ? primaryErr.message : primaryErr}`);
+  }
+
+  // Phase 2: Try backup URL if configured (with 20s timeout)
   if (DIPPER_BACKUP_URL) {
-    const FAILOVER_TIMEOUT_MS = 20_000;
     try {
+      const backupUrl = DIPPER_BACKUP_URL.replace(/\/$/, '');
+      console.log(`[Dipper] Falling back to backup: ${backupUrl}`);
       const result = await Promise.race([
-        runDipperPass(text, strength, sentenceBySentence, primaryUrl),
+        runDipperPass(text, strength, sentenceBySentence, backupUrl),
         new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error('Dipper primary timed out after 20s')), FAILOVER_TIMEOUT_MS)
+          setTimeout(() => reject(new Error('Dipper backup timed out after 20s')), FAILOVER_TIMEOUT_MS)
         ),
       ]);
       return result;
-    } catch (primaryErr) {
-      console.warn(`[Dipper] Primary failed/timed out, switching to backup: ${primaryErr instanceof Error ? primaryErr.message : primaryErr}`);
-      const backupUrl = DIPPER_BACKUP_URL.replace(/\/$/, '');
-      console.log(`[Dipper] Falling back to backup: ${backupUrl}`);
-      return await runDipperPass(text, strength, sentenceBySentence, backupUrl);
+    } catch (backupErr) {
+      console.warn(`[Dipper] Backup also failed: ${backupErr instanceof Error ? backupErr.message : backupErr}`);
     }
   }
 
-  // No backup configured — run primary normally (no timeout race)
-  return await runDipperPass(text, strength, sentenceBySentence, primaryUrl);
+  // Phase 3: Oxygen TS fallback — instant, serverless, always available
+  console.log('[Dipper] All API endpoints failed, falling back to Oxygen TS engine');
+  const { oxygenHumanize } = await import('@/lib/engine/oxygen-humanizer');
+  const oxygenMode = strength === 'light' ? 'fast' : strength === 'strong' ? 'aggressive' : 'quality';
+  const humanized = oxygenHumanize(text, strength, oxygenMode, sentenceBySentence);
+  const inputWords = text.trim().split(/\s+/).length;
+  return {
+    humanized,
+    inputWords,
+    outputWords: humanized.trim().split(/\s+/).length,
+    latencyMs: 0,
+  };
 }

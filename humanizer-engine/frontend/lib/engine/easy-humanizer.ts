@@ -158,9 +158,16 @@ export async function easyHumanize(
 ): Promise<EasyResult> {
   const apiKey = process.env.EASY_API_KEY;
   if (!apiKey) {
-    throw new Error('EASY_API_KEY environment variable is not set');
+    // No API key — fall through to Oxygen directly
+    console.log('[Easy] No EASY_API_KEY, falling back to Oxygen TS engine');
+    const { oxygenHumanize } = await import('@/lib/engine/oxygen-humanizer');
+    const oxygenMode = strength === 'light' ? 'fast' : strength === 'strong' ? 'aggressive' : 'quality';
+    const humanized = oxygenHumanize(text, strength, oxygenMode, sentenceBySentence);
+    const inputWords = text.trim().split(/\s+/).length;
+    return { humanized, inputWords, outputWords: humanized.trim().split(/\s+/).length, processingTimeMs: 0, plan: 'oxygen-fallback', quotaUsed: 0, quotaLimit: 0 };
   }
 
+  try {
   if (!sentenceBySentence) {
     // Whole-paper mode: single API call
     const data = await callEasyAPI(text, apiKey, strength, tone);
@@ -221,4 +228,13 @@ export async function easyHumanize(
     quotaUsed: 0,
     quotaLimit: 0,
   };
+  } catch (err) {
+    // Oxygen TS fallback — instant, serverless, always available
+    console.warn(`[Easy] API failed, falling back to Oxygen TS: ${err instanceof Error ? err.message : err}`);
+    const { oxygenHumanize } = await import('@/lib/engine/oxygen-humanizer');
+    const oxygenMode = strength === 'light' ? 'fast' : strength === 'strong' ? 'aggressive' : 'quality';
+    const humanized = oxygenHumanize(text, strength, oxygenMode, sentenceBySentence);
+    const inputWords = text.trim().split(/\s+/).length;
+    return { humanized, inputWords, outputWords: humanized.trim().split(/\s+/).length, processingTimeMs: 0, plan: 'oxygen-fallback', quotaUsed: 0, quotaLimit: 0 };
+  }
 }

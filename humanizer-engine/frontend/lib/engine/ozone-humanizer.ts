@@ -153,9 +153,15 @@ export async function ozoneHumanize(
 ): Promise<OzoneResult> {
   const apiKey = process.env.OZONE_API_KEY;
   if (!apiKey) {
-    throw new Error('OZONE_API_KEY environment variable is not set');
+    // No API key — fall through to Oxygen directly
+    console.log('[Ozone] No OZONE_API_KEY, falling back to Oxygen TS engine');
+    const { oxygenHumanize } = await import('@/lib/engine/oxygen-humanizer');
+    const humanized = oxygenHumanize(text, 'medium', 'quality', sentenceBySentence);
+    const inputWords = text.trim().split(/\s+/).length;
+    return { humanized, inputWords, outputWords: humanized.trim().split(/\s+/).length, latencyMs: 0, quotaUsed: 0, quotaLimit: 0, quotaRemaining: 0 };
   }
 
+  try {
   if (!sentenceBySentence) {
     // Whole-paper mode: send entire text in one API call
     const data = await callOzoneAPI(text, apiKey);
@@ -221,4 +227,12 @@ export async function ozoneHumanize(
     quotaLimit: lastQuota.limit,
     quotaRemaining: lastQuota.remaining,
   };
+  } catch (err) {
+    // Oxygen TS fallback — instant, serverless, always available
+    console.warn(`[Ozone] API failed, falling back to Oxygen TS: ${err instanceof Error ? err.message : err}`);
+    const { oxygenHumanize } = await import('@/lib/engine/oxygen-humanizer');
+    const humanized = oxygenHumanize(text, 'medium', 'quality', sentenceBySentence);
+    const inputWords = text.trim().split(/\s+/).length;
+    return { humanized, inputWords, outputWords: humanized.trim().split(/\s+/).length, latencyMs: 0, quotaUsed: 0, quotaLimit: 0, quotaRemaining: 0 };
+  }
 }
