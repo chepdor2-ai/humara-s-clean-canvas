@@ -25,7 +25,12 @@ INSERT INTO public.engine_config (engine_id, label, enabled, premium, sort_order
   ('ninja',           'Ninja',           true,  false, 8),
   ('undetectable',    'Undetectable',    true,  false, 9),
   ('fast_v11',        'V1.1',            true,  true,  10),
-  ('humara',          'Humara',          true,  true,  11)
+  ('humara',          'Humara',          true,  true,  11),
+  ('oxygen_t5',       'Humara 3.0',      true,  false, 12),
+  ('dipper',          'Humara 3.1',      true,  false, 13),
+  ('humarin',         'Humara 3.2',      true,  false, 14),
+  ('ozone',           'Ozone',           true,  false, 0),
+  ('easy',            'Easy',            true,  false, 15)
 ON CONFLICT (engine_id) DO NOTHING;
 
 -- Allow public read access (users need to see which engines are available)
