@@ -2,9 +2,12 @@
  * Humarin Humanizer Engine — ChatGPT-trained T5-base paraphraser.
  * Calls the HF Space running humarin/chatgpt_paraphraser_on_T5_base (222M params).
  * Same API shape as t5-humanizer.ts — Bearer auth, /humanize POST, JSON response.
+ * Falls back to Cloud Run backup if primary HF Space is down.
  */
 
 const HUMARIN_API_URL = process.env.HUMARIN_API_URL || 'https://maguna956-humarin-paraphraser.hf.space';
+const HUMARIN_BACKUP_URL = process.env.HUMARIN_API_URL_BACKUP || '';
+const HUMARIN_BACKUP_KEY = process.env.HUMARIN_API_KEY_BACKUP || '';
 
 export interface HumarinResult {
   humanized: string;
@@ -82,22 +85,15 @@ function splitIntoChunks(text: string, maxChunks: number = 3): string[] {
 }
 
 /**
- * Call the Humarin humanizer API with parallel chunk processing.
- * @param text Full text to humanize
- * @param mode 'quality' | 'fast' | 'aggressive' | 'turbo'
- * @param sentenceBySentence Server processes each sentence independently (default true)
+ * Run a full Humarin pass against a single endpoint.
  */
-export async function humarinHumanize(
+async function runHumarinPass(
   text: string,
-  mode: string = 'quality',
-  sentenceBySentence: boolean = true,
+  mode: string,
+  sentenceBySentence: boolean,
+  apiKey: string,
+  url: string,
 ): Promise<HumarinResult> {
-  const apiKey = process.env.HUMARIN_API_KEY;
-  if (!apiKey) {
-    throw new Error('HUMARIN_API_KEY environment variable is not set');
-  }
-
-  const url = HUMARIN_API_URL.replace(/\/$/, '');
   const chunks = splitIntoChunks(text, 3);
 
   if (chunks.length === 1) {
@@ -127,4 +123,46 @@ export async function humarinHumanize(
       threshold_ratio: Math.round((metThreshold / Math.max(totalSentences, 1)) * 1000) / 1000,
     },
   };
+}
+
+/**
+ * Call the Humarin humanizer API with parallel chunk processing.
+ * Automatically falls back to Cloud Run backup if primary HF Space is down.
+ * @param text Full text to humanize
+ * @param mode 'quality' | 'fast' | 'aggressive' | 'turbo'
+ * @param sentenceBySentence Server processes each sentence independently (default true)
+ */
+export async function humarinHumanize(
+  text: string,
+  mode: string = 'quality',
+  sentenceBySentence: boolean = true,
+): Promise<HumarinResult> {
+  const apiKey = process.env.HUMARIN_API_KEY;
+  if (!apiKey) {
+    throw new Error('HUMARIN_API_KEY environment variable is not set');
+  }
+
+  const primaryUrl = HUMARIN_API_URL.replace(/\/$/, '');
+
+  // Try primary (HF Space)
+  try {
+    return await runHumarinPass(text, mode, sentenceBySentence, apiKey, primaryUrl);
+  } catch (primaryErr) {
+    console.warn(`[Humarin] Primary API failed: ${primaryErr instanceof Error ? primaryErr.message : primaryErr}`);
+
+    // Fallback to Cloud Run backup if configured
+    if (HUMARIN_BACKUP_URL) {
+      const backupUrl = HUMARIN_BACKUP_URL.replace(/\/$/, '');
+      const backupKey = HUMARIN_BACKUP_KEY || apiKey;
+      console.log(`[Humarin] Falling back to backup: ${backupUrl}`);
+      try {
+        return await runHumarinPass(text, mode, sentenceBySentence, backupKey, backupUrl);
+      } catch (backupErr) {
+        console.error(`[Humarin] Backup API also failed: ${backupErr instanceof Error ? backupErr.message : backupErr}`);
+        throw new Error('Humarin humanizer unavailable — primary and backup both failed');
+      }
+    }
+
+    throw primaryErr;
+  }
 }

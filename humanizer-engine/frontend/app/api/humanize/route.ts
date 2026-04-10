@@ -27,6 +27,7 @@ import { robustSentenceSplit } from '@/lib/engine/content-protection';
 import { synonymReplace } from '@/lib/engine/utils';
 import { applyAIWordKill } from '@/lib/engine/shared-dictionaries';
 import { postCleanGrammar } from '@/lib/engine/grammar-cleaner';
+import { apexHumanize } from '@/lib/engine/apex-humanizer';
 
 export const maxDuration = 120; // LLM engines need more time
 
@@ -474,6 +475,14 @@ export async function POST(req: Request) {
       // Ghost Min v1.2: Academic Prose optimized
       const { ghostMiniV1_2 } = await import('@/lib/engine/ghost-mini-v1-2');
       humanized = ghostMiniV1_2(normalizedText);
+    } else if (engine === 'apex') {
+      // Apex: 6-phase GPT-4o-mini + multi-phase post-processing pipeline
+      // Phase 1: LLM sentence-by-sentence rewrite (50%+ change)
+      // Phase 2: Aggressive PP (40%) | Phase 3: Cleaning PP (30%)
+      // Phase 4: Paragraph restructuring (20%) | Phase 5: AI signal kill
+      // Phase 6: Grammar/punctuation cleanup
+      const apexResult = await apexHumanize(normalizedText);
+      humanized = apexResult.humanized;
     } else if (engine === 'ghost_pro') {
       // Ghost Pro: Single LLM rewrite + signal-aware post-processing
       humanized = await ghostProHumanize(normalizedText, {
@@ -504,21 +513,21 @@ export async function POST(req: Request) {
     const FIRST_PERSON_RE_EARLY = /\b(I|me|my|mine|myself|we|us|our|ours|ourselves)\b/i;
     const earlyFirstPerson = FIRST_PERSON_RE_EARLY.test(text);
     const inputAiScore = inputAnalysis.summary.overall_ai_score;
-    if (engine !== 'humara' && engine !== 'humara_v1_3' && engine !== 'nuru' && engine !== 'omega' && engine !== 'oxygen') {
+    if (engine !== 'humara' && engine !== 'humara_v1_3' && engine !== 'nuru' && engine !== 'omega' && engine !== 'oxygen' && engine !== 'apex') {
       humanized = unifiedSentenceProcess(humanized, earlyFirstPerson, inputAiScore);
     }
 
     // ── 60% Restructuring Enforcement ──────────────────────────────
     // Ensures at least 60% of sentences show meaningful word-level changes.
     // Applies additional transforms to under-changed sentences.
-    if (engine !== 'oxygen') {
+    if (engine !== 'oxygen' && engine !== 'apex') {
       humanized = enforceRestructuringThreshold(text, humanized, 0.60);
     }
 
     // Post-capitalization formatting — fix sentence casing for all engine outputs
     // Skip for humara/nuru/omega: they have their own capitalization handling
     // Pass original text so proper nouns from the input are preserved
-    if (engine !== 'humara' && engine !== 'humara_v1_3' && engine !== 'nuru' && engine !== 'omega' && engine !== 'oxygen') {
+    if (engine !== 'humara' && engine !== 'humara_v1_3' && engine !== 'nuru' && engine !== 'omega' && engine !== 'oxygen' && engine !== 'apex') {
       humanized = fixCapitalization(humanized, text);
     }
 

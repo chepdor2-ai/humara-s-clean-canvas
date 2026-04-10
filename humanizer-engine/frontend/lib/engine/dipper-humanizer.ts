@@ -3,9 +3,11 @@
  * Calls our deployed DIPPER 1B paraphraser (SamSJackson/paraphrase-dipper-no-ctx).
  * Controls: lexical diversity (word changes) and order diversity (structural changes).
  * Supports sentence-by-sentence processing with paragraph/title preservation.
+ * Falls back to Cloud Run backup if primary HF Space is down.
  */
 
-const DIPPER_SPACE_URL = 'https://maguna956-dipper-paraphraser.hf.space';
+const DIPPER_SPACE_URL = process.env.DIPPER_API_URL || 'https://maguna956-dipper-paraphraser.hf.space';
+const DIPPER_BACKUP_URL = process.env.DIPPER_API_URL_BACKUP || '';
 const GRADIO_API = `${DIPPER_SPACE_URL}/gradio_api/call/paraphrase`;
 
 export interface DipperResult {
@@ -111,9 +113,12 @@ function reassembleSegments(segments: TextSegment[]): string {
  * Call the DIPPER Gradio API for a single piece of text.
  * Uses the standard Gradio submit → SSE polling pattern.
  */
-async function callDipperAPI(text: string, lex: number, order: number): Promise<string> {
+async function callDipperAPI(text: string, lex: number, order: number, baseUrl?: string): Promise<string> {
+  const apiBase = baseUrl || DIPPER_SPACE_URL;
+  const gradioEndpoint = `${apiBase}/gradio_api/call/paraphrase`;
+
   // Step 1: Submit the job
-  const submitResp = await fetch(GRADIO_API, {
+  const submitResp = await fetch(gradioEndpoint, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ data: [text, lex, order] }),
@@ -130,7 +135,7 @@ async function callDipperAPI(text: string, lex: number, order: number): Promise<
   }
 
   // Step 2: Poll for result via SSE
-  const resultResp = await fetch(`${GRADIO_API}/${event_id}`, {
+  const resultResp = await fetch(`${gradioEndpoint}/${event_id}`, {
     signal: AbortSignal.timeout(180000), // 3 min timeout for CPU inference
   });
 
@@ -164,21 +169,20 @@ async function callDipperAPI(text: string, lex: number, order: number): Promise<
 }
 
 /**
- * Main entry: humanize text via DIPPER paraphraser.
- * @param sentenceBySentence If true, processes each sentence independently.
+ * Run DIPPER against a single endpoint URL.
  */
-export async function dipperHumanize(
+async function runDipperPass(
   text: string,
-  strength: string = 'medium',
-  sentenceBySentence: boolean = false,
+  strength: string,
+  sentenceBySentence: boolean,
+  baseUrl: string,
 ): Promise<DipperResult> {
   const { lex, order } = mapStrengthToDiversity(strength);
   const startTime = Date.now();
   const inputWords = text.trim().split(/\s+/).length;
 
   if (!sentenceBySentence) {
-    // Whole-text mode
-    const result = await callDipperAPI(text, lex, order);
+    const result = await callDipperAPI(text, lex, order, baseUrl);
     return {
       humanized: result,
       inputWords,
@@ -187,17 +191,15 @@ export async function dipperHumanize(
     };
   }
 
-  // Sentence-by-sentence mode
   const segments = segmentText(text);
   const sentenceSegments = segments.filter(seg => seg.type === 'sentence');
 
-  // Process in batches of 5 (CPU inference is slow, don't overwhelm)
   const BATCH_SIZE = 5;
   for (let batchStart = 0; batchStart < sentenceSegments.length; batchStart += BATCH_SIZE) {
     const batch = sentenceSegments.slice(batchStart, batchStart + BATCH_SIZE);
     const batchResults = await Promise.allSettled(
       batch.map((seg, i) =>
-        callDipperAPI(seg.text, lex, order).then(result => ({ index: batchStart + i, result }))
+        callDipperAPI(seg.text, lex, order, baseUrl).then(result => ({ index: batchStart + i, result }))
       )
     );
     for (const r of batchResults) {
@@ -215,4 +217,38 @@ export async function dipperHumanize(
     outputWords: humanized.trim().split(/\s+/).length,
     latencyMs: Date.now() - startTime,
   };
+}
+
+/**
+ * Main entry: humanize text via DIPPER paraphraser.
+ * Automatically falls back to Cloud Run backup if primary HF Space is down.
+ * @param sentenceBySentence If true, processes each sentence independently.
+ */
+export async function dipperHumanize(
+  text: string,
+  strength: string = 'medium',
+  sentenceBySentence: boolean = false,
+): Promise<DipperResult> {
+  const primaryUrl = DIPPER_SPACE_URL.replace(/\/$/, '');
+
+  // Try primary (HF Space)
+  try {
+    return await runDipperPass(text, strength, sentenceBySentence, primaryUrl);
+  } catch (primaryErr) {
+    console.warn(`[Dipper] Primary API failed: ${primaryErr instanceof Error ? primaryErr.message : primaryErr}`);
+
+    // Fallback to Cloud Run backup if configured
+    if (DIPPER_BACKUP_URL) {
+      const backupUrl = DIPPER_BACKUP_URL.replace(/\/$/, '');
+      console.log(`[Dipper] Falling back to backup: ${backupUrl}`);
+      try {
+        return await runDipperPass(text, strength, sentenceBySentence, backupUrl);
+      } catch (backupErr) {
+        console.error(`[Dipper] Backup API also failed: ${backupErr instanceof Error ? backupErr.message : backupErr}`);
+        throw new Error('Dipper humanizer unavailable — primary and backup both failed');
+      }
+    }
+
+    throw primaryErr;
+  }
 }
