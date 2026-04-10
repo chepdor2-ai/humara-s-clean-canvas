@@ -30,6 +30,14 @@ async function t5Call(
   apiKey: string,
   url: string,
 ): Promise<{ humanized: string; stats: Record<string, unknown> }> {
+  // Pre-flight: verify the Space is awake and not stuck processing
+  try {
+    const healthRes = await fetch(`${url}/health`, { signal: AbortSignal.timeout(10_000) });
+    if (!healthRes.ok) throw new Error(`Health check failed: ${healthRes.status}`);
+  } catch (err) {
+    throw new Error(`T5 Space unavailable (health check failed): ${err instanceof Error ? err.message : err}`);
+  }
+
   const response = await fetch(`${url}/humanize`, {
     method: 'POST',
     headers: {
@@ -43,7 +51,7 @@ async function t5Call(
       min_change_ratio: 0.40,
       max_retries: mode === 'turbo' ? 1 : mode === 'fast' ? 2 : 5,
     }),
-    signal: AbortSignal.timeout(180_000),
+    signal: AbortSignal.timeout(300_000), // 5 min — CPU inference is slow on free-tier Spaces
   });
 
   if (!response.ok) {
@@ -101,9 +109,12 @@ async function runT5Pass(
     return { humanized: result.humanized, stats: result.stats as T5Result['stats'] };
   }
 
-  const results = await Promise.all(
-    chunks.map(chunk => t5Call(chunk, mode, sentenceBySentence, apiKey, url))
-  );
+  // Process chunks sequentially — free-tier HF Spaces have a single worker
+  // and reject concurrent requests with "Already borrowed" errors.
+  const results: { humanized: string; stats: Record<string, unknown> }[] = [];
+  for (const chunk of chunks) {
+    results.push(await t5Call(chunk, mode, sentenceBySentence, apiKey, url));
+  }
 
   const humanized = results.map(r => r.humanized).join('\n\n');
   const totalSentences = results.reduce((acc, r) => acc + ((r.stats as Record<string, number>).total_sentences || 0), 0);

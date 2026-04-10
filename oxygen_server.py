@@ -1160,9 +1160,11 @@ def humanize_sentence(original: str, preset: dict, min_change: float,
 
     # Phase 4: If still below threshold, use heavy rule-based rewriting
     # (these are fast, no T5 calls, so we can retry aggressively)
-    if best_ratio < min_change:
+    # Skip fallback retries entirely in turbo mode — speed is the priority
+    fallback_retries = 0 if max_retries <= 1 else max(max_retries - t5_retries, 3)
+    if best_ratio < min_change and fallback_retries > 0:
         # First try: heavy rewrite on T5 output
-        for fb_attempt in range(max(max_retries - t5_retries, 3)):
+        for fb_attempt in range(fallback_retries):
             attempts += 1
             # Start from best T5 result, apply heavy rewriting
             fallback = heavy_rewrite_sentence(best_result)
@@ -1185,7 +1187,8 @@ def humanize_sentence(original: str, preset: dict, min_change: float,
                 break
         
         # Second try: if still below, rewrite from ORIGINAL (not T5 output)
-        if best_ratio < min_change:
+        # Skip in turbo mode
+        if best_ratio < min_change and fallback_retries > 0:
             for fb2 in range(3):
                 attempts += 1
                 fallback = heavy_rewrite_sentence(original)

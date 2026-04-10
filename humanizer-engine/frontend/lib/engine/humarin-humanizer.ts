@@ -27,6 +27,14 @@ async function humarinCall(
   apiKey: string,
   url: string,
 ): Promise<{ humanized: string; stats: Record<string, unknown> }> {
+  // Pre-flight: verify the Space is awake and not stuck processing
+  try {
+    const healthRes = await fetch(`${url}/health`, { signal: AbortSignal.timeout(10_000) });
+    if (!healthRes.ok) throw new Error(`Health check failed: ${healthRes.status}`);
+  } catch (err) {
+    throw new Error(`Humarin Space unavailable (health check failed): ${err instanceof Error ? err.message : err}`);
+  }
+
   const response = await fetch(`${url}/humanize`, {
     method: 'POST',
     headers: {
@@ -97,9 +105,12 @@ export async function humarinHumanize(
     return { humanized: result.humanized, stats: result.stats as HumarinResult['stats'] };
   }
 
-  const results = await Promise.all(
-    chunks.map(chunk => humarinCall(chunk, mode, sentenceBySentence, apiKey, url))
-  );
+  // Process chunks sequentially — free-tier HF Spaces have a single worker
+  // and reject concurrent requests with "Already borrowed" errors.
+  const results: { humanized: string; stats: Record<string, unknown> }[] = [];
+  for (const chunk of chunks) {
+    results.push(await humarinCall(chunk, mode, sentenceBySentence, apiKey, url));
+  }
 
   const humanized = results.map(r => r.humanized).join('\n\n');
   const totalSentences = results.reduce((acc, r) => acc + ((r.stats as Record<string, number>).total_sentences || 0), 0);
