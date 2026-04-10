@@ -1495,6 +1495,13 @@ def humanize_text(text: str, mode: str = "quality",
 
 # ── API Routes ──
 
+@app.get("/")
+async def root():
+    if model is None:
+        raise HTTPException(503, "Model not loaded")
+    return {"service": "Oxygen T5 Humanizer v2", "status": "running", "model": "oxygen-t5-humanizer-v2", "device": device}
+
+
 @app.get("/health")
 async def health():
     if model is None:

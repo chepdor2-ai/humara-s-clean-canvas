@@ -54,8 +54,10 @@ function segmentText(text: string): TextSegment[] {
       const isTitle =
         /^#{1,6}\s/.test(trimmed) ||
         /^[IVXLCDM]+\.\s/.test(trimmed) ||
+        /^\d+(?:[.):]|(?:\.\d+)+)\s+[A-Z]/.test(trimmed) ||
+        /^[A-Za-z][.):]\s/.test(trimmed) ||
         /^(?:Part|Section|Chapter|Abstract|Introduction|Conclusion|References|Bibliography|Appendix)\b/i.test(trimmed) ||
-        (trimmed.length < 80 && !/[.!?:;]$/.test(trimmed) && /^[A-Z]/.test(trimmed) && !/[a-z]{3,}\s[a-z]{3,}\s[a-z]{3,}\s[a-z]{3,}\s[a-z]{3,}/.test(trimmed));
+        (trimmed.length < 80 && !/[.!;]$/.test(trimmed) && /^[A-Z]/.test(trimmed) && trimmed.split(/\s+/).length <= 12 && !/[a-z]{3,}\s[a-z]{3,}\s[a-z]{3,}\s[a-z]{3,}\s[a-z]{3,}/.test(trimmed));
 
       if (isTitle) {
         segments.push({ type: 'title', text: trimmed, paragraphIndex: pIdx });
@@ -86,18 +88,19 @@ function reassembleSegments(segments: TextSegment[]): string {
 
   for (const key of sortedKeys) {
     const segs = paragraphGroups.get(key)!;
-    const parts: string[] = [];
+    const titleParts: string[] = [];
+    const bodyParts: string[] = [];
     for (const seg of segs) {
-      if (seg.type === 'title' || seg.type === 'sentence') parts.push(seg.text);
+      if (seg.type === 'title') titleParts.push(seg.text);
+      else if (seg.type === 'sentence') bodyParts.push(seg.text);
     }
-    if (parts.length > 0) {
-      if (segs[0].type === 'title' && segs.length > 1) {
-        paragraphs.push(parts[0] + '\n' + parts.slice(1).join(' '));
-      } else if (segs[0].type === 'title') {
-        paragraphs.push(parts[0]);
-      } else {
-        paragraphs.push(parts.join(' '));
-      }
+    // Titles get their own paragraph block, body text joins separately
+    // Using \n\n ensures post-processors detect titles as headings
+    if (titleParts.length > 0) {
+      paragraphs.push(titleParts.join('\n'));
+    }
+    if (bodyParts.length > 0) {
+      paragraphs.push(bodyParts.join(' '));
     }
   }
 

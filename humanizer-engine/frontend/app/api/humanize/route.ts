@@ -379,7 +379,7 @@ export async function POST(req: Request) {
 
     if (engine === 'easy') {
       // Easy: EssayWritingSupport external API — instant processing, no LLM
-      const easySBS = body.easy_sentence_by_sentence === true;
+      const easySBS = body.easy_sentence_by_sentence !== false;
       const easyResult = await easyHumanize(
         normalizedText,
         effectiveStrength,

@@ -422,9 +422,15 @@ export function unifiedSentenceProcess(
       continue;
     }
 
-    // Detect headings — short lines without terminal punctuation
+    // Detect headings — short lines without terminal punctuation, numbered/lettered headings, markdown
     const words = trimmedPara.split(/\s+/);
-    const isHeading = words.length <= 10 && !/[.!?]$/.test(trimmedPara);
+    const isHeading =
+      /^#{1,6}\s/.test(trimmedPara) ||
+      /^[IVXLCDM]+\.\s/.test(trimmedPara) ||
+      /^\d+(?:[.):]|(?:\.\d+)+)\s+[A-Z]/.test(trimmedPara) ||
+      /^[A-Za-z][.):\s]/.test(trimmedPara) && words.length <= 5 ||
+      /^(?:Part|Section|Chapter|Abstract|Introduction|Conclusion|References|Bibliography|Appendix)\b/i.test(trimmedPara) ||
+      (words.length <= 12 && !/[.!;]$/.test(trimmedPara));
     if (isHeading) {
       processedParagraphs.push(trimmedPara);
       continue;
