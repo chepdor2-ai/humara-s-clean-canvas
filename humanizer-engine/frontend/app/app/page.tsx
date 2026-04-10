@@ -149,6 +149,7 @@ const ALL_ENGINES: EngineConfig[] = [
   { id: 'oxygen_t5', label: 'Humara 3.0' },
   { id: 'dipper', label: 'Humara 3.1' },
   { id: 'humarin', label: 'Humara 3.2' },
+  { id: 'humara_v3_3', label: 'Humara 3.3' },
 ];
 
 const ENGINE_GUIDES: Record<string, string> = {
@@ -158,6 +159,7 @@ const ENGINE_GUIDES: Record<string, string> = {
   oxygen_t5: 'Deep paraphrase engine powered by a fine-tuned T5 model. Produces the most natural rewrites with highest word-level change.',
   dipper: 'DIPPER-based deep paraphraser — 1B T5 model specifically trained to evade AI detectors. Highest word-level diversity with meaning preservation.',
   humarin: 'ChatGPT-trained T5 paraphraser — generates high-quality, diverse rewrites with natural sentence structure. Best overall quality.',
+  humara_v3_3: 'Triple-engine fallback chain (Humarin → Dipper → Oxygen) with full post-processing and detector feedback loop. Most resilient — 0% AI score target.',
 };
 
 interface EngineConfig {
@@ -187,7 +189,7 @@ export default function EditorPage() {
   const [error, setError] = useState('');
   const [rephrasing, setRephrasing] = useState(false);
 
-  const [engine, setEngine] = useState('ozone');
+  const [engine, setEngine] = useState('humara_v3_3');
   const [engineDropdownOpen, setEngineDropdownOpen] = useState(false);
   const [strength, setStrength] = useState('medium');
   const [tone, setTone] = useState('academic');

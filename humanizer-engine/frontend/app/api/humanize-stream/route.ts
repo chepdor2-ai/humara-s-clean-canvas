@@ -265,6 +265,12 @@ export async function POST(req: Request) {
             const humarinMode = strength === 'strong' ? 'aggressive' : strength === 'light' ? 'fast' : 'quality';
             const humarinResult = await humarinHumanize(normalizedText, humarinMode, true);
             humanized = humarinResult.humanized;
+          } else if (eng === 'humara_v3_3') {
+            // Humara 3.3: Triple-engine fallback (Humarin → Dipper → Oxygen TS)
+            // Uses same Humarin engine but flows through full post-processing below
+            const humarinMode = strength === 'strong' ? 'aggressive' : strength === 'light' ? 'fast' : 'quality';
+            const humarinResult = await humarinHumanize(normalizedText, humarinMode, true);
+            humanized = humarinResult.humanized;
           } else if (eng === 'humara_v1_3') {
             const { pipeline } = await import('@/lib/engine/humara-v1-3');
             humanized = await pipeline(normalizedText, (tone ?? 'academic') as string, strength === 'strong' ? 10 : strength === 'light' ? 4 : 7);

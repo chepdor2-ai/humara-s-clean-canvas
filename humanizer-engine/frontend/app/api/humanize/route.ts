@@ -21,6 +21,7 @@ import { omegaHumanize } from '@/lib/engine/omega-humanizer';
 import { easyHumanize } from '@/lib/engine/easy-humanizer';
 import { ozoneHumanize } from '@/lib/engine/ozone-humanizer';
 import { oxygenHumanize } from '@/lib/engine/oxygen-humanizer';
+import { humarinHumanize } from '@/lib/engine/humarin-humanizer';
 import { robustSentenceSplit } from '@/lib/engine/content-protection';
 // deepRestructure, voiceShift, tenseVariation disabled — they garble sentence structure
 // import { deepRestructure, voiceShift, tenseVariation } from '@/lib/engine/advanced-transforms';
@@ -406,6 +407,13 @@ export async function POST(req: Request) {
         body.oxygen_sentence_by_sentence === true,
       );
       // Oxygen now flows through ALL post-processing below
+    } else if (engine === 'humara_v3_3') {
+      // Humara 3.3: Triple-engine fallback (Humarin → Dipper → Oxygen TS)
+      // Uses Humarin as primary engine (which internally cascades through the triple fallback)
+      // Then flows through ALL post-processing including detector feedback loop
+      const humarinMode = strength === 'strong' ? 'aggressive' : strength === 'light' ? 'fast' : 'quality';
+      const humarinResult = await humarinHumanize(normalizedText, humarinMode, true);
+      humanized = humarinResult.humanized;
     } else if (engine === 'humara_v1_3') {
       // Humara v1.3: Stealth Humanizer Engine v5 from coursework-champ
       const { pipeline } = await import('@/lib/engine/humara-v1-3');
