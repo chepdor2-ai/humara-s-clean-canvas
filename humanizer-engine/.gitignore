@@ -37,9 +37,11 @@ venv_clean/
 
 # Data files
 data/
+!frontend/lib/**/data/
 dictionaries/*.json
 dictionaries/*.jsonl
 !dictionaries/style_profiles.json
+!dictionaries/curated_synonyms.json
 
 # Logs
 *.log
