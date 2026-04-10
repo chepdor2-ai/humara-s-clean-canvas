@@ -144,22 +144,16 @@ const splitSentences = (text: string): { text: string; start: number; end: numbe
 // Full engine registry — admin controls which are visible/premium via Supabase engine_config
 const ALL_ENGINES: EngineConfig[] = [
   { id: 'oxygen', label: 'Humara 2.0' },
-  { id: 'ozone', label: 'Humara 2.1' },
   { id: 'easy', label: 'Humara 2.2' },
-  { id: 'oxygen_t5', label: 'Humara 3.0' },
-  { id: 'dipper', label: 'Humara 3.1' },
-  { id: 'humarin', label: 'Humara 3.2' },
-  { id: 'humara_v3_3', label: 'Humara 3.3' },
+  { id: 'ozone', label: 'Humara 2.3' },
+  { id: 'humara_v3_3', label: 'Humara 2.4' },
 ];
 
 const ENGINE_GUIDES: Record<string, string> = {
   oxygen: 'Primarily trained against GPTZero. Ideal for papers that have refused to bypass GPTZero — add your humanized paper for a second pass.',
-  ozone: 'Trained against ZeroGPT, Surfer and other common detectors. Solves persistent AI detection in ZeroGPT and Surfer.',
   easy: 'Trained to beat all detectors broadly. May compromise score on some individual detectors.',
-  oxygen_t5: 'Deep paraphrase engine powered by a fine-tuned T5 model. Produces the most natural rewrites with highest word-level change.',
-  dipper: 'DIPPER-based deep paraphraser — 1B T5 model specifically trained to evade AI detectors. Highest word-level diversity with meaning preservation.',
-  humarin: 'ChatGPT-trained T5 paraphraser — generates high-quality, diverse rewrites with natural sentence structure. Best overall quality.',
-  humara_v3_3: 'Triple-engine fallback chain (Humarin → Dipper → Oxygen) with full post-processing and detector feedback loop. Most resilient — 0% AI score target.',
+  ozone: 'Trained against ZeroGPT, Surfer and other common detectors. Solves persistent AI detection in ZeroGPT and Surfer.',
+  humara_v3_3: 'Triple-engine fallback chain with full post-processing and detector feedback loop. Most resilient — 0% AI score target.',
 };
 
 interface EngineConfig {
@@ -928,7 +922,7 @@ export default function EditorPage() {
       {ozoneUndetectWarning && (
         <div className="flex items-center gap-1.5 px-1 animate-pulse">
           <span className="text-amber-500 text-[9px]">⚠️</span>
-          <p className="text-[9px] text-amber-400 font-medium">Undetectability always enabled for Humara 2.1</p>
+          <p className="text-[9px] text-amber-400 font-medium">Undetectability always enabled for Humara 2.3</p>
         </div>
       )}
 
