@@ -5,7 +5,8 @@
     "dev": "sh -c 'cd humanizer-engine/frontend && if [ ! -d node_modules ]; then npm install; fi && npm run dev -- --hostname 0.0.0.0 --port ${PORT:-${npm_config_port:-3000}}'",
     "build:dev": "npm run build",
     "build": "cd humanizer-engine/frontend && npm install && npm run build",
-    "start": "cd humanizer-engine/frontend && npm run start -- --hostname 0.0.0.0 --port ${PORT:-10000}"
+    "postinstall": "cd humanizer-engine/frontend && npm install && npm run build",
+    "start": "cd humanizer-engine/frontend && npx next start --hostname 0.0.0.0 --port ${PORT:-10000}"
   },
   "dependencies": {
     "compromise": "^14.15.0"
