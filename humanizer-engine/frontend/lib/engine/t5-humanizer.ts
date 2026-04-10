@@ -151,10 +151,17 @@ export async function t5Humanize(
   }
 
   const primaryUrl = T5_API_URL.replace(/\/$/, '');
+  const FAILOVER_TIMEOUT_MS = 10_000;
 
-  // Try primary (HF Space)
+  // Try primary with 10s timeout, then fall back to backup
   try {
-    return await runT5Pass(text, mode, sentenceBySentence, apiKey, primaryUrl);
+    const result = await Promise.race([
+      runT5Pass(text, mode, sentenceBySentence, apiKey, primaryUrl),
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('T5 primary timed out after 10s')), FAILOVER_TIMEOUT_MS)
+      ),
+    ]);
+    return result;
   } catch (primaryErr) {
     console.warn(`[T5] Primary API failed: ${primaryErr instanceof Error ? primaryErr.message : primaryErr}`);
 
