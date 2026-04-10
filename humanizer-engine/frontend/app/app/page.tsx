@@ -146,12 +146,18 @@ const ALL_ENGINES: EngineConfig[] = [
   { id: 'oxygen', label: 'Humara 2.0' },
   { id: 'ozone', label: 'Humara 2.1' },
   { id: 'easy', label: 'Humara 2.2' },
+  { id: 'oxygen_t5', label: 'Humara 3.0' },
+  { id: 'dipper', label: 'Humara 3.1' },
+  { id: 'humarin', label: 'Humara 3.2' },
 ];
 
 const ENGINE_GUIDES: Record<string, string> = {
   oxygen: 'Primarily trained against GPTZero. Ideal for papers that have refused to bypass GPTZero — add your humanized paper for a second pass.',
   ozone: 'Trained against ZeroGPT, Surfer and other common detectors. Solves persistent AI detection in ZeroGPT and Surfer.',
   easy: 'Trained to beat all detectors broadly. May compromise score on some individual detectors.',
+  oxygen_t5: 'Deep paraphrase engine powered by a fine-tuned T5 model. Produces the most natural rewrites with highest word-level change.',
+  dipper: 'DIPPER-based deep paraphraser — 1B T5 model specifically trained to evade AI detectors. Highest word-level diversity with meaning preservation.',
+  humarin: 'ChatGPT-trained T5 paraphraser — generates high-quality, diverse rewrites with natural sentence structure. Best overall quality.',
 };
 
 interface EngineConfig {

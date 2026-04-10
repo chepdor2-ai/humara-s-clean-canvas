@@ -19,6 +19,9 @@ import { omegaHumanize } from '@/lib/engine/omega-humanizer';
 import { easyHumanize } from '@/lib/engine/easy-humanizer';
 import { ozoneHumanize } from '@/lib/engine/ozone-humanizer';
 import { oxygenHumanize } from '@/lib/engine/oxygen-humanizer';
+import { dipperHumanize } from '@/lib/engine/dipper-humanizer';
+import { humarinHumanize } from '@/lib/engine/humarin-humanizer';
+import { t5Humanize } from '@/lib/engine/t5-humanizer';
 import { synonymReplace } from '@/lib/engine/utils';
 import { applyAIWordKill } from '@/lib/engine/shared-dictionaries';
 import { postCleanGrammar } from '@/lib/engine/grammar-cleaner';
@@ -245,6 +248,23 @@ export async function POST(req: Request) {
                 ? Boolean((body as Record<string, unknown>).oxygen_sentence_by_sentence)
                 : true,
             );
+          } else if (eng === 'oxygen_t5') {
+            // Oxygen T5: Remote T5 model server (HF Space or self-hosted)
+            const t5Mode = effectiveStrength === 'light' ? 'turbo' : effectiveStrength === 'strong' ? 'aggressive' : 'fast';
+            const t5Result = await t5Humanize(normalizedText, t5Mode, true);
+            humanized = t5Result.humanized;
+          } else if (eng === 'dipper') {
+            // DIPPER: 1B T5 paraphraser trained to evade AI detectors (HF Space)
+            const dipperSBS = (body as Record<string, unknown>).dipper_sentence_by_sentence !== undefined
+              ? Boolean((body as Record<string, unknown>).dipper_sentence_by_sentence)
+              : false;
+            const dipperResult = await dipperHumanize(normalizedText, effectiveStrength, dipperSBS);
+            humanized = dipperResult.humanized;
+          } else if (eng === 'humarin') {
+            // Humarin: ChatGPT-trained T5-base paraphraser (222M, HF Space)
+            const humarinMode = strength === 'strong' ? 'aggressive' : strength === 'light' ? 'fast' : 'quality';
+            const humarinResult = await humarinHumanize(normalizedText, humarinMode, true);
+            humanized = humarinResult.humanized;
           } else if (eng === 'humara_v1_3') {
             const { pipeline } = await import('@/lib/engine/humara-v1-3');
             humanized = await pipeline(normalizedText, (tone ?? 'academic') as string, strength === 'strong' ? 10 : strength === 'light' ? 4 : 7);
@@ -283,8 +303,8 @@ export async function POST(req: Request) {
           const detector = getDetector();
           const inputAnalysis = detector.analyze(text);
 
-          // ── POST-PROCESSING (skip entirely for ozone — it uses Ozone API + EssayWritingSupport) ──
-          if (eng !== 'ozone') {
+          // ── POST-PROCESSING (skip for ozone and oxygen_t5 — they handle their own full pipelines) ──
+          if (eng !== 'ozone' && eng !== 'oxygen_t5' && eng !== 'dipper' && eng !== 'humarin') {
 
           // 4. Unified Sentence Process
           const FIRST_PERSON_RE_EARLY = /\b(I|me|my|mine|myself|we|us|our|ours|ourselves)\b/i;
@@ -441,7 +461,7 @@ export async function POST(req: Request) {
           humanized = humanized.replace(/(^|[.!?]\s+)([a-z])/g, (_m: string, pre: string, ch: string) => pre + ch.toUpperCase());
           humanized = fixMidSentenceCapitalization(humanized, text);
 
-          } // end: if (eng !== 'ozone') post-processing block
+          } // end: if (eng !== 'ozone' && eng !== 'oxygen_t5' && eng !== 'dipper' && eng !== 'humarin') post-processing block
 
           // ── OXYGEN POLISH PASS (FINAL PHASE) ──────────────────────────
           // Easy engine's output is polished through the Oxygen TS engine

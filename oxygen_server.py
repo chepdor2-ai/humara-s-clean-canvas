@@ -22,9 +22,15 @@ import logging
 import os
 import re
 import random
+import asyncio
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
 import torch
+
+# Use all available CPU cores for inference
+torch.set_num_threads(os.cpu_count() or 2)
+torch.set_num_interop_threads(1)
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
@@ -38,6 +44,7 @@ logger = logging.getLogger(__name__)
 
 # ── Model ──
 MODEL_DIR = "oxygen-model"
+HF_MODEL_REPO = os.environ.get("HF_MODEL_REPO", "maguna956/oxygen-t5-model")
 device = "cuda" if torch.cuda.is_available() else "cpu"
 model: T5ForConditionalGeneration | None = None
 tokenizer: AutoTokenizer | None = None
@@ -47,16 +54,24 @@ import json as _json
 
 def load_model():
     global model, tokenizer, model_prefix
-    if not os.path.exists(MODEL_DIR):
-        raise FileNotFoundError(f"Model directory not found: {MODEL_DIR}")
-    logger.info(f"Loading model from {MODEL_DIR} ...")
-    tokenizer = AutoTokenizer.from_pretrained(MODEL_DIR, local_files_only=True)
-    model = T5ForConditionalGeneration.from_pretrained(
-        MODEL_DIR, local_files_only=True, torch_dtype=torch.float32,
-    ).to(device)
+    # Try local model first, fall back to HF Hub repo
+    if os.path.exists(MODEL_DIR) and os.path.exists(os.path.join(MODEL_DIR, "model.safetensors")):
+        source = MODEL_DIR
+        logger.info(f"Loading model from local {MODEL_DIR} ...")
+        tokenizer = AutoTokenizer.from_pretrained(source, local_files_only=True)
+        model = T5ForConditionalGeneration.from_pretrained(
+            source, local_files_only=True, torch_dtype=torch.float32,
+        ).to(device)
+    else:
+        source = HF_MODEL_REPO
+        logger.info(f"Local model not found — downloading from HF Hub: {source} ...")
+        tokenizer = AutoTokenizer.from_pretrained(source, torch_dtype=torch.float32)
+        model = T5ForConditionalGeneration.from_pretrained(
+            source, torch_dtype=torch.float32,
+        ).to(device)
     model.eval()
     n = sum(p.numel() for p in model.parameters())
-    logger.info(f"Model loaded ({n:,} params) on {device}")
+    logger.info(f"Model loaded ({n:,} params) on {device} from {source}")
     
     # Check for model source info (set by upgrade_oxygen_model.py)
     source_file = os.path.join(MODEL_DIR, "model_source.json")
@@ -879,6 +894,11 @@ def t5_generate_sentence(sentence: str, num_beams: int = 4,
     Strategy: generate multiple diverse candidates, pick the one with
     highest change ratio that still preserves meaning.
     """
+    # Short sentences (<6 words) hallucinate with beam search — use greedy only
+    word_count = len(sentence.split())
+    if word_count < 6:
+        num_beams = 1
+    
     # Apply model prefix if configured (e.g. "paraphrase: " for paraphrase models)
     input_text = f"{model_prefix}{sentence}" if model_prefix else sentence
     
@@ -890,7 +910,7 @@ def t5_generate_sentence(sentence: str, num_beams: int = 4,
         padding=True,
     ).to(device)
     
-    max_new = min(768, max(len(sentence.split()) * 4, 128))
+    max_new = min(256, max(len(sentence.split()) * 2, 40))
     
     # Generate multiple candidates by running beam search with varied parameters
     # This avoids the group-beam-search dependency while still producing diverse outputs
@@ -912,7 +932,8 @@ def t5_generate_sentence(sentence: str, num_beams: int = 4,
         candidates.append(decoded)
     
     # Run 2: Higher repetition penalty → forces more word variety
-    if num_beams >= 4:
+    # Only for quality/aggressive modes (num_beams >= 6) to save time
+    if num_beams >= 6:
         outputs2 = model.generate(
             **inputs,
             max_new_tokens=max_new,
@@ -928,7 +949,8 @@ def t5_generate_sentence(sentence: str, num_beams: int = 4,
             candidates.append(decoded2)
     
     # Run 3: Fewer beams + higher rep penalty → greedy-ish with forced diversity
-    if num_beams >= 4:
+    # Only for quality/aggressive modes (num_beams >= 6) to save time
+    if num_beams >= 6:
         outputs3 = model.generate(
             **inputs,
             max_new_tokens=max_new,
@@ -943,13 +965,6 @@ def t5_generate_sentence(sentence: str, num_beams: int = 4,
         if decoded3 and decoded3 not in candidates:
             candidates.append(decoded3)
     
-    # Decode all candidates and pick the best
-    candidates = []
-    for i in range(outputs.shape[0]):
-        decoded = tokenizer.decode(outputs[i], skip_special_tokens=True).strip()
-        if decoded:
-            candidates.append(decoded)
-    
     if not candidates:
         return sentence
     
@@ -960,8 +975,8 @@ def t5_generate_sentence(sentence: str, num_beams: int = 4,
         change = measure_change(sentence, cand)
         meaning = measure_meaning_overlap(sentence, cand)
         # Score: reward change, penalize meaning loss
-        # Reject if meaning overlap < 0.35 (hallucination)
-        if meaning < 0.35:
+        # Reject if meaning overlap < 0.40 (hallucination)
+        if meaning < 0.40:
             continue
         # Score balances change (want high) and meaning preservation (want ≥ 0.5)
         score = change * 0.7 + min(meaning, 0.8) * 0.3
@@ -975,18 +990,18 @@ def t5_generate_sentence(sentence: str, num_beams: int = 4,
 # ── Quality mode presets ──
 MODE_PRESETS = {
     "quality": {
-        "num_beams": 8,
+        "num_beams": 6,
         "no_repeat_ngram": 3,
         "length_penalty": 1.5,
         "repetition_penalty": 1.8,    # Higher forces more diverse word choices
-        "max_retries": 5,
+        "max_retries": 3,
     },
     "fast": {
-        "num_beams": 4,               # Use diverse beam even in fast mode
+        "num_beams": 4,               # Single run (< 6), faster
         "no_repeat_ngram": 2,
         "length_penalty": 1.3,
         "repetition_penalty": 1.5,
-        "max_retries": 2,
+        "max_retries": 1,
     },
     "aggressive": {
         "num_beams": 8,
@@ -995,7 +1010,17 @@ MODE_PRESETS = {
         "repetition_penalty": 2.0,    # Maximum diversity pressure
         "max_retries": 8,
     },
+    "turbo": {
+        "num_beams": 2,               # Minimal beams for max speed
+        "no_repeat_ngram": 2,
+        "length_penalty": 1.0,
+        "repetition_penalty": 1.3,
+        "max_retries": 1,             # Single attempt — no retry loop
+    },
 }
+
+# Thread pool for parallel sentence processing (cpu-basic = 2 vCPU)
+_sentence_pool = ThreadPoolExecutor(max_workers=2)
 
 
 # ── Main Pipeline ──
@@ -1218,13 +1243,18 @@ def humanize_text(text: str, mode: str = "quality",
             continue
         if sentence_by_sentence:
             sentences = split_sentences(para)
-            processed_sentences = []
-            
-            for sent in sentences:
-                total_sentences += 1
-                result, stats = humanize_sentence(
-                    sent, preset, min_change_ratio, max_retries
+            total_sentences += len(sentences)
+
+            # ── Parallel sentence processing using thread pool ──
+            futures = [
+                _sentence_pool.submit(
+                    humanize_sentence, sent, {**preset}, min_change_ratio, max_retries
                 )
+                for sent in sentences
+            ]
+            processed_sentences = []
+            for fut in futures:
+                result, stats = fut.result()
                 processed_sentences.append(result)
                 all_stats.append(stats)
                 if stats.get("met_threshold", False) or stats.get("skipped", False):
@@ -1475,7 +1505,9 @@ async def humanize_endpoint(req: HumanizeRequest):
         raise HTTPException(503, "Model not loaded")
 
     try:
-        humanized, stats = humanize_text(
+        # Run CPU-bound inference in thread pool so we don't block the event loop
+        humanized, stats = await asyncio.to_thread(
+            humanize_text,
             text=req.text,
             mode=req.mode,
             min_change_ratio=req.min_change_ratio,
