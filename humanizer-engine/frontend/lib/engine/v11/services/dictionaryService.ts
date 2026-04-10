@@ -8,6 +8,9 @@
  * maps if not yet generated.
  */
 
+import { existsSync, readFileSync } from 'fs';
+import { join } from 'path';
+
 // ---- Inline fallback dictionaries (used until Python-generated files are in place) ----
 
 const FALLBACK_SYNONYMS: Record<string, string[]> = {
@@ -256,12 +259,23 @@ let _connectors: Record<string, string[]> | null = null;
 let _starters: string[] | null = null;
 
 async function tryLoadJSON<T>(path: string, fallback: T): Promise<T> {
-  try {
-    const mod = await import(`../data/${path}`);
-    return mod.default ?? mod;
-  } catch {
-    return fallback;
+  const candidates = [
+    // When running from humanizer-engine/frontend as cwd (Render start/build scripts do this)
+    join(process.cwd(), 'lib', 'engine', 'v11', 'data', path),
+    // When running from repo root as cwd
+    join(process.cwd(), 'humanizer-engine', 'frontend', 'lib', 'engine', 'v11', 'data', path),
+  ];
+
+  for (const fullPath of candidates) {
+    if (!existsSync(fullPath)) continue;
+    try {
+      return JSON.parse(readFileSync(fullPath, 'utf-8')) as T;
+    } catch {
+      // ignore and fall back
+    }
   }
+
+  return fallback;
 }
 
 async function ensureLoaded() {
