@@ -218,11 +218,22 @@ export async function POST(req: Request) {
             const easyResult = await easyHumanize(normalizedText, effectiveStrength, tone ?? 'academic', easySBS);
             humanized = easyResult.humanized;
           } else if (eng === 'ozone') {
-            // Ozone: External API with undetectable mode — then full post-processing pipeline
-            // Default sentence-by-sentence to FALSE (whole-document mode saves quota; SBS uses 1 call per sentence)
+            // Ozone: Call Ozone API (standard mode) → then EssayWritingSupport as undetectability polish
+            // No further post-processing — Ozone + Easy combo handles everything
             const ozoneSBS = (body as Record<string, unknown>).ozone_sentence_by_sentence === true;
             const ozoneResult = await ozoneHumanize(normalizedText, ozoneSBS);
             humanized = ozoneResult.humanized;
+
+            // Post-pass: run through EssayWritingSupport for undetectability
+            sendSSE(controller, { type: 'stage', stage: 'Undetectability Polish' });
+            await flushDelay(80);
+            try {
+              const easyPolish = await easyHumanize(humanized, effectiveStrength, tone ?? 'academic', false);
+              humanized = easyPolish.humanized;
+            } catch (easyErr) {
+              // If Easy API fails, continue with Ozone output — don't break the pipeline
+              console.warn('[Ozone] EssayWritingSupport polish failed, using raw Ozone output:', easyErr);
+            }
           } else if (eng === 'oxygen') {
             // Oxygen: Pure TypeScript multi-phase humanizer (runs serverless in Vercel)
             const oxygenMode = (body as Record<string, unknown>).oxygen_mode as string || (effectiveStrength === 'light' ? 'fast' : effectiveStrength === 'strong' ? 'aggressive' : 'quality');
@@ -268,11 +279,16 @@ export async function POST(req: Request) {
           await emitSentencesStaggered(controller, engineSentences, 'Engine', 80);
           await flushDelay(200); // pause between stages
 
+          // Detector + input analysis — needed for both post-processing and final detection
+          const detector = getDetector();
+          const inputAnalysis = detector.analyze(text);
+
+          // ── POST-PROCESSING (skip entirely for ozone — it uses Ozone API + EssayWritingSupport) ──
+          if (eng !== 'ozone') {
+
           // 4. Unified Sentence Process
           const FIRST_PERSON_RE_EARLY = /\b(I|me|my|mine|myself|we|us|our|ours|ourselves)\b/i;
           const earlyFirstPerson = FIRST_PERSON_RE_EARLY.test(text);
-          const detector = getDetector();
-          const inputAnalysis = detector.analyze(text);
           const inputAiScore = inputAnalysis.summary.overall_ai_score;
 
           if (eng !== 'humara' && eng !== 'humara_v1_3' && eng !== 'nuru' && eng !== 'omega' && eng !== 'oxygen') {
@@ -424,6 +440,8 @@ export async function POST(req: Request) {
           // Final sentence-initial caps + mid-sentence caps fix
           humanized = humanized.replace(/(^|[.!?]\s+)([a-z])/g, (_m: string, pre: string, ch: string) => pre + ch.toUpperCase());
           humanized = fixMidSentenceCapitalization(humanized, text);
+
+          } // end: if (eng !== 'ozone') post-processing block
 
           // ── OXYGEN POLISH PASS (FINAL PHASE) ──────────────────────────
           // Easy engine's output is polished through the Oxygen TS engine

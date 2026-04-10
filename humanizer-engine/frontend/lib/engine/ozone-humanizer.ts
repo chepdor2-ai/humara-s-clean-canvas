@@ -1,7 +1,8 @@
 /**
  * Ozone Humanizer Engine — Ozone API Proxy
  * Calls the external Ozone humanizer API.
- * Always uses "undetectable" mode for maximum bypass.
+ * Uses standard mode (no 'undetectable') — EssayWritingSupport is called
+ * separately as a post-processing step in route.ts for better control.
  * Supports sentence-by-sentence processing with paragraph/title preservation.
  */
 
@@ -122,7 +123,6 @@ async function callOzoneAPI(text: string, apiKey: string): Promise<{ text: strin
     },
     body: JSON.stringify({
       text,
-      mode: 'undetectable',
     }),
     signal: AbortSignal.timeout(60000),
   });
