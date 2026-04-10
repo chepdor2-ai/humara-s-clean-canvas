@@ -602,8 +602,8 @@ function phase6(text: string, originalText: string): string {
 
   // Validate and repair with existing shared utility
   const validated = validateAndRepairOutput(result, originalText);
-  if (validated && validated.trim().length > result.trim().length * 0.5) {
-    result = validated;
+  if (validated && validated.text && validated.text.trim().length > result.trim().length * 0.5) {
+    result = validated.text;
   }
 
   return result;
