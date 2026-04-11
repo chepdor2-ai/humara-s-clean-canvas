@@ -506,20 +506,17 @@ export async function POST(req: Request) {
             await flushDelay(200);
           }
 
-          // 14. Detection & meaning check
+          // 14. Meaning check (detection disabled — coming soon)
           // Final cleanup: collapse double spaces
           humanized = humanized.replace(/ {2,}/g, ' ');
           sendSSE(controller, { type: 'stage', stage: 'Analyzing' });
           await flushDelay(50);
-          const [outputAnalysis, meaningCheck] = await Promise.all([
-            Promise.resolve(detector.analyze(humanized)),
-            isMeaningPreserved(text, humanized, 0.88),
-          ]);
+          const meaningCheck = await isMeaningPreserved(text, humanized, 0.88);
 
           const inputWords = text.trim().split(/\s+/).length;
           const outputWords = humanized.trim().split(/\s+/).length;
 
-          // Final done event
+          // Final done event — detection results omitted (coming soon)
           sendSSE(controller, {
             type: 'done',
             humanized,
@@ -528,22 +525,6 @@ export async function POST(req: Request) {
             engine_used: eng,
             meaning_preserved: meaningCheck.isSafe,
             meaning_similarity: Math.round(meaningCheck.similarity * 100) / 100,
-            input_detector_results: {
-              overall: Math.round(inputAnalysis.summary.overall_ai_score * 10) / 10,
-              detectors: inputAnalysis.detectors.map(d => ({
-                detector: d.detector,
-                ai_score: Math.round(d.ai_score * 10) / 10,
-                human_score: Math.round(d.human_score * 10) / 10,
-              })),
-            },
-            output_detector_results: {
-              overall: Math.round(outputAnalysis.summary.overall_ai_score * 10) / 10,
-              detectors: outputAnalysis.detectors.map(d => ({
-                detector: d.detector,
-                ai_score: Math.round(d.ai_score * 10) / 10,
-                human_score: Math.round(d.human_score * 10) / 10,
-              })),
-            },
           });
 
           // Track usage + save document
@@ -560,9 +541,8 @@ export async function POST(req: Request) {
                   input_word_count: inputWords, output_word_count: outputWords,
                   engine_used: eng, strength: effectiveStrength, tone: toneDb,
                   meaning_preserved: meaningCheck.isSafe, meaning_similarity: meaningCheck.similarity,
-                  input_ai_score: inputAnalysis.summary.overall_ai_score,
-                  output_ai_score: outputAnalysis.summary.overall_ai_score,
-                  detector_results: { input: inputAnalysis.detectors, output: outputAnalysis.detectors },
+                  input_ai_score: 0,
+                  output_ai_score: 0,
                 }),
               ]);
             } catch (e) { console.error('Usage tracking error:', e); }

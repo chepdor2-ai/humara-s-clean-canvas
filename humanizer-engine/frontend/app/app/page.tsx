@@ -347,43 +347,13 @@ export default function EditorPage() {
     setHistory(prev => [entry, ...prev].slice(0, 20)); // keep max 20
   }, []);
 
-  /* ── Auto-detect input (debounced 1.5s) ─────────────────────────────── */
+  /* ── Auto-detect input — DISABLED (coming soon) ─────────────────────── */
+  // Detection deactivated — will be re-enabled with improved accuracy
   useEffect(() => {
-    if (detectTimerRef.current) clearTimeout(detectTimerRef.current);
-    if (!text.trim() || inputWords < 10) {
-      setInputDetection(null);
-      setSentenceScores([]);
-      return;
-    }
-    const controller = new AbortController();
-    detectTimerRef.current = setTimeout(async () => {
-      setAutoDetecting(true);
-      try {
-        const res = await fetch('/api/detect', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ text }),
-          signal: controller.signal,
-        });
-        const data = await res.json();
-        if (res.ok && !data.error) {
-          const det: DetectionResult = {
-            overallAi: data.summary.overall_ai_score,
-            overallHuman: data.summary.overall_human_score,
-            detectors: data.detectors,
-          };
-          setInputDetection(det);
-          const sentences = splitSentences(text);
-          setSentenceScores(sentences.map(s => ({ ...s, score: scoreSentence(s.text, det.overallAi) })));
-        }
-      } catch (err) {
-        if (err instanceof Error && err.name === 'AbortError') return;
-      } finally {
-        setAutoDetecting(false);
-      }
-    }, 1500);
-    return () => { if (detectTimerRef.current) clearTimeout(detectTimerRef.current); controller.abort(); };
-  }, [text, inputWords]);
+    setInputDetection(null);
+    setSentenceScores([]);
+    setAutoDetecting(false);
+  }, [text]);
 
   /* ── Handlers ───────────────────────────────────────────────────────── */
   const handleTransitionComplete = useCallback(() => {
@@ -520,21 +490,12 @@ export default function EditorPage() {
         setResult(currentResult);
         setMeaningScore(finalData.meaning_similarity as number);
 
-        if (finalData.input_detector_results) {
-          const d = finalData.input_detector_results as { overall: number; detectors: DetectorScore[] };
-          setInputDetection({ overallAi: d.overall, overallHuman: 100 - d.overall, detectors: d.detectors });
-          const sentences = splitSentences(text);
-          setSentenceScores(sentences.map(s => ({ ...s, score: scoreSentence(s.text, d.overall) })));
-        }
-        if (finalData.output_detector_results) {
-          const d = finalData.output_detector_results as { overall: number; detectors: DetectorScore[] };
-          setOutputDetection({ overallAi: d.overall, overallHuman: 100 - d.overall, detectors: d.detectors });
-        }
+        // Detection disabled — coming soon
+        // Detection results from API are ignored
 
         // Add to temporary history
-        const finalAi = finalData.output_detector_results ? (finalData.output_detector_results as { overall: number }).overall : 0;
-        const inputAi = finalData.input_detector_results ? (finalData.input_detector_results as { overall: number }).overall : 0;
-        addToHistory(text, currentResult, (finalData.engine_used as string) || engine, inputAi, finalAi, (finalData.word_count as number) || outputWords);
+        // Detection disabled — scores set to 0
+        addToHistory(text, currentResult, (finalData.engine_used as string) || engine, 0, 0, (finalData.word_count as number) || outputWords);
         refreshUsage();
       }
     } catch (err) {
@@ -567,10 +528,7 @@ export default function EditorPage() {
       if (finalData) {
         setResult(finalData.humanized as string);
         setMeaningScore(finalData.meaning_similarity as number);
-        if (finalData.output_detector_results) {
-          const d = finalData.output_detector_results as { overall: number; detectors: DetectorScore[] };
-          setOutputDetection({ overallAi: d.overall, overallHuman: 100 - d.overall, detectors: d.detectors });
-        }
+        // Detection disabled — coming soon
         refreshUsage();
       }
     } catch (err) {

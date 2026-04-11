@@ -42,7 +42,7 @@ export default function RootLayoutClient({ children }: { children: React.ReactNo
     { name: 'Dashboard', href: '/app/dashboard', icon: LayoutDashboard },
     { name: 'Humanizer', href: '/app', icon: Edit3 },
     { name: 'Documents', href: '/app/documents', icon: FileText },
-    { name: 'AI Detector', href: '/app/detector', icon: ShieldCheck },
+    { name: 'AI Detector', href: '/app/detector', icon: ShieldCheck, badge: 'Soon' },
     { name: 'Style Profiles', href: '/app/style', icon: BrainCircuit },
     { name: 'Advanced', href: '/app/advanced', icon: FlaskConical },
     { name: 'Docs', href: '/app/docs', icon: BookOpen },
@@ -62,7 +62,7 @@ export default function RootLayoutClient({ children }: { children: React.ReactNo
                 <Link href="/how-it-works" className="text-sm text-zinc-400 hover:text-purple-400 font-medium transition-colors">How it Works</Link>
                 <Link href="/pricing" className="text-sm text-zinc-400 hover:text-purple-400 font-medium transition-colors">Pricing</Link>
                 <Link href="/about" className="text-sm text-zinc-400 hover:text-purple-400 font-medium transition-colors">About</Link>
-                <Link href="/detector" className="text-sm text-zinc-400 hover:text-purple-400 font-medium transition-colors">AI Detector</Link>
+                <Link href="/detector" className="text-sm text-zinc-400 hover:text-purple-400 font-medium transition-colors inline-flex items-center gap-1.5">AI Detector <span className="text-[9px] font-bold text-amber-400 bg-amber-950/40 border border-amber-800/40 px-1.5 py-0.5 rounded-full">Soon</span></Link>
               </nav>
 
               <div className="hidden md:flex items-center gap-4">
@@ -81,7 +81,7 @@ export default function RootLayoutClient({ children }: { children: React.ReactNo
               <Link href="/how-it-works" onClick={() => setMobileMenuOpen(false)} className="text-sm font-medium text-zinc-200 py-1">How it Works</Link>
               <Link href="/pricing" onClick={() => setMobileMenuOpen(false)} className="text-sm font-medium text-zinc-200 py-1">Pricing</Link>
               <Link href="/about" onClick={() => setMobileMenuOpen(false)} className="text-sm font-medium text-zinc-200 py-1">About</Link>
-              <Link href="/detector" onClick={() => setMobileMenuOpen(false)} className="text-sm font-medium text-zinc-200 py-1">AI Detector</Link>
+              <Link href="/detector" onClick={() => setMobileMenuOpen(false)} className="text-sm font-medium text-zinc-200 py-1 inline-flex items-center gap-1.5">AI Detector <span className="text-[9px] font-bold text-amber-400 bg-amber-950/40 border border-amber-800/40 px-1.5 py-0.5 rounded-full">Soon</span></Link>
               <div className="h-px bg-white/10 my-1"></div>
               <Link href="/login" onClick={() => setMobileMenuOpen(false)} className="text-sm font-medium text-zinc-200 py-1">Log In</Link>
               <Link href="/signup" onClick={() => setMobileMenuOpen(false)} className="text-sm font-medium text-purple-400 py-1">Get Started</Link>
@@ -110,7 +110,7 @@ export default function RootLayoutClient({ children }: { children: React.ReactNo
                     <li><Link href="/app" className="hover:text-white transition-colors">Humanizer</Link></li>
                     <li><Link href="/how-it-works" className="hover:text-white transition-colors">How it Works</Link></li>
                     <li><Link href="/pricing" className="hover:text-white transition-colors">Pricing</Link></li>
-                    <li><Link href="/detector" className="hover:text-white transition-colors">AI Detector</Link></li>
+                    <li><Link href="/detector" className="hover:text-white transition-colors inline-flex items-center gap-1.5">AI Detector <span className="text-[9px] font-bold text-amber-400">Soon</span></Link></li>
                   </ul>
                 </div>
                 <div>
@@ -180,6 +180,9 @@ export default function RootLayoutClient({ children }: { children: React.ReactNo
               >
                 <Icon className={`w-[18px] h-[18px] ${isActive ? 'text-purple-400' : ''}`} />
                 {link.name}
+                {'badge' in link && link.badge && (
+                  <span className="ml-auto text-[9px] font-bold text-amber-400 bg-amber-950/40 border border-amber-800/40 px-1.5 py-0.5 rounded-full">{link.badge}</span>
+                )}
               </Link>
             );
           })}
