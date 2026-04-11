@@ -21,9 +21,10 @@ export default function SignupPage() {
     setGoogleLoading(true);
     setError('');
     try {
+      const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || window.location.origin;
       const { error: authError } = await supabase.auth.signInWithOAuth({
         provider: 'google',
-        options: { redirectTo: `${window.location.origin}/auth/callback` },
+        options: { redirectTo: `${siteUrl}/auth/callback` },
       });
       if (authError) setError(authError.message);
     } catch {

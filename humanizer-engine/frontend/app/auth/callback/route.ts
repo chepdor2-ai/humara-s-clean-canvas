@@ -6,6 +6,9 @@ export async function GET(request: Request) {
   const code = searchParams.get('code');
   const next = searchParams.get('next') ?? '/app';
 
+  // Use explicit site URL to avoid 0.0.0.0 or wrong origin issues
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || origin;
+
   if (code) {
     const supabase = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -13,10 +16,10 @@ export async function GET(request: Request) {
     );
     const { error } = await supabase.auth.exchangeCodeForSession(code);
     if (!error) {
-      return NextResponse.redirect(`${origin}${next}`);
+      return NextResponse.redirect(`${siteUrl}${next}`);
     }
   }
 
   // Fallback: redirect to login with error
-  return NextResponse.redirect(`${origin}/login?error=auth_callback_failed`);
+  return NextResponse.redirect(`${siteUrl}/login?error=auth_callback_failed`);
 }

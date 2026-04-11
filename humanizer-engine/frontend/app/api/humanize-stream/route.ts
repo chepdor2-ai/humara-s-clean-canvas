@@ -150,16 +150,24 @@ export async function POST(req: Request) {
 
     // Auth + quota enforcement
     let userId: string | null = null;
+    let userEmail: string | null = null;
     const authHeader = req.headers.get('authorization');
     if (authHeader) {
       try {
         const supa = createServiceClient();
         const { data: { user: authUser } } = await supa.auth.getUser(authHeader.replace('Bearer ', ''));
-        if (authUser) userId = authUser.id;
+        if (authUser) {
+          userId = authUser.id;
+          userEmail = authUser.email ?? null;
+        }
       } catch { /* auth optional */ }
     }
 
-    if (userId) {
+    // Admin emails get unlimited access
+    const adminEmails = (process.env.ADMIN_EMAILS || '').split(',').map(e => e.trim().toLowerCase()).filter(Boolean);
+    const isAdmin = userEmail ? adminEmails.includes(userEmail.toLowerCase()) : false;
+
+    if (userId && !isAdmin) {
       try {
         const supa = createServiceClient();
         const inputWordCount = text.trim().split(/\s+/).length;
@@ -167,15 +175,13 @@ export async function POST(req: Request) {
 
         // Default free-tier limits when RPC fails or missing
         let totalUsed = 0;
-        let totalLimit = 2000;
+        let totalLimit = 1000;
 
         if (!statsError && stats) {
           totalUsed = (stats.words_used_fast || 0) + (stats.words_used_stealth || 0);
           const rawLimit = (stats.words_limit_fast || 0) + (stats.words_limit_stealth || 0);
-          const hasSub = (stats.days_remaining || 0) > 0;
-          // If no active subscription, cap at free tier (2000)
-          // This handles stale DB function defaults (20000/10000)
-          totalLimit = hasSub ? (rawLimit || 2000) : 2000;
+          // Use DB limit if user has active subscription, otherwise free tier (1000)
+          totalLimit = rawLimit > 0 ? rawLimit : 1000;
         }
 
         const remaining = Math.max(0, totalLimit - totalUsed);

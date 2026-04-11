@@ -1053,18 +1053,18 @@ export default function EditorPage() {
               {result && !isAnimating && (
                 <>
                   <button onClick={handleRehumanizeFlagged} disabled={rehumanizing || loading}
-                    className="text-[11px] font-semibold text-amber-600 hover:text-amber-700 dark:text-amber-400 px-2 py-1 rounded-lg hover:bg-amber-50 dark:hover:bg-amber-950/30 transition-all flex items-center gap-1 disabled:opacity-50"
+                    className="text-[11px] font-semibold text-amber-600 hover:text-amber-400 px-2 py-1 rounded-lg hover:bg-amber-950/30 transition-all flex items-center gap-1 disabled:opacity-50"
                     title="Fix flagged AI sentences">
                     <AlertTriangle className={`w-3 h-3 ${rehumanizing ? 'animate-pulse' : ''}`} />
                     {rehumanizing ? 'Fixing…' : 'Fix AI'}
                   </button>
                   <button onClick={handleRephrase} disabled={rephrasing || loading}
-                    className="text-[11px] font-semibold text-brand-600 hover:text-brand-700 dark:text-brand-400 px-2 py-1 rounded-lg hover:bg-brand-50 dark:hover:bg-brand-950/30 transition-all flex items-center gap-1 disabled:opacity-50"
+                    className="text-[11px] font-semibold text-brand-600 hover:text-brand-400 px-2 py-1 rounded-lg hover:bg-brand-950/30 transition-all flex items-center gap-1 disabled:opacity-50"
                     title="Rephrase output">
                     <RefreshCw className={`w-3 h-3 ${rephrasing ? 'animate-spin' : ''}`} />
                     {rephrasing ? 'Rephrasing…' : 'Rephrase'}
                   </button>
-                  <button onClick={handleCopy} className="p-1.5 text-brand-600 dark:text-brand-400 hover:bg-brand-50 dark:hover:bg-brand-950 rounded-md transition-colors" title="Copy">
+                  <button onClick={handleCopy} className="p-1.5 text-brand-400 hover:bg-brand-950 rounded-md transition-colors" title="Copy">
                     {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
                   </button>
                 </>
