@@ -144,8 +144,8 @@ const splitSentences = (text: string): { text: string; start: number; end: numbe
 // Full engine registry — admin controls which are visible/premium via Supabase engine_config
 const ALL_ENGINES: EngineConfig[] = [
   { id: 'oxygen', label: 'Humara 2.0' },
+  { id: 'ozone', label: 'Humara 2.1' },
   { id: 'easy', label: 'Humara 2.2' },
-  { id: 'ozone', label: 'Humara 2.3' },
   { id: 'humara_v3_3', label: 'Humara 2.4' },
 ];
 
@@ -922,7 +922,7 @@ export default function EditorPage() {
       {ozoneUndetectWarning && (
         <div className="flex items-center gap-1.5 px-1 animate-pulse">
           <span className="text-amber-500 text-[9px]">⚠️</span>
-          <p className="text-[9px] text-amber-400 font-medium">Undetectability always enabled for Humara 2.3</p>
+          <p className="text-[9px] text-amber-400 font-medium">Undetectability always enabled for Humara 2.1</p>
         </div>
       )}
 
