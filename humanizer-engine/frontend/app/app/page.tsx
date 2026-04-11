@@ -155,10 +155,10 @@ const ANTI_GPTZERO_ENGINES = new Set(['oxygen', 'humara_v3_3']);
 const STANDARD_ENGINES = new Set(['ozone', 'easy']);
 
 const ENGINE_GUIDES: Record<string, string> = {
-  oxygen: 'NOT a humanizer — this is a GPTZero signal-killing engine. Paste content you already humanized through Stealthy or another humanizer, and this will strip all remaining GPTZero markers.',
-  ozone: 'Full humanizer trained against ZeroGPT, Surfer SEO and other common detectors. Cleans persistent AI detection signals from ZeroGPT and Surfer.',
-  easy: 'Full humanizer trained to beat all detectors broadly. Handles ZeroGPT, Surfer SEO, and other AI detectors.',
-  humara_v3_3: 'NOT a humanizer — this is a GPTZero signal-killing engine with triple fallback and detector feedback loop. Post content from Stealthy for GPTZero signal cleaning. Most resilient — 0% AI score target.',
+  oxygen: 'Trained specifically to beat GPTZero. May score slightly higher on other detectors — use this only when GPTZero is the problem.',
+  ozone: 'Best for cleaning ZeroGPT and Surfer SEO signals. Activate this when ZeroGPT or Surfer is flagging your content.',
+  easy: 'Broad-spectrum engine that handles ZeroGPT, Surfer SEO, and other AI detectors. Good general-purpose option.',
+  humara_v3_3: 'Most powerful GPTZero killer with triple fallback and detector feedback loop. Use when GPTZero stubbornly flags your text. May score slightly higher on other detectors.',
 };
 
 const MAX_WORDS_PER_REQUEST = 2000;
@@ -895,18 +895,18 @@ export default function EditorPage() {
         <div className="ticker-animate flex items-center gap-8 whitespace-nowrap px-4">
           {ENGINES.flatMap(eng => {
             const useCases: Record<string, string> = {
-              oxygen: 'GPTZero signal killer — clean already-humanized text',
-              ozone: 'Eliminate ZeroGPT & Surfer SEO detection markers',
-              easy: 'Broad-spectrum detection bypass for all major platforms',
-              humara_v3_3: 'GPTZero signal killer with triple fallback — 0% target',
+              oxygen: 'Beat GPTZero — tuned specifically for GPTZero signals',
+              ozone: 'Clean ZeroGPT & Surfer SEO — best for non-GPTZero detectors',
+              easy: 'Broad-spectrum — handles all major AI detectors',
+              humara_v3_3: 'Strongest GPTZero killer — triple fallback, 0% target',
             };
             return [{ engine: eng.label, use: useCases[eng.id] || 'Advanced humanization' }];
           }).concat(ENGINES.flatMap(eng => {
             const useCases: Record<string, string> = {
-              oxygen: 'GPTZero signal killer — clean already-humanized text',
-              ozone: 'Eliminate ZeroGPT & Surfer SEO detection markers',
-              easy: 'Broad-spectrum detection bypass for all major platforms',
-              humara_v3_3: 'GPTZero signal killer with triple fallback — 0% target',
+              oxygen: 'Beat GPTZero — tuned specifically for GPTZero signals',
+              ozone: 'Clean ZeroGPT & Surfer SEO — best for non-GPTZero detectors',
+              easy: 'Broad-spectrum — handles all major AI detectors',
+              humara_v3_3: 'Strongest GPTZero killer — triple fallback, 0% target',
             };
             return [{ engine: eng.label, use: useCases[eng.id] || 'Advanced humanization' }];
           })).map((item, i) => (
@@ -967,8 +967,17 @@ export default function EditorPage() {
         <div className="flex items-start gap-2 px-3 py-2 bg-orange-950/30 border border-orange-800/40 rounded-lg mx-1">
           <span className="text-orange-400 text-xs mt-0.5">⚡</span>
           <div>
-            <p className="text-[10px] font-bold text-orange-300">AntiGPTZero Mode — Signal Killer, NOT a Humanizer</p>
-            <p className="text-[9px] text-orange-200/70 leading-relaxed mt-0.5">These engines do not humanize your text. They strip GPTZero detection signals from <span className="font-semibold text-orange-200">already humanized</span> content. Use a humanizer like <span className="font-semibold text-orange-200">Stealthy</span> first, then paste the output here for GPTZero signal cleaning.</p>
+            <p className="text-[10px] font-bold text-orange-300">AntiGPTZero Mode — Tuned to Beat GPTZero</p>
+            <p className="text-[9px] text-orange-200/70 leading-relaxed mt-0.5">These engines are trained specifically to beat <span className="font-semibold text-orange-200">GPTZero</span> and may score slightly higher on other detectors. Each AI detector uses different signals — that is why we tune each engine to solve a specific problem. If GPTZero is flagging your text, run <span className="font-semibold text-orange-200">2.4</span> (strongest) or <span className="font-semibold text-orange-200">2.0</span>.</p>
+          </div>
+        </div>
+      )}
+      {!antiGptZero && (
+        <div className="flex items-start gap-2 px-3 py-2 bg-teal-950/30 border border-teal-800/40 rounded-lg mx-1">
+          <span className="text-teal-400 text-xs mt-0.5">🛡️</span>
+          <div>
+            <p className="text-[10px] font-bold text-teal-300">Detector Cleaning Mode — ZeroGPT, Surfer SEO &amp; Others</p>
+            <p className="text-[9px] text-teal-200/70 leading-relaxed mt-0.5">If <span className="font-semibold text-teal-200">ZeroGPT</span> or <span className="font-semibold text-teal-200">Surfer SEO</span> is the problem, run <span className="font-semibold text-teal-200">2.1</span> (best for cleaning the mess) or <span className="font-semibold text-teal-200">2.2</span> (broad coverage). Each detector reads different AI signals — these engines are tuned for non-GPTZero detectors.</p>
           </div>
         </div>
       )}
