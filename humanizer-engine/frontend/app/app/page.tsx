@@ -149,12 +149,22 @@ const ALL_ENGINES: EngineConfig[] = [
   { id: 'humara_v3_3', label: 'Humara 2.4' },
 ];
 
+// AntiGPTZero mode engines (signal killers — NOT pure humanizers)
+const ANTI_GPTZERO_ENGINES = new Set(['oxygen', 'humara_v3_3']);
+// Standard humanizer engines (handle ZeroGPT, Surfer SEO, etc.)
+const STANDARD_ENGINES = new Set(['ozone', 'easy']);
+
 const ENGINE_GUIDES: Record<string, string> = {
-  oxygen: 'Primarily trained against GPTZero. Ideal for papers that have refused to bypass GPTZero — add your humanized paper for a second pass.',
-  easy: 'Trained to beat all detectors broadly. May compromise score on some individual detectors.',
-  ozone: 'Trained against ZeroGPT, Surfer and other common detectors. Solves persistent AI detection in ZeroGPT and Surfer.',
-  humara_v3_3: 'Triple-engine fallback chain with full post-processing and detector feedback loop. Most resilient — 0% AI score target.',
+  oxygen: 'NOT a humanizer — this is a GPTZero signal-killing engine. Paste content you already humanized through Stealthy or another humanizer, and this will strip all remaining GPTZero markers.',
+  ozone: 'Full humanizer trained against ZeroGPT, Surfer SEO and other common detectors. Cleans persistent AI detection signals from ZeroGPT and Surfer.',
+  easy: 'Full humanizer trained to beat all detectors broadly. Handles ZeroGPT, Surfer SEO, and other AI detectors.',
+  humara_v3_3: 'NOT a humanizer — this is a GPTZero signal-killing engine with triple fallback and detector feedback loop. Post content from Stealthy for GPTZero signal cleaning. Most resilient — 0% AI score target.',
 };
+
+const MAX_WORDS_PER_REQUEST = 2000;
+const RECOMMENDED_MIN_WORDS = 500;
+const RECOMMENDED_MAX_WORDS = 1500;
+const FREE_DAILY_WORD_LIMIT = 2000;
 
 interface EngineConfig {
   id: string;
@@ -188,6 +198,7 @@ export default function EditorPage() {
   const [strength, setStrength] = useState('medium');
   const [tone, setTone] = useState('academic');
   const [strictMeaning, setStrictMeaning] = useState(true);
+  const [antiGptZero, setAntiGptZero] = useState(true); // AntiGPTZero mode ON by default
 
   // Admin-controlled engine visibility
   const [engineConfig, setEngineConfig] = useState<Record<string, { enabled: boolean; premium: boolean; sort_order: number }>>({});
@@ -217,21 +228,32 @@ export default function EditorPage() {
     })();
   }, []);
 
-  // Compute visible engines: if admin config exists AND has data, use it; otherwise show ALL_ENGINES
+  // Compute visible engines: filter by admin config AND AntiGPTZero mode
   const ENGINES: EngineConfig[] = useMemo(() => {
-    if (!engineConfigLoaded) return ALL_ENGINES; // Still loading
-    const hasConfig = Object.keys(engineConfig).length > 0;
-    if (!hasConfig) {
-      console.log('[Engine Config] No admin config, showing all engines');
-      return ALL_ENGINES; // No config in DB, show all engines
+    // Start with all engines
+    let base = ALL_ENGINES;
+    // Apply admin config if available
+    if (engineConfigLoaded) {
+      const hasConfig = Object.keys(engineConfig).length > 0;
+      if (hasConfig) {
+        base = base
+          .filter(e => engineConfig[e.id]?.enabled !== false)
+          .sort((a, b) => (engineConfig[a.id]?.sort_order ?? 99) - (engineConfig[b.id]?.sort_order ?? 99));
+      }
     }
-    // Config exists - filter and sort based on enabled status
-    const filtered = ALL_ENGINES
-      .filter(e => engineConfig[e.id]?.enabled !== false)
-      .sort((a, b) => (engineConfig[a.id]?.sort_order ?? 99) - (engineConfig[b.id]?.sort_order ?? 99));
-    console.log('[Engine Config] Filtered engines:', filtered.map(e => e.id));
-    return filtered;
-  }, [engineConfig, engineConfigLoaded]);
+    // Apply AntiGPTZero filter
+    const modeSet = antiGptZero ? ANTI_GPTZERO_ENGINES : STANDARD_ENGINES;
+    return base.filter(e => modeSet.has(e.id));
+  }, [engineConfig, engineConfigLoaded, antiGptZero]);
+
+  // Auto-switch engine when toggling AntiGPTZero mode
+  useEffect(() => {
+    if (antiGptZero) {
+      if (!ANTI_GPTZERO_ENGINES.has(engine)) setEngine('humara_v3_3');
+    } else {
+      if (!STANDARD_ENGINES.has(engine)) setEngine('ozone');
+    }
+  }, [antiGptZero]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const [inputDetection, setInputDetection] = useState<DetectionResult | null>(null);
   const [outputDetection, setOutputDetection] = useState<DetectionResult | null>(null);
@@ -466,10 +488,14 @@ export default function EditorPage() {
   const handleHumanize = async () => {
     if (!text.trim()) return;
     if (inputWords < 10) { setError('Please enter at least 10 words.'); return; }
+    if (inputWords > MAX_WORDS_PER_REQUEST) {
+      setError(`Maximum ${MAX_WORDS_PER_REQUEST.toLocaleString()} words per request. You have ${inputWords.toLocaleString()} words. Split your text into smaller sections.`);
+      return;
+    }
     if (usage) {
       const remaining = usage.wordsLimit - usage.wordsUsed;
       if (remaining < inputWords) {
-        setError(`Word limit reached. ${Math.max(0, remaining).toLocaleString()} words remaining.`);
+        setError(`Word limit reached. ${Math.max(0, remaining).toLocaleString()} words remaining of your daily ${usage.wordsLimit.toLocaleString()} words.`);
         return;
       }
     }
@@ -782,8 +808,16 @@ export default function EditorPage() {
           </div>
         </div>
 
-        {/* Row 2: Engine + Depth + Tone + Meaning + Humanize */}
+        {/* Row 2: AntiGPTZero + Engine + Depth + Tone + Meaning + Humanize */}
         <div className="flex flex-wrap items-center gap-x-5 gap-y-2 px-5 py-2.5">
+          <div className="flex items-center gap-1.5">
+            <span className="text-[10px] font-semibold uppercase" style={{ color: antiGptZero ? '#f97316' : '#71717a' }}>AntiGPTZero</span>
+            <button onClick={() => setAntiGptZero(!antiGptZero)}
+              className={`w-7 h-[16px] rounded-full transition-all relative ${antiGptZero ? 'bg-orange-600' : 'bg-zinc-700'}`}>
+              <div className={`w-2.5 h-2.5 bg-white rounded-full absolute top-[3px] transition-all shadow-sm ${antiGptZero ? 'left-[13px]' : 'left-[3px]'}`} />
+            </button>
+          </div>
+          <div className="w-px h-4 bg-zinc-800 hidden sm:block" />
           <div className="flex items-center gap-1.5 relative">
             <span className="text-[10px] font-semibold text-zinc-500 uppercase">Engine</span>
             <div className="relative group">
@@ -861,16 +895,18 @@ export default function EditorPage() {
         <div className="ticker-animate flex items-center gap-8 whitespace-nowrap px-4">
           {ENGINES.flatMap(eng => {
             const useCases: Record<string, string> = {
-              oxygen: 'Clear GPTZero signals from stealthy humanized text',
-              ozone: 'Eliminate ZeroGPT & Surfer AI detection markers',
+              oxygen: 'GPTZero signal killer — clean already-humanized text',
+              ozone: 'Eliminate ZeroGPT & Surfer SEO detection markers',
               easy: 'Broad-spectrum detection bypass for all major platforms',
+              humara_v3_3: 'GPTZero signal killer with triple fallback — 0% target',
             };
             return [{ engine: eng.label, use: useCases[eng.id] || 'Advanced humanization' }];
           }).concat(ENGINES.flatMap(eng => {
             const useCases: Record<string, string> = {
-              oxygen: 'Clear GPTZero signals from stealthy humanized text',
-              ozone: 'Eliminate ZeroGPT & Surfer AI detection markers',
+              oxygen: 'GPTZero signal killer — clean already-humanized text',
+              ozone: 'Eliminate ZeroGPT & Surfer SEO detection markers',
               easy: 'Broad-spectrum detection bypass for all major platforms',
+              humara_v3_3: 'GPTZero signal killer with triple fallback — 0% target',
             };
             return [{ engine: eng.label, use: useCases[eng.id] || 'Advanced humanization' }];
           })).map((item, i) => (
@@ -923,6 +959,31 @@ export default function EditorPage() {
         <div className="flex items-center gap-1.5 px-1 animate-pulse">
           <span className="text-amber-500 text-[9px]">⚠️</span>
           <p className="text-[9px] text-amber-400 font-medium">Undetectability always enabled for Humara 2.1</p>
+        </div>
+      )}
+
+      {/* AntiGPTZero Mode Info Banner */}
+      {antiGptZero && (
+        <div className="flex items-start gap-2 px-3 py-2 bg-orange-950/30 border border-orange-800/40 rounded-lg mx-1">
+          <span className="text-orange-400 text-xs mt-0.5">⚡</span>
+          <div>
+            <p className="text-[10px] font-bold text-orange-300">AntiGPTZero Mode — Signal Killer, NOT a Humanizer</p>
+            <p className="text-[9px] text-orange-200/70 leading-relaxed mt-0.5">These engines do not humanize your text. They strip GPTZero detection signals from <span className="font-semibold text-orange-200">already humanized</span> content. Use a humanizer like <span className="font-semibold text-orange-200">Stealthy</span> first, then paste the output here for GPTZero signal cleaning.</p>
+          </div>
+        </div>
+      )}
+
+      {/* Word Count Warnings */}
+      {inputWords > MAX_WORDS_PER_REQUEST && (
+        <div className="flex items-center gap-1.5 px-1">
+          <AlertTriangle className="w-2.5 h-2.5 text-red-500 shrink-0" />
+          <p className="text-[9px] text-red-400"><span className="font-bold">Too many words:</span> Maximum {MAX_WORDS_PER_REQUEST.toLocaleString()} words per request. You have {inputWords.toLocaleString()}.</p>
+        </div>
+      )}
+      {inputWords > 0 && inputWords <= MAX_WORDS_PER_REQUEST && (inputWords < RECOMMENDED_MIN_WORDS || inputWords > RECOMMENDED_MAX_WORDS) && (
+        <div className="flex items-center gap-1.5 px-1">
+          <span className="text-blue-400 text-[9px]">💡</span>
+          <p className="text-[9px] text-blue-400">Best results with {RECOMMENDED_MIN_WORDS}–{RECOMMENDED_MAX_WORDS.toLocaleString()} words. You have {inputWords.toLocaleString()}.</p>
         </div>
       )}
 

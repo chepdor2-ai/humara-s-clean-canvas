@@ -52,9 +52,9 @@ export function useUsage() {
         const totalUsed = (data.words_used_fast || 0) + (data.words_used_stealth || 0);
         const rawLimit = (data.words_limit_fast || 0) + (data.words_limit_stealth || 0);
         const hasSub = (data.days_remaining || 0) > 0;
-        // If no active subscription, cap at free tier (1000 words)
+        // If no active subscription, cap at free tier (2000 words)
         // This handles stale DB function defaults (20000/10000)
-        const totalLimit = hasSub ? (rawLimit || 1000) : 1000;
+        const totalLimit = hasSub ? (rawLimit || 2000) : 2000;
         const planName = hasSub ? (data.plan_name || 'Free') : 'Free';
         setUsage({
           wordsUsed: totalUsed,
@@ -65,12 +65,12 @@ export function useUsage() {
       } else {
         // RPC failed or not deployed — show free tier defaults so bar is always visible
         console.warn('Usage RPC unavailable, using free defaults:', error?.message);
-        setUsage(prev => prev ?? { wordsUsed: 0, wordsLimit: 1000, daysRemaining: 0, planName: 'Free' });
+        setUsage(prev => prev ?? { wordsUsed: 0, wordsLimit: 2000, daysRemaining: 0, planName: 'Free' });
       }
     } catch (err) {
       console.error('Usage fetch error:', err);
       // Ensure bar always shows even on network / RPC errors
-      setUsage(prev => prev ?? { wordsUsed: 0, wordsLimit: 1000, daysRemaining: 0, planName: 'Free' });
+      setUsage(prev => prev ?? { wordsUsed: 0, wordsLimit: 2000, daysRemaining: 0, planName: 'Free' });
     } finally {
       setLoading(false);
     }

@@ -139,6 +139,15 @@ export async function POST(req: Request) {
       });
     }
 
+    // Max 2000 words per request
+    const inputWordCount = text.trim().split(/\s+/).length;
+    if (inputWordCount > 2000) {
+      return new Response('data: ' + JSON.stringify({ type: 'error', error: `Maximum 2,000 words per request. You submitted ${inputWordCount.toLocaleString()} words.` }) + '\n\n', {
+        status: 400,
+        headers: { 'Content-Type': 'text/event-stream' },
+      });
+    }
+
     // Auth + quota enforcement
     let userId: string | null = null;
     const authHeader = req.headers.get('authorization');
@@ -158,15 +167,15 @@ export async function POST(req: Request) {
 
         // Default free-tier limits when RPC fails or missing
         let totalUsed = 0;
-        let totalLimit = 1000;
+        let totalLimit = 2000;
 
         if (!statsError && stats) {
           totalUsed = (stats.words_used_fast || 0) + (stats.words_used_stealth || 0);
           const rawLimit = (stats.words_limit_fast || 0) + (stats.words_limit_stealth || 0);
           const hasSub = (stats.days_remaining || 0) > 0;
-          // If no active subscription, cap at free tier (1000)
+          // If no active subscription, cap at free tier (2000)
           // This handles stale DB function defaults (20000/10000)
-          totalLimit = hasSub ? (rawLimit || 1000) : 1000;
+          totalLimit = hasSub ? (rawLimit || 2000) : 2000;
         }
 
         const remaining = Math.max(0, totalLimit - totalUsed);
