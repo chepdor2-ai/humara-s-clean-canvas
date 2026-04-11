@@ -39,23 +39,43 @@ function useCountUp(target: number, duration: number = 1000) {
 }
 
 export function useUsage() {
-  const { user } = useAuth();
+  const { user, session } = useAuth();
   const [usage, setUsage] = useState<UsageData | null>(null);
   const [loading, setLoading] = useState(true);
 
   const refresh = useCallback(async () => {
     if (!user) return;
     try {
-      const { data, error } = await supabase.rpc('get_usage_stats', { p_user_id: user.id });
+      // Prefer server API (service-role) to avoid RLS/RPC privilege issues.
+      // Fallback to direct RPC if the API isn't available.
+      let data: any = null;
+      let error: { message?: string } | null = null;
+
+      if (session?.access_token) {
+        const res = await fetch('/api/usage', {
+          headers: { Authorization: `Bearer ${session.access_token}` },
+        });
+        if (res.ok) {
+          data = await res.json();
+        } else {
+          // Continue to RPC fallback
+          error = { message: `API status ${res.status}` };
+        }
+      }
+
+      if (!data) {
+        const rpc = await supabase.rpc('get_usage_stats', { p_user_id: user.id });
+        data = rpc.data;
+        error = rpc.error as any;
+      }
+
       if (!error && data) {
         // Combine fast + stealth into single word count
         const totalUsed = (data.words_used_fast || 0) + (data.words_used_stealth || 0);
         const rawLimit = (data.words_limit_fast || 0) + (data.words_limit_stealth || 0);
-        const hasSub = (data.days_remaining || 0) > 0;
-        // If no active subscription, cap at free tier (2000 words)
-        // This handles stale DB function defaults (20000/10000)
-        const totalLimit = hasSub ? (rawLimit || 2000) : 2000;
-        const planName = hasSub ? (data.plan_name || 'Free') : 'Free';
+        const planName = String(data.plan_name || 'Free');
+        const isFree = planName.trim().toLowerCase() === 'free';
+        const totalLimit = rawLimit > 0 ? rawLimit : (isFree ? 1000 : 0);
         setUsage({
           wordsUsed: totalUsed,
           wordsLimit: totalLimit,
@@ -65,16 +85,16 @@ export function useUsage() {
       } else {
         // RPC failed or not deployed — show free tier defaults so bar is always visible
         console.warn('Usage RPC unavailable, using free defaults:', error?.message);
-        setUsage(prev => prev ?? { wordsUsed: 0, wordsLimit: 2000, daysRemaining: 0, planName: 'Free' });
+        setUsage(prev => prev ?? { wordsUsed: 0, wordsLimit: 1000, daysRemaining: 0, planName: 'Free' });
       }
     } catch (err) {
       console.error('Usage fetch error:', err);
       // Ensure bar always shows even on network / RPC errors
-      setUsage(prev => prev ?? { wordsUsed: 0, wordsLimit: 2000, daysRemaining: 0, planName: 'Free' });
+      setUsage(prev => prev ?? { wordsUsed: 0, wordsLimit: 1000, daysRemaining: 0, planName: 'Free' });
     } finally {
       setLoading(false);
     }
-  }, [user]);
+  }, [session?.access_token, user]);
 
   useEffect(() => { 
     if (!user) {
