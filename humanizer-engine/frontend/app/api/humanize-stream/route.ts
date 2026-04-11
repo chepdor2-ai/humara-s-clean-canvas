@@ -484,6 +484,113 @@ export async function POST(req: Request) {
 
           } // end: if (eng !== 'ozone' && eng !== 'oxygen_t5' && eng !== 'dipper' && eng !== 'humarin') post-processing block
 
+          // ── EXTERNAL API SANITIZATION (ozone, easy, etc.) ─────────────
+          // External APIs can return LLM refusals, garbled phrases, and bad synonyms.
+          // This lightweight pass cleans the worst artifacts without full post-processing.
+          {
+            // 1. Strip LLM refusal/instruction leaks (anywhere in text)
+            const REFUSAL_PATTERNS = [
+              /Sorry,?\s+I\s+(?:cannot|can't|am unable to|couldn't)\s+(?:complete|do|help|assist|process|fulfill|generate|write|rewrite|paraphrase)[^.!?\n]*[.!?]?\s*/gi,
+              /(?:As an AI|I'm an AI|I am an AI)[^.!?\n]*[.!?]?\s*/gi,
+              /(?:Please (?:provide|deliver|give|send|share|paste))\s+(?:the|your)\s+(?:original|source|input|actual)\s+(?:text|content|paragraph|essay|assignment)[^.!?\n]*[.!?]?\s*/gi,
+              /I (?:don't|do not) have (?:access to|the original)[^.!?\n]*[.!?]?\s*/gi,
+              /(?:Could you (?:please )?(?:provide|share|send))[^.!?\n]*[.!?]?\s*/gi,
+            ];
+            for (const re of REFUSAL_PATTERNS) {
+              humanized = humanized.replace(re, '');
+            }
+
+            // 2. Fix garbled transition/discourse markers from external APIs
+            // These are commonly injected mid-clause in unnatural positions
+            const GARBLED_TRANSITIONS: [RegExp, string][] = [
+              // "upon review, " mid-sentence — remove
+              [/,\s*upon review,?\s*/gi, ', '],
+              [/\bupon review,?\s*/gi, ''],
+              // "at this stage, " mid-sentence — remove
+              [/,\s*at this stage,?\s*/gi, ', '],
+              [/\bat this stage,?\s*/gi, ''],
+              // "on closer inspection, " — remove
+              [/,\s*on closer inspection,?\s*/gi, ', '],
+              [/\bon closer inspection,?\s*/gi, ''],
+              // "in broad terms, " — remove
+              [/,\s*in broad terms,?\s*/gi, ', '],
+              [/\bin broad terms,?\s*/gi, ''],
+              // "to be specific, " — remove
+              [/,\s*to be specific,?\s*/gi, ', '],
+              [/\bto be specific,?\s*/gi, ''],
+              // "at its core, " — remove
+              [/,\s*at its core,?\s*/gi, ', '],
+              [/\bat its core,?\s*/gi, ''],
+              // "on this basis, " — remove
+              [/,\s*on this basis,?\s*/gi, ', '],
+              [/\bon this basis,?\s*/gi, ''],
+              // "by comparison, " — remove when mid-sentence
+              [/,\s*by comparison,?\s*/gi, ', '],
+              // "by all accounts, " — remove
+              [/,\s*by all accounts,?\s*/gi, ', '],
+              [/\bby all accounts,?\s*/gi, ''],
+              // "strikingly, " — remove
+              [/\bstrikingly,?\s*/gi, ''],
+              // "above all, " mid-sentence — remove
+              [/,\s*above all,?\s*/gi, ', '],
+              // Fix "besides" used as conjunction (should be "and also" or removed)
+              [/,?\s*besides\s+/gi, ', and '],
+              // Fix "coupled with" inserted between incompatible clauses
+              [/,?\s*coupled with\s+/gi, ', and '],
+              // Fix "paired with"
+              [/,?\s*paired with\s+/gi, ', and '],
+              // Fix "in tandem with"
+              [/,?\s*in tandem with\s+/gi, ', and '],
+              // "supplied that" → "given that"
+              [/\bsupplied that\b/gi, 'given that'],
+              // "presented that" → "given that"
+              [/\bpresented that\b/gi, 'given that'],
+              // "granted that" → "given that"
+              [/\bgranted that\b/gi, 'given that'],
+              // "offered that" → "given that"
+              [/\boffered that\b/gi, 'given that'],
+              // "provided that" is sometimes valid, but when used as a garbled "given that":
+              // Leave it as-is since it can be grammatically correct
+            ];
+            for (const [re, rep] of GARBLED_TRANSITIONS) {
+              humanized = humanized.replace(re, rep);
+            }
+
+            // 3. Fix worst synonym garbling from external APIs
+            const BAD_SYNONYMS: [RegExp, string][] = [
+              [/\bcrafting\s+(?=econom|countr|nation)/gi, 'developing '],
+              [/\bshaping\s+(?=econom|countr|nation)/gi, 'developing '],
+              [/\bbuilding\s+(?=countr|nation)/gi, 'developing '],
+              [/\badvancing\s+(?=countr|nation)/gi, 'developing '],
+              [/\bbackdrop\b/gi, 'environment'],
+              [/\bwellspring\b/gi, 'source'],
+              [/\bIt too\b/g, 'It also'],
+              [/\bhas too\b/gi, 'has also'],
+              [/\bhave too\b/gi, 'have also'],
+              [/\bhad too\b/gi, 'had also'],
+              [/\btoo (?=sparked|prompted|brought|created|caused|led|produced)/gi, 'also '],
+              // "Eco-friendly progress Goals" → "Sustainable Development Goals"
+              [/\bEco-friendly progress Goals\b/gi, 'Sustainable Development Goals'],
+              // "protocols against's review" → "policies on"
+              [/\bprotocols\s+against'?s?\s+review\b/gi, 'policies on'],
+              [/\bprotocols\b/gi, 'policies'],
+              // "rendering" when used for "making"
+              [/\brender them\b/gi, 'make them'],
+              [/\bto render\b/gi, 'to make'],
+            ];
+            for (const [re, rep] of BAD_SYNONYMS) {
+              humanized = humanized.replace(re, rep);
+            }
+
+            // 4. Fix broken sentence starts (double commas, leading commas)
+            humanized = humanized.replace(/^,\s*/gm, '');
+            humanized = humanized.replace(/,\s*,/g, ',');
+            humanized = humanized.replace(/ {2,}/g, ' ');
+
+            // 5. Sentence-initial capitalization
+            humanized = humanized.replace(/(^|[.!?]\s+)([a-z])/g, (_m: string, pre: string, ch: string) => pre + ch.toUpperCase());
+          }
+
           // ── OXYGEN POLISH PASS (FINAL PHASE) ──────────────────────────
           // Easy engine's output is polished through the Oxygen TS engine
           // as the LAST step after all post-processing, for final cleanup.
