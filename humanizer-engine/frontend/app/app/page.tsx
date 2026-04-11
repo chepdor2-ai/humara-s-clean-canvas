@@ -147,18 +147,20 @@ const ALL_ENGINES: EngineConfig[] = [
   { id: 'ozone', label: 'Humara 2.1' },
   { id: 'easy', label: 'Humara 2.2' },
   { id: 'humara_v3_3', label: 'Humara 2.4' },
+  { id: 'ghost_pro_wiki', label: 'Wikipedia' },
 ];
 
 // AntiGPTZero mode engines (signal killers — NOT pure humanizers)
 const ANTI_GPTZERO_ENGINES = new Set(['oxygen', 'humara_v3_3']);
 // Standard humanizer engines (handle ZeroGPT, Surfer SEO, etc.)
-const STANDARD_ENGINES = new Set(['ozone', 'easy']);
+const STANDARD_ENGINES = new Set(['ozone', 'easy', 'ghost_pro_wiki']);
 
 const ENGINE_GUIDES: Record<string, string> = {
   oxygen: 'Trained specifically to beat GPTZero. May score slightly higher on other detectors — use this only when GPTZero is the problem.',
   ozone: 'Best for cleaning ZeroGPT and Surfer SEO signals. Activate this when ZeroGPT or Surfer is flagging your content.',
   easy: 'Broad-spectrum engine that handles ZeroGPT, Surfer SEO, and other AI detectors. Good general-purpose option.',
   humara_v3_3: 'Most powerful GPTZero killer with triple fallback and detector feedback loop. Use when GPTZero stubbornly flags your text. May score slightly higher on other detectors.',
+  ghost_pro_wiki: 'Rewrites text in neutral, encyclopedic Wikipedia style. Preserves academic vocabulary and formal register. Best for research papers, reports, and scholarly content.',
 };
 
 const MAX_WORDS_PER_REQUEST = 2000;

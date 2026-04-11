@@ -32,6 +32,228 @@ import { apexHumanize } from '@/lib/engine/apex-humanizer';
 
 export const maxDuration = 120; // LLM engines need more time
 
+// ── Template-Breaking Pass for Wiki Mode ──────────────────────────
+// Detects repetitive sentence starters and evaluation phrases across
+// paragraphs, then varies them to break the AI template pattern that
+// detectors (GPTZero, Pangram, Originality.ai) flag.
+function breakRepetitiveTemplates(text: string): string {
+  const paragraphs = text.split(/\n\s*\n/).filter(p => p.trim());
+
+  // Track sentence starters across ALL paragraphs to detect repetition
+  const allSentences: string[] = [];
+  const sentencesByPara = paragraphs.map(p => robustSentenceSplit(p.trim()));
+  for (const sents of sentencesByPara) {
+    allSentences.push(...sents);
+  }
+
+  // Count how many times each template pattern appears in the whole document
+  type TemplateRule = { pattern: RegExp; variations: string[] };
+  const templateRules: TemplateRule[] = [
+    {
+      // "This source is [particularly/highly/etc] relevant because ..."
+      pattern: /^This source is (?:particularly |especially |highly |directly )?relevant because\b/i,
+      variations: [
+        'The relevance of this work lies in the fact that',
+        'What makes this study pertinent is that',
+        'From a research standpoint, this source matters because',
+        'This work bears directly on the topic since',
+        'A key strength of this source is that',
+        'For the purposes of this research, this work is useful since',
+        'The contribution this source makes is evident in how',
+      ],
+    },
+    {
+      // "This source is [particularly/highly/etc] relevant [without because]"
+      pattern: /^This source is (?:particularly |especially |highly |directly )?relevant\b(?! because)/i,
+      variations: [
+        'The pertinence of this work stems from the way',
+        'What lends this study its value is that',
+        'This source carries weight in the present analysis since',
+        'The applicability of this work is clear, as',
+      ],
+    },
+    {
+      // "This makes it a [valuable/important/critical/...] ..."
+      pattern: /^This makes it (?:a |an )?(?:valuable|important|critical|essential|useful|key|significant)\b/i,
+      variations: [
+        'As such, it serves as a key',
+        'Its value lies in its role as a noteworthy',
+        'Consequently, researchers can draw on this',
+        'It therefore stands as a significant',
+        'For these reasons, it functions as a central',
+        'This positions it as an instructive',
+      ],
+    },
+    {
+      // "This source is foundational/essential because ..."
+      pattern: /^This source is (?:foundational|essential) because\b/i,
+      variations: [
+        'As a foundational text, this work matters because',
+        'The baseline significance of this source stems from the fact that',
+        'Its foundational character is clear in that',
+        'Serving as an anchor for subsequent research, this work is notable since',
+      ],
+    },
+    {
+      // "This source is foundational/essential [without because]"
+      pattern: /^This source is (?:foundational|essential)\b(?! because)/i,
+      variations: [
+        'As a foundational text, this work',
+        'The baseline significance of this source is clear since it',
+        'Anchoring subsequent research, this work',
+      ],
+    },
+    {
+      // "The findings suggest/indicate/highlight/show/reveal/emphasize/reinforce ..."
+      pattern: /^The findings (?:suggest|indicate|highlight|show|reveal|emphasize|reinforce)\b/i,
+      variations: [
+        'What emerges from the data is',
+        'Evidence from the study suggests',
+        'On the basis of these results, one can observe',
+        'The data make clear',
+        'Taken together, the results indicate',
+      ],
+    },
+    {
+      // "It highlights/emphasizes/underscores/also highlights ..."  
+      pattern: /^It (?:also )?(?:highlights|emphasizes|underscores)\b/i,
+      variations: [
+        'Attention is drawn to',
+        'One noteworthy dimension involves',
+        'The analysis brings into focus',
+        'A further point concerns',
+        'The discussion underlines',
+        'The argument centers on',
+        'An important aspect involves',
+        'The work calls attention to',
+      ],
+    },
+    {
+      // "Additionally/Furthermore/Moreover, ..."
+      pattern: /^(?:Additionally|Furthermore|Moreover),?\s/i,
+      variations: [
+        'Beyond this, ',
+        'On a related note, ',
+        'Alongside these findings, ',
+        'In parallel, ',
+        'Equally, ',
+        'At the same time, ',
+      ],
+    },
+    {
+      // "The study/report/research/authors also highlights/emphasizes ..."
+      pattern: /^The (?:study|report|research|analysis|authors?)\s+(?:also\s+)?(?:highlights?|emphasizes?|underscores?|reinforces?|supports?)\b/i,
+      variations: [
+        'An additional insight from this work involves',
+        'One further dimension that emerges concerns',
+        'The work also draws attention to',
+        'A related observation concerns',
+        'What stands out in the analysis involves',
+        'The report turns the focus to',
+        'A notable finding concerns',
+        'Equally relevant here involves',
+      ],
+    },
+    {
+      // "It supports/reinforces/complements the ..."
+      pattern: /^It (?:supports|reinforces|complements) the\b/i,
+      variations: [
+        'This line of evidence strengthens the',
+        'Corroborating this view is the',
+        'Further support comes from the',
+        'Reinforcing this point is the',
+      ],
+    },
+    {
+      // Catch variations that were introduced by our own template-breaking but repeat
+      // "Of particular note is ..."
+      pattern: /^Of particular note is\b/i,
+      variations: [
+        'A noteworthy element here involves',
+        'An important element here involves',
+        'What stands out involves',
+        'Attention should be given to',
+        'One prominent aspect concerns',
+      ],
+    },
+    {
+      // "Worth noting in this context is ..."
+      pattern: /^Worth noting in this context is\b/i,
+      variations: [
+        'Relevant to the current discussion involves',
+        'What merits attention here concerns',
+        'A salient point in the analysis concerns',
+        'What bears emphasis involves',
+      ],
+    },
+  ];
+
+  // Count pattern occurrences across all sentences
+  const patternCounts: number[] = templateRules.map(rule =>
+    allSentences.filter(s => rule.pattern.test(s.trim())).length
+  );
+
+  // Track which variation index was used for each rule to avoid repeats
+  const usedVariationIndices: Set<number>[] = templateRules.map(() => new Set());
+
+  const result = sentencesByPara.map(sents => {
+    return sents.map(sent => {
+      const trimmed = sent.trim();
+      if (!trimmed) return sent;
+
+      for (let rIdx = 0; rIdx < templateRules.length; rIdx++) {
+        const rule = templateRules[rIdx];
+        // Only vary patterns that appear 2+ times in the document
+        if (patternCounts[rIdx] < 2) continue;
+
+        const match = trimmed.match(rule.pattern);
+        if (!match) continue;
+
+        // Pick an unused variation
+        const used = usedVariationIndices[rIdx];
+        let varIdx = Math.floor(Math.random() * rule.variations.length);
+        let attempts = 0;
+        while (used.has(varIdx) && attempts < rule.variations.length) {
+          varIdx = (varIdx + 1) % rule.variations.length;
+          attempts++;
+        }
+        used.add(varIdx);
+
+        const replacement = rule.variations[varIdx];
+        const afterMatch = trimmed.slice(match[0].length).trim();
+
+        if (!afterMatch) return replacement;
+
+        // Skip replacement if remainder has a dangling coordinate verb
+        // e.g. "highlights X and identifies Y" → afterMatch = "X and identifies Y"
+        // Replacing the subject+verb would leave "and identifies" without a subject
+        const coordinateVerbPattern = /\band\s+(?:also\s+)?(?:identifies|highlights|emphasizes|underscores|argues|suggests|demonstrates|provides|shows|reveals|examines|explores|finds|notes|discusses|presents|reports|concludes|recommends|calls|proposes|offers|advocates|supports|reinforces)\b/i;
+        if (coordinateVerbPattern.test(afterMatch)) {
+          continue;
+        }
+
+        // Join replacement with remainder, handling capitalization
+        if (replacement.endsWith(' ')) {
+          return replacement + afterMatch.charAt(0).toLowerCase() + afterMatch.slice(1);
+        }
+        return replacement + ' ' + afterMatch.charAt(0).toLowerCase() + afterMatch.slice(1);
+      }
+      return sent;
+    }).join(' ');
+  }).join('\n\n');
+
+  return result;
+}
+
+/**
+ * Fix hyphenated compound words where the LLM inserts spaces around hyphens.
+ * "cross - national" → "cross-national", "evidence - based" → "evidence-based"
+ */
+function fixHyphenSpacing(text: string): string {
+  // Fix "word - word" patterns (spaces around hyphen between lowercase words)
+  return text.replace(/\b([a-z]+)\s+-\s+([a-z]+)\b/gi, '$1-$2');
+}
+
 // ── 60% Sentence Restructuring Enforcement ──────────────────────────
 // Ensures at least 60% of sentences are meaningfully restructured.
 // Compares output sentences against original, applies additional
@@ -499,6 +721,19 @@ export async function POST(req: Request) {
         strictMeaning: strict_meaning ?? false,
         enablePostProcessing: enable_post_processing !== false,
       });
+    } else if (engine === 'ghost_pro_wiki') {
+      // Ghost Pro Wikipedia: Encyclopedic rewrite — LLM produces Wikipedia-style prose,
+      // aggressive post-processing to break AI patterns
+      humanized = await ghostProHumanize(normalizedText, {
+        strength: strength ?? 'medium',
+        tone: 'wikipedia',
+        strictMeaning: strict_meaning ?? false,
+        enablePostProcessing: enable_post_processing !== false,
+      });
+      // Template-breaking pass: vary repetitive paragraph starters that flag detectors
+      humanized = breakRepetitiveTemplates(humanized);
+      // Fix hyphenated compound words that LLM splits with spaces (e.g. "cross - national" → "cross-national")
+      humanized = fixHyphenSpacing(humanized);
     } else {
       // Ghost Mini: Statistical-only pipeline (no LLM)
       humanized = humanize(normalizedText, {
@@ -521,7 +756,7 @@ export async function POST(req: Request) {
     const FIRST_PERSON_RE_EARLY = /\b(I|me|my|mine|myself|we|us|our|ours|ourselves)\b/i;
     const earlyFirstPerson = FIRST_PERSON_RE_EARLY.test(text);
     const inputAiScore = inputAnalysis.summary.overall_ai_score;
-    if (engine !== 'humara' && engine !== 'humara_v1_3' && engine !== 'nuru' && engine !== 'omega' && engine !== 'oxygen' && engine !== 'apex') {
+    if (engine !== 'humara' && engine !== 'humara_v1_3' && engine !== 'nuru' && engine !== 'omega' && engine !== 'oxygen' && engine !== 'apex' && engine !== 'ghost_pro_wiki') {
       humanized = unifiedSentenceProcess(humanized, earlyFirstPerson, inputAiScore);
     }
 
@@ -554,7 +789,7 @@ export async function POST(req: Request) {
     // Structural post-processing — attacks document-level statistical signals
     // (spectral_flatness, burstiness, sentence_uniformity, readability_consistency, vocabulary_richness)
     // Skip for humara engine: it has its own structural diversity layer
-    if (engine !== 'humara' && engine !== 'humara_v1_3' && engine !== 'nuru' && engine !== 'omega' && engine !== 'ninja' && engine !== 'undetectable' && engine !== 'oxygen') {
+    if (engine !== 'humara' && engine !== 'humara_v1_3' && engine !== 'nuru' && engine !== 'omega' && engine !== 'ninja' && engine !== 'undetectable' && engine !== 'oxygen' && engine !== 'ghost_pro_wiki') {
       humanized = structuralPostProcess(humanized);
     }
 
@@ -619,7 +854,44 @@ export async function POST(req: Request) {
     humanized = humanized.replace(/\bputed\b/g, 'put');
     humanized = humanized.replace(/\bcutted\b/g, 'cut');
     humanized = humanized.replace(/\bsetted\b/g, 'set');
+    humanized = humanized.replace(/\bseting\b/g, 'setting');
     humanized = humanized.replace(/\bweighes\b/g, 'weighs');
+    // 9c. Fix noun/verb POS mismatches from synonym replacement
+    // "the require for" → "the need for" (require used as noun)
+    humanized = humanized.replace(/\bthe require for\b/gi, 'the need for');
+    humanized = humanized.replace(/\bthe require of\b/gi, 'the need of');
+    // "for grasp" → "for grasping" (bare infinitive after "for")
+    humanized = humanized.replace(/\bfor grasp\b/gi, 'for grasping');
+    // "widespread referred" → "commonly referred" (adjective used as adverb)
+    humanized = humanized.replace(/\bwidespread referred\b/gi, 'commonly referred');
+    humanized = humanized.replace(/\bprevalent referred\b/gi, 'commonly referred');
+    // "setting up / sets up / set up X as" → "establishing / establishes / established X as"
+    humanized = humanized.replace(/\bsetting up\b/gi, 'establishing');
+    humanized = humanized.replace(/\bsets up\b/gi, 'establishes');
+    humanized = humanized.replace(/\bset up\b/gi, 'established');
+    // "facilitate to X" → "help to X" (facilitate doesn't take infinitive)
+    humanized = humanized.replace(/\bfacilitate to\b/gi, 'help to');
+    humanized = humanized.replace(/\bfacilitates to\b/gi, 'helps to');
+    // 9d. Fix capitalized verb after citation mid-sentence: "et al. (2022) Provide" → "provide"
+    humanized = humanized.replace(/(\(\d{4}\))\s+([A-Z])([a-z]+)\b/g, 
+      (m, cite, first, rest) => {
+        const word = first.toLowerCase() + rest;
+        // Only lowercase if it looks like a common verb
+        const verbs = new Set(['provide', 'provides', 'provided', 'analyze', 'analyzes', 'analyzed',
+          'examine', 'examines', 'examined', 'argue', 'argues', 'argued', 'suggest',
+          'suggests', 'suggested', 'demonstrate', 'demonstrates', 'demonstrated',
+          'highlight', 'highlights', 'highlighted', 'use', 'uses', 'used',
+          'show', 'shows', 'showed', 'report', 'reports', 'reported',
+          'discuss', 'discusses', 'discussed', 'find', 'finds', 'found',
+          'note', 'notes', 'noted', 'offer', 'offers', 'offered',
+          'present', 'presents', 'presented', 'explore', 'explores', 'explored',
+          'identify', 'identifies', 'identified', 'reveal', 'reveals', 'revealed',
+          'describe', 'describes', 'described', 'assess', 'assesses', 'assessed',
+          'conclude', 'concludes', 'concluded', 'investigate', 'investigates', 'investigated',
+          'employ', 'employs', 'employed']);
+        if (verbs.has(word)) return cite + ' ' + word;
+        return m;
+      });
     humanized = humanized.replace(/\bcarrys\b/g, 'carries');
     humanized = humanized.replace(/\bdealed\b/g, 'dealt');
     // 10. Fix superlative grammar: "most strong" → "strongest", "most large" → "largest"
@@ -805,6 +1077,34 @@ export async function POST(req: Request) {
     // preserveInputStructure, unifiedSentenceProcess, etc.
     humanized = fixMidSentenceCapitalization(humanized, text);
 
+    // ── FINAL HYPHEN SPACING FIX ──────────────────────────────
+    // Fix spaced hyphens that may have been re-introduced by post-processing
+    // "cross - national" → "cross-national", "evidence - based" → "evidence-based"
+    humanized = fixHyphenSpacing(humanized);
+
+    // ── FINAL CITATION VERB FIX ───────────────────────────────
+    // Must run AFTER fixMidSentenceCapitalization because "et al." causes
+    // the sentence splitter to treat "(2022) Provide" as sentence-initial
+    // and re-capitalize "Provide". This pass has the final say.
+    humanized = humanized.replace(/(\(\d{4}\))\s+([A-Z])([a-z]+)\b/g, 
+      (m, cite, first, rest) => {
+        const word = first.toLowerCase() + rest;
+        const verbs = new Set(['provide', 'provides', 'provided', 'analyze', 'analyzes', 'analyzed',
+          'examine', 'examines', 'examined', 'argue', 'argues', 'argued', 'suggest',
+          'suggests', 'suggested', 'demonstrate', 'demonstrates', 'demonstrated',
+          'highlight', 'highlights', 'highlighted', 'use', 'uses', 'used',
+          'show', 'shows', 'showed', 'report', 'reports', 'reported',
+          'discuss', 'discusses', 'discussed', 'find', 'finds', 'found',
+          'note', 'notes', 'noted', 'offer', 'offers', 'offered',
+          'present', 'presents', 'presented', 'explore', 'explores', 'explored',
+          'identify', 'identifies', 'identified', 'reveal', 'reveals', 'revealed',
+          'describe', 'describes', 'described', 'assess', 'assesses', 'assessed',
+          'conclude', 'concludes', 'concluded', 'investigate', 'investigates', 'investigated',
+          'employ', 'employs', 'employed']);
+        if (verbs.has(word)) return cite + ' ' + word;
+        return m;
+      });
+
     // ── OXYGEN POLISH PASS (FINAL PHASE) ──────────────────────────
     // Easy engine's output is polished through the Oxygen TS engine
     // as the LAST step after all post-processing, for cleaner output.
@@ -824,7 +1124,9 @@ export async function POST(req: Request) {
     // run progressively stronger Oxygen passes to drive it to 0%.
     // Max 3 iterations to avoid infinite loops. Each pass uses
     // increasing strength to break remaining AI patterns.
-    {
+    // Skip for Wikipedia: Oxygen passes destroy encyclopedic vocabulary
+    // and introduce grammar errors ("boosts", "opportunitied", "pitch in").
+    if (engine !== 'ghost_pro_wiki') {
       const FEEDBACK_MAX_ITERS = 3;
       const FEEDBACK_AI_THRESHOLD = 5.0; // below 5% is acceptable
       const FEEDBACK_STRENGTHS = ['light', 'medium', 'strong'] as const;

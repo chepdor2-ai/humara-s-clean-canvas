@@ -57,6 +57,13 @@ import {
 
 const LLM_MODEL = process.env.LLM_MODEL ?? "gpt-4o-mini";
 
+// ── Groq config (OpenAI-compatible, Llama models) ──
+const GROQ_MODELS = [
+  "llama-3.3-70b-versatile",                        // Primary: best quality
+  "meta-llama/llama-4-scout-17b-16e-instruct",      // Fallback 1: good quality, 5x token limit
+  "llama-3.1-8b-instant",                            // Fallback 2: fast, highest request limits
+] as const;
+
 // ── OpenAI client singleton ──
 
 let _client: OpenAI | null = null;
@@ -69,18 +76,73 @@ function getClient(): OpenAI {
   return _client;
 }
 
-async function llmCall(system: string, user: string, temperature: number, maxTokens?: number): Promise<string> {
-  const client = getClient();
-  const r = await client.chat.completions.create({
-    model: LLM_MODEL,
-    messages: [
-      { role: "system", content: system },
-      { role: "user", content: user },
-    ],
-    temperature,
-    max_tokens: maxTokens ?? 4096,
+// ── Groq client singleton (OpenAI-compatible) ──
+
+let _groqClient: OpenAI | null = null;
+
+function getGroqClient(): OpenAI {
+  if (_groqClient) return _groqClient;
+  const apiKey = process.env.GROQ_API_KEY?.trim();
+  if (!apiKey) throw new Error("GROQ_API_KEY not set.");
+  _groqClient = new OpenAI({
+    apiKey,
+    baseURL: "https://api.groq.com/openai/v1",
   });
-  return r.choices[0]?.message?.content?.trim() ?? "";
+  return _groqClient;
+}
+
+async function groqCall(system: string, user: string, temperature: number, maxTokens?: number): Promise<string> {
+  const client = getGroqClient();
+
+  for (let i = 0; i < GROQ_MODELS.length; i++) {
+    const model = GROQ_MODELS[i];
+    try {
+      const r = await client.chat.completions.create({
+        model,
+        messages: [
+          { role: "system", content: system },
+          { role: "user", content: user },
+        ],
+        temperature,
+        max_tokens: maxTokens ?? 4096,
+      });
+      const content = r.choices[0]?.message?.content?.trim() ?? "";
+      if (content) {
+        if (i > 0) console.log(`  [Groq] Succeeded with fallback model: ${model}`);
+        return content;
+      }
+    } catch (err: unknown) {
+      const errMsg = err instanceof Error ? err.message : String(err);
+      console.warn(`  [Groq] Model ${model} failed: ${errMsg}`);
+      if (i < GROQ_MODELS.length - 1) {
+        console.log(`  [Groq] Falling back to ${GROQ_MODELS[i + 1]}...`);
+      }
+    }
+  }
+  // All Groq models failed — fall back to OpenAI
+  console.warn("  [Groq] All models failed, falling back to OpenAI GPT-4o-mini");
+  return llmCall(system, user, temperature, maxTokens);
+}
+
+async function llmCall(system: string, user: string, temperature: number, maxTokens?: number, modelOverride?: string): Promise<string> {
+  try {
+    const client = getClient();
+    const model = modelOverride ?? LLM_MODEL;
+    const r = await client.chat.completions.create({
+      model,
+      messages: [
+        { role: "system", content: system },
+        { role: "user", content: user },
+      ],
+      temperature,
+      max_tokens: maxTokens ?? 4096,
+    });
+    return r.choices[0]?.message?.content?.trim() ?? "";
+  } catch (err: any) {
+    console.error("  [GhostPro] OpenAI API Error:", err.message);
+    console.warn("  [GhostPro] System fallback to Groq due to OpenAI failure...");
+    return groqCall(system, user, temperature, maxTokens);
+  }
 }
 
 // ── Input Feature Detection ──
@@ -116,9 +178,23 @@ function detectInputFeatures(text: string): InputFeatures {
 
 function getSystemPrompt(tone: string, wordCount?: number): string {
   const isAcademic = tone === "academic";
+  const isWikipedia = tone === "wikipedia";
   const isShort = (wordCount ?? 999) < 300;
 
-  const voiceInstruction = isAcademic
+  const voiceInstruction = isWikipedia
+    ? `You are an experienced Wikipedia editor rewriting text into proper encyclopedic style. Your output must read exactly like a real Wikipedia article: neutral point of view (NPOV), third-person throughout, factual and declarative, no hedging or opinion. State established knowledge directly. Use domain-specific vocabulary naturally. Cite sources where reference markers exist. Write the way real human Wikipedia editors write — clear, informative, occasionally dry, with natural variation in sentence structure.
+
+WIKIPEDIA STYLE EXAMPLES (study these carefully — match this exact register):
+
+Example 1 (History):
+The Treaty of Westphalia was signed in 1648, ending the Thirty Years' War in the Holy Roman Empire. It established the principle of state sovereignty that shaped European politics for centuries. The negotiations involved 109 delegations and took nearly five years to complete. Several smaller conflicts continued in the region despite the formal peace agreement.
+
+Example 2 (Science):
+Photosynthesis converts light energy into chemical energy stored in glucose molecules. The process occurs primarily in the chloroplasts of plant cells, where chlorophyll absorbs light in the red and blue wavelengths. Six molecules of carbon dioxide and six molecules of water produce one molecule of glucose and six molecules of oxygen. The overall efficiency of this conversion varies between 3 and 6 percent under normal conditions.
+
+Example 3 (Geography):
+The Amazon River basin covers approximately 7 million square kilometres across nine countries in South America. It contains roughly 20 percent of the world's fresh water that flows into the ocean. More than 3,000 species of fish have been identified in the basin. Seasonal flooding between June and October can raise water levels by as much as 12 metres in some areas.`
+    : isAcademic
     ? `You are ghostwriting as a real graduate student. Your job: rewrite text so it reads like a sharp human scholar wrote it — thoughtful rhythm, natural flow, not robotic. Think of how a strong graduate thesis or journal article reads when written by someone who actually cares about clarity: direct, precise, occasionally personal in style, but never stiff or formulaic.`
     : `You are ghostwriting as a real human author. Your job: rewrite text so it reads exactly like a person wrote it by hand — messy rhythm, personal quirks, uneven pacing. Think of how columnists from the 1990s or early-2000s bloggers wrote: direct, sometimes clumsy, never polished to a robotic sheen.`;
 
@@ -136,7 +212,16 @@ SHORT TEXT — EXTRA RULES (this text is under 300 words, so every sentence matt
 - Vary your word lengths — mix short punchy words with longer ones
 ` : ``;
 
-  const burstinessRule = isAcademic
+  const burstinessRule = isWikipedia
+    ? `1. SENTENCE LENGTH VARIATION (critical for bypassing AI detection):
+   Wikipedia articles have natural sentence length variation. Match these statistics:
+   - Average sentence length: 20-24 words
+   - Standard deviation: 8-10 words
+   - Include short factual sentences (8-14 words): "The treaty was signed in 1648." "Several species remain endangered."
+   - Include longer compound sentences (30-45 words) with subordinate clauses, relative clauses, or appositives
+   - NEVER write 3 consecutive sentences within 6 words of each other in length
+   - Target coefficient of variation between 0.35 and 0.50`
+    : isAcademic
     ? `1. SENTENCE LENGTH VARIATION (the single most important rule):
    You MUST create genuine variation in sentence lengths in EVERY paragraph.
    - Include some shorter sentences (6-12 words) for emphasis or clarity
@@ -155,7 +240,21 @@ SHORT TEXT — EXTRA RULES (this text is under 300 words, so every sentence matt
    - NEVER write 3 sentences in a row that are within 8 words of each other in length
    - Target coefficient of variation > 0.50 for sentence lengths`;
 
-  const wordChoiceRule = isAcademic
+  const wordChoiceRule = isWikipedia
+    ? `5. WORD CHOICE — sound like a real Wikipedia article:
+   - Use precise, domain-appropriate vocabulary: "established", "implemented", "comprising", "designated"
+   - Keep academic and technical terms that belong in encyclopedic writing: "significant", "demonstrated", "contributed", "framework"
+   - AVOID only the blatantly AI-robotic words: utilize, leverage, delve, tapestry, cornerstone, bedrock, myriad, plethora, multifaceted, holistic, synergy, paradigm
+   - Use NEUTRAL descriptors: "notable", "prominent", "widely recognized" — not "amazing", "incredible", "crucial"
+   - NO hedging or opinion: never write "arguably", "it seems", "one could say", "interestingly"
+   - NO informal language: never write "pretty much", "a lot of", "sort of", "kicked off"
+   - Use passive voice naturally where appropriate (15-25% of sentences): "The organization was founded in 1950" is natural in Wikipedia
+   - State facts directly without qualification: "The population increased by 30%" not "The population saw a significant increase"
+   - Use specific numbers, dates, and proper nouns from the original text wherever possible
+   - MANDATORY: Replace at least 30% of non-technical content words with natural academic synonyms. Do NOT leave most words unchanged — rewrite actively.
+   - STRUCTURAL VARIATION: Vary sentence structures aggressively. Use clause fronting, voice shifts (active/passive), nominalization, and reordering. Do NOT preserve the original sentence structure — transform it.
+   - BREAK TEMPLATE PATTERNS: If the original text has repetitive patterns (e.g. every paragraph starts with "This source is relevant because..."), break them. Use different formulations each time.`
+    : isAcademic
     ? `5. WORD CHOICE — sound like a real scholar, not an AI:
    - Keep appropriate academic vocabulary (analysis, framework, implications) — these are expected
    - Avoid the OBVIOUSLY robotic AI words listed above (utilize, leverage, facilitate, etc.)
@@ -175,25 +274,47 @@ ABSOLUTE REQUIREMENTS — these are non-negotiable:
 
 ${burstinessRule}
 
-2. ABSOLUTELY BANNED VOCABULARY — if you use ANY of these words, the output fails:
+${isWikipedia ? `2. BANNED VOCABULARY — these are AI-detector markers, never use them:
+   utilize, leverage, delve, tapestry, cornerstone, bedrock, linchpin, nexus, myriad, plethora, multitude, multifaceted, holistic, synergy, paradigm, trajectory, discourse, dichotomy, conundrum, ramification, underpinning, efficacious, bolster, catalyze, spearhead, unravel, unveil, embark, harness, ameliorate, engender, elucidate, exacerbate, proliferate, culminate
+
+   Also BANNED phrases: "it is important to note", "it should be noted", "plays a crucial role", "in today's world", "in today's society", "a wide range of", "due to the fact that", "first and foremost", "each and every", "not only...but also", "serves as a testament", "it is worth noting", "it is clear that", "moving forward", "when it comes to"
+
+   ALLOWED in Wikipedia context (do NOT replace these): significant, demonstrated, established, contributed, implemented, comprehensive, framework, methodology, fundamental, substantial, facilitate, prominent, notable, considerable, contemporary, subsequent, initial, primary, various, additional, specific, respectively, approximately` :
+`2. ABSOLUTELY BANNED VOCABULARY — if you use ANY of these words, the output fails:
    utilize, facilitate, leverage, comprehensive, multifaceted, paramount, furthermore, moreover, additionally, consequently, subsequently, nevertheless, notwithstanding, aforementioned, paradigm, trajectory, discourse, dichotomy, conundrum, ramification, underpinning, synergy, robust, nuanced, salient, ubiquitous, pivotal, intricate, meticulous, profound, inherent, overarching, substantive, efficacious, holistic, transformative, innovative, groundbreaking, noteworthy, proliferate, exacerbate, ameliorate, engender, delineate, elucidate, illuminate, necessitate, perpetuate, underscore, exemplify, encompass, bolster, catalyze, streamline, optimize, mitigate, navigate, prioritize, articulate, substantiate, corroborate, disseminate, cultivate, ascertain, endeavor, delve, embark, foster, harness, spearhead, unravel, unveil, tapestry, cornerstone, bedrock, linchpin, nexus, spectrum, myriad, plethora, multitude, landscape, realm, culminate
 
-   Also BANNED phrases: "it is important to note", "it should be noted", "plays a crucial role", "in today's world", "in today's society", "a wide range of", "due to the fact that", "first and foremost", "each and every", "not only...but also", "serves as a testament", "in light of", "with that in mind", "having said that", "that being said", "it is worth noting", "on the other hand", "in conclusion", "in summary", "as a result", "for example,", "for instance,", "there are several", "there are many", "it is clear that", "when it comes to", "given that", "moving forward"
+   Also BANNED phrases: "it is important to note", "it should be noted", "plays a crucial role", "in today's world", "in today's society", "a wide range of", "due to the fact that", "first and foremost", "each and every", "not only...but also", "serves as a testament", "in light of", "with that in mind", "having said that", "that being said", "it is worth noting", "on the other hand", "in conclusion", "in summary", "as a result", "for example,", "for instance,", "there are several", "there are many", "it is clear that", "when it comes to", "given that", "moving forward"`}
 
-3. SENTENCE STARTERS — vary them dramatically:
+${isWikipedia ? `3. SENTENCE STARTERS — Wikipedia style:
+   - Most sentences start with the grammatical subject: "The organization...", "Health education...", "Several studies..."
+   - Some sentences start with temporal or locational context: "In 1976,...", "During the 1980s,...", "In the United States,..."
+   - Use transitional sentences sparingly and naturally — no more than 1-2 per paragraph
+   - NEVER start with: "Furthermore," "Moreover," "Additionally," "It is important," "It should be noted"
+   - NEVER start any sentence with a conjunction: "And", "But", "Or", "So", "Yet"
+   - Vary between active and passive constructions naturally` :
+`3. SENTENCE STARTERS — vary them dramatically:
    - Start some sentences with the subject directly ("The economy grew...")
    - Start some with a short clause ("After the reforms took hold, ...")
    - Do NOT start any sentence with a conjunction like And, But, Or, So, Yet
    - Start some with gerunds ("Looking at the data...")
    - NEVER use the same starting word for consecutive sentences
-   - NEVER start with: "Furthermore," "Moreover," "Additionally," "However," "Nevertheless," "Consequently," "It is" 
+   - NEVER start with: "Furthermore," "Moreover," "Additionally," "However," "Nevertheless," "Consequently," "It is"`}
 
-4. NATURAL HUMAN TEXTURE:
+${isWikipedia ? `4. ENCYCLOPEDIC TEXTURE:
+   - Write in neutral, informative prose — no opinion, no rhetorical questions, no persuasion
+   - Use relative clauses naturally: "which was established in...", "whose mission is to..."
+   - Use appositives for context: "SOPHE, a professional society of health educators, was founded..."
+   - Semicolons are acceptable to join closely related clauses
+   - Do NOT use em dashes (—) or parenthetical asides with personal commentary
+   - Reference markers like [1], [2] etc. must be preserved exactly
+   - Dates, statistics, proper nouns, and organization names must be exact
+   - Use "according to" sparingly — state facts directly instead` :
+`4. NATURAL HUMAN TEXTURE:
    - Use phrasal verbs where natural: look into, carry out, bring about, come up with, break down, set up, point out, figure out, deal with, end up, turn out, stand out, account for, spell out
    - Use semicolons 2-3 times to join related thoughts
    - Use comma-based hedging asides 2-4 times (e.g. ", admittedly," or ", in most cases,")
    - Do NOT use em dashes (—) or parenthetical brackets
-   - Mix simple and complex sentence structures unpredictably
+   - Mix simple and complex sentence structures unpredictably`}
 
 ${wordChoiceRule}
 
@@ -217,6 +338,9 @@ STRICT PRESERVATION RULES:
 function buildUserPrompt(text: string, features: InputFeatures, tone: string): string {
   let toneGuide = "";
   switch (tone) {
+    case "wikipedia":
+      toneGuide = "Rewrite this text in neutral encyclopedic Wikipedia style. Third person only. No thesis statements, no argumentation, no opinion. Present facts as established knowledge. Use domain-specific vocabulary naturally. Preserve all citations, dates, proper nouns, and reference markers exactly. Write as a real Wikipedia editor would — informative, precise, occasionally dry, with varied sentence structure.";
+      break;
     case "academic":
       toneGuide = "Write like a sharp grad student — intellectual but grounded. Maintain academic register. Keep key terms (e.g., emotional intelligence, leadership foundations, empowerment) intact. Use semicolons and dashes for natural rhythm. Do NOT use slang or overly casual phrasing.";
       break;
@@ -230,15 +354,24 @@ function buildUserPrompt(text: string, features: InputFeatures, tone: string): s
       toneGuide = "Write like a confident college student explaining this topic to a peer — natural, clear, occasionally conversational.";
   }
 
-  const contractionRule = features.hasContractions
+  // Wikipedia mode: always no contractions, no first person, no rhetorical questions
+  const isWiki = tone === "wikipedia";
+
+  const contractionRule = isWiki
+    ? "Do NOT use contractions. Write all words fully (do not, cannot, will not, etc.)."
+    : features.hasContractions
     ? "You MAY use contractions naturally."
     : "Do NOT use contractions. Write all words fully (do not, cannot, will not, etc.).";
 
-  const firstPersonRule = features.hasFirstPerson
+  const firstPersonRule = isWiki
+    ? "Do NOT use first-person pronouns (I, we, me, us, my, our). Wikipedia uses third person and impersonal constructions exclusively."
+    : features.hasFirstPerson
     ? "You may use first-person pronouns where appropriate."
     : "Do NOT use first-person pronouns (I, we, me, us, my, our). Use impersonal constructions instead.";
 
-  const rhetoricalRule = features.hasRhetoricalQuestions
+  const rhetoricalRule = isWiki
+    ? "Do NOT use rhetorical questions. Wikipedia articles use only declarative statements."
+    : features.hasRhetoricalQuestions
     ? "You may use rhetorical questions sparingly."
     : "Do NOT use rhetorical questions. Do NOT add any sentences ending with a question mark. Use declarative statements only.";
 
@@ -292,8 +425,11 @@ ${text}`;
 
 function getSentenceSystemPrompt(tone: string): string {
   const isAcademic = tone === "academic";
+  const isWikipedia = tone === "wikipedia";
 
-  const voiceInstruction = isAcademic
+  const voiceInstruction = isWikipedia
+    ? `You are AGGRESSIVELY rewriting a SINGLE sentence in neutral encyclopedic style. You MUST substantially change the wording, vocabulary, and sentence structure. Do NOT return the original with minor edits — that is a FAILURE. Third person, factual, informative. No opinion, no hedging, no persuasion. The goal is to convey the same facts using completely different words and clause arrangements.`
+    : isAcademic
     ? `You are rewriting a SINGLE sentence as a real graduate student would write it — thoughtful, natural, not robotic. Direct and precise but never formulaic.`
     : `You are rewriting a SINGLE sentence as a real human author would write it — natural quirks, personal style. Think how a 1990s columnist or early-2000s blogger would phrase this.`;
 
@@ -303,9 +439,25 @@ RULES:
 1. Rewrite ONLY the sentence marked [TARGET]. The [BEFORE] and [AFTER] lines are read-only context.
 2. Return ONLY the rewritten sentence — no labels, no commentary, no quotation marks around it.
 3. OUTPUT EXACTLY ONE SENTENCE. Do NOT split the input into multiple sentences. Do NOT merge with context. One sentence in = one sentence out. NEVER add periods that would create additional sentences.
-4. BANNED WORDS: utilize, facilitate, leverage, comprehensive, multifaceted, paramount, furthermore, moreover, additionally, consequently, subsequently, nevertheless, notwithstanding, aforementioned, paradigm, trajectory, discourse, robust, nuanced, pivotal, intricate, transformative, innovative, groundbreaking, mitigate, streamline, optimize, bolster, catalyze, delve, embark, foster, harness, spearhead, unravel, unveil, tapestry, cornerstone, nexus, myriad, plethora, realm, landscape, methodology, framework, holistic, substantive, salient, ubiquitous, meticulous, profound, enhance, crucial, vital, essential, significant, implement, navigate, foster, underscore, highlight, interplay, diverse, dynamic, ensure, aspect, notion, endeavor, pertaining, integral
+4. BANNED WORDS: ${isWikipedia
+  ? `utilize, leverage, delve, tapestry, cornerstone, bedrock, linchpin, nexus, myriad, plethora, multifaceted, holistic, synergy, paradigm, trajectory, discourse, dichotomy, conundrum, ramification, underpinning, efficacious, bolster, catalyze, spearhead, unravel, unveil, embark, harness, ameliorate, engender, elucidate, exacerbate, proliferate, culminate`
+  : `utilize, facilitate, leverage, comprehensive, multifaceted, paramount, furthermore, moreover, additionally, consequently, subsequently, nevertheless, notwithstanding, aforementioned, paradigm, trajectory, discourse, robust, nuanced, pivotal, intricate, transformative, innovative, groundbreaking, mitigate, streamline, optimize, bolster, catalyze, delve, embark, foster, harness, spearhead, unravel, unveil, tapestry, cornerstone, nexus, myriad, plethora, realm, landscape, methodology, framework, holistic, substantive, salient, ubiquitous, meticulous, profound, enhance, crucial, vital, essential, significant, implement, navigate, foster, underscore, highlight, interplay, diverse, dynamic, ensure, aspect, notion, endeavor, pertaining, integral`}
 5. BANNED STARTERS: Do NOT start with "Furthermore," "Moreover," "Additionally," "However," "Nevertheless," "Consequently," "It is," "It's important," "It should be noted," "In today's," "In the realm," "When it comes to"
-6. Use everyday words: "use" not "utilize", "help" not "facilitate", "big" not "significant", "show" not "demonstrate", "part" not "aspect", "idea" not "notion"
+${isWikipedia ? `6. AGGRESSIVE REWRITING (MANDATORY): You MUST substantially rewrite every sentence. Do NOT return the original wording with minor tweaks. Change the sentence structure, swap vocabulary, rearrange clauses. The output should read differently while keeping the same factual content. If your rewrite is more than 70% similar to the original, you have FAILED.
+7. CRITICAL: Preserve all placeholder tokens like [[PROT_0]], [[TRM_0]] exactly as-is. Do not remove or modify them.
+8. Keep the same meaning and all factual content, data, citations, dates, proper nouns. Do NOT hallucinate or invent.
+9. Stay within ±25% of the original sentence word count.
+10. Write in third person. No opinion markers. No hedging. State facts directly.
+11. SYNONYM REPLACEMENT (MANDATORY — 40%+ of content words): Replace verbs, adjectives, adverbs, and non-technical nouns with natural academic alternatives. Examples: "examines" → "investigates"/"probes"/"assesses", "argues" → "contends"/"maintains"/"posits", "provides" → "offers"/"presents"/"supplies", "highlights" → "underscores"/"draws attention to"/"brings out", "suggests" → "indicates"/"points to"/"implies", "addresses" → "confronts"/"deals with"/"takes on", "relevant" → "pertinent"/"applicable"/"germane", "valuable" → "useful"/"instructive"/"informative", "important" → "notable"/"consequential"/"key", "comprehensive" → "thorough"/"wide-ranging"/"in-depth", "significant" → "major"/"substantial"/"considerable". You MUST replace these words — do NOT keep original verbs and adjectives.
+12. STRUCTURAL TRANSFORMATION (MANDATORY — apply to EVERY sentence):
+    - CLAUSE FRONTING: Move subordinate clauses to the beginning ("X because Y" → "Because Y, X")
+    - VOICE SHIFT: Change active to passive or vice versa ("The authors argue" → "It is argued by the authors" / "violence is shaped by" → "structural factors shape violence")
+    - NOMINALIZATION: Convert verbs to nouns or vice versa ("the study examines" → "the examination in this study" / "an analysis of X" → "analyzing X")
+    - REORDER INFORMATION: Move phrases to different positions ("Using data from surveys, the study examines..." → "The study, drawing on survey data, examines...")
+    You MUST change the word order. Do NOT preserve the original clause arrangement.
+13. PRESERVE COMPOUND TERMS: Keep established compound terms intact (e.g. "intimate partner violence", "gender-based violence", "civil society", "criminal justice", "policy change"). Do NOT replace words within these terms.
+14. CAPITALIZATION: Only capitalize proper nouns (names, places, organizations). Common nouns like "health", "women", "crime", "education" must be lowercase mid-sentence.
+15. Use passive voice naturally where appropriate. Preserve reference markers [1], [2] exactly. Use relative clauses and appositives.` : `6. Use everyday words: "use" not "utilize", "help" not "facilitate", "big" not "significant", "show" not "demonstrate", "part" not "aspect", "idea" not "notion"
 7. CRITICAL: Preserve all placeholder tokens like [[PROT_0]], [[TRM_0]] exactly as-is. Do not remove or modify them.
 8. Keep the same meaning and all factual content, data, citations. Do NOT hallucinate or invent information not present in the original.
 9. CRITICAL WORD COUNT: Your output sentence MUST stay within ±15% of the original word count. Do NOT drastically shorten or pad.
@@ -325,7 +477,7 @@ RULES:
     - PHRASE EXPANSION/COMPRESSION: "location" → "place of residence", "regardless of" → "no matter"
     - PARALLEL STRUCTURE BREAKING: Make lists asymmetric — "A, B, and C" → "A along with B, as well as C"
 12. AVOID HEDGING: Do not use "it is important to note", "it is worth mentioning", "one could argue". Make direct statements.
-13. PREFER CONCRETE OVER ABSTRACT: Say "the factory shut down" not "the operation ceased". Say "prices went up" not "costs increased significantly".`;
+13. PREFER CONCRETE OVER ABSTRACT: Say "the factory shut down" not "the operation ceased". Say "prices went up" not "costs increased significantly".`}`;
 }
 
 function buildSentenceUserPrompt(
@@ -358,6 +510,51 @@ ${contextBefore}[TARGET]: ${sentence}${contextAfter}`;
 }
 
 // ══════════════════════════════════════════════════════════════════════════
+// PARAGRAPH-LEVEL LLM REWRITE (Wikipedia mode only)
+// Sends full paragraphs to the LLM for natural cross-sentence dependencies.
+// This prevents the per-sentence uniformity that neural detectors catch.
+// ══════════════════════════════════════════════════════════════════════════
+
+function getWikiParagraphSystemPrompt(): string {
+  return `You are a seasoned Wikipedia editor rewriting a paragraph into proper encyclopedic style. Your output must read exactly like a real Wikipedia article — neutral point of view (NPOV), third person, factual and declarative.
+
+RULES:
+1. Rewrite the ENTIRE paragraph. Return ONLY the rewritten paragraph — no labels, no commentary.
+2. PRESERVE the same number of sentences. Do NOT merge or split sentences.
+3. BANNED WORDS: utilize, leverage, delve, tapestry, cornerstone, bedrock, linchpin, nexus, myriad, plethora, multifaceted, holistic, synergy, paradigm, trajectory, discourse, dichotomy, conundrum, ramification, underpinning, efficacious, bolster, catalyze, spearhead, unravel, unveil, embark, harness, ameliorate, engender, elucidate, exacerbate, proliferate, culminate
+4. ALLOWED academic vocabulary (use freely): significant, demonstrated, established, contributed, implemented, comprehensive, framework, methodology, fundamental, substantial, facilitate, prominent, notable, considerable, contemporary, subsequent, initial, primary, various, additional, specific, respectively, approximately
+5. AGGRESSIVE REWRITING: Change sentence structure, swap vocabulary, rearrange clauses. The output must read differently while keeping the same factual content. Minimum 40% of content words should be different.
+6. SENTENCE LENGTH VARIATION (critical): Create natural variation in sentence length. Mix short declarative sentences (8-14 words) with longer complex ones (30-45 words). NEVER write 3+ consecutive sentences of similar length. Real Wikipedia articles have a standard deviation of 8-10 words in sentence length.
+7. STRUCTURAL DIVERSITY across sentences: Use different grammatical structures for different sentences within the paragraph:
+   - Some sentences: subject-verb-object (simple declarative)
+   - Some sentences: fronted subordinate clause ("Drawing on X, the study...")
+   - Some sentences: passive voice ("The data were collected from...")
+   - Some sentences: relative clause insertion ("The report, which draws on extensive data, argues...")
+   Do NOT use the same structure for consecutive sentences.
+8. PRESERVE: All placeholder tokens [[PROT_0]], [[TRM_0]], all citations, dates, proper nouns, reference markers, and compound terms (intimate partner violence, gender-based violence, civil society, criminal justice).
+9. No contractions. No first-person. No opinion markers. No hedging. State facts directly.
+10. Third person throughout. Write as a real human Wikipedia editor — clear, informative, occasionally dry.
+11. BANNED STARTERS: Do NOT start sentences with "Furthermore," "Moreover," "Additionally," "However," "Nevertheless," "Consequently," "It is," "It's important," "It should be noted"`;
+}
+
+function buildParagraphUserPrompt(
+  paragraph: string,
+  features: InputFeatures,
+  sentenceCount: number,
+): string {
+  const wordCount = paragraph.split(/\s+/).length;
+  const minWords = Math.floor(wordCount * 0.85);
+  const maxWords = Math.ceil(wordCount * 1.15);
+
+  return `No contractions. No first-person pronouns (I, we, me, us, my, our). No rhetorical questions.
+WORD RANGE: The original is ${wordCount} words. Your output MUST be between ${minWords} and ${maxWords} words.
+SENTENCE COUNT: The original has ${sentenceCount} sentences. Your output MUST have exactly ${sentenceCount} sentences.
+
+PARAGRAPH TO REWRITE:
+${paragraph}`;
+}
+
+// ══════════════════════════════════════════════════════════════════════════
 // PASS 2: NON-LLM STATISTICAL POST-PROCESSING
 // Targets each of the 20 detector signals individually
 // ══════════════════════════════════════════════════════════════════════════
@@ -365,9 +562,30 @@ ${contextBefore}[TARGET]: ${sentence}${contextAfter}`;
 // ── 2A: AI VOCABULARY ELIMINATION ──
 // Covers: ai_pattern_score, per_sentence_ai_ratio
 
+// Words that are SAFE in Wikipedia/encyclopedic context — do NOT replace these in wikipedia mode
+const WIKIPEDIA_SAFE_WORDS = new Set([
+  "significant", "demonstrate", "demonstrated", "demonstrates", "demonstrating",
+  "established", "establishing", "establishment", "comprehensive", "facilitate",
+  "facilitated", "facilitating", "contributed", "contributing", "contribution",
+  "implemented", "implementing", "implementation", "framework", "methodology",
+  "fundamental", "fundamentally", "substantial", "substantially", "prominent",
+  "notable", "considerable", "considerably", "contemporary", "subsequent",
+  "subsequently", "initial", "initially", "primary", "primarily", "various",
+  "additional", "additionally", "specific", "specifically", "respectively",
+  "approximately", "significant", "significance", "enhance", "enhanced",
+  "enhancement", "crucial", "vital", "essential", "diverse", "diversity",
+  "dynamic", "ensure", "ensuring", "aspect", "aspects", "integral",
+  "foster", "fostered", "fostering", "encompass", "encompassed", "encompassing",
+  "highlight", "highlighted", "highlighting", "furthermore", "moreover",
+  "consequently", "nevertheless", "however", "therefore", "regarding",
+  "pertaining", "designated", "designation", "comprised", "comprising",
+  "advocating", "advocacy", "promoting", "promotion", "curriculum",
+  "curricula", "intervention", "interventions", "assessment", "certification",
+]);
+
 const AI_WORD_KILL: Record<string, string[]> = {
   utilize: ["use"], utilise: ["use"], leverage: ["use", "draw on", "rely on"],
-  facilitate: ["help", "support", "allow"], comprehensive: ["broad", "full", "thorough", "wide"],
+  facilitate: ["help", "support", "allow"], comprehensive: ["thorough", "extensive", "wide-ranging", "in-depth"],
   multifaceted: ["complex", "layered"], paramount: ["central", "most important", "top"],
   furthermore: ["also", "and", "on top of that"], moreover: ["also", "and", "plus"],
   additionally: ["also", "and", "on top of that"], consequently: ["so", "because of this", "this meant"],
@@ -383,13 +601,13 @@ const AI_WORD_KILL: Record<string, string[]> = {
   meticulous: ["careful", "thorough", "exact"], profound: ["deep", "serious", "far-reaching"],
   inherent: ["built-in", "natural", "baked-in"], overarching: ["main", "broad", "general"],
   substantive: ["real", "meaningful", "solid"], efficacious: ["effective", "working"],
-  holistic: ["whole", "complete", "full-picture"], transformative: ["game-changing", "major", "radical"],
+  holistic: ["integrated", "complete", "all-encompassing"], transformative: ["game-changing", "major", "radical"],
   innovative: ["new", "fresh", "creative"], groundbreaking: ["pioneering", "first-of-its-kind"],
   noteworthy: ["worth noting", "interesting", "striking"], proliferate: ["spread", "grow", "multiply"],
-  exacerbate: ["worsen", "make worse", "aggravate"], ameliorate: ["improve", "ease", "fix"],
+  exacerbate: ["worsen", "intensify", "aggravate"], ameliorate: ["improve", "ease", "fix"],
   engender: ["create", "produce", "cause"], delineate: ["describe", "outline", "map out"],
   elucidate: ["explain", "clarify", "spell out"], illuminate: ["shed light on", "clarify", "show"],
-  necessitate: ["require", "call for", "demand"], perpetuate: ["keep going", "continue", "maintain"],
+  necessitate: ["call for", "demand", "require"], perpetuate: ["keep going", "continue", "maintain"],
   underscore: ["highlight", "stress", "bring out"], exemplify: ["show", "demonstrate", "reflect"],
   encompass: ["include", "cover", "take in"], bolster: ["support", "back up", "strengthen"],
   catalyze: ["trigger", "spark", "set off"], streamline: ["simplify", "cut down on", "trim"],
@@ -429,7 +647,7 @@ const AI_WORD_KILL: Record<string, string[]> = {
   notion: ["idea", "thought", "concept"],
   diverse: ["varied", "mixed", "different"],
   dynamic: ["active", "shifting", "changing"],
-  implement: ["put in place", "carry out", "set up"],
+  implement: ["carry out", "apply", "execute"],
   pertaining: ["about", "related to", "tied to"],
   integral: ["key", "central", "core"],
   interplay: ["give and take", "back and forth", "exchange"],
@@ -1374,19 +1592,25 @@ function splitIntoChunks(text: string): string[] {
  * Post-process a single sentence independently through all transforms.
  * This is the core unit of work — each sentence is treated as an isolated chunk.
  */
-function postProcessSingleSentence(sent: string, features: InputFeatures, strength: string = "light"): string {
+function postProcessSingleSentence(sent: string, features: InputFeatures, strength: string = "light", tone: string = "neutral"): string {
   if (!sent.trim()) return sent;
   const originalSent = sent.trim();
   let result = originalSent;
+  const isWiki = tone === "wikipedia";
 
   // 1. Kill AI vocabulary — local PHRASE patterns first
-  for (const [pattern, replacement] of AI_PHRASE_KILL) {
-    result = result.replace(pattern, replacement);
+  // Wikipedia mode: only kill blatantly AI phrases, preserve encyclopedic vocabulary
+  if (!isWiki) {
+    for (const [pattern, replacement] of AI_PHRASE_KILL) {
+      result = result.replace(pattern, replacement);
+    }
   }
 
   // 2. Kill AI vocabulary — local WORD map (word by word through AI_WORD_KILL)
+  // Wikipedia mode: skip words in WIKIPEDIA_SAFE_WORDS
   result = result.replace(/\b[a-zA-Z]+\b/g, (word) => {
     const lower = word.toLowerCase();
+    if (isWiki && WIKIPEDIA_SAFE_WORDS.has(lower)) return word;
     const replacements = AI_WORD_KILL[lower];
     if (!replacements) return word;
     const rep = replacements[Math.floor(Math.random() * replacements.length)];
@@ -1397,11 +1621,17 @@ function postProcessSingleSentence(sent: string, features: InputFeatures, streng
   });
 
   // 3. Kill AI vocabulary — shared dictionaries (120+ words + phrase patterns)
-  result = applyAIWordKill(result);
-  result = applyPhrasePatterns(result);
+  // Wikipedia mode: skip shared dictionaries entirely — they replace academic vocabulary with casual alternatives
+  if (!isWiki) {
+    result = applyAIWordKill(result);
+    result = applyPhrasePatterns(result);
+  }
 
   // 4. Naturalize connectors
-  result = applyConnectorNaturalization(result);
+  // Wikipedia mode: skip — encyclopedic connectors are appropriate
+  if (!isWiki) {
+    result = applyConnectorNaturalization(result);
+  }
 
   // Steps 5-9 REMOVED — applyPhrasePatterns in step 3 already covers all 9 swap dictionaries.
   // Applying them again was causing double/triple replacement that produced nonsensical output.
@@ -1451,14 +1681,18 @@ function postProcessSingleSentence(sent: string, features: InputFeatures, streng
   }
 
   // 12b. Second-pass AI word kill — catch any AI words reintroduced by synonym/template steps
-  result = applyAIWordKill(result);
+  // Wikipedia mode: skip — encyclopedic vocabulary must be preserved
+  if (!isWiki) {
+    result = applyAIWordKill(result);
+  }
 
   // 12b2. Structural diversity — DISABLED: random phrase injection was producing artifacts
   // like "By that point," and "Oddly," that corrupt academic text
 
   // 12c. Per-sentence anti-detection — score this sentence against the same 9 micro-signals
   // the detector uses and apply targeted fixes to push it below detection threshold
-  {
+  // Wikipedia mode: skip — anti-detection uses casual phrasing inappropriate for academic text
+  if (!isWiki) {
     const antiDetected = perSentenceAntiDetection([result], features.hasContractions);
     if (antiDetected.length > 0 && antiDetected[0].trim()) {
       result = antiDetected[0];
@@ -1466,7 +1700,8 @@ function postProcessSingleSentence(sent: string, features: InputFeatures, streng
   }
 
   // 12d. Deep cleaning — eliminate residual AI structural patterns
-  {
+  // Wikipedia mode: skip — deep cleaning replaces academic vocabulary with casual alternatives
+  if (!isWiki) {
     const deepCleaned = deepCleaningPass([result]);
     if (deepCleaned.length > 0 && deepCleaned[0].trim()) {
       result = deepCleaned[0];
@@ -1474,6 +1709,8 @@ function postProcessSingleSentence(sent: string, features: InputFeatures, streng
   }
 
   // 12e. Pre-1990 naturalness — replace modern collocations with older phrasing
+  // Wikipedia mode: skip — modern collocations are appropriate in encyclopedic writing
+  if (!isWiki) {
   result = result.replace(/\bin terms of\b/gi, "regarding");
   result = result.replace(/\bat the end of the day\b/gi, "when all is said and done");
   result = result.replace(/\bmoving forward\b/gi, "from here on");
@@ -1489,8 +1726,17 @@ function postProcessSingleSentence(sent: string, features: InputFeatures, streng
   result = result.replace(/\bplays a role\b/gi, "matters");
   result = result.replace(/\bdue to\b/gi, "because of");
   result = result.replace(/\bas well as\b/gi, "and");
+  }
 
   // 12f. N-gram pattern breaking — Pangram and Copyleaks use n-gram frequency analysis
+  // Wikipedia mode: only kill the most blatantly AI n-gram patterns (5 patterns)
+  if (isWiki) {
+    result = result.replace(/\bplays a crucial role\b/gi, "is central to");
+    result = result.replace(/\bplay a crucial role\b/gi, "are central to");
+    result = result.replace(/\bit is worth noting\b/gi, "notably");
+    result = result.replace(/\bit is important to\b/gi, "it is necessary to");
+    result = result.replace(/\bin order to\b/gi, "to");
+  } else {
   // These are the most common AI bigram/trigram patterns that flag text as AI-generated
   result = result.replace(/\bplays a crucial role\b/gi, "matters a great deal");
   result = result.replace(/\bplay a crucial role\b/gi, "matter a great deal");
@@ -1522,9 +1768,11 @@ function postProcessSingleSentence(sent: string, features: InputFeatures, streng
   result = result.replace(/\bas a result of\b/gi, "from");
   result = result.replace(/\bas a consequence of\b/gi, "from");
   result = result.replace(/\bon the basis of\b/gi, "based on");
+  }
 
   // 13. Constraint enforcement per sentence
-  if (!features.hasContractions) {
+  // Wikipedia mode: always expand contractions (encyclopedic style requires formal language)
+  if (!features.hasContractions || isWiki) {
     result = result.replace(CONTRACTION_EXPAND_RE, (match) => {
       const expanded = EXPANSION_MAP[match.toLowerCase()] ?? match;
       return match[0] === match[0].toUpperCase() && expanded[0] === expanded[0].toLowerCase()
@@ -1534,7 +1782,10 @@ function postProcessSingleSentence(sent: string, features: InputFeatures, streng
   }
 
   // 14. Kill modern buzzwords (pre-2000 era naturalness)
-  result = killModernBuzzwords(result);
+  // Wikipedia mode: skip — modern terminology is appropriate in encyclopedic writing
+  if (!isWiki) {
+    result = killModernBuzzwords(result);
+  }
   // NOTE: applyAIWordKill removed here — already applied in step 3. Running it again
   // caused recursive synonym drift that produced nonsensical output.
 
@@ -1652,7 +1903,7 @@ function ghostProMergeSplit(text: string): string {
  * Splits into paragraphs → sentences, processes each sentence independently,
  * then recombines.
  */
-function sentenceIndependentPostProcess(text: string, features: InputFeatures, strength: string = "light"): string {
+function sentenceIndependentPostProcess(text: string, features: InputFeatures, strength: string = "light", tone: string = "neutral"): string {
   const paragraphs = text.split(/\n\s*\n/);
 
   return paragraphs.map(para => {
@@ -1665,7 +1916,7 @@ function sentenceIndependentPostProcess(text: string, features: InputFeatures, s
     const processed = sentences.map(sent => {
       const trimmed = sent.trim();
       if (!trimmed || trimmed.split(/\s+/).length < 3) return trimmed;
-      return postProcessSingleSentence(trimmed, features, strength);
+      return postProcessSingleSentence(trimmed, features, strength, tone);
     }).filter(Boolean);
 
     // Fragment removal DISABLED — would alter sentence count (1-in=1-out)
@@ -1830,83 +2081,305 @@ async function processChunk(
 ): Promise<string> {
   const { strength } = options;
   const chunkWords = chunkText.trim().split(/\s+/).length;
+  const isWikiRewrite = options.tone === "wikipedia";
 
   // ═══════════════════════════════════════════
-  // PASS 1: PER-SENTENCE LLM Rewrite (each sentence independently)
+  // PASS 1: LLM Rewrite
+  // Wikipedia mode: PARAGRAPH-LEVEL rewriting + sentence mixing
+  // Other modes: PER-SENTENCE independent rewriting
   // ═══════════════════════════════════════════
-  console.log("  [GhostPro]   Pass 1: Per-sentence LLM rewrite...");
 
-  const sentenceSystemPrompt = getSentenceSystemPrompt(options.tone);
   const paragraphs = chunkText.split(/\n\s*\n/).filter(p => p.trim());
-
   let totalSentencesProcessed = 0;
+  let result: string;
 
-  const rewrittenParagraphs = await Promise.all(paragraphs.map(async (para) => {
-    const trimmedPara = para.trim();
-    // Skip headings/titles — pass through unchanged
-    if (isTitleOrHeading(trimmedPara)) {
-      return trimmedPara;
-    }
+  if (isWikiRewrite) {
+    // ── WIKIPEDIA: Dual-LLM paragraph rewriting + sentence mixing ──
+    // STRATEGY: Two different LLM architectures in sequence.
+    // Pass 1A: GPT-4o-mini rewrites paragraphs (high quality, smooth output)
+    // Pass 1B: Groq/Llama 3.3 70B re-rewrites the GPT-4o-mini output
+    // This breaks the single-model token probability signature that neural
+    // detectors (GPTZero, Originality, Pangram) are trained to catch.
+    // Then mixes in ~35% of original sentences for perplexity burstiness.
+    console.log("  [GhostPro]   Pass 1A: GPT-4o-mini paragraph rewrite (wiki mode)...");
 
-    const sentences = robustSentenceSplit(trimmedPara);
-    if (sentences.length === 0) {
-      return trimmedPara;
-    }
+    const paragraphSystemPrompt = getWikiParagraphSystemPrompt();
 
-    // Process each sentence independently via LLM (parallel for speed)
-    const rewritePromises = sentences.map(async (sent, idx) => {
-      const trimmed = sent.trim();
-      if (!trimmed || trimmed.split(/\s+/).length < 3) return trimmed;
+    const rewrittenParagraphs = await Promise.all(paragraphs.map(async (para, pi) => {
+      const trimmedPara = para.trim();
+      if (isTitleOrHeading(trimmedPara)) return trimmedPara;
 
-      // Skip title-like sentences
-      if (isTitleOrHeading(trimmed)) return trimmed;
+      const originalSentences = robustSentenceSplit(trimmedPara);
+      if (originalSentences.length === 0) return trimmedPara;
 
-      const prevSent = idx > 0 ? sentences[idx - 1] : null;
-      const nextSent = idx < sentences.length - 1 ? sentences[idx + 1] : null;
+      // Decide which sentences to keep original (for perplexity burstiness)
+      // Neural detectors key on uniform token probabilities — mixing in ~35% of
+      // original human sentences creates genuine perplexity variation that breaks
+      // the "smooth LLM texture" that GPTZero/Originality/Pangram detect.
+      // Strategy: keep 2nd and 4th sentences in 5-sentence paragraphs,
+      // and randomly keep others at ~35% rate. Never keep the 1st sentence
+      // (it's the most "template-like" and most impactful to rewrite).
+      const keepOriginal = new Set<number>();
+      if (originalSentences.length >= 4) {
+        // Always keep sentence index 1 (2nd sentence) — creates burst after rewritten opener
+        keepOriginal.add(1);
+        // Keep sentence index 3 if it exists — alternating pattern
+        if (originalSentences.length > 3) keepOriginal.add(3);
+      }
+      // Random additional keeps for other middle/end sentences
+      for (let i = 2; i < originalSentences.length; i++) {
+        if (!keepOriginal.has(i) && Math.random() < 0.20) keepOriginal.add(i);
+      }
 
-      const userPrompt = buildSentenceUserPrompt(
-        placeholdersToLLMFormat(trimmed),
-        prevSent ? placeholdersToLLMFormat(prevSent) : null,
-        nextSent ? placeholdersToLLMFormat(nextSent) : null,
+      const paraWords = trimmedPara.split(/\s+/).length;
+      const paraTemp = options.temperature + (Math.random() * 0.10 - 0.05);
+      const clampedTemp = Math.max(0.3, Math.min(1.0, paraTemp));
+      const maxTokens = Math.max(512, Math.ceil(paraWords * 2.5));
+
+      const userPrompt = buildParagraphUserPrompt(
+        placeholdersToLLMFormat(trimmedPara),
         features,
+        originalSentences.length,
       );
 
-      // Vary temperature per-sentence for unpredictability
-      const sentTemp = options.temperature + (Math.random() * 0.14 - 0.07);
-      const clampedTemp = Math.max(0.3, Math.min(1.0, sentTemp));
-      const sentMaxTokens = Math.max(256, Math.ceil(trimmed.split(/\s+/).length * 3));
+      try {
+        let rewrittenPara = llmFormatToPlaceholders(
+          await llmCall(paragraphSystemPrompt, userPrompt, clampedTemp, maxTokens) ?? ''
+        );
+        if (!rewrittenPara || rewrittenPara.trim().length < trimmedPara.length * 0.2) {
+          return trimmedPara;
+        }
+
+        // ── GPT-4o-mini output is clean; minimal dedup needed ──
+        // Still check for rare sentence-count drift
+        {
+          const rawSentences = robustSentenceSplit(rewrittenPara);
+          const seen = new Set<string>();
+          const deduped: string[] = [];
+          for (const s of rawSentences) {
+            const normalized = s.trim().toLowerCase().replace(/\s+/g, ' ');
+            if (seen.has(normalized)) continue;
+            seen.add(normalized);
+            deduped.push(s.trim());
+          }
+          rewrittenPara = deduped.join(" ");
+        }
+
+        // Enforce strict rules on the whole paragraph
+        const ruleResult = enforceStrictRules(trimmedPara, rewrittenPara, features as unknown as SurgeryInputFeatures);
+        rewrittenPara = ruleResult.text;
+
+        // Now mix in original sentences for burstiness
+        if (keepOriginal.size > 0) {
+          const rewrittenSentences = robustSentenceSplit(rewrittenPara);
+          // Only mix if rewrite produced similar sentence count
+          if (Math.abs(rewrittenSentences.length - originalSentences.length) <= 2) {
+            for (const keepIdx of keepOriginal) {
+              // Map to closest index in rewritten (in case counts differ slightly)
+              const mappedIdx = Math.min(keepIdx, rewrittenSentences.length - 1);
+              if (mappedIdx >= 0 && mappedIdx < rewrittenSentences.length) {
+                rewrittenSentences[mappedIdx] = originalSentences[keepIdx];
+              }
+            }
+            rewrittenPara = rewrittenSentences.join(" ");
+          }
+        }
+
+        totalSentencesProcessed += originalSentences.length;
+        return rewrittenPara;
+      } catch (err) {
+        console.error(`  [GhostPro] Pass 1A error para ${pi}:`, err);
+        return trimmedPara;
+      }
+    }));
+
+    result = rewrittenParagraphs.join("\n\n");
+    console.log(`  [GhostPro]   Pass 1A done: ${result.split(/\s+/).length} words (GPT-4o-mini, ~35% original mixed in)`);
+
+    // ═══════════════════════════════════════════
+    // PASS 1B: Groq/Llama sentence-list envelope re-rewrite (second LLM)
+    // Sends each paragraph as a numbered sentence list to Groq.
+    // Full paragraph context → better pattern disruption than per-sentence.
+    // Numbered format → prevents sentence merging/loss.
+    // Original (human) sentences marked KEEP → preserves human perplexity.
+    // Sequential processing to respect Groq rate limits (12K TPM).
+    // ═══════════════════════════════════════════
+
+    const pass1BParagraphs = result.split(/\n\s*\n/).filter(p => p.trim());
+    console.log(`  [GhostPro]   Pass 1B: Groq/Llama sentence-list envelope... (P: ${pass1BParagraphs.length})`);
+
+    const groqEnvelopeSystem = `You are a Wikipedia editor. You will receive a numbered list of sentences from a paragraph. For each sentence marked [REWRITE], produce a completely rewritten version using different vocabulary and sentence structure. For sentences marked [KEEP], output them UNCHANGED.
+
+CRITICAL RULES:
+1. Output EXACTLY N lines for N input sentences — one sentence per line, numbered (1. 2. 3. etc.)
+2. [KEEP] sentences must be returned VERBATIM — do not change even a single word
+3. [REWRITE] sentences: change at least 40% of the content words, restructure clauses, vary sentence openings
+4. Each rewritten sentence MUST stay within ±3 words of the original word count shown in parentheses
+5. Preserve ALL citations (Author Year), dates, proper nouns, and placeholder tokens [[PROT_0]] [[TRM_0]] exactly
+6. BANNED words: utilize, leverage, delve, tapestry, cornerstone, multifaceted, holistic, synergy, paradigm, trajectory, discourse, comprehensive, furthermore, moreover, additionally, consequently, significantly
+7. No contractions. No first person. Third person only. Encyclopedic NPOV tone.
+8. Each sentence must be self-contained and grammatically complete
+9. Vary sentence length: some shorter (10-14 words), some longer (18-28 words)
+10. Do NOT add any commentary, labels, or explanations — only the numbered sentences`;
+
+    const groqResults: string[] = [];
+
+    for (let pi = 0; pi < pass1BParagraphs.length; pi++) {
+      const gptPara = pass1BParagraphs[pi].trim();
+      if (isTitleOrHeading(gptPara)) {
+        groqResults.push(gptPara);
+        continue;
+      }
+
+      const sentences = robustSentenceSplit(gptPara);
+      if (sentences.length === 0) {
+        groqResults.push(gptPara);
+        continue;
+      }
+
+      // Identify which sentences are originals (kept by mixing in Pass 1A)
+      const origPara = (paragraphs[pi] ?? '').trim();
+      const origSentences = robustSentenceSplit(origPara);
+      const origNormalized = new Set(origSentences.map(os => os.trim().toLowerCase().replace(/\s+/g, ' ')));
+
+      // Build numbered sentence list
+      const sentenceLines: string[] = [];
+      const sentenceLabels: ('keep' | 'rewrite')[] = [];
+      for (let si = 0; si < sentences.length; si++) {
+        const sent = sentences[si].trim();
+        const norm = sent.toLowerCase().replace(/\s+/g, ' ');
+        const isOriginal = origNormalized.has(norm);
+        const words = sent.split(/\s+/).length;
+        const label = isOriginal ? '[KEEP]' : '[REWRITE]';
+        sentenceLabels.push(isOriginal ? 'keep' : 'rewrite');
+        sentenceLines.push(`${si + 1}. ${label} (${words} words): ${placeholdersToLLMFormat(sent)}`);
+      }
+
+      // If all sentences are originals, skip Groq entirely
+      if (sentenceLabels.every(l => l === 'keep')) {
+        console.log(`  [Groq] Para ${pi}: All keep, skipping.`);
+        groqResults.push(gptPara);
+        continue;
+      }
+      
+      console.log(`  [Groq] Para ${pi}: ReWrite count = ${sentenceLabels.filter(l => l === 'rewrite').length}`);
+
+      const paraWords = gptPara.split(/\s+/).length;
+      const paraTemp = Math.max(0.7, Math.min(1.05, options.temperature + 0.05));
+      const maxTokens = Math.max(512, Math.ceil(paraWords * 2.5));
+
+      const groqUserPrompt = `Rewrite this paragraph's ${sentences.length} sentences:\n\n${sentenceLines.join('\n')}`;
 
       try {
-        let rewritten = llmFormatToPlaceholders(
-          await llmCall(sentenceSystemPrompt, userPrompt, clampedTemp, sentMaxTokens) ?? ''
+    const rawOutput = await groqCall(groqEnvelopeSystem, groqUserPrompt, paraTemp, maxTokens) ?? '';
+        console.log(`  [Groq] Paragraph ${pi} raw output lengths: ${rawOutput.length} chars`);
+        
+        // Parse numbered output lines
+        const outputLines = rawOutput.split('\n')
+          .map(l => l.trim())
+          .filter(l => /^\d+[\.\)]\s/.test(l))
+          .map(l => l.replace(/^\d+[\.\)]\s*/, '').trim());
+
+        if (outputLines.length < sentences.length - 1) {
+          // Groq didn't return enough lines — keep GPT version
+          console.warn(`  [Groq] Para ${pi}: expected ${sentences.length} lines, got ${outputLines.length} — keeping Pass 1A`);
+          groqResults.push(gptPara);
+          continue;
+        }
+
+        // Merge: use Groq output for REWRITE sentences, original for KEEP sentences
+        const mergedSentences: string[] = [];
+        for (let si = 0; si < sentences.length; si++) {
+          if (sentenceLabels[si] === 'keep') {
+            // Always use the original sentence regardless of what Groq returned
+            mergedSentences.push(sentences[si].trim());
+          } else if (si < outputLines.length) {
+            let groqSent = llmFormatToPlaceholders(outputLines[si]);
+            groqSent = groqSent.replace(/^\[(?:REWRITE|KEEP)\]\s*/i, '');
+            groqSent = groqSent.replace(/^\(\d+ words\):?\s*/i, '');
+            groqSent = groqSent.replace(/^(Here is|Rewritten|Output|Result):?\s*/i, '');
+            groqSent = enforceSingleSentence(groqSent);
+            
+            // Validate word count didn't drift too much
+            const origWords = sentences[si].split(/\s+/).length;
+            const groqWords = groqSent.split(/\s+/).length;
+            if (groqWords < origWords * 0.5 || groqWords > origWords * 1.8 || groqSent.length < 10) {
+              mergedSentences.push(sentences[si].trim()); // Too much drift, keep GPT
+            } else {
+              mergedSentences.push(groqSent);
+            }
+          } else {
+            mergedSentences.push(sentences[si].trim()); // No corresponding output
+          }
+        }
+
+        groqResults.push(mergedSentences.join(" "));
+      } catch {
+        groqResults.push(gptPara); // On error, keep GPT version
+      }
+    }
+
+    result = groqResults.join("\n\n");
+    console.log(`  [GhostPro]   Pass 1B done: ${result.split(/\s+/).length} words (Groq/Llama, dual-LLM rewrite complete)`);
+
+  } else {
+    // ── OTHER MODES: Per-sentence independent LLM rewriting ──
+    console.log("  [GhostPro]   Pass 1: Per-sentence LLM rewrite...");
+
+    const sentenceSystemPrompt = getSentenceSystemPrompt(options.tone);
+
+    const rewrittenParagraphs = await Promise.all(paragraphs.map(async (para) => {
+      const trimmedPara = para.trim();
+      if (isTitleOrHeading(trimmedPara)) return trimmedPara;
+
+      const sentences = robustSentenceSplit(trimmedPara);
+      if (sentences.length === 0) return trimmedPara;
+
+      const rewritePromises = sentences.map(async (sent, idx) => {
+        const trimmed = sent.trim();
+        if (!trimmed || trimmed.split(/\s+/).length < 3) return trimmed;
+        if (isTitleOrHeading(trimmed)) return trimmed;
+
+        const prevSent = idx > 0 ? sentences[idx - 1] : null;
+        const nextSent = idx < sentences.length - 1 ? sentences[idx + 1] : null;
+
+        const userPrompt = buildSentenceUserPrompt(
+          placeholdersToLLMFormat(trimmed),
+          prevSent ? placeholdersToLLMFormat(prevSent) : null,
+          nextSent ? placeholdersToLLMFormat(nextSent) : null,
+          features,
         );
-        if (!rewritten || rewritten.trim().length < trimmed.length * 0.2) {
+
+        const sentTemp = options.temperature + (Math.random() * 0.14 - 0.07);
+        const clampedTemp = Math.max(0.3, Math.min(1.0, sentTemp));
+        const sentMaxTokens = Math.max(256, Math.ceil(trimmed.split(/\s+/).length * 3));
+
+        try {
+          let rewritten = llmFormatToPlaceholders(
+            await llmCall(sentenceSystemPrompt, userPrompt, clampedTemp, sentMaxTokens) ?? ''
+          );
+          if (!rewritten || rewritten.trim().length < trimmed.length * 0.2) {
+            return trimmed;
+          }
+          rewritten = rewritten.replace(/^\[TARGET\]:\s*/i, "").trim();
+          rewritten = enforceSingleSentence(rewritten);
+          const ruleResult = enforceStrictRules(trimmed, rewritten, features as unknown as SurgeryInputFeatures);
+          rewritten = ruleResult.text;
+          rewritten = enforceCapitalization(trimmed, rewritten);
+          return rewritten;
+        } catch {
           return trimmed;
         }
-        rewritten = rewritten.replace(/^\[TARGET\]:\s*/i, "").trim();
-        // Enforce single sentence: if LLM returned multiple sentences, collapse to one
-        rewritten = enforceSingleSentence(rewritten);
+      });
 
-        // Enforce strict rules (no contractions, no rhetorical questions, no first-person)
-        const ruleResult = enforceStrictRules(trimmed, rewritten, features as unknown as SurgeryInputFeatures);
-        rewritten = ruleResult.text;
+      const rewrittenSentences = await Promise.all(rewritePromises);
+      totalSentencesProcessed += rewrittenSentences.length;
+      return rewrittenSentences.join(" ");
+    }));
 
-        // Enforce capitalization
-        rewritten = enforceCapitalization(trimmed, rewritten);
-
-        return rewritten;
-      } catch {
-        return trimmed;
-      }
-    });
-
-    const rewrittenSentences = await Promise.all(rewritePromises);
-    totalSentencesProcessed += rewrittenSentences.length;
-    return rewrittenSentences.join(" ");
-  }));
-
-  let result = rewrittenParagraphs.join("\n\n");
-  console.log(`  [GhostPro]   Pass 1 done: ${result.split(/\s+/).length} words (${totalSentencesProcessed} sentences processed independently)`);
+    result = rewrittenParagraphs.join("\n\n");
+    console.log(`  [GhostPro]   Pass 1 done: ${result.split(/\s+/).length} words (${totalSentencesProcessed} sentences processed independently)`);
+  }
 
   // ═══════════════════════════════════════════
   // PASS 2: SENTENCE-INDEPENDENT Post-processing
@@ -1915,7 +2388,7 @@ async function processChunk(
   console.log("  [GhostPro]   Pass 2: Sentence-independent post-processing...");
 
   // Single deep post-processing pass
-  result = sentenceIndependentPostProcess(result, features, strength);
+  result = sentenceIndependentPostProcess(result, features, strength, options.tone);
   console.log(`  [GhostPro]   Post-processing done at strength=${strength}`);
 
   // Per-sentence polish and n-gram de-repeat — prevent bulk operations from splitting sentences
@@ -1936,8 +2409,10 @@ async function processChunk(
   // PASS 3: DETECTOR FEEDBACK LOOP
   // Analyze with detector, apply per-sentence anti-detection + deep cleaning
   // until scores drop or we hit the iteration cap.
+  // Wikipedia mode: skip entirely — internal detector is unreliable, LLM prompt handles style
   // ═══════════════════════════════════════════
-  const maxFeedbackPasses = 1;
+  const isWikiMode = options.tone === "wikipedia";
+  const maxFeedbackPasses = isWikiMode ? 1 : 1;
   const targetAiScore = strength === "strong" ? 15 : strength === "medium" ? 25 : 35;
 
   for (let fbPass = 0; fbPass < maxFeedbackPasses; fbPass++) {
@@ -2021,6 +2496,13 @@ export async function ghostProHumanize(
   const original = text.trim();
   const features = detectInputFeatures(original);
 
+  // Wikipedia mode: force encyclopedic constraints regardless of input
+  if (tone === "wikipedia") {
+    features.hasContractions = false;
+    features.hasFirstPerson = false;
+    features.hasRhetoricalQuestions = false;
+  }
+
   console.log(`  [GhostPro] Input: ${features.wordCount} words, ${features.paragraphCount} paras`);
   console.log(`  [GhostPro] Features: contractions=${features.hasContractions}, firstPerson=${features.hasFirstPerson}, rhetoricalQs=${features.hasRhetoricalQuestions}`);
 
@@ -2045,6 +2527,10 @@ export async function ghostProHumanize(
 
   const tempMap: Record<string, number> = { light: 0.72, medium: 0.82, strong: 0.92 };
   let temperature = tempMap[strength] ?? 0.72;
+  // Wikipedia mode: higher temperature for more unpredictable rewriting
+  if (tone === "wikipedia") {
+    temperature = Math.min(temperature + 0.12, 0.98);
+  }
   // Short texts need higher temperature for more unpredictable word choices
   if (features.wordCount < 300) {
     temperature = Math.min(temperature + 0.10, 0.98);
@@ -2138,6 +2624,8 @@ export async function ghostProHumanize(
   }
 
   // ── DETECTOR FEEDBACK LOOP — re-run post-processing if AI score > 15% ──
+  // Wikipedia mode: skip — internal detector is unreliable for encyclopedic text
+  if (tone !== "wikipedia") {
   try {
     const detector = getDetector();
     for (let feedbackRound = 0; feedbackRound < 2; feedbackRound++) {
@@ -2161,6 +2649,7 @@ export async function ghostProHumanize(
     }
   } catch {
     // Detector failure is non-fatal
+  }
   }
 
   // ── Safety net: fix doubled subordinate conjunctions ("when when", "since since") ──
