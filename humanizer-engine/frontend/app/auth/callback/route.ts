@@ -1,20 +1,19 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
-import { cookies } from 'next/headers';
 
-export async function GET(request: Request) {
+export async function GET(request: NextRequest) {
   const url = new URL(request.url);
   const code = url.searchParams.get('code');
   const next = url.searchParams.get('next') ?? '/app';
 
   // Build the redirect base URL
-  const forwardedHost = request.headers.get('x-forwarded-host')?.split(',')[0]?.trim();
-  const forwardedProto = request.headers.get('x-forwarded-proto')?.split(',')[0]?.trim() || 'https';
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL
-    || (forwardedHost ? `${forwardedProto}://${forwardedHost}` : url.origin);
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || url.origin;
 
   if (code) {
-    const cookieStore = await cookies();
+    // We must set cookies on the redirect response, not on the request context.
+    // So we create the response first, then use it for cookie writes.
+    const redirectUrl = new URL(next, siteUrl);
+    const response = NextResponse.redirect(redirectUrl);
 
     const supabase = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -22,11 +21,11 @@ export async function GET(request: Request) {
       {
         cookies: {
           getAll() {
-            return cookieStore.getAll();
+            return request.cookies.getAll();
           },
           setAll(cookiesToSet) {
             cookiesToSet.forEach(({ name, value, options }) => {
-              cookieStore.set(name, value, options);
+              response.cookies.set(name, value, options);
             });
           },
         },
@@ -35,7 +34,7 @@ export async function GET(request: Request) {
 
     const { error } = await supabase.auth.exchangeCodeForSession(code);
     if (!error) {
-      return NextResponse.redirect(new URL(next, siteUrl));
+      return response;
     }
   }
 
