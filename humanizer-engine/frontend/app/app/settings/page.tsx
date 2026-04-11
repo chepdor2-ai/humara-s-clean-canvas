@@ -1,8 +1,9 @@
 'use client';
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { CreditCard, LogOut, Settings, User, Bell, Key, HelpCircle, CheckCircle2, Copy, Check, Plus, Trash2, RotateCcw, Save, Mail, Shield, ExternalLink, Crown } from 'lucide-react';
+import { CreditCard, LogOut, Settings, User, Bell, Key, HelpCircle, CheckCircle2, Copy, Check, Plus, Trash2, RotateCcw, Save, Mail, Shield, ExternalLink, Crown, Clock } from 'lucide-react';
 import { useAuth } from '../../AuthProvider';
+import { useUsage } from '../UsageBar';
 
 const PLAN_COLORS: Record<string, string> = {
   starter: '#64748b',
@@ -41,6 +42,7 @@ interface ApiKey {
 
 export default function SettingsPage() {
   const { session, signOut } = useAuth();
+  const { usage } = useUsage();
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<Tab>('profile');
 
@@ -259,9 +261,28 @@ export default function SettingsPage() {
               <div>
                 <h2 className="text-lg font-semibold text-white mb-1">Billing & Plans</h2>
                 <p className="text-sm text-zinc-400">
-                  {plan ? <>You are on the <strong className="text-brand-600">{plan.display_name} (${plan.price_monthly}/mo)</strong>.</> : 'Loading plan details...'}
+                  {plan ? <>You are on the <strong className="text-purple-400">{plan.display_name} (${plan.price_monthly}/mo)</strong>.</> : 'Loading plan details...'}
                 </p>
               </div>
+
+              {/* Subscription countdown */}
+              {usage && usage.daysRemaining > 0 && (
+                <div className="flex items-center gap-3 p-4 bg-purple-950/20 border border-purple-800/30 rounded-xl">
+                  <Clock className="w-5 h-5 text-purple-400 shrink-0" />
+                  <div className="flex-1">
+                    <p className="text-sm font-medium text-white">Subscription Active</p>
+                    <p className={`text-xs mt-0.5 ${usage.daysRemaining <= 3 ? 'text-red-400' : usage.daysRemaining <= 7 ? 'text-amber-400' : 'text-zinc-400'}`}>
+                      {usage.daysRemaining} day{usage.daysRemaining !== 1 ? 's' : ''} remaining · {usage.wordsUsed.toLocaleString()} / {usage.wordsLimit.toLocaleString()} words used today
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <span className={`text-2xl font-bold tabular-nums ${usage.daysRemaining <= 3 ? 'text-red-400' : 'text-white'}`}>
+                      {usage.daysRemaining}
+                    </span>
+                    <p className="text-[10px] text-zinc-500 uppercase">days</p>
+                  </div>
+                </div>
+              )}
 
               {plan && (() => {
                 const pColor = PLAN_COLORS[plan.name?.toLowerCase()] || PLAN_COLORS.starter;
@@ -286,26 +307,27 @@ export default function SettingsPage() {
                         </li>
                       ))}
                     </ul>
-                    <a href="/pricing" className="inline-block w-full text-center py-2.5 bg-zinc-800 text-zinc-300 text-sm font-semibold hover:bg-zinc-700 transition-all border border-zinc-700 rounded-xl hover:shadow-md">View All Plans</a>
+                    <a href="/pricing" className="inline-block w-full text-center py-2.5 bg-zinc-800 text-zinc-300 text-sm font-semibold hover:bg-zinc-700 transition-all border border-zinc-700 rounded-xl hover:shadow-md">
+                      {plan.price_monthly > 0 ? 'Change Plan' : 'Upgrade Plan'}
+                    </a>
                   </div>
                 );
               })()}
 
-              <div className="pt-6 border-t border-zinc-800 space-y-4">
-                <h3 className="text-sm font-semibold text-white">Payment Methods</h3>
-                <div className="flex items-center justify-between p-4 bg-zinc-800 border border-zinc-700 rounded-xl">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-zinc-700 flex items-center justify-center text-white rounded-lg">
-                      <CreditCard className="w-5 h-5" />
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium text-white">Mastercard ending in 4242</p>
-                      <p className="text-xs text-zinc-500">Expires 12/26</p>
-                    </div>
-                  </div>
-                  <button className="px-3 py-1.5 bg-zinc-700 text-zinc-300 border border-zinc-600 text-xs font-medium hover:bg-zinc-600 transition-colors rounded-lg">Edit</button>
+              {!plan && (
+                <div className="p-6 bg-zinc-800 rounded-xl border border-zinc-700 text-center">
+                  <Crown className="w-8 h-8 text-zinc-500 mx-auto mb-3" />
+                  <p className="text-sm text-zinc-400 mb-3">You&apos;re on the Free plan</p>
+                  <a href="/pricing" className="inline-block px-6 py-2.5 bg-purple-600 hover:bg-purple-500 text-white text-sm font-semibold rounded-xl transition-colors">
+                    Upgrade Now
+                  </a>
                 </div>
-                <button className="text-brand-600 hover:text-brand-700 text-sm font-medium">+ Add payment method</button>
+              )}
+
+              <div className="pt-6 border-t border-zinc-800 space-y-4">
+                <h3 className="text-sm font-semibold text-white">Payment History</h3>
+                <p className="text-xs text-zinc-500">Payments are processed securely via Paystack. View your transaction history on the Paystack dashboard.</p>
+                <a href="/pricing" className="text-purple-400 hover:text-purple-300 text-sm font-medium transition-colors">View Pricing Plans &rarr;</a>
               </div>
             </div>
           )}

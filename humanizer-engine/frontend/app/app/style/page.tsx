@@ -195,7 +195,7 @@ export default function StylePage() {
         <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6 space-y-4">
           <div className="flex items-center justify-between">
             <h2 className="text-sm font-semibold text-white">{editingId ? 'Edit Profile' : 'Create New Profile'}</h2>
-            <button onClick={resetForm} title="Close" className="p-1.5 text-slate-400 hover:text-zinc-300 rounded-lg hover:bg-zinc-800 transition-colors">
+            <button onClick={resetForm} title="Close" className="p-1.5 text-zinc-400 hover:text-zinc-300 rounded-lg hover:bg-zinc-800 transition-colors">
               <X className="w-4 h-4" />
             </button>
           </div>

@@ -104,6 +104,11 @@ export default function DashboardHome() {
           <div className="inline-flex items-center gap-2 px-3.5 py-2 rounded-lg bg-[#12121a] border border-zinc-800/60 text-xs font-medium text-zinc-300">
             <Crown className="w-3.5 h-3.5 text-purple-400" />
             {planName}
+            {usage?.daysRemaining && usage.daysRemaining > 0 ? (
+              <span className={`ml-1 ${usage.daysRemaining <= 3 ? 'text-red-400' : usage.daysRemaining <= 7 ? 'text-amber-400' : 'text-zinc-500'}`}>
+                · {usage.daysRemaining}d left
+              </span>
+            ) : null}
           </div>
           <Link href="/app" className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-purple-600 hover:bg-purple-500 text-white text-xs font-semibold transition-colors">
             <Zap className="w-3.5 h-3.5" /> Humanize

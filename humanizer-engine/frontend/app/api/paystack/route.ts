@@ -48,6 +48,10 @@ export async function POST(request: Request) {
       paystackCurrency = 'USD';
     }
 
+    // Use env-configured callback URL, fallback to request origin
+    const callbackUrl = process.env.NEXT_PUBLIC_PAYSTACK_CALLBACK_URL
+      || `${new URL(request.url).origin}/app/payment/verify`;
+
     const res = await fetch('https://api.paystack.co/transaction/initialize', {
       method: 'POST',
       headers: {
@@ -64,7 +68,7 @@ export async function POST(request: Request) {
           currency,
           usd_amount: usdAmount,
         },
-        callback_url: `${new URL(request.url).origin}/app/payment/verify`,
+        callback_url: callbackUrl,
       }),
     });
 

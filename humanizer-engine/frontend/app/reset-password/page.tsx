@@ -4,14 +4,33 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { Mail, ArrowLeft } from 'lucide-react'
 import { useState } from 'react'
+import { supabase } from '../../lib/supabase'
 
 export default function ResetPasswordPage() {
   const [email, setEmail] = useState('')
   const [submitted, setSubmitted] = useState(false)
+  const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState('')
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    setSubmitted(true)
+    setIsLoading(true)
+    setError('')
+    try {
+      const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || window.location.origin
+      const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${siteUrl}/update-password`,
+      })
+      if (resetError) {
+        setError(resetError.message)
+        return
+      }
+      setSubmitted(true)
+    } catch {
+      setError('Something went wrong. Please try again.')
+    } finally {
+      setIsLoading(false)
+    }
   }
 
   return (
@@ -50,6 +69,11 @@ export default function ResetPasswordPage() {
             </div>
           ) : (
             <form onSubmit={handleSubmit} className="space-y-5">
+              {error && (
+                <div className="p-3 bg-red-950/40 border border-red-900/50 rounded-xl text-sm text-red-400">
+                  {error}
+                </div>
+              )}
               <div>
                 <label className="block text-sm font-medium text-zinc-300 mb-1.5">Email Address</label>
                 <div className="relative">
@@ -66,9 +90,10 @@ export default function ResetPasswordPage() {
               </div>
               <button
                 type="submit"
-                className="w-full bg-purple-600 hover:bg-purple-500 text-white font-semibold py-3 rounded-xl transition-all shadow-lg shadow-purple-600/20 hover:shadow-purple-500/30 active:scale-[0.98]"
+                disabled={isLoading}
+                className="w-full bg-purple-600 hover:bg-purple-500 text-white font-semibold py-3 rounded-xl transition-all shadow-lg shadow-purple-600/20 hover:shadow-purple-500/30 active:scale-[0.98] disabled:opacity-50"
               >
-                Send Reset Link
+                {isLoading ? 'Sending...' : 'Send Reset Link'}
               </button>
             </form>
           )}
