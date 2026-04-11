@@ -516,14 +516,16 @@ ${contextBefore}[TARGET]: ${sentence}${contextAfter}`;
 // ══════════════════════════════════════════════════════════════════════════
 
 function getWikiParagraphSystemPrompt(): string {
-  return `You are a seasoned Wikipedia editor rewriting a paragraph into proper encyclopedic style. Your output must read exactly like a real Wikipedia article — neutral point of view (NPOV), third person, factual and declarative.
+  return `You are a seasoned Wikipedia editor COMPLETELY rewriting a paragraph into proper encyclopedic style. Your output must read exactly like a real Wikipedia article — neutral point of view (NPOV), third person, factual and declarative.
+
+CRITICAL MANDATE: You MUST produce a SUBSTANTIALLY DIFFERENT version of the input. If your output resembles the original wording, you have FAILED. Rewrite every sentence from scratch using entirely different vocabulary and sentence structures. Imagine you are writing the paragraph for the first time based only on the facts.
 
 RULES:
-1. Rewrite the ENTIRE paragraph. Return ONLY the rewritten paragraph — no labels, no commentary.
+1. Rewrite the ENTIRE paragraph FROM SCRATCH. Return ONLY the rewritten paragraph — no labels, no commentary.
 2. PRESERVE the same number of sentences. Do NOT merge or split sentences.
 3. BANNED WORDS: utilize, leverage, delve, tapestry, cornerstone, bedrock, linchpin, nexus, myriad, plethora, multifaceted, holistic, synergy, paradigm, trajectory, discourse, dichotomy, conundrum, ramification, underpinning, efficacious, bolster, catalyze, spearhead, unravel, unveil, embark, harness, ameliorate, engender, elucidate, exacerbate, proliferate, culminate
 4. ALLOWED academic vocabulary (use freely): significant, demonstrated, established, contributed, implemented, comprehensive, framework, methodology, fundamental, substantial, facilitate, prominent, notable, considerable, contemporary, subsequent, initial, primary, various, additional, specific, respectively, approximately
-5. AGGRESSIVE REWRITING: Change sentence structure, swap vocabulary, rearrange clauses. The output must read differently while keeping the same factual content. Minimum 40% of content words should be different.
+5. AGGRESSIVE REWRITING (MANDATORY): You MUST change at least 70% of content words. Restructure EVERY clause. Use completely different verbs, adjectives, and sentence openings than the original. The output should look like a DIFFERENT PERSON wrote it about the same topic.
 6. SENTENCE LENGTH VARIATION (critical): Create natural variation in sentence length. Mix short declarative sentences (8-14 words) with longer complex ones (30-45 words). NEVER write 3+ consecutive sentences of similar length. Real Wikipedia articles have a standard deviation of 8-10 words in sentence length.
 7. STRUCTURAL DIVERSITY across sentences: Use different grammatical structures for different sentences within the paragraph:
    - Some sentences: subject-verb-object (simple declarative)
@@ -543,12 +545,13 @@ function buildParagraphUserPrompt(
   sentenceCount: number,
 ): string {
   const wordCount = paragraph.split(/\s+/).length;
-  const minWords = Math.floor(wordCount * 0.85);
-  const maxWords = Math.ceil(wordCount * 1.15);
+  const minWords = Math.floor(wordCount * 0.75);
+  const maxWords = Math.ceil(wordCount * 1.25);
 
   return `No contractions. No first-person pronouns (I, we, me, us, my, our). No rhetorical questions.
 WORD RANGE: The original is ${wordCount} words. Your output MUST be between ${minWords} and ${maxWords} words.
 SENTENCE COUNT: The original has ${sentenceCount} sentences. Your output MUST have exactly ${sentenceCount} sentences.
+REWRITE MANDATE: Do NOT copy phrases from the original. Every sentence must use different vocabulary and structure. Imagine you are writing this paragraph from scratch based only on the facts.
 
 PARAGRAPH TO REWRITE:
 ${paragraph}`;
@@ -2113,22 +2116,18 @@ async function processChunk(
       if (originalSentences.length === 0) return trimmedPara;
 
       // Decide which sentences to keep original (for perplexity burstiness)
-      // Neural detectors key on uniform token probabilities — mixing in ~35% of
-      // original human sentences creates genuine perplexity variation that breaks
-      // the "smooth LLM texture" that GPTZero/Originality/Pangram detect.
-      // Strategy: keep 2nd and 4th sentences in 5-sentence paragraphs,
-      // and randomly keep others at ~35% rate. Never keep the 1st sentence
-      // (it's the most "template-like" and most impactful to rewrite).
+      // Mix in a small percentage of original sentences to break uniform LLM texture.
+      // Keep ~15% of non-first sentences to maintain burstiness without overwhelming
+      // the rewrite. Never keep the 1st sentence (most impactful to rewrite).
       const keepOriginal = new Set<number>();
-      if (originalSentences.length >= 4) {
-        // Always keep sentence index 1 (2nd sentence) — creates burst after rewritten opener
-        keepOriginal.add(1);
-        // Keep sentence index 3 if it exists — alternating pattern
-        if (originalSentences.length > 3) keepOriginal.add(3);
+      if (originalSentences.length >= 5) {
+        // For longer paragraphs, keep exactly 1 random middle sentence
+        const midIdx = 1 + Math.floor(Math.random() * (originalSentences.length - 2));
+        keepOriginal.add(midIdx);
       }
-      // Random additional keeps for other middle/end sentences
-      for (let i = 2; i < originalSentences.length; i++) {
-        if (!keepOriginal.has(i) && Math.random() < 0.20) keepOriginal.add(i);
+      // Random additional keeps at low rate (10%) for remaining sentences
+      for (let i = 1; i < originalSentences.length; i++) {
+        if (!keepOriginal.has(i) && Math.random() < 0.10) keepOriginal.add(i);
       }
 
       const paraWords = trimmedPara.split(/\s+/).length;
@@ -2194,7 +2193,7 @@ async function processChunk(
     }));
 
     result = rewrittenParagraphs.join("\n\n");
-    console.log(`  [GhostPro]   Pass 1A done: ${result.split(/\s+/).length} words (GPT-4o-mini, ~35% original mixed in)`);
+    console.log(`  [GhostPro]   Pass 1A done: ${result.split(/\s+/).length} words (GPT-4o-mini, ${totalSentencesProcessed} sentences processed)`);
 
     // ═══════════════════════════════════════════
     // PASS 1B: Groq/Llama sentence-list envelope re-rewrite (second LLM)
@@ -2213,8 +2212,8 @@ async function processChunk(
 CRITICAL RULES:
 1. Output EXACTLY N lines for N input sentences — one sentence per line, numbered (1. 2. 3. etc.)
 2. [KEEP] sentences must be returned VERBATIM — do not change even a single word
-3. [REWRITE] sentences: change at least 40% of the content words, restructure clauses, vary sentence openings
-4. Each rewritten sentence MUST stay within ±3 words of the original word count shown in parentheses
+3. [REWRITE] sentences: AGGRESSIVELY rewrite — change at least 60% of content words, completely restructure clauses, use different sentence openings and grammatical patterns. The rewrite must look like a DIFFERENT PERSON wrote it
+4. Each rewritten sentence SHOULD stay within ±25% of the original word count shown in parentheses
 5. Preserve ALL citations (Author Year), dates, proper nouns, and placeholder tokens [[PROT_0]] [[TRM_0]] exactly
 6. BANNED words: utilize, leverage, delve, tapestry, cornerstone, multifaceted, holistic, synergy, paradigm, trajectory, discourse, comprehensive, furthermore, moreover, additionally, consequently, significantly
 7. No contractions. No first person. Third person only. Encyclopedic NPOV tone.
