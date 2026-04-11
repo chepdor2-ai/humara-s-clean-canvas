@@ -1,55 +1,44 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
-
-function normalizeOrigin(origin: string) {
-  try {
-    const url = new URL(origin);
-    if (url.hostname === '0.0.0.0' || url.hostname === '::' || url.hostname === '[::]') {
-      url.hostname = 'localhost';
-    }
-    return url.origin;
-  } catch {
-    return origin;
-  }
-}
-
-function getRequestOrigin(request: Request) {
-  const url = new URL(request.url);
-
-  const forwardedHost = request.headers.get('x-forwarded-host')?.split(',')[0]?.trim();
-  const forwardedProto = request.headers.get('x-forwarded-proto')?.split(',')[0]?.trim();
-  if (forwardedHost) {
-    const proto = forwardedProto || url.protocol.replace(':', '') || 'https';
-    return normalizeOrigin(`${proto}://${forwardedHost}`);
-  }
-
-  return normalizeOrigin(url.origin);
-}
-
-function safeNextPath(next: string | null) {
-  if (!next) return '/app';
-  if (!next.startsWith('/')) return '/app';
-  return next;
-}
+import { createServerClient } from '@supabase/ssr';
+import { cookies } from 'next/headers';
 
 export async function GET(request: Request) {
   const url = new URL(request.url);
   const code = url.searchParams.get('code');
-  const next = safeNextPath(url.searchParams.get('next'));
-  const siteUrl = getRequestOrigin(request);
+  const next = url.searchParams.get('next') ?? '/app';
+
+  // Build the redirect base URL
+  const forwardedHost = request.headers.get('x-forwarded-host')?.split(',')[0]?.trim();
+  const forwardedProto = request.headers.get('x-forwarded-proto')?.split(',')[0]?.trim() || 'https';
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL
+    || (forwardedHost ? `${forwardedProto}://${forwardedHost}` : url.origin);
 
   if (code) {
-    const supabase = createClient(
+    const cookieStore = await cookies();
+
+    const supabase = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      { auth: { flowType: 'pkce' } },
+      {
+        cookies: {
+          getAll() {
+            return cookieStore.getAll();
+          },
+          setAll(cookiesToSet) {
+            cookiesToSet.forEach(({ name, value, options }) => {
+              cookieStore.set(name, value, options);
+            });
+          },
+        },
+      },
     );
+
     const { error } = await supabase.auth.exchangeCodeForSession(code);
-    if (!error) return NextResponse.redirect(new URL(next, siteUrl));
+    if (!error) {
+      return NextResponse.redirect(new URL(next, siteUrl));
+    }
   }
 
-  // If there's no `code`, this is typically implicit OAuth flow where tokens are in the URL hash.
-  // The server cannot read the hash, but browsers preserve it across redirects, so we just
-  // redirect to the intended page and let the client-side Supabase SDK finalize the session.
-  return NextResponse.redirect(new URL(next, siteUrl));
+  // No code or exchange failed — redirect to login
+  return NextResponse.redirect(new URL('/login?error=auth_callback_failed', siteUrl));
 }

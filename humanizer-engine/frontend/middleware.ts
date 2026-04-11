@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { createServerClient } from '@supabase/ssr';
 
 const PUBLIC_ROUTES = [
   '/',
@@ -36,20 +36,38 @@ export async function middleware(request: NextRequest) {
   // Allow static files
   if (pathname.includes('.')) return NextResponse.next();
 
-  // For /app routes, check auth
+  // For /app routes, check auth via Supabase SSR
   if (pathname.startsWith('/app')) {
-    const accessToken = request.cookies.get('sb-lqkpjghjermvxzgkocne-auth-token')?.value;
-    
-    // Check for Supabase auth cookies (multiple formats)
-    const hasAuthCookie = request.cookies.getAll().some(c => 
-      c.name.startsWith('sb-') && c.name.includes('auth')
+    let response = NextResponse.next({ request });
+
+    const supabase = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        cookies: {
+          getAll() {
+            return request.cookies.getAll();
+          },
+          setAll(cookiesToSet) {
+            cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value));
+            response = NextResponse.next({ request });
+            cookiesToSet.forEach(({ name, value, options }) =>
+              response.cookies.set(name, value, options)
+            );
+          },
+        },
+      },
     );
 
-    if (!accessToken && !hasAuthCookie) {
+    const { data: { user } } = await supabase.auth.getUser();
+
+    if (!user) {
       const loginUrl = new URL('/login', request.url);
       loginUrl.searchParams.set('redirect', pathname);
       return NextResponse.redirect(loginUrl);
     }
+
+    return response;
   }
 
   return NextResponse.next();
