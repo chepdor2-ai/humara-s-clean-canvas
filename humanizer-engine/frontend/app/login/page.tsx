@@ -21,7 +21,17 @@ function LoginForm() {
     setGoogleLoading(true);
     setError('');
     try {
-      const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || window.location.origin;
+      const siteUrl = (() => {
+        try {
+          const url = new URL(window.location.origin);
+          if (url.hostname === '0.0.0.0' || url.hostname === '::' || url.hostname === '[::]') {
+            url.hostname = 'localhost';
+          }
+          return url.origin;
+        } catch {
+          return window.location.origin;
+        }
+      })();
       const { error: authError } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: { redirectTo: `${siteUrl}/auth/callback` },
