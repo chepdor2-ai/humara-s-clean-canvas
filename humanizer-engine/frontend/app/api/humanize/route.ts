@@ -697,7 +697,7 @@ export async function POST(req: Request) {
     };
 
     const runHumara21 = async (input: string): Promise<string> => {
-      const ozoneSentenceBySentence = body.ozone_sentence_by_sentence !== false;
+      const ozoneSentenceBySentence = body.ozone_sentence_by_sentence === true;
       const ozoneResult = await ozoneHumanize(input, ozoneSentenceBySentence);
       return ozoneResult.humanized;
     };
@@ -916,21 +916,21 @@ export async function POST(req: Request) {
     const FIRST_PERSON_RE_EARLY = /\b(I|me|my|mine|myself|we|us|our|ours|ourselves)\b/i;
     const earlyFirstPerson = FIRST_PERSON_RE_EARLY.test(text);
     const inputAiScore = inputAnalysis.summary.overall_ai_score;
-    if (engine !== 'humara' && engine !== 'humara_v1_3' && engine !== 'nuru' && engine !== 'nuru_v2' && engine !== 'omega' && engine !== 'oxygen' && engine !== 'apex' && engine !== 'ghost_pro_wiki') {
+    if (engine !== 'humara' && engine !== 'humara_v1_3' && engine !== 'nuru' && engine !== 'nuru_v2' && engine !== 'omega' && engine !== 'oxygen' && engine !== 'ozone' && engine !== 'apex' && engine !== 'ghost_pro_wiki') {
       humanized = unifiedSentenceProcess(humanized, earlyFirstPerson, inputAiScore);
     }
 
     // ── 60% Restructuring Enforcement ──────────────────────────────
     // Ensures at least 60% of sentences show meaningful word-level changes.
     // Applies additional transforms to under-changed sentences.
-    if (engine !== 'oxygen' && engine !== 'apex' && engine !== 'nuru_v2') {
+    if (engine !== 'oxygen' && engine !== 'ozone' && engine !== 'apex' && engine !== 'nuru_v2') {
       humanized = enforceRestructuringThreshold(text, humanized, 0.70);
     }
 
     // Post-capitalization formatting — fix sentence casing for all engine outputs
     // Skip for humara/nuru/omega: they have their own capitalization handling
     // Pass original text so proper nouns from the input are preserved
-    if (engine !== 'humara' && engine !== 'humara_v1_3' && engine !== 'nuru' && engine !== 'nuru_v2' && engine !== 'omega' && engine !== 'oxygen' && engine !== 'apex') {
+    if (engine !== 'humara' && engine !== 'humara_v1_3' && engine !== 'nuru' && engine !== 'nuru_v2' && engine !== 'omega' && engine !== 'oxygen' && engine !== 'ozone' && engine !== 'apex') {
       humanized = fixCapitalization(humanized, text);
     }
 
@@ -942,20 +942,20 @@ export async function POST(req: Request) {
 
     // Cross-sentence repetition cleanup — deduplicates phrases repeated across sentences
     // Skip for humara engine: it has its own coherence layer
-    if (engine !== 'humara' && engine !== 'humara_v1_3' && engine !== 'nuru' && engine !== 'nuru_v2' && engine !== 'omega' && engine !== 'oxygen') {
+    if (engine !== 'humara' && engine !== 'humara_v1_3' && engine !== 'nuru' && engine !== 'nuru_v2' && engine !== 'omega' && engine !== 'oxygen' && engine !== 'ozone') {
       humanized = deduplicateRepeatedPhrases(humanized);
     }
 
     // Structural post-processing — attacks document-level statistical signals
     // (spectral_flatness, burstiness, sentence_uniformity, readability_consistency, vocabulary_richness)
     // Skip for humara engine: it has its own structural diversity layer
-    if (engine !== 'humara' && engine !== 'humara_v1_3' && engine !== 'nuru' && engine !== 'nuru_v2' && engine !== 'omega' && engine !== 'ninja' && engine !== 'undetectable' && engine !== 'oxygen' && engine !== 'ghost_pro_wiki') {
+    if (engine !== 'humara' && engine !== 'humara_v1_3' && engine !== 'nuru' && engine !== 'nuru_v2' && engine !== 'omega' && engine !== 'ninja' && engine !== 'undetectable' && engine !== 'oxygen' && engine !== 'ozone' && engine !== 'ghost_pro_wiki') {
       humanized = structuralPostProcess(humanized);
     }
 
     // Restore the original title/paragraph layout for EVERY engine output.
     // Skip for nuru_v2: it preserves paragraph structure internally.
-    if (engine !== 'nuru_v2') {
+    if (engine !== 'nuru_v2' && engine !== 'ozone') {
       humanized = preserveInputStructure(normalizedText, humanized);
     }
 

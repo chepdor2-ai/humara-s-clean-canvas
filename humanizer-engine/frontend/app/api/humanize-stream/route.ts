@@ -338,6 +338,10 @@ export async function POST(req: Request) {
             humanized = humarinResult.humanized;
           } else if (eng === 'humara_v3_3') {
             humanized = await runHumara24(normalizedText);
+          } else if (eng === 'nuru_v2') {
+            humanized = runNuru(normalizedText);
+          } else if (eng === 'ghost_pro_wiki') {
+            humanized = await runWikipedia(normalizedText);
           } else if (eng === 'ninja_3') {
             // Ninja 3
             const stage1 = runHumara20(normalizedText);
@@ -423,7 +427,7 @@ export async function POST(req: Request) {
           const earlyFirstPerson = FIRST_PERSON_RE_EARLY.test(text);
           const inputAiScore = inputAnalysis.summary.overall_ai_score;
 
-          if (eng !== 'humara' && eng !== 'humara_v1_3' && eng !== 'nuru' && eng !== 'omega' && eng !== 'oxygen') {
+          if (eng !== 'humara' && eng !== 'humara_v1_3' && eng !== 'nuru' && eng !== 'omega' && eng !== 'oxygen' && eng !== 'ozone') {
             sendSSE(controller, { type: 'stage', stage: 'Sentence Processing' });
             await flushDelay(20);
             humanized = unifiedSentenceProcess(humanized, earlyFirstPerson, inputAiScore);
@@ -483,17 +487,19 @@ export async function POST(req: Request) {
             .replace(/\bai\b/g, 'AI');
 
           // 8. Repetition cleanup
-          if (eng !== 'humara' && eng !== 'humara_v1_3' && eng !== 'nuru' && eng !== 'omega') {
+          if (eng !== 'humara' && eng !== 'humara_v1_3' && eng !== 'nuru' && eng !== 'omega' && eng !== 'ozone') {
             humanized = deduplicateRepeatedPhrases(humanized);
           }
 
           // 9. Structural post-processing
-          if (eng !== 'humara' && eng !== 'humara_v1_3' && eng !== 'nuru' && eng !== 'omega' && eng !== 'ninja' && eng !== 'undetectable') {
+          if (eng !== 'humara' && eng !== 'humara_v1_3' && eng !== 'nuru' && eng !== 'omega' && eng !== 'ninja' && eng !== 'undetectable' && eng !== 'ozone') {
             humanized = structuralPostProcess(humanized);
           }
 
-          // 10. Structure preservation — apply to ALL engines
-          humanized = preserveInputStructure(normalizedText, humanized);
+          // 10. Structure preservation — skip for engines that preserve structure internally
+          if (eng !== 'ozone') {
+            humanized = preserveInputStructure(normalizedText, humanized);
+          }
 
           // 11. Contraction & em-dash enforcement
           humanized = expandContractions(humanized);
