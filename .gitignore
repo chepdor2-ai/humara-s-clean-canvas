@@ -12,6 +12,7 @@ dictionaries/phrase_dictionary.jsonl
 
 # Trained model (990MB)
 oxygen-model/
+oxygen3-model/
 
 # Large binary model files (exceed GitHub 100MB limit)
 _humarin_ct2/model.bin

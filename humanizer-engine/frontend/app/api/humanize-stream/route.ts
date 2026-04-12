@@ -22,6 +22,7 @@ import { oxygenHumanize } from '@/lib/engine/oxygen-humanizer';
 import { dipperHumanize } from '@/lib/engine/dipper-humanizer';
 import { humarinHumanize } from '@/lib/engine/humarin-humanizer';
 import { t5Humanize } from '@/lib/engine/t5-humanizer';
+import { oxygen3Humanize } from '@/lib/engine/oxygen3-humanizer';
 import { synonymReplace } from '@/lib/engine/utils';
 import { applyAIWordKill } from '@/lib/engine/shared-dictionaries';
 import { postCleanGrammar } from '@/lib/engine/grammar-cleaner';
@@ -263,6 +264,11 @@ export async function POST(req: Request) {
                 ? Boolean((body as Record<string, unknown>).oxygen_sentence_by_sentence)
                 : true,
             );
+          } else if (eng === 'oxygen3') {
+            // Oxygen 3.0: Fine-tuned T5 model (strict sentence-by-sentence, first-person guard)
+            const o3Mode = effectiveStrength === 'light' ? 'turbo' : effectiveStrength === 'strong' ? 'quality' : 'fast';
+            const o3Result = await oxygen3Humanize(normalizedText, o3Mode);
+            humanized = o3Result.humanized;
           } else if (eng === 'oxygen_t5') {
             // Oxygen T5: Remote T5 model server (HF Space or self-hosted)
             const t5Mode = effectiveStrength === 'light' ? 'turbo' : effectiveStrength === 'strong' ? 'aggressive' : 'fast';
@@ -325,7 +331,7 @@ export async function POST(req: Request) {
           const inputAnalysis = detector.analyze(text);
 
           // ── POST-PROCESSING (skip for ozone and oxygen_t5 — they handle their own full pipelines) ──
-          if (eng !== 'ozone' && eng !== 'oxygen_t5' && eng !== 'dipper' && eng !== 'humarin') {
+          if (eng !== 'ozone' && eng !== 'oxygen_t5' && eng !== 'oxygen3' && eng !== 'dipper' && eng !== 'humarin') {
 
           // 4. Unified Sentence Process
           const FIRST_PERSON_RE_EARLY = /\b(I|me|my|mine|myself|we|us|our|ours|ourselves)\b/i;

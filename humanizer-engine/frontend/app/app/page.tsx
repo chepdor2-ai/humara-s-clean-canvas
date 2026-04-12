@@ -147,11 +147,13 @@ const ALL_ENGINES: EngineConfig[] = [
   { id: 'ozone', label: 'Humara 2.1' },
   { id: 'easy', label: 'Humara 2.2' },
   { id: 'humara_v3_3', label: 'Humara 2.4' },
+  { id: 'oxygen3', label: 'Humara 3.0' },
   { id: 'ghost_pro_wiki', label: 'Wikipedia' },
+  { id: 'nuru_v2', label: 'Nuru 2.0' },
 ];
 
 // AntiGPTZero mode engines (signal killers — NOT pure humanizers)
-const ANTI_GPTZERO_ENGINES = new Set(['oxygen', 'humara_v3_3']);
+const ANTI_GPTZERO_ENGINES = new Set(['oxygen', 'humara_v3_3', 'oxygen3']);
 // Standard humanizer engines (handle ZeroGPT, Surfer SEO, etc.)
 const STANDARD_ENGINES = new Set(['ozone', 'easy', 'ghost_pro_wiki']);
 
@@ -160,6 +162,8 @@ const ENGINE_GUIDES: Record<string, string> = {
   ozone: 'Best for cleaning ZeroGPT and Surfer SEO signals. Activate this when ZeroGPT or Surfer is flagging your content.',
   easy: 'Broad-spectrum engine that handles ZeroGPT, Surfer SEO, and other AI detectors. Good general-purpose option.',
   humara_v3_3: 'Most powerful GPTZero killer with triple fallback and detector feedback loop. Use when GPTZero stubbornly flags your text. May score slightly higher on other detectors.',
+  oxygen3: 'Custom fine-tuned AI humanizer trained on 270K sentence pairs. Processes each sentence independently for maximum accuracy. Fast batch inference with first-person avoidance.',
+  nuru_v2: 'Sentence-by-sentence deep restructuring engine. No contractions, no first person (unless in input). 40%+ per-sentence change with phrase replacement, synonym swaps, and probabilistic starter injection. Quality first.',
   ghost_pro_wiki: 'Rewrites text in neutral, encyclopedic Wikipedia style. Preserves academic vocabulary and formal register. Best for research papers, reports, and scholarly content.',
 };
 
