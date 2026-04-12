@@ -260,6 +260,71 @@ function fixHyphenSpacing(text: string): string {
 // Compares output sentences against original, applies additional
 // transforms to under-changed sentences until the 60% threshold is met.
 
+// ── Adaptive Oxygen Iteration Chain ──────────────────────────────────
+// Runs oxygenHumanize iteratively on phaseOneOutput.
+//   • Minimum 5 total passes (phase 1 + 4 iterations)
+//   • Maximum 10 total passes (phase 1 + 9 iterations)
+//   • After pass 5, checks if ≥40% word-level change per sentence vs
+//     originalText. If threshold met → stop. Otherwise → escalate.
+// Speed design: passes 2-5 use fast/light, 6-8 use quality/medium,
+// 9-10 use aggressive/strong.  All passes are pure TS (no LLM).
+function adaptiveOxygenChain(
+  phaseOneOutput: string,
+  _originalText: string,   // kept for API compat; gate compares vs phase-1 output
+): string {
+  const MIN_TOTAL = 5;           // minimum 5 total passes (including phase 1)
+  const MAX_ITERATIONS = 9;      // up to 9 more oxygen passes → 10 total
+  const TARGET_CHANGE = 0.40;    // 40% word-level change from phase-1 per sentence
+  const SENT_PASS_RATE = 0.75;   // 75% of sentences must hit target (exits earlier → faster)
+
+  let current = phaseOneOutput;
+  // Gate compares against phase-1 output — how much the oxygen chain added on top of the LLM
+  const phase1Sentences = robustSentenceSplit(phaseOneOutput);
+
+  for (let iter = 0; iter < MAX_ITERATIONS; iter++) {
+    const totalPasses = iter + 2; // phase 1 = pass 1, first iter here = pass 2
+
+    // Progressive escalation: fast for mandatory passes, escalate only when gate fails
+    let passMode: string, passStrength: string;
+    if (totalPasses <= 5) {
+      // Passes 2-5: always run at maximum speed (no LLM, sync — <10ms each)
+      passMode = 'fast'; passStrength = 'light';
+    } else if (totalPasses <= 7) {
+      // Passes 6-7: medium quality if gate not met yet
+      passMode = 'quality'; passStrength = 'medium';
+    } else {
+      // Passes 8-10: aggressive escalation as last resort
+      passMode = 'aggressive'; passStrength = 'strong';
+    }
+
+    const passResult = oxygenHumanize(current, passStrength, passMode, false);
+    if (passResult && passResult.trim().length > 0) current = passResult;
+
+    // Gate: only check after minimum passes are complete
+    if (totalPasses >= MIN_TOTAL) {
+      const curSentences = robustSentenceSplit(current);
+      let metCount = 0;
+      for (const curSent of curSentences) {
+        // Find closest phase-1 sentence and measure how much oxygen chain changed it
+        let bestChange = 0;
+        for (const p1Sent of phase1Sentences) {
+          const c = measureSentenceChange(p1Sent, curSent);
+          if (c > bestChange) bestChange = c;
+        }
+        if (bestChange >= TARGET_CHANGE) metCount++;
+      }
+      const total = curSentences.length;
+      if (total > 0 && metCount / total >= SENT_PASS_RATE) {
+        console.log(`[AdaptiveChain] Gate passed at pass ${totalPasses}: ${metCount}/${total} sentences ≥40% from phase-1`);
+        break;
+      }
+      console.log(`[AdaptiveChain] Pass ${totalPasses}: ${metCount}/${total} ≥40% from phase-1 — escalating`);
+    }
+  }
+
+  return current;
+}
+
 function measureSentenceChange(original: string, modified: string): number {
   const origWords = original.toLowerCase().split(/\s+/).filter(Boolean);
   const modWords = modified.toLowerCase().split(/\s+/).filter(Boolean);
@@ -600,43 +665,117 @@ export async function POST(req: Request) {
       "$1\n\n"
     );
 
-    let humanized: string;
-
-    if (engine === 'easy') {
-      // Easy: EssayWritingSupport external API — instant processing, no LLM
+    const runHumara22 = async (input: string): Promise<string> => {
+      // Humara 2.2: 5-pass iterative chain + final Nuru refinement
       const easySBS = body.easy_sentence_by_sentence !== false;
       const easyResult = await easyHumanize(
-        normalizedText,
+        input,
         effectiveStrength,
         tone ?? 'academic',
         easySBS,
       );
-      humanized = easyResult.humanized;
-      // Easy flows through all post-processing below
-    } else if (engine === 'ozone') {
-      // Ozone: External API with undetectable mode — then full post-processing pipeline
-      // Default sentence-by-sentence to TRUE so titles/headings are preserved during API call
+      let output = easyResult.humanized;
+      for (let pass = 1; pass < 5; pass++) {
+        const passMode = pass < 3 ? 'quality' : 'fast';
+        const passStrength = pass < 3 ? 'medium' : 'light';
+        const passResult = oxygenHumanize(output, passStrength, passMode, false);
+        if (passResult && passResult.trim().length > 0) output = passResult;
+      }
+      const nuruFinal = stealthHumanize(output, strength ?? 'medium', tone ?? 'academic');
+      if (nuruFinal && nuruFinal.trim().length > 0) output = nuruFinal;
+      return output;
+    };
+
+    const runHumara21 = async (input: string): Promise<string> => {
       const ozoneSentenceBySentence = body.ozone_sentence_by_sentence !== false;
-      const ozoneResult = await ozoneHumanize(normalizedText, ozoneSentenceBySentence);
-      humanized = ozoneResult.humanized;
-      // Ozone now flows through ALL post-processing below
-    } else if (engine === 'oxygen') {
-      // Oxygen: Pure TypeScript multi-phase humanizer (runs serverless in Vercel)
+      const ozoneResult = await ozoneHumanize(input, ozoneSentenceBySentence);
+      return ozoneResult.humanized;
+    };
+
+    const runHumara20 = (input: string): string => {
       const oxygenMode = (body.oxygen_mode as string) || (effectiveStrength === 'light' ? 'fast' : effectiveStrength === 'strong' ? 'aggressive' : 'quality');
-      humanized = oxygenHumanize(
-        normalizedText,
-        effectiveStrength,
-        oxygenMode,
-        body.oxygen_sentence_by_sentence === true,
-      );
-      // Oxygen now flows through ALL post-processing below
-    } else if (engine === 'humara_v3_3') {
-      // Humara 3.3: Triple-engine fallback (Humarin → Dipper → Oxygen TS)
-      // Uses Humarin as primary engine (which internally cascades through the triple fallback)
-      // Then flows through ALL post-processing including detector feedback loop
+      let output = oxygenHumanize(input, effectiveStrength, oxygenMode, body.oxygen_sentence_by_sentence === true);
+      output = adaptiveOxygenChain(output, input);
+      return output;
+    };
+
+    const runHumara24 = async (input: string): Promise<string> => {
       const humarinMode = strength === 'strong' ? 'aggressive' : strength === 'light' ? 'fast' : 'quality';
-      const humarinResult = await humarinHumanize(normalizedText, humarinMode, true);
-      humanized = humarinResult.humanized;
+      const humarinResult = await humarinHumanize(input, humarinMode, true);
+      let output = humarinResult.humanized;
+      output = adaptiveOxygenChain(output, input);
+      return output;
+    };
+
+    const runWikipedia = async (input: string): Promise<string> => {
+      let output = await ghostProHumanize(input, {
+        strength: strength ?? 'medium',
+        tone: 'wikipedia',
+        strictMeaning: strict_meaning ?? false,
+        enablePostProcessing: enable_post_processing !== false,
+      });
+      output = breakRepetitiveTemplates(output);
+      output = fixHyphenSpacing(output);
+      output = adaptiveOxygenChain(output, input);
+      const nuruCleaned = stealthHumanize(output, strength ?? 'medium', tone ?? 'wikipedia');
+      if (nuruCleaned && nuruCleaned.trim().length > 0) output = nuruCleaned;
+      return output;
+    };
+
+    const runNuru = (input: string): string => {
+      const output = stealthHumanize(input, strength ?? 'medium', tone ?? 'academic');
+      return output && output.trim().length > 0 ? output : input;
+    };
+
+    let humanized: string;
+
+    if (engine === 'easy') {
+      humanized = await runHumara22(normalizedText);
+    } else if (engine === 'ozone') {
+      humanized = await runHumara21(normalizedText);
+    } else if (engine === 'oxygen') {
+      humanized = runHumara20(normalizedText);
+    } else if (engine === 'humara_v3_3') {
+      humanized = await runHumara24(normalizedText);
+    } else if (engine === 'ninja_3') {
+      // Ninja 3: 2.0 -> Wikipedia
+      const stage1 = runHumara20(normalizedText);
+      humanized = await runWikipedia(stage1);
+    } else if (engine === 'ninja_2') {
+      // Ninja 2: 2.0 -> Nuru 2.0
+      const stage1 = runHumara20(normalizedText);
+      humanized = runNuru(stage1);
+    } else if (engine === 'ninja_4') {
+      // Ninja 4: 2.4 -> Wikipedia
+      const stage1 = await runHumara24(normalizedText);
+      humanized = await runWikipedia(stage1);
+    } else if (engine === 'ninja_5') {
+      // Ninja 5: 2.4 -> Nuru 2.0
+      const stage1 = await runHumara24(normalizedText);
+      humanized = runNuru(stage1);
+    } else if (engine === 'ghost_trial_2') {
+      // Ghost Trial 2: Wikipedia -> 2.4 -> Nuru
+      const stage1 = await runWikipedia(normalizedText);
+      const stage2 = await runHumara24(stage1);
+      humanized = runNuru(stage2);
+    } else if (engine === 'ghost_trial_2_alt') {
+      // Ghost Trial 2 alt: Wikipedia -> 2.0 -> Nuru
+      const stage1 = await runWikipedia(normalizedText);
+      const stage2 = runHumara20(stage1);
+      humanized = runNuru(stage2);
+    } else if (engine === 'conscusion_1') {
+      // Conscusion 1: 2.2 -> Wikipedia -> 2.0 -> Nuru
+      const stage1 = await runHumara22(normalizedText);
+      const stage2 = await runWikipedia(stage1);
+      const stage3 = runHumara20(stage2);
+      humanized = runNuru(stage3);
+    } else if (engine === 'conscusion_12') {
+      // Conscusion 12: 2.1 -> 2.4 -> Wikipedia -> 2.0 -> Nuru
+      const stage1 = await runHumara21(normalizedText);
+      const stage2 = await runHumara24(stage1);
+      const stage3 = await runWikipedia(stage2);
+      const stage4 = runHumara20(stage3);
+      humanized = runNuru(stage4);
     } else if (engine === 'humara_v1_3') {
       // Humara v1.3: Stealth Humanizer Engine v5 from coursework-champ
       const { pipeline } = await import('@/lib/engine/humara-v1-3');
@@ -730,18 +869,7 @@ export async function POST(req: Request) {
         enablePostProcessing: enable_post_processing !== false,
       });
     } else if (engine === 'ghost_pro_wiki') {
-      // Ghost Pro Wikipedia: Encyclopedic rewrite — LLM produces Wikipedia-style prose,
-      // aggressive post-processing to break AI patterns
-      humanized = await ghostProHumanize(normalizedText, {
-        strength: strength ?? 'medium',
-        tone: 'wikipedia',
-        strictMeaning: strict_meaning ?? false,
-        enablePostProcessing: enable_post_processing !== false,
-      });
-      // Template-breaking pass: vary repetitive paragraph starters that flag detectors
-      humanized = breakRepetitiveTemplates(humanized);
-      // Fix hyphenated compound words that LLM splits with spaces (e.g. "cross - national" → "cross-national")
-      humanized = fixHyphenSpacing(humanized);
+      humanized = await runWikipedia(normalizedText);
     } else {
       // Ghost Mini: Statistical-only pipeline (no LLM)
       humanized = humanize(normalizedText, {
@@ -1017,16 +1145,20 @@ export async function POST(req: Request) {
     // If any sentence has drifted too far, it gets reprocessed with
     // lighter transforms that preserve meaning. Runs up to 2 iterations
     // to catch sentences that still drift after the first pass.
-    for (let meaningIter = 0; meaningIter < 2; meaningIter++) {
-      const beforeFix = humanized;
-      humanized = lastMileMeaningValidator(text, humanized, 0.35);
-      if (humanized === beforeFix) break; // no changes needed, stop iterating
+    // Skip for nuru_v2: its iterative rewrite loop manages its own meaning check.
+    if (engine !== 'nuru_v2') {
+      for (let meaningIter = 0; meaningIter < 2; meaningIter++) {
+        const beforeFix = humanized;
+        humanized = lastMileMeaningValidator(text, humanized, 0.35);
+        if (humanized === beforeFix) break; // no changes needed, stop iterating
+      }
     }
 
     // ── COHERENCE SAFETY NET ─────────────────────────────────
     // Catch any garbled sentences that slipped through engine-level checks.
     // Replace them with the best-matching original sentence (natural > garbled).
-    {
+    // Skip for nuru_v2: its own quality gate handles garbled output.
+    if (engine !== 'nuru_v2') {
       const isLikelyGarbled = (s: string): boolean => {
         const st = s.trim().replace(/^["'\u201C\u201D\u2018\u2019\s]+/, '').replace(/["'\u201C\u201D\u2018\u2019\s]+$/, '');
         const w = st.split(/\s+/);
@@ -1112,20 +1244,6 @@ export async function POST(req: Request) {
         if (verbs.has(word)) return cite + ' ' + word;
         return m;
       });
-
-    // ── OXYGEN POLISH PASS (FINAL PHASE) ──────────────────────────
-    // Easy engine's output is polished through the Oxygen TS engine
-    // as the LAST step after all post-processing, for cleaner output.
-    if (engine === 'easy') {
-      try {
-        const polished = oxygenHumanize(humanized, 'light', 'fast', false);
-        if (polished && polished.trim().length > 0) {
-          humanized = polished;
-        }
-      } catch {
-        // Oxygen polish is best-effort — never block the pipeline
-      }
-    }
 
     // ── DETECTOR FEEDBACK LOOP ────────────────────────────────
     // After ALL post-processing, check AI score. If still above 5%,

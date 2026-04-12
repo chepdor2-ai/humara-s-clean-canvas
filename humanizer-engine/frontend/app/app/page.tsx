@@ -143,34 +143,61 @@ const splitSentences = (text: string): { text: string; start: number; end: numbe
 /* ── Constants ──────────────────────────────────────────────────────────── */
 // Full engine registry — admin controls which are visible/premium via Supabase engine_config
 const ALL_ENGINES: EngineConfig[] = [
-  { id: 'oxygen', label: 'Humara 2.0' },
   { id: 'ozone', label: 'Humara 2.1' },
   { id: 'easy', label: 'Humara 2.2' },
+  { id: 'oxygen', label: 'Humara 2.0' },
   { id: 'humara_v3_3', label: 'Humara 2.4' },
-  { id: 'oxygen3', label: 'Humara 3.0' },
-  { id: 'ghost_pro_wiki', label: 'Wikipedia' },
-  { id: 'nuru_v2', label: 'Nuru 2.0' },
+  { id: 'ninja_3', label: 'Ninja 3 (2.0 -> Wikipedia)' },
+  { id: 'ninja_2', label: 'Ninja 2 (2.0 -> Nuru 2.0)' },
+  { id: 'ninja_4', label: 'Ninja 4 (2.4 -> Wikipedia)' },
+  { id: 'ninja_5', label: 'Ninja 5 (2.4 -> Nuru 2.0)' },
+  { id: 'ghost_trial_2', label: 'Ghost Trial 2 (Wiki -> 2.4 -> Nuru)' },
+  { id: 'ghost_trial_2_alt', label: 'Ghost Trial 2 Alt (Wiki -> 2.0 -> Nuru)' },
+  { id: 'conscusion_1', label: 'Conscusion 1 (2.2 -> Wiki -> 2.0 -> Nuru)' },
+  { id: 'conscusion_12', label: 'Conscusion 12 (2.1 -> 2.4 -> Wiki -> 2.0 -> Nuru)' },
 ];
 
-// AntiGPTZero mode engines (signal killers — NOT pure humanizers)
-const ANTI_GPTZERO_ENGINES = new Set(['oxygen', 'humara_v3_3', 'oxygen3']);
-// Standard humanizer engines (handle ZeroGPT, Surfer SEO, etc.)
-const STANDARD_ENGINES = new Set(['ozone', 'easy', 'ghost_pro_wiki', 'nuru_v2']);
+type ModeId = 'stealth_mode' | 'anti_gptzero' | 'deep_signal_kill';
+const MODE_ENGINES: Record<ModeId, Set<string>> = {
+  stealth_mode: new Set(['ozone', 'easy']),
+  anti_gptzero: new Set(['oxygen', 'humara_v3_3']),
+  deep_signal_kill: new Set([
+    'ninja_3',
+    'ninja_2',
+    'ninja_4',
+    'ninja_5',
+    'ghost_trial_2',
+    'ghost_trial_2_alt',
+    'conscusion_1',
+    'conscusion_12',
+  ]),
+};
+const MODE_LABELS: Record<ModeId, string> = {
+  stealth_mode: 'Stealth Mode',
+  anti_gptzero: 'Anti GPTZero',
+  deep_signal_kill: 'Deep Signal Kill',
+};
 
 const ENGINE_GUIDES: Record<string, string> = {
-  oxygen: 'Trained specifically to beat GPTZero. May score slightly higher on other detectors — use this only when GPTZero is the problem.',
-  ozone: 'Best for cleaning ZeroGPT and Surfer SEO signals. Activate this when ZeroGPT or Surfer is flagging your content.',
-  easy: 'Broad-spectrum engine that handles ZeroGPT, Surfer SEO, and other AI detectors. Good general-purpose option.',
-  humara_v3_3: 'Most powerful GPTZero killer with triple fallback and detector feedback loop. Use when GPTZero stubbornly flags your text. May score slightly higher on other detectors.',
-  oxygen3: 'Custom fine-tuned AI humanizer trained on 270K sentence pairs. Processes each sentence independently for maximum accuracy. Fast batch inference with first-person avoidance.',
-  nuru_v2: 'Sentence-by-sentence deep restructuring engine. No contractions, no first person (unless in input). 40%+ per-sentence change with phrase replacement, synonym swaps, and probabilistic starter injection. Quality first.',
-  ghost_pro_wiki: 'Rewrites text in neutral, encyclopedic Wikipedia style. Preserves academic vocabulary and formal register. Best for research papers, reports, and scholarly content.',
+  ozone: 'Stealth Mode base engine for detector cleaning. Best for ZeroGPT and Surfer cleanup.',
+  easy: 'Stealth Mode wide-coverage engine for balanced, natural sounding rewrites.',
+  oxygen: 'Anti GPTZero engine tuned for GPTZero signal suppression.',
+  humara_v3_3: 'Anti GPTZero high-power engine (2.4) for stubborn GPTZero flags.',
+  ninja_3: 'Pipeline: 2.0 then Wikipedia.',
+  ninja_2: 'Pipeline: 2.0 then Nuru 2.0.',
+  ninja_4: 'Pipeline: 2.4 then Wikipedia.',
+  ninja_5: 'Pipeline: 2.4 then Nuru 2.0.',
+  ghost_trial_2: 'Pipeline: Wikipedia then 2.4 then Nuru.',
+  ghost_trial_2_alt: 'Pipeline: Wikipedia then 2.0 then Nuru.',
+  conscusion_1: 'Pipeline: 2.2 then Wikipedia then 2.0 then Nuru.',
+  conscusion_12: 'Pipeline: 2.1 then 2.4 then Wikipedia then 2.0 then Nuru.',
 };
 
 const MAX_WORDS_PER_REQUEST = 2000;
 const RECOMMENDED_MIN_WORDS = 500;
 const RECOMMENDED_MAX_WORDS = 1500;
 const FREE_DAILY_WORD_LIMIT = 2000;
+const EDITOR_HEIGHT_CLASS = 'min-h-[320px] md:min-h-[380px] lg:min-h-[420px] max-h-[420px] md:max-h-[500px] lg:max-h-[560px]';
 
 interface EngineConfig {
   id: string;
@@ -204,7 +231,7 @@ export default function EditorPage() {
   const [strength, setStrength] = useState('medium');
   const [tone, setTone] = useState('academic');
   const [strictMeaning, setStrictMeaning] = useState(true);
-  const [antiGptZero, setAntiGptZero] = useState(true); // AntiGPTZero mode ON by default
+  const [mode, setMode] = useState<ModeId>('anti_gptzero');
 
   // Admin-controlled engine visibility
   const [engineConfig, setEngineConfig] = useState<Record<string, { enabled: boolean; premium: boolean; sort_order: number }>>({});
@@ -234,7 +261,7 @@ export default function EditorPage() {
     })();
   }, []);
 
-  // Compute visible engines: filter by admin config AND AntiGPTZero mode
+  // Compute visible engines: filter by admin config and active mode
   const ENGINES: EngineConfig[] = useMemo(() => {
     // Start with all engines
     let base = ALL_ENGINES;
@@ -247,19 +274,25 @@ export default function EditorPage() {
           .sort((a, b) => (engineConfig[a.id]?.sort_order ?? 99) - (engineConfig[b.id]?.sort_order ?? 99));
       }
     }
-    // Apply AntiGPTZero filter
-    const modeSet = antiGptZero ? ANTI_GPTZERO_ENGINES : STANDARD_ENGINES;
-    return base.filter(e => modeSet.has(e.id));
-  }, [engineConfig, engineConfigLoaded, antiGptZero]);
+    // Apply mode-specific filter
+    return base.filter(e => MODE_ENGINES[mode].has(e.id));
+  }, [engineConfig, engineConfigLoaded, mode]);
 
-  // Auto-switch engine when toggling AntiGPTZero mode
+  // Auto-switch engine when mode changes
   useEffect(() => {
-    if (antiGptZero) {
-      if (!ANTI_GPTZERO_ENGINES.has(engine)) setEngine('humara_v3_3');
-    } else {
-      if (!STANDARD_ENGINES.has(engine)) setEngine('ozone');
-    }
-  }, [antiGptZero]); // eslint-disable-line react-hooks/exhaustive-deps
+    const fallbackByMode: Record<ModeId, string> = {
+      stealth_mode: 'ozone',
+      anti_gptzero: 'humara_v3_3',
+      deep_signal_kill: 'ninja_4',
+    };
+    if (!MODE_ENGINES[mode].has(engine)) setEngine(fallbackByMode[mode]);
+  }, [mode]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Ensure engine stays valid after admin config filtering
+  useEffect(() => {
+    if (ENGINES.length === 0) return;
+    if (!ENGINES.some(e => e.id === engine)) setEngine(ENGINES[0].id);
+  }, [ENGINES, engine]);
 
   const [inputDetection, setInputDetection] = useState<DetectionResult | null>(null);
   const [outputDetection, setOutputDetection] = useState<DetectionResult | null>(null);
@@ -745,48 +778,61 @@ export default function EditorPage() {
 
   /* ── Render ───────────────────────────────────────────────────────────── */
   return (
-    <div className="flex flex-col gap-4 animate-in fade-in duration-500 w-full">
+    <div className="stealth-shell relative flex flex-col gap-4 animate-in fade-in duration-500 w-full p-1 sm:p-2">
 
       {/* ═══ Combined Control Card ═══ */}
       <div
-        className={`bg-[#0c0c14] border border-zinc-800/60 rounded-2xl ${planColor ? 'plan-glow' : ''}`}
-        style={planColor ? { '--plan-color': planColor } as React.CSSProperties : undefined}
+        className={`relative overflow-hidden bg-[linear-gradient(145deg,rgba(8,11,16,.95),rgba(10,13,19,.92))] border border-cyan-900/40 rounded-2xl shadow-[0_16px_40px_-22px_rgba(6,182,212,.45)] ${planColor ? 'plan-glow' : ''}`}
       >
+        <div className="stealth-top-glow pointer-events-none absolute inset-0 opacity-70" />
         {/* Row 1: Brand + Usage + Nav */}
-        <div className="flex items-center justify-between px-5 py-3 border-b border-zinc-800/40">
+        <div className="relative flex items-center justify-between px-4 sm:px-5 py-3 border-b border-cyan-900/30">
           <div className="flex items-center gap-4">
-            <h1 className="text-lg font-extrabold text-white tracking-tight brand-glow">HumaraGPT</h1>
-            <div className="w-px h-4 bg-zinc-800" />
+            <h1 className="text-lg font-black text-cyan-100 tracking-tight">Humara Stealth</h1>
+            <div className="w-px h-4 bg-cyan-900/50" />
             <UsageBar />
           </div>
           <div className="flex items-center gap-1.5">
             {isAdmin && (
               <Link href="/app/admin"
-                className="flex items-center gap-1 px-2 py-1.5 text-[10px] font-semibold text-amber-400 bg-amber-950/30 border border-amber-800 rounded-lg hover:bg-amber-900/30 transition-colors">
+                className="flex items-center gap-1 px-2 py-1.5 text-[10px] font-semibold text-amber-300 bg-amber-950/30 border border-amber-700/60 rounded-lg hover:bg-amber-900/30 transition-colors">
                 <Shield className="w-3 h-3" /> Admin
               </Link>
             )}
-            <Link href="/app/settings" className="p-1.5 text-zinc-500 hover:text-white rounded-lg hover:bg-zinc-800/50 transition-colors">
+            <Link href="/app/settings" className="p-1.5 text-zinc-500 hover:text-cyan-100 rounded-lg hover:bg-cyan-950/30 transition-colors">
               <Settings className="w-3.5 h-3.5" />
             </Link>
           </div>
         </div>
 
-        {/* Row 2: AntiGPTZero + Engine + Depth + Tone + Meaning + Humanize */}
-        <div className="flex flex-wrap items-center gap-x-5 gap-y-2 px-5 py-2.5">
+        {/* Row 2: Mode + Engine + Depth + Tone + Meaning + Humanize */}
+        <div className="relative flex flex-wrap items-center gap-x-4 gap-y-2 px-4 sm:px-5 py-3">
           <div className="flex items-center gap-1.5">
-            <span className="text-[10px] font-semibold uppercase" style={{ color: antiGptZero ? '#f97316' : '#71717a' }}>AntiGPTZero</span>
-            <button onClick={() => setAntiGptZero(!antiGptZero)}
-              className={`w-7 h-[16px] rounded-full transition-all relative ${antiGptZero ? 'bg-orange-600' : 'bg-zinc-700'}`}>
-              <div className={`w-2.5 h-2.5 bg-white rounded-full absolute top-[3px] transition-all shadow-sm ${antiGptZero ? 'left-[13px]' : 'left-[3px]'}`} />
-            </button>
+            <span className="text-[10px] font-semibold uppercase text-zinc-500">Mode</span>
+            <div className="flex bg-zinc-950/60 rounded-md p-0.5 border border-cyan-900/40">
+              {([
+                { id: 'stealth_mode', label: 'Stealth' },
+                { id: 'anti_gptzero', label: 'Anti GPTZero' },
+                { id: 'deep_signal_kill', label: 'Deep Kill' },
+              ] as { id: ModeId; label: string }[]).map((m) => (
+                <button
+                  key={m.id}
+                  onClick={() => setMode(m.id)}
+                  className={`px-2 py-1 text-[10px] font-semibold rounded transition-all ${
+                    mode === m.id ? 'bg-cyan-700/70 text-white' : 'text-zinc-500 hover:text-zinc-300'
+                  }`}
+                >
+                  {m.label}
+                </button>
+              ))}
+            </div>
           </div>
-          <div className="w-px h-4 bg-zinc-800 hidden sm:block" />
+          <div className="w-px h-4 bg-cyan-950/70 hidden sm:block" />
           <div className="flex items-center gap-1.5 relative">
             <span className="text-[10px] font-semibold text-zinc-500 uppercase">Engine</span>
             <div className="relative group">
               <button ref={engineBtnRef} type="button" onClick={() => setEngineDropdownOpen(!engineDropdownOpen)}
-                className="flex items-center gap-1.5 bg-zinc-900/50 border border-zinc-800/60 rounded-md px-2 py-1 text-[11px] font-semibold text-zinc-300 outline-none hover:border-zinc-600 transition-colors min-w-[110px]">
+                className="flex items-center gap-1.5 bg-zinc-950/60 border border-cyan-900/40 rounded-md px-2 py-1 text-[11px] font-semibold text-zinc-300 outline-none hover:border-cyan-700/60 transition-colors min-w-[118px]">
                 <span>{ENGINES.find(e => e.id === engine)?.label}</span>
                 <svg className={`ml-auto w-3 h-3 text-zinc-500 transition-transform ${engineDropdownOpen ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
               </button>
@@ -799,7 +845,7 @@ export default function EditorPage() {
                 <>
                   <div className="fixed inset-0 z-[9998]" onClick={() => setEngineDropdownOpen(false)} />
                   <div
-                    className="fixed z-[9999] w-[200px] bg-[#0c0c14] border border-zinc-700/80 rounded-xl shadow-2xl shadow-black/60 overflow-hidden animate-in fade-in slide-in-from-top-1 duration-150"
+                    className="fixed z-[9999] w-[200px] bg-[#090d14] border border-cyan-900/50 rounded-xl shadow-2xl shadow-black/60 overflow-hidden animate-in fade-in slide-in-from-top-1 duration-150"
                     style={{
                       top: engineBtnRef.current ? engineBtnRef.current.getBoundingClientRect().bottom + 6 : 0,
                       left: engineBtnRef.current ? engineBtnRef.current.getBoundingClientRect().left : 0,
@@ -807,9 +853,9 @@ export default function EditorPage() {
                   >
                     {ENGINES.map(e => (
                       <button key={e.id} type="button" onClick={() => { setEngine(e.id); setEngineDropdownOpen(false); }}
-                        className={`w-full text-left px-3.5 py-2.5 hover:bg-zinc-800/60 transition-colors border-b border-zinc-800/40 last:border-b-0 flex items-center gap-2 ${engine === e.id ? 'bg-purple-950/30' : ''}`}>
+                        className={`w-full text-left px-3.5 py-2.5 hover:bg-cyan-950/30 transition-colors border-b border-zinc-800/40 last:border-b-0 flex items-center gap-2 ${engine === e.id ? 'bg-cyan-950/40' : ''}`}>
                         <span className="text-sm font-medium text-zinc-200">{e.label}</span>
-                        {engine === e.id && <svg className="ml-auto w-4 h-4 text-purple-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>}
+                        {engine === e.id && <svg className="ml-auto w-4 h-4 text-cyan-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>}
                       </button>
                     ))}
                   </div>
@@ -817,69 +863,50 @@ export default function EditorPage() {
               )}
             </div>
           </div>
-          <div className="w-px h-4 bg-zinc-800 hidden sm:block" />
+          <div className="w-px h-4 bg-cyan-950/70 hidden sm:block" />
           <div className="flex items-center gap-1.5">
             <span className="text-[10px] font-semibold text-zinc-500 uppercase">Depth</span>
-            <div className="flex bg-zinc-900/50 rounded-md p-0.5 border border-zinc-800/60">
+            <div className="flex bg-zinc-950/60 rounded-md p-0.5 border border-cyan-900/40">
               {STRENGTHS.map(s => (
                 <button key={s.id} onClick={() => setStrength(s.id)}
-                  className={`px-2 py-1 text-[10px] font-semibold rounded transition-all ${strength === s.id ? 'bg-zinc-700 text-white' : 'text-zinc-500 hover:text-zinc-300'}`}>
+                  className={`px-2 py-1 text-[10px] font-semibold rounded transition-all ${strength === s.id ? 'bg-cyan-700/70 text-white' : 'text-zinc-500 hover:text-zinc-300'}`}>
                   {s.label}
                 </button>
               ))}
             </div>
           </div>
-          <div className="w-px h-4 bg-zinc-800 hidden sm:block" />
+          <div className="w-px h-4 bg-cyan-950/70 hidden sm:block" />
           <div className="flex items-center gap-1.5">
             <span className="text-[10px] font-semibold text-zinc-500 uppercase">Tone</span>
             <select value={tone} onChange={(e) => setTone(e.target.value)} title="Tone"
-              className="bg-zinc-900/50 border border-zinc-800/60 rounded-md px-2 py-1 text-[10px] font-semibold text-zinc-300 outline-none focus:border-purple-500">
+              className="bg-zinc-950/60 border border-cyan-900/40 rounded-md px-2 py-1 text-[10px] font-semibold text-zinc-300 outline-none focus:border-cyan-500">
               {TONES.map(t => <option key={t.id} value={t.id}>{t.label}</option>)}
             </select>
           </div>
-          <div className="w-px h-4 bg-zinc-800 hidden sm:block" />
+          <div className="w-px h-4 bg-cyan-950/70 hidden sm:block" />
           <label className="flex items-center gap-1.5 cursor-pointer select-none">
             <span className="text-[10px] font-semibold text-zinc-500 uppercase">Meaning</span>
             <button onClick={() => setStrictMeaning(!strictMeaning)} title={strictMeaning ? 'On' : 'Off'}
-              className={`w-7 h-[16px] rounded-full transition-all relative ${strictMeaning ? 'bg-purple-600' : 'bg-zinc-700'}`}>
+              className={`w-7 h-[16px] rounded-full transition-all relative ${strictMeaning ? 'bg-cyan-600' : 'bg-zinc-700'}`}>
               <div className={`w-2.5 h-2.5 bg-white rounded-full absolute top-[3px] transition-all shadow-sm ${strictMeaning ? 'left-[13px]' : 'left-[3px]'}`} />
             </button>
           </label>
           <button onClick={handleHumanize} disabled={!text.trim() || loading || rephrasing}
-            className="ml-auto bg-gradient-to-r from-brand-600 to-brand-500 hover:from-brand-700 hover:to-brand-600 text-white text-[11px] font-bold rounded-lg px-4 py-2 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center gap-1.5 shadow-md hover:shadow-lg active:scale-[0.97]">
+            className="ml-auto bg-gradient-to-r from-cyan-700 to-teal-600 hover:from-cyan-600 hover:to-teal-500 text-white text-[11px] font-bold rounded-lg px-4 py-2 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center gap-1.5 shadow-md hover:shadow-lg active:scale-[0.97]">
             {loading ? <RotateCcw className="w-3 h-3 animate-spin" /> : <Zap className="w-3 h-3" />}
             {loading ? 'Humanizing…' : 'Humanize'}
           </button>
         </div>
       </div>
 
-      {/* Model Ticker (no card) */}
-      <div className="relative h-8 flex items-center overflow-hidden -mx-1">
-        <div className="absolute inset-0 bg-gradient-to-r from-zinc-950 via-transparent to-zinc-950 pointer-events-none z-10" />
-        <div className="ticker-animate flex items-center gap-8 whitespace-nowrap px-4">
-          {ENGINES.flatMap(eng => {
-            const useCases: Record<string, string> = {
-              oxygen: 'Beat GPTZero — tuned specifically for GPTZero signals',
-              ozone: 'Clean ZeroGPT & Surfer SEO — best for non-GPTZero detectors',
-              easy: 'Broad-spectrum — handles all major AI detectors',
-              humara_v3_3: 'Strongest GPTZero killer — triple fallback, 0% target',
-            };
-            return [{ engine: eng.label, use: useCases[eng.id] || 'Advanced humanization' }];
-          }).concat(ENGINES.flatMap(eng => {
-            const useCases: Record<string, string> = {
-              oxygen: 'Beat GPTZero — tuned specifically for GPTZero signals',
-              ozone: 'Clean ZeroGPT & Surfer SEO — best for non-GPTZero detectors',
-              easy: 'Broad-spectrum — handles all major AI detectors',
-              humara_v3_3: 'Strongest GPTZero killer — triple fallback, 0% target',
-            };
-            return [{ engine: eng.label, use: useCases[eng.id] || 'Advanced humanization' }];
-          })).map((item, i) => (
-            <div key={i} className="flex items-center gap-2 shrink-0">
-              <span className="text-[10px] font-bold text-brand-400">{item.engine}</span>
-              <span className="text-zinc-700">→</span>
-              <span className="text-[10px] text-zinc-500">{item.use}</span>
-            </div>
-          ))}
+      {/* Stealth Hint Bar */}
+      <div className="flex flex-wrap items-center gap-2.5 px-3 py-2 rounded-xl border border-cyan-950/60 bg-[#0a1018]">
+        <span className="text-[10px] font-semibold uppercase tracking-wide text-cyan-300">Profile</span>
+        <span className="text-[11px] text-zinc-300">Simple controls, stealth output, editable result.</span>
+        <div className="ml-auto flex flex-wrap items-center gap-1.5">
+          <span className="text-[10px] px-2 py-0.5 rounded-full bg-cyan-950/50 border border-cyan-900/60 text-cyan-200">{MODE_LABELS[mode]}</span>
+          <span className="text-[10px] px-2 py-0.5 rounded-full bg-zinc-900/70 border border-zinc-800 text-zinc-300">{ENGINES.find(e => e.id === engine)?.label}</span>
+          <span className="text-[10px] px-2 py-0.5 rounded-full bg-zinc-900/70 border border-zinc-800 text-zinc-300">{TONES.find(t => t.id === tone)?.label}</span>
         </div>
       </div>
 
@@ -926,22 +953,31 @@ export default function EditorPage() {
         </div>
       )}
 
-      {/* AntiGPTZero Mode Info Banner */}
-      {antiGptZero && (
+      {/* Mode Info Banner */}
+      {mode === 'anti_gptzero' && (
         <div className="flex items-start gap-2 px-3 py-2 bg-orange-950/30 border border-orange-800/40 rounded-lg mx-1">
           <span className="text-orange-400 text-xs mt-0.5">⚡</span>
           <div>
             <p className="text-[10px] font-bold text-orange-300">AntiGPTZero Mode — Tuned to Beat GPTZero</p>
-            <p className="text-[9px] text-orange-200/70 leading-relaxed mt-0.5">These engines are trained specifically to beat <span className="font-semibold text-orange-200">GPTZero</span> and may score slightly higher on other detectors. Each AI detector uses different signals — that is why we tune each engine to solve a specific problem. If GPTZero is flagging your text, run <span className="font-semibold text-orange-200">2.4</span> (strongest) or <span className="font-semibold text-orange-200">2.0</span>.</p>
+            <p className="text-[9px] text-orange-200/70 leading-relaxed mt-0.5">Use <span className="font-semibold text-orange-200">2.0</span> or <span className="font-semibold text-orange-200">2.4</span> for GPTZero-focused suppression. Humara 3.0 has been removed from selection for now.</p>
           </div>
         </div>
       )}
-      {!antiGptZero && (
+      {mode === 'stealth_mode' && (
         <div className="flex items-start gap-2 px-3 py-2 bg-teal-950/30 border border-teal-800/40 rounded-lg mx-1">
           <span className="text-teal-400 text-xs mt-0.5">🛡️</span>
           <div>
-            <p className="text-[10px] font-bold text-teal-300">Detector Cleaning Mode — ZeroGPT, Surfer SEO &amp; Others</p>
-            <p className="text-[9px] text-teal-200/70 leading-relaxed mt-0.5">If <span className="font-semibold text-teal-200">ZeroGPT</span> or <span className="font-semibold text-teal-200">Surfer SEO</span> is the problem, run <span className="font-semibold text-teal-200">2.1</span> (best for cleaning the mess) or <span className="font-semibold text-teal-200">2.2</span> (broad coverage). Each detector reads different AI signals — these engines are tuned for non-GPTZero detectors.</p>
+            <p className="text-[10px] font-bold text-teal-300">Stealth Mode — 2.1 and 2.2</p>
+            <p className="text-[9px] text-teal-200/70 leading-relaxed mt-0.5">General detector cleaning for natural output. Use <span className="font-semibold text-teal-200">2.1</span> for stronger external rewrite or <span className="font-semibold text-teal-200">2.2</span> for balanced broad coverage.</p>
+          </div>
+        </div>
+      )}
+      {mode === 'deep_signal_kill' && (
+        <div className="flex items-start gap-2 px-3 py-2 bg-fuchsia-950/30 border border-fuchsia-800/40 rounded-lg mx-1">
+          <span className="text-fuchsia-300 text-xs mt-0.5">🧪</span>
+          <div>
+            <p className="text-[10px] font-bold text-fuchsia-200">Deep Signal Kill — Multi-pass Pipelines</p>
+            <p className="text-[9px] text-fuchsia-100/70 leading-relaxed mt-0.5">Stacked pipelines chain 2.0/2.4/Wikipedia/Nuru in different orders (Ninja, Ghost Trial, Conscusion profiles) for deeper signal disruption.</p>
           </div>
         </div>
       )}
@@ -991,27 +1027,31 @@ export default function EditorPage() {
             <span className="text-[9px] text-purple-400">Threshold <span className="font-bold">{(oxygenMinChangeRatio * 100).toFixed(0)}%</span></span>
             <input type="range" min="0.2" max="0.8" step="0.05" value={oxygenMinChangeRatio}
               onChange={(e) => setOxygenMinChangeRatio(parseFloat(e.target.value))}
+              title="Oxygen threshold"
+              aria-label="Oxygen threshold"
               className="w-16 h-1 bg-purple-900/50 rounded appearance-none cursor-pointer accent-purple-600" />
           </div>
           <div className="flex items-center gap-2">
             <span className="text-[9px] text-purple-400">Retries <span className="font-bold">{oxygenMaxRetries}</span></span>
             <input type="range" min="1" max="15" step="1" value={oxygenMaxRetries}
               onChange={(e) => setOxygenMaxRetries(parseInt(e.target.value))}
+              title="Oxygen retries"
+              aria-label="Oxygen retries"
               className="w-16 h-1 bg-purple-900/50 rounded appearance-none cursor-pointer accent-purple-600" />
           </div>
         </div>
       )}
 
       {/* Editor Stack */}
-      <div className="flex flex-col gap-4">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-stretch">
         {/* Input Panel */}
-        <div className="bg-[#0c0c14] border border-zinc-800/60 rounded-2xl overflow-hidden flex flex-col hover:border-zinc-700/60 transition-all">
-          <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-800/50">
+        <div className="bg-[linear-gradient(145deg,rgba(9,14,22,.95),rgba(9,12,19,.94))] border border-cyan-900/30 rounded-2xl overflow-hidden flex flex-col hover:border-cyan-800/40 transition-all shadow-[0_20px_40px_-28px_rgba(8,145,178,.5)]">
+          <div className="flex items-center justify-between px-4 py-3 border-b border-cyan-900/25 gap-3">
             <div className="flex items-center gap-2.5">
-              <div className="w-2 h-2 rounded-full bg-purple-400 animate-pulse" style={{ animationDuration: '3s' }} />
-              <span className="text-sm font-semibold text-zinc-200 tracking-tight">Input</span>
+              <div className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse" />
+              <span className="text-sm font-semibold text-zinc-100 tracking-tight">Input</span>
             </div>
-            <div className="flex items-center gap-2.5">
+            <div className="flex items-center gap-2.5 shrink-0">
               <span className="text-[11px] text-zinc-500 tabular-nums font-medium">{inputWords} words</span>
               <button onClick={handleClear} className="text-xs font-medium text-zinc-500 hover:text-red-400 px-2 py-1 rounded-lg hover:bg-red-950/30 transition-all flex items-center gap-1">
                 <Eraser className="w-3 h-3" /> Clear
@@ -1023,13 +1063,13 @@ export default function EditorPage() {
           <div className="flex-1 relative">
             <textarea ref={inputRef} value={text}
               onChange={(e) => setText(e.target.value)}
-              className="w-full min-h-[260px] bg-transparent outline-none resize-none text-[14px] leading-[1.8] text-zinc-200 p-5 placeholder:text-zinc-600"
-              placeholder="Paste your AI-generated text here…" />
+              className={`w-full ${EDITOR_HEIGHT_CLASS} bg-transparent outline-none resize-y overflow-y-auto text-[14px] leading-[1.8] text-zinc-200 p-5 placeholder:text-zinc-600`}
+              placeholder="Paste text you want to humanize..." />
             {!text && (
               <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                 <button
                   onClick={async () => { try { const t = await navigator.clipboard.readText(); if (t) setText(t); } catch {} }}
-                  className="pointer-events-auto flex items-center gap-2 px-5 py-3 rounded-xl bg-purple-950/40 border border-purple-800/40 text-purple-300 hover:bg-purple-900/40 hover:border-purple-700/60 transition-all text-sm font-medium"
+                  className="pointer-events-auto flex items-center gap-2 px-5 py-3 rounded-xl bg-cyan-950/35 border border-cyan-900/50 text-cyan-200 hover:bg-cyan-900/35 hover:border-cyan-700/60 transition-all text-sm font-medium"
                 >
                   <ClipboardPaste className="w-4 h-4" />
                   Paste from clipboard
@@ -1041,31 +1081,31 @@ export default function EditorPage() {
         </div>
 
         {/* Output Panel */}
-        <div className={`bg-[#0c0c14] border rounded-2xl overflow-hidden flex flex-col relative hover:border-zinc-700/60 transition-all ${result && !loading && !rephrasing ? 'border-emerald-500/20' : 'border-zinc-800/60'}`}>
-          <div className={`flex items-center justify-between px-4 py-3 border-b ${result && !loading && !rephrasing ? 'border-emerald-900/30' : 'border-zinc-800/50'}`}>
-            <div className="flex items-center gap-2.5">
+        <div className={`bg-[linear-gradient(145deg,rgba(9,14,22,.95),rgba(9,12,19,.94))] border rounded-2xl overflow-hidden flex flex-col relative hover:border-cyan-800/40 transition-all ${result && !loading && !rephrasing ? 'border-emerald-500/25' : 'border-cyan-900/30'} shadow-[0_20px_40px_-28px_rgba(8,145,178,.5)]`}>
+          <div className={`flex items-center justify-between px-4 py-3 border-b gap-3 ${result && !loading && !rephrasing ? 'border-emerald-900/30' : 'border-cyan-900/25'}`}>
+            <div className="flex items-center gap-2.5 min-w-0">
               <div className={`w-2 h-2 rounded-full ${result && !loading ? 'bg-emerald-400' : 'bg-zinc-600'}`} />
-              <span className="text-sm font-semibold text-zinc-200 tracking-tight">Output</span>
+              <span className="text-sm font-semibold text-zinc-100 tracking-tight">Output</span>
               {result && !loading && !rephrasing && (
-                <div className="flex items-center gap-1.5">
-                  <span className="text-[10px] font-medium text-emerald-400/70 bg-emerald-900/20 px-2 py-0.5 rounded-full">
-                    Editable — click to edit, select text for alternatives
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <span className="text-[10px] font-medium text-emerald-300/80 bg-emerald-900/20 px-2 py-0.5 rounded-full whitespace-nowrap overflow-hidden text-ellipsis max-w-[230px] hidden sm:inline-block">
+                    Editable: click to edit, select text for alternatives
                   </span>
                 </div>
               )}
             </div>
-            <div className="flex items-center gap-2">
-              <span className="text-[11px] text-zinc-500 tabular-nums font-medium">{outputWords} words</span>
+            <div className="flex items-center gap-1.5 sm:gap-2 flex-nowrap shrink-0 whitespace-nowrap">
+              <span className="text-[11px] text-zinc-500 tabular-nums font-medium hidden sm:inline">{outputWords} words</span>
               {result && !isAnimating && (
                 <>
                   <button onClick={handleRehumanizeFlagged} disabled={rehumanizing || loading}
-                    className="text-[11px] font-semibold text-amber-600 hover:text-amber-400 px-2 py-1 rounded-lg hover:bg-amber-950/30 transition-all flex items-center gap-1 disabled:opacity-50"
+                    className="text-[11px] font-semibold text-amber-500 hover:text-amber-300 px-1.5 sm:px-2 py-1 rounded-lg hover:bg-amber-950/30 transition-all flex items-center gap-1 disabled:opacity-50"
                     title="Fix flagged AI sentences">
                     <AlertTriangle className={`w-3 h-3 ${rehumanizing ? 'animate-pulse' : ''}`} />
                     {rehumanizing ? 'Fixing…' : 'Fix AI'}
                   </button>
                   <button onClick={handleRephrase} disabled={rephrasing || loading}
-                    className="text-[11px] font-semibold text-brand-600 hover:text-brand-400 px-2 py-1 rounded-lg hover:bg-brand-950/30 transition-all flex items-center gap-1 disabled:opacity-50"
+                    className="text-[11px] font-semibold text-cyan-400 hover:text-cyan-300 px-1.5 sm:px-2 py-1 rounded-lg hover:bg-cyan-950/30 transition-all flex items-center gap-1 disabled:opacity-50"
                     title="Rephrase output">
                     <RefreshCw className={`w-3 h-3 ${rephrasing ? 'animate-spin' : ''}`} />
                     {rephrasing ? 'Rephrasing…' : 'Rephrase'}
@@ -1079,30 +1119,32 @@ export default function EditorPage() {
           </div>
 
           {isAnimating ? (
-            <LiveTextTransition
-              sentences={streamSentences}
-              paragraphBoundaries={streamParagraphBoundaries}
-              globalStage={streamGlobalStage}
-              isDone={streamDone}
-              onComplete={handleTransitionComplete}
-            />
+            <div className={`${EDITOR_HEIGHT_CLASS} overflow-hidden`}>
+              <LiveTextTransition
+                sentences={streamSentences}
+                paragraphBoundaries={streamParagraphBoundaries}
+                globalStage={streamGlobalStage}
+                isDone={streamDone}
+                onComplete={handleTransitionComplete}
+              />
+            </div>
           ) : result ? (
-            <div className="relative flex-1">
+            <div className={`relative flex-1 ${EDITOR_HEIGHT_CLASS} overflow-hidden`}>
               <div className="absolute inset-0 bg-emerald-950/10 pointer-events-none rounded-b-2xl" />
               <textarea ref={outputRef} value={result}
                 onChange={(e) => setResult(e.target.value)} onSelect={handleOutputSelect}
-                className="relative z-10 flex-1 w-full min-h-[260px] bg-transparent outline-none resize-none text-[14px] leading-[1.8] text-zinc-200 p-5 cursor-text"
+                className={`relative z-10 flex-1 w-full ${EDITOR_HEIGHT_CLASS} bg-transparent outline-none resize-y overflow-y-auto text-[14px] leading-[1.8] text-zinc-200 p-5 cursor-text`}
                 style={{ fontFamily: 'inherit' }}
                 placeholder="Output appears here…" />
             </div>
           ) : (
             <div className="flex flex-col items-center justify-center min-h-[260px] text-zinc-700 gap-4 px-8 text-center">
-              <div className="w-12 h-12 rounded-2xl bg-purple-950/30 flex items-center justify-center">
-                <Zap className="w-5 h-5 text-purple-500" />
+              <div className="w-12 h-12 rounded-2xl bg-cyan-950/35 flex items-center justify-center border border-cyan-900/40">
+                <Zap className="w-5 h-5 text-cyan-400" />
               </div>
               <div className="space-y-1">
-                <span className="text-sm font-medium text-zinc-400 block">Humanized text will appear here</span>
-                <span className="text-[11px] text-zinc-600 max-w-xs leading-relaxed block">Paste text above and click Humanize to transform it</span>
+                <span className="text-sm font-medium text-zinc-300 block">Stealth humanized text appears here</span>
+                <span className="text-[11px] text-zinc-500 max-w-xs leading-relaxed block">Paste text, pick style, then click Humanize</span>
               </div>
             </div>
           )}

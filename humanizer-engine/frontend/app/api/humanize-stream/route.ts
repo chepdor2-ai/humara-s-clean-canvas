@@ -15,6 +15,7 @@ import { premiumHumanize } from '@/lib/engine/premium-humanizer';
 import { humanizeV11 } from '@/lib/engine/v11';
 import { humaraHumanize } from '@/lib/humara';
 import { nuruHumanize } from '@/lib/engine/nuru-humanizer';
+import { stealthHumanize } from '@/lib/engine/stealth';
 import { omegaHumanize } from '@/lib/engine/omega-humanizer';
 import { easyHumanize } from '@/lib/engine/easy-humanizer';
 import { ozoneHumanize } from '@/lib/engine/ozone-humanizer';
@@ -232,38 +233,63 @@ export async function POST(req: Request) {
           let humanized: string;
           const eng = engine ?? 'oxygen';
 
-          if (eng === 'easy') {
+          const runHumara22 = async (input: string): Promise<string> => {
             const easySBS = (body as Record<string, unknown>).easy_sentence_by_sentence === true;
-            const easyResult = await easyHumanize(normalizedText, effectiveStrength, tone ?? 'academic', easySBS);
-            humanized = easyResult.humanized;
-          } else if (eng === 'ozone') {
-            // Ozone: Call Ozone API (standard mode) → then EssayWritingSupport as undetectability polish
-            // No further post-processing — Ozone + Easy combo handles everything
-            const ozoneSBS = (body as Record<string, unknown>).ozone_sentence_by_sentence === true;
-            const ozoneResult = await ozoneHumanize(normalizedText, ozoneSBS);
-            humanized = ozoneResult.humanized;
+            const easyResult = await easyHumanize(input, effectiveStrength, tone ?? 'academic', easySBS);
+            return easyResult.humanized;
+          };
 
-            // Post-pass: run through EssayWritingSupport for undetectability
-            sendSSE(controller, { type: 'stage', stage: 'Undetectability Polish' });
-            await flushDelay(80);
+          const runHumara21 = async (input: string): Promise<string> => {
+            const ozoneSBS = (body as Record<string, unknown>).ozone_sentence_by_sentence === true;
+            const ozoneResult = await ozoneHumanize(input, ozoneSBS);
+            let output = ozoneResult.humanized;
             try {
-              const easyPolish = await easyHumanize(humanized, effectiveStrength, tone ?? 'academic', false);
-              humanized = easyPolish.humanized;
+              const easyPolish = await easyHumanize(output, effectiveStrength, tone ?? 'academic', false);
+              output = easyPolish.humanized;
             } catch (easyErr) {
-              // If Easy API fails, continue with Ozone output — don't break the pipeline
               console.warn('[Ozone] EssayWritingSupport polish failed, using raw Ozone output:', easyErr);
             }
-          } else if (eng === 'oxygen') {
-            // Oxygen: Pure TypeScript multi-phase humanizer (runs serverless in Vercel)
+            return output;
+          };
+
+          const runHumara20 = (input: string): string => {
             const oxygenMode = (body as Record<string, unknown>).oxygen_mode as string || (effectiveStrength === 'light' ? 'fast' : effectiveStrength === 'strong' ? 'aggressive' : 'quality');
-            humanized = oxygenHumanize(
-              normalizedText,
+            return oxygenHumanize(
+              input,
               effectiveStrength,
               oxygenMode,
               (body as Record<string, unknown>).oxygen_sentence_by_sentence !== undefined
                 ? Boolean((body as Record<string, unknown>).oxygen_sentence_by_sentence)
                 : true,
             );
+          };
+
+          const runHumara24 = async (input: string): Promise<string> => {
+            const humarinMode = strength === 'strong' ? 'aggressive' : strength === 'light' ? 'fast' : 'quality';
+            const humarinResult = await humarinHumanize(input, humarinMode, true);
+            return humarinResult.humanized;
+          };
+
+          const runWikipedia = async (input: string): Promise<string> => {
+            return await ghostProHumanize(input, {
+              strength: strength ?? 'medium',
+              tone: 'wikipedia',
+              strictMeaning: strict_meaning ?? false,
+              enablePostProcessing: enable_post_processing !== false,
+            });
+          };
+
+          const runNuru = (input: string): string => {
+            const output = stealthHumanize(input, strength ?? 'medium', tone ?? 'academic');
+            return output && output.trim().length > 0 ? output : input;
+          };
+
+          if (eng === 'easy') {
+            humanized = await runHumara22(normalizedText);
+          } else if (eng === 'ozone') {
+            humanized = await runHumara21(normalizedText);
+          } else if (eng === 'oxygen') {
+            humanized = runHumara20(normalizedText);
           } else if (eng === 'oxygen3') {
             // Oxygen 3.0: Fine-tuned T5 model (strict sentence-by-sentence, first-person guard)
             const o3Mode = effectiveStrength === 'strong' ? 'fast' : 'turbo';
@@ -287,11 +313,46 @@ export async function POST(req: Request) {
             const humarinResult = await humarinHumanize(normalizedText, humarinMode, true);
             humanized = humarinResult.humanized;
           } else if (eng === 'humara_v3_3') {
-            // Humara 3.3: Triple-engine fallback (Humarin → Dipper → Oxygen TS)
-            // Uses same Humarin engine but flows through full post-processing below
-            const humarinMode = strength === 'strong' ? 'aggressive' : strength === 'light' ? 'fast' : 'quality';
-            const humarinResult = await humarinHumanize(normalizedText, humarinMode, true);
-            humanized = humarinResult.humanized;
+            humanized = await runHumara24(normalizedText);
+          } else if (eng === 'ninja_3') {
+            // Ninja 3: 2.0 -> Wikipedia
+            const stage1 = runHumara20(normalizedText);
+            humanized = await runWikipedia(stage1);
+          } else if (eng === 'ninja_2') {
+            // Ninja 2: 2.0 -> Nuru 2.0
+            const stage1 = runHumara20(normalizedText);
+            humanized = runNuru(stage1);
+          } else if (eng === 'ninja_4') {
+            // Ninja 4: 2.4 -> Wikipedia
+            const stage1 = await runHumara24(normalizedText);
+            humanized = await runWikipedia(stage1);
+          } else if (eng === 'ninja_5') {
+            // Ninja 5: 2.4 -> Nuru 2.0
+            const stage1 = await runHumara24(normalizedText);
+            humanized = runNuru(stage1);
+          } else if (eng === 'ghost_trial_2') {
+            // Ghost Trial 2: Wikipedia -> 2.4 -> Nuru
+            const stage1 = await runWikipedia(normalizedText);
+            const stage2 = await runHumara24(stage1);
+            humanized = runNuru(stage2);
+          } else if (eng === 'ghost_trial_2_alt') {
+            // Ghost Trial 2 alt: Wikipedia -> 2.0 -> Nuru
+            const stage1 = await runWikipedia(normalizedText);
+            const stage2 = runHumara20(stage1);
+            humanized = runNuru(stage2);
+          } else if (eng === 'conscusion_1') {
+            // Conscusion 1: 2.2 -> Wikipedia -> 2.0 -> Nuru
+            const stage1 = await runHumara22(normalizedText);
+            const stage2 = await runWikipedia(stage1);
+            const stage3 = runHumara20(stage2);
+            humanized = runNuru(stage3);
+          } else if (eng === 'conscusion_12') {
+            // Conscusion 12: 2.1 -> 2.4 -> Wikipedia -> 2.0 -> Nuru
+            const stage1 = await runHumara21(normalizedText);
+            const stage2 = await runHumara24(stage1);
+            const stage3 = await runWikipedia(stage2);
+            const stage4 = runHumara20(stage3);
+            humanized = runNuru(stage4);
           } else if (eng === 'humara_v1_3') {
             const { pipeline } = await import('@/lib/engine/humara-v1-3');
             humanized = await pipeline(normalizedText, (tone ?? 'academic') as string, strength === 'strong' ? 10 : strength === 'light' ? 4 : 7);
