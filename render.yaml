@@ -16,9 +16,9 @@ services:
   - type: web
     name: oxygen3
     runtime: python
-    buildCommand: pip install torch --index-url https://download.pytorch.org/whl/cpu && pip install transformers fastapi uvicorn safetensors
+    buildCommand: pip install torch --index-url https://download.pytorch.org/whl/cpu && pip install transformers fastapi "uvicorn[standard]" safetensors pydantic
     startCommand: python oxygen3_server.py
     envVars:
       - key: OXYGEN3_MODEL_DIR
         value: oxygen3-model
-    plan: starter
+    plan: standard

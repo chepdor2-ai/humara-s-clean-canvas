@@ -176,22 +176,21 @@ export const syntacticTransformer: Transformer = {
           if (match) {
             const converted = convert(match);
             if (converted && converted.length > 10
-                && converted.split(/\s+/).length >= 4
-                && /[.!?]$/.test(converted) === false ? converted + '.' : converted) {
+                && converted.split(/\s+/).length >= 4) {
+              const candidate = /[.!?]$/.test(converted) ? converted : converted + '.';
               // Verify no first person introduced
-              if (!/\b(I|we|my|our|me|us)\b/i.test(converted) || ctx.metadata.hasFirstPerson) {
+              if (!/\b(I|we|my|our|me|us)\b/i.test(candidate) || ctx.metadata.hasFirstPerson) {
                 // Verify the conversion didn't lose too many words
                 const origWords = text.split(/\s+/).length;
-                const newWords = converted.split(/\s+/).length;
+                const newWords = candidate.split(/\s+/).length;
                 if (newWords >= origWords * 0.5) {
                   changes.push({
                     type: 'syntactic',
                     original: text,
-                    replacement: converted,
+                    replacement: candidate,
                     reason: 'passive to active voice conversion',
                   });
-                  text = converted;
-                  if (!/[.!?]$/.test(text)) text += '.';
+                  text = candidate;
                   break;
                 }
               }
