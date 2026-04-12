@@ -147,14 +147,14 @@ const ALL_ENGINES: EngineConfig[] = [
   { id: 'easy', label: 'Humara 2.2' },
   { id: 'oxygen', label: 'Humara 2.0' },
   { id: 'humara_v3_3', label: 'Humara 2.4' },
-  { id: 'ninja_3', label: 'Ninja 3 (2.0 -> Wikipedia)' },
-  { id: 'ninja_2', label: 'Ninja 2 (2.0 -> Nuru 2.0)' },
-  { id: 'ninja_4', label: 'Ninja 4 (2.4 -> Wikipedia)' },
-  { id: 'ninja_5', label: 'Ninja 5 (2.4 -> Nuru 2.0)' },
-  { id: 'ghost_trial_2', label: 'Ghost Trial 2 (Wiki -> 2.4 -> Nuru)' },
-  { id: 'ghost_trial_2_alt', label: 'Ghost Trial 2 Alt (Wiki -> 2.0 -> Nuru)' },
-  { id: 'conscusion_1', label: 'Conscusion 1 (2.2 -> Wiki -> 2.0 -> Nuru)' },
-  { id: 'conscusion_12', label: 'Conscusion 12 (2.1 -> 2.4 -> Wiki -> 2.0 -> Nuru)' },
+  { id: 'ninja_3', label: 'Ninja 3' },
+  { id: 'ninja_2', label: 'Ninja 2' },
+  { id: 'ninja_4', label: 'Ninja 4' },
+  { id: 'ninja_5', label: 'Ninja 5' },
+  { id: 'ghost_trial_2', label: 'Ghost Trial 2' },
+  { id: 'ghost_trial_2_alt', label: 'Ghost Trial 2 Alt' },
+  { id: 'conscusion_1', label: 'Conscusion 1' },
+  { id: 'conscusion_12', label: 'Conscusion 12' },
 ];
 
 type ModeId = 'stealth_mode' | 'anti_gptzero' | 'deep_signal_kill';
@@ -183,14 +183,14 @@ const ENGINE_GUIDES: Record<string, string> = {
   easy: 'Stealth Mode wide-coverage engine for balanced, natural sounding rewrites.',
   oxygen: 'Anti GPTZero engine tuned for GPTZero signal suppression.',
   humara_v3_3: 'Anti GPTZero high-power engine (2.4) for stubborn GPTZero flags.',
-  ninja_3: 'Pipeline: 2.0 then Wikipedia.',
-  ninja_2: 'Pipeline: 2.0 then Nuru 2.0.',
-  ninja_4: 'Pipeline: 2.4 then Wikipedia.',
-  ninja_5: 'Pipeline: 2.4 then Nuru 2.0.',
-  ghost_trial_2: 'Pipeline: Wikipedia then 2.4 then Nuru.',
-  ghost_trial_2_alt: 'Pipeline: Wikipedia then 2.0 then Nuru.',
-  conscusion_1: 'Pipeline: 2.2 then Wikipedia then 2.0 then Nuru.',
-  conscusion_12: 'Pipeline: 2.1 then 2.4 then Wikipedia then 2.0 then Nuru.',
+  ninja_3: 'Deep Signal Kill profile for aggressive suppression.',
+  ninja_2: 'Deep Signal Kill profile for aggressive suppression.',
+  ninja_4: 'Deep Signal Kill profile for aggressive suppression.',
+  ninja_5: 'Deep Signal Kill profile for aggressive suppression.',
+  ghost_trial_2: 'Deep Signal Kill profile for aggressive suppression.',
+  ghost_trial_2_alt: 'Deep Signal Kill profile for aggressive suppression.',
+  conscusion_1: 'Deep Signal Kill profile for aggressive suppression.',
+  conscusion_12: 'Deep Signal Kill profile for aggressive suppression.',
 };
 
 const MAX_WORDS_PER_REQUEST = 2000;
@@ -448,6 +448,7 @@ export default function EditorPage() {
     const decoder = new TextDecoder();
     let buffer = '';
     let finalData: Record<string, unknown> | null = null;
+    let doneEventReceived = false;
 
     while (true) {
       const { done, value } = await reader.read();
@@ -487,8 +488,31 @@ export default function EditorPage() {
           setStreamSentences(prev => prev.map(s => ({ ...s, stage: 'done' })));
           setStreamGlobalStage('Complete');
           setStreamDone(true);
+          doneEventReceived = true;
         }
       }
+
+      if (doneEventReceived) {
+        try { await reader.cancel(); } catch {}
+        break;
+      }
+    }
+
+    // If the stream closed abruptly, do not leave the UI in a perpetual loading state.
+    if (!finalData && buffer.trim().startsWith('data: ')) {
+      try {
+        const trailingEvent = JSON.parse(buffer.trim().slice(6)) as Record<string, unknown>;
+        if (trailingEvent.type === 'done') {
+          finalData = trailingEvent;
+          setStreamSentences(prev => prev.map(s => ({ ...s, stage: 'done' })));
+          setStreamGlobalStage('Complete');
+          setStreamDone(true);
+        }
+      } catch {}
+    }
+
+    if (!finalData) {
+      throw new Error('Stream ended before completion');
     }
 
     return finalData;
@@ -976,8 +1000,8 @@ export default function EditorPage() {
         <div className="flex items-start gap-2 px-3 py-2 bg-fuchsia-950/30 border border-fuchsia-800/40 rounded-lg mx-1">
           <span className="text-fuchsia-300 text-xs mt-0.5">🧪</span>
           <div>
-            <p className="text-[10px] font-bold text-fuchsia-200">Deep Signal Kill — Multi-pass Pipelines</p>
-            <p className="text-[9px] text-fuchsia-100/70 leading-relaxed mt-0.5">Stacked pipelines chain 2.0/2.4/Wikipedia/Nuru in different orders (Ninja, Ghost Trial, Conscusion profiles) for deeper signal disruption.</p>
+            <p className="text-[10px] font-bold text-fuchsia-200">Deep Signal Kill</p>
+            <p className="text-[9px] text-fuchsia-100/70 leading-relaxed mt-0.5">High-intensity profile set for deeper detector suppression.</p>
           </div>
         </div>
       )}

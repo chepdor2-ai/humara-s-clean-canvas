@@ -7,14 +7,14 @@ const DEFAULT_ENGINES = [
   { engine_id: 'easy', label: 'Humara 2.2', enabled: true, premium: false, sort_order: 2 },
   { engine_id: 'oxygen', label: 'Humara 2.0', enabled: true, premium: false, sort_order: 3 },
   { engine_id: 'humara_v3_3', label: 'Humara 2.4', enabled: true, premium: false, sort_order: 4 },
-  { engine_id: 'ninja_3', label: 'Ninja 3 (2.0 -> Wikipedia)', enabled: true, premium: false, sort_order: 5 },
-  { engine_id: 'ninja_2', label: 'Ninja 2 (2.0 -> Nuru 2.0)', enabled: true, premium: false, sort_order: 6 },
-  { engine_id: 'ninja_4', label: 'Ninja 4 (2.4 -> Wikipedia)', enabled: true, premium: false, sort_order: 7 },
-  { engine_id: 'ninja_5', label: 'Ninja 5 (2.4 -> Nuru 2.0)', enabled: true, premium: false, sort_order: 8 },
-  { engine_id: 'ghost_trial_2', label: 'Ghost Trial 2 (Wiki -> 2.4 -> Nuru)', enabled: true, premium: false, sort_order: 9 },
-  { engine_id: 'ghost_trial_2_alt', label: 'Ghost Trial 2 Alt (Wiki -> 2.0 -> Nuru)', enabled: true, premium: false, sort_order: 10 },
-  { engine_id: 'conscusion_1', label: 'Conscusion 1 (2.2 -> Wiki -> 2.0 -> Nuru)', enabled: true, premium: false, sort_order: 11 },
-  { engine_id: 'conscusion_12', label: 'Conscusion 12 (2.1 -> 2.4 -> Wiki -> 2.0 -> Nuru)', enabled: true, premium: false, sort_order: 12 },
+  { engine_id: 'ninja_3', label: 'Ninja 3', enabled: true, premium: false, sort_order: 5 },
+  { engine_id: 'ninja_2', label: 'Ninja 2', enabled: true, premium: false, sort_order: 6 },
+  { engine_id: 'ninja_4', label: 'Ninja 4', enabled: true, premium: false, sort_order: 7 },
+  { engine_id: 'ninja_5', label: 'Ninja 5', enabled: true, premium: false, sort_order: 8 },
+  { engine_id: 'ghost_trial_2', label: 'Ghost Trial 2', enabled: true, premium: false, sort_order: 9 },
+  { engine_id: 'ghost_trial_2_alt', label: 'Ghost Trial 2 Alt', enabled: true, premium: false, sort_order: 10 },
+  { engine_id: 'conscusion_1', label: 'Conscusion 1', enabled: true, premium: false, sort_order: 11 },
+  { engine_id: 'conscusion_12', label: 'Conscusion 12', enabled: true, premium: false, sort_order: 12 },
 ];
 
 function getToken(authHeader: string | null) {

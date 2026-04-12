@@ -62,6 +62,7 @@ export default function RootLayoutClient({ children }: { children: React.ReactNo
                 <Link href="/how-it-works" className="text-sm text-zinc-400 hover:text-purple-400 font-medium transition-colors">How it Works</Link>
                 <Link href="/pricing" className="text-sm text-zinc-400 hover:text-purple-400 font-medium transition-colors">Pricing</Link>
                 <Link href="/about" className="text-sm text-zinc-400 hover:text-purple-400 font-medium transition-colors">About</Link>
+                <Link href="/blog" className="text-sm text-zinc-400 hover:text-purple-400 font-medium transition-colors">Blog</Link>
                 <Link href="/detector" className="text-sm text-zinc-400 hover:text-purple-400 font-medium transition-colors inline-flex items-center gap-1.5">AI Detector <span className="text-[9px] font-bold text-amber-400 bg-amber-950/40 border border-amber-800/40 px-1.5 py-0.5 rounded-full">Soon</span></Link>
               </nav>
 
@@ -81,6 +82,7 @@ export default function RootLayoutClient({ children }: { children: React.ReactNo
               <Link href="/how-it-works" onClick={() => setMobileMenuOpen(false)} className="text-sm font-medium text-zinc-200 py-1">How it Works</Link>
               <Link href="/pricing" onClick={() => setMobileMenuOpen(false)} className="text-sm font-medium text-zinc-200 py-1">Pricing</Link>
               <Link href="/about" onClick={() => setMobileMenuOpen(false)} className="text-sm font-medium text-zinc-200 py-1">About</Link>
+              <Link href="/blog" onClick={() => setMobileMenuOpen(false)} className="text-sm font-medium text-zinc-200 py-1">Blog</Link>
               <Link href="/detector" onClick={() => setMobileMenuOpen(false)} className="text-sm font-medium text-zinc-200 py-1 inline-flex items-center gap-1.5">AI Detector <span className="text-[9px] font-bold text-amber-400 bg-amber-950/40 border border-amber-800/40 px-1.5 py-0.5 rounded-full">Soon</span></Link>
               <div className="h-px bg-white/10 my-1"></div>
               <Link href="/login" onClick={() => setMobileMenuOpen(false)} className="text-sm font-medium text-zinc-200 py-1">Log In</Link>
@@ -117,6 +119,7 @@ export default function RootLayoutClient({ children }: { children: React.ReactNo
                   <h4 className="font-semibold text-white mb-4">Company</h4>
                   <ul className="space-y-3 text-gray-400">
                     <li><Link href="/about" className="hover:text-white transition-colors">About</Link></li>
+                    <li><Link href="/blog" className="hover:text-white transition-colors">Blog</Link></li>
                     <li><Link href="/contact" className="hover:text-white transition-colors">Contact</Link></li>
                   </ul>
                 </div>

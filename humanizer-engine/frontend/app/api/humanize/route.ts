@@ -272,10 +272,10 @@ function adaptiveOxygenChain(
   phaseOneOutput: string,
   _originalText: string,   // kept for API compat; gate compares vs phase-1 output
 ): string {
-  const MIN_TOTAL = 5;           // minimum 5 total passes (including phase 1)
-  const MAX_ITERATIONS = 9;      // up to 9 more oxygen passes → 10 total
+  const MIN_TOTAL = 4;           // speed-optimized minimum passes
+  const MAX_ITERATIONS = 6;      // speed-optimized cap on iterative passes
   const TARGET_CHANGE = 0.40;    // 40% word-level change from phase-1 per sentence
-  const SENT_PASS_RATE = 0.75;   // 75% of sentences must hit target (exits earlier → faster)
+  const SENT_PASS_RATE = 0.70;   // slightly more permissive for faster exits
 
   let current = phaseOneOutput;
   // Gate compares against phase-1 output — how much the oxygen chain added on top of the LLM
@@ -621,6 +621,16 @@ function lastMileMeaningValidator(
   return rebuilt.filter(p => p.trim()).join('\n\n');
 }
 
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(`${label} timed out after ${timeoutMs}ms`)), timeoutMs);
+    promise
+      .then((value) => resolve(value))
+      .catch((err) => reject(err))
+      .finally(() => clearTimeout(timer));
+  });
+}
+
 export async function POST(req: Request) {
   try {
     let body: any;
@@ -727,6 +737,20 @@ export async function POST(req: Request) {
       return output && output.trim().length > 0 ? output : input;
     };
 
+    const runGuarded = async (
+      label: string,
+      task: () => Promise<string>,
+      fallback: string,
+      timeoutMs = 45_000,
+    ): Promise<string> => {
+      try {
+        return await withTimeout(task(), timeoutMs, label);
+      } catch (err) {
+        console.warn(`[Humanize] ${label} failed or timed out:`, err);
+        return fallback;
+      }
+    };
+
     let humanized: string;
 
     if (engine === 'easy') {
@@ -738,42 +762,42 @@ export async function POST(req: Request) {
     } else if (engine === 'humara_v3_3') {
       humanized = await runHumara24(normalizedText);
     } else if (engine === 'ninja_3') {
-      // Ninja 3: 2.0 -> Wikipedia
+      // Ninja 3
       const stage1 = runHumara20(normalizedText);
-      humanized = await runWikipedia(stage1);
+      humanized = await runGuarded('ninja_3_stage_2', () => runWikipedia(stage1), stage1);
     } else if (engine === 'ninja_2') {
-      // Ninja 2: 2.0 -> Nuru 2.0
+      // Ninja 2
       const stage1 = runHumara20(normalizedText);
       humanized = runNuru(stage1);
     } else if (engine === 'ninja_4') {
-      // Ninja 4: 2.4 -> Wikipedia
-      const stage1 = await runHumara24(normalizedText);
-      humanized = await runWikipedia(stage1);
+      // Ninja 4
+      const stage1 = await runGuarded('ninja_4_stage_1', () => runHumara24(normalizedText), normalizedText);
+      humanized = await runGuarded('ninja_4_stage_2', () => runWikipedia(stage1), stage1);
     } else if (engine === 'ninja_5') {
-      // Ninja 5: 2.4 -> Nuru 2.0
-      const stage1 = await runHumara24(normalizedText);
+      // Ninja 5
+      const stage1 = await runGuarded('ninja_5_stage_1', () => runHumara24(normalizedText), normalizedText);
       humanized = runNuru(stage1);
     } else if (engine === 'ghost_trial_2') {
-      // Ghost Trial 2: Wikipedia -> 2.4 -> Nuru
-      const stage1 = await runWikipedia(normalizedText);
-      const stage2 = await runHumara24(stage1);
+      // Ghost Trial 2
+      const stage1 = await runGuarded('ghost_trial_2_stage_1', () => runWikipedia(normalizedText), normalizedText);
+      const stage2 = await runGuarded('ghost_trial_2_stage_2', () => runHumara24(stage1), stage1);
       humanized = runNuru(stage2);
     } else if (engine === 'ghost_trial_2_alt') {
-      // Ghost Trial 2 alt: Wikipedia -> 2.0 -> Nuru
-      const stage1 = await runWikipedia(normalizedText);
+      // Ghost Trial 2 Alt
+      const stage1 = await runGuarded('ghost_trial_2_alt_stage_1', () => runWikipedia(normalizedText), normalizedText);
       const stage2 = runHumara20(stage1);
       humanized = runNuru(stage2);
     } else if (engine === 'conscusion_1') {
-      // Conscusion 1: 2.2 -> Wikipedia -> 2.0 -> Nuru
-      const stage1 = await runHumara22(normalizedText);
-      const stage2 = await runWikipedia(stage1);
+      // Conscusion 1
+      const stage1 = await runGuarded('conscusion_1_stage_1', () => runHumara22(normalizedText), normalizedText, 35_000);
+      const stage2 = await runGuarded('conscusion_1_stage_2', () => runWikipedia(stage1), stage1);
       const stage3 = runHumara20(stage2);
       humanized = runNuru(stage3);
     } else if (engine === 'conscusion_12') {
-      // Conscusion 12: 2.1 -> 2.4 -> Wikipedia -> 2.0 -> Nuru
-      const stage1 = await runHumara21(normalizedText);
-      const stage2 = await runHumara24(stage1);
-      const stage3 = await runWikipedia(stage2);
+      // Conscusion 12
+      const stage1 = await runGuarded('conscusion_12_stage_1', () => runHumara21(normalizedText), normalizedText, 35_000);
+      const stage2 = await runGuarded('conscusion_12_stage_2', () => runHumara24(stage1), stage1);
+      const stage3 = await runGuarded('conscusion_12_stage_3', () => runWikipedia(stage2), stage2);
       const stage4 = runHumara20(stage3);
       humanized = runNuru(stage4);
     } else if (engine === 'humara_v1_3') {
@@ -1254,8 +1278,8 @@ export async function POST(req: Request) {
     // and introduce grammar errors ("boosts", "opportunitied", "pitch in").
     // Skip for nuru_v2: it handles its own sentence-by-sentence quality.
     if (engine !== 'ghost_pro_wiki' && engine !== 'nuru_v2') {
-      const FEEDBACK_MAX_ITERS = 3;
-      const FEEDBACK_AI_THRESHOLD = 5.0; // below 5% is acceptable
+      const FEEDBACK_MAX_ITERS = 2;
+      const FEEDBACK_AI_THRESHOLD = 8.0; // faster stop threshold
       const FEEDBACK_STRENGTHS = ['light', 'medium', 'strong'] as const;
 
       for (let fbIter = 0; fbIter < FEEDBACK_MAX_ITERS; fbIter++) {
@@ -1290,14 +1314,17 @@ export async function POST(req: Request) {
     const FIRST_PERSON_RE = /\b(I|me|my|mine|myself|we|us|our|ours|ourselves)\b/i;
     const inputHadFirstPerson = FIRST_PERSON_RE.test(text);
     const sentenceAlternativesMap: Record<string, ScoredCandidate[]> = {};
-    // Split final humanized text into sentences and generate 2 extra candidates per sentence
+    // Split final humanized text into sentences and generate lightweight extras.
+    // Skip for very long outputs to reduce latency.
     const finalSentences = humanized.match(/[^.!?]+[.!?]+|[^.!?]+$/g) || [];
-    for (const sent of finalSentences) {
-      const trimmed = sent.trim();
-      if (!trimmed || trimmed.length < 15) continue;
-      const { alternatives } = generateCandidates(trimmed, inputHadFirstPerson, 3);
-      if (alternatives.length > 0) {
-        sentenceAlternativesMap[trimmed] = alternatives;
+    if (finalSentences.length <= 40) {
+      for (const sent of finalSentences) {
+        const trimmed = sent.trim();
+        if (!trimmed || trimmed.length < 15) continue;
+        const { alternatives } = generateCandidates(trimmed, inputHadFirstPerson, 2);
+        if (alternatives.length > 0) {
+          sentenceAlternativesMap[trimmed] = alternatives;
+        }
       }
     }
 

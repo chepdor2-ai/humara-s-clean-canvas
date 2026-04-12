@@ -190,7 +190,7 @@ export default function LiveTextTransition({
 
   /* ── JSX ──────────────────────────────────────────────────────────── */
   return (
-    <div className="flex flex-col min-h-[380px] relative">
+    <div className="flex h-full min-h-0 flex-col relative">
       {/* Background overlay */}
       <div
         className={`absolute inset-0 transition-colors duration-1000 rounded-b-xl pointer-events-none ${

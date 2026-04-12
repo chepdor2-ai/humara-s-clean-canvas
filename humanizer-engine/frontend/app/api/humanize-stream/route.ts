@@ -50,8 +50,18 @@ function sendSSE(controller: ReadableStreamDefaultController, data: unknown) {
 }
 
 /** Small delay to allow the stream to flush so the browser can render intermediate states */
-function flushDelay(ms = 30): Promise<void> {
+function flushDelay(ms = 8): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(`${label} timed out after ${timeoutMs}ms`)), timeoutMs);
+    promise
+      .then((value) => resolve(value))
+      .catch((err) => reject(err))
+      .finally(() => clearTimeout(timer));
+  });
 }
 
 /** Staggered per-sentence emit with small delays between each */
@@ -209,7 +219,7 @@ export async function POST(req: Request) {
             sentences: origSentences,
             paragraphBoundaries,
           });
-          await flushDelay(150); // let client render original text in red
+          await flushDelay(40); // let client render initial state quickly
 
           // 2. Heading normalization
           let normalizedText = text;
@@ -228,10 +238,24 @@ export async function POST(req: Request) {
 
           // 3. Engine stage — the main humanization
           sendSSE(controller, { type: 'stage', stage: 'Engine Processing' });
-          await flushDelay(80);
+          await flushDelay(20);
 
           let humanized: string;
           const eng = engine ?? 'oxygen';
+
+          const runGuarded = async (
+            label: string,
+            task: () => Promise<string>,
+            fallback: string,
+            timeoutMs = 45_000,
+          ): Promise<string> => {
+            try {
+              return await withTimeout(task(), timeoutMs, label);
+            } catch (err) {
+              console.warn(`[HumanizeStream] ${label} failed or timed out:`, err);
+              return fallback;
+            }
+          };
 
           const runHumara22 = async (input: string): Promise<string> => {
             const easySBS = (body as Record<string, unknown>).easy_sentence_by_sentence === true;
@@ -315,42 +339,42 @@ export async function POST(req: Request) {
           } else if (eng === 'humara_v3_3') {
             humanized = await runHumara24(normalizedText);
           } else if (eng === 'ninja_3') {
-            // Ninja 3: 2.0 -> Wikipedia
+            // Ninja 3
             const stage1 = runHumara20(normalizedText);
-            humanized = await runWikipedia(stage1);
+            humanized = await runGuarded('ninja_3_stage_2', () => runWikipedia(stage1), stage1);
           } else if (eng === 'ninja_2') {
-            // Ninja 2: 2.0 -> Nuru 2.0
+            // Ninja 2
             const stage1 = runHumara20(normalizedText);
             humanized = runNuru(stage1);
           } else if (eng === 'ninja_4') {
-            // Ninja 4: 2.4 -> Wikipedia
-            const stage1 = await runHumara24(normalizedText);
-            humanized = await runWikipedia(stage1);
+            // Ninja 4
+            const stage1 = await runGuarded('ninja_4_stage_1', () => runHumara24(normalizedText), normalizedText);
+            humanized = await runGuarded('ninja_4_stage_2', () => runWikipedia(stage1), stage1);
           } else if (eng === 'ninja_5') {
-            // Ninja 5: 2.4 -> Nuru 2.0
-            const stage1 = await runHumara24(normalizedText);
+            // Ninja 5
+            const stage1 = await runGuarded('ninja_5_stage_1', () => runHumara24(normalizedText), normalizedText);
             humanized = runNuru(stage1);
           } else if (eng === 'ghost_trial_2') {
-            // Ghost Trial 2: Wikipedia -> 2.4 -> Nuru
-            const stage1 = await runWikipedia(normalizedText);
-            const stage2 = await runHumara24(stage1);
+            // Ghost Trial 2
+            const stage1 = await runGuarded('ghost_trial_2_stage_1', () => runWikipedia(normalizedText), normalizedText);
+            const stage2 = await runGuarded('ghost_trial_2_stage_2', () => runHumara24(stage1), stage1);
             humanized = runNuru(stage2);
           } else if (eng === 'ghost_trial_2_alt') {
-            // Ghost Trial 2 alt: Wikipedia -> 2.0 -> Nuru
-            const stage1 = await runWikipedia(normalizedText);
+            // Ghost Trial 2 Alt
+            const stage1 = await runGuarded('ghost_trial_2_alt_stage_1', () => runWikipedia(normalizedText), normalizedText);
             const stage2 = runHumara20(stage1);
             humanized = runNuru(stage2);
           } else if (eng === 'conscusion_1') {
-            // Conscusion 1: 2.2 -> Wikipedia -> 2.0 -> Nuru
-            const stage1 = await runHumara22(normalizedText);
-            const stage2 = await runWikipedia(stage1);
+            // Conscusion 1
+            const stage1 = await runGuarded('conscusion_1_stage_1', () => runHumara22(normalizedText), normalizedText, 35_000);
+            const stage2 = await runGuarded('conscusion_1_stage_2', () => runWikipedia(stage1), stage1);
             const stage3 = runHumara20(stage2);
             humanized = runNuru(stage3);
           } else if (eng === 'conscusion_12') {
-            // Conscusion 12: 2.1 -> 2.4 -> Wikipedia -> 2.0 -> Nuru
-            const stage1 = await runHumara21(normalizedText);
-            const stage2 = await runHumara24(stage1);
-            const stage3 = await runWikipedia(stage2);
+            // Conscusion 12
+            const stage1 = await runGuarded('conscusion_12_stage_1', () => runHumara21(normalizedText), normalizedText, 35_000);
+            const stage2 = await runGuarded('conscusion_12_stage_2', () => runHumara24(stage1), stage1);
+            const stage3 = await runGuarded('conscusion_12_stage_3', () => runWikipedia(stage2), stage2);
             const stage4 = runHumara20(stage3);
             humanized = runNuru(stage4);
           } else if (eng === 'humara_v1_3') {
@@ -384,8 +408,8 @@ export async function POST(req: Request) {
 
           // Emit engine output — sentence-by-sentence with stagger
           const { sentences: engineSentences } = splitIntoIndexedSentences(humanized);
-          await emitSentencesStaggered(controller, engineSentences, 'Engine', 80);
-          await flushDelay(200); // pause between stages
+          await emitSentencesStaggered(controller, engineSentences, 'Engine', 20);
+          await flushDelay(30); // small stage pause
 
           // Detector + input analysis — needed for both post-processing and final detection
           const detector = getDetector();
@@ -401,16 +425,16 @@ export async function POST(req: Request) {
 
           if (eng !== 'humara' && eng !== 'humara_v1_3' && eng !== 'nuru' && eng !== 'omega' && eng !== 'oxygen') {
             sendSSE(controller, { type: 'stage', stage: 'Sentence Processing' });
-            await flushDelay(80);
+            await flushDelay(20);
             humanized = unifiedSentenceProcess(humanized, earlyFirstPerson, inputAiScore);
             const { sentences: uspSentences } = splitIntoIndexedSentences(humanized);
-            await emitSentencesStaggered(controller, uspSentences, 'Sentence Processing', 80);
-            await flushDelay(200);
+            await emitSentencesStaggered(controller, uspSentences, 'Sentence Processing', 20);
+            await flushDelay(30);
           }
 
           // 5. 40% Restructuring enforcement
           sendSSE(controller, { type: 'stage', stage: 'Restructuring' });
-          await flushDelay(80);
+          await flushDelay(20);
           {
             const { sentences: origSents } = splitIntoIndexedSentences(normalizedText);
             const { sentences: humanizedSents, paragraphBoundaries: humanParaBounds } = splitIntoIndexedSentences(humanized);
@@ -443,10 +467,10 @@ export async function POST(req: Request) {
             if (changed) {
               humanized = reassembleText(humanizedSents, humanParaBounds.length ? humanParaBounds : [0]);
               const { sentences: restructuredSents } = splitIntoIndexedSentences(humanized);
-              await emitSentencesStaggered(controller, restructuredSents, 'Restructuring', 80);
+              await emitSentencesStaggered(controller, restructuredSents, 'Restructuring', 20);
             }
           }
-          await flushDelay(200);
+          await flushDelay(30);
 
           // 6. Capitalization fix
           if (eng !== 'humara' && eng !== 'humara_v1_3' && eng !== 'nuru' && eng !== 'omega') {
@@ -664,33 +688,33 @@ export async function POST(req: Request) {
           if (eng === 'easy') {
             try {
               sendSSE(controller, { type: 'stage', stage: 'Oxygen Polish' });
-              await flushDelay(80);
+              await flushDelay(20);
               const polished = oxygenHumanize(humanized, 'light', 'fast', false);
               if (polished && polished.trim().length > 0) {
                 humanized = polished;
                 const { sentences: oxygenSents } = splitIntoIndexedSentences(humanized);
-                await emitSentencesStaggered(controller, oxygenSents, 'Oxygen Polish', 80);
+                await emitSentencesStaggered(controller, oxygenSents, 'Oxygen Polish', 20);
               }
             } catch {
               // Oxygen polish is best-effort — never block the pipeline
             }
-            await flushDelay(200);
+            await flushDelay(30);
           }
 
           // Emit polished sentences
           {
             sendSSE(controller, { type: 'stage', stage: 'Polishing' });
-            await flushDelay(80);
+            await flushDelay(20);
             const { sentences: polishedSents } = splitIntoIndexedSentences(humanized);
-            await emitSentencesStaggered(controller, polishedSents, 'Polishing', 80);
-            await flushDelay(200);
+            await emitSentencesStaggered(controller, polishedSents, 'Polishing', 20);
+            await flushDelay(30);
           }
 
           // 14. Meaning check (detection disabled — coming soon)
           // Final cleanup: collapse double spaces
           humanized = humanized.replace(/ {2,}/g, ' ');
           sendSSE(controller, { type: 'stage', stage: 'Analyzing' });
-          await flushDelay(50);
+          await flushDelay(10);
           // For engines with server-side meaning checks (oxygen3), use fast sync heuristic
           const meaningCheck = (eng === 'oxygen3')
             ? isMeaningPreservedSync(text, humanized, 0.88)
@@ -712,23 +736,31 @@ export async function POST(req: Request) {
 
           // Track usage + save document
           if (userId) {
-            try {
-              const supa = createServiceClient();
-              const engineType = 'fast'; // unified — all engines deduct from one pool
-              const toneDb = ({ neutral: 'natural', academic: 'academic', professional: 'business', simple: 'direct' } as Record<string, string>)[tone ?? 'neutral'] ?? 'natural';
-              await Promise.all([
-                supa.rpc('increment_usage', { p_user_id: userId, p_words: outputWords, p_engine_type: engineType }),
-                supa.from('documents').insert({
-                  user_id: userId, title: text.slice(0, 60).replace(/\n/g, ' ').trim() + (text.length > 60 ? '…' : ''),
-                  input_text: text, output_text: humanized,
-                  input_word_count: inputWords, output_word_count: outputWords,
-                  engine_used: eng, strength: effectiveStrength, tone: toneDb,
-                  meaning_preserved: meaningCheck.isSafe, meaning_similarity: meaningCheck.similarity,
-                  input_ai_score: 0,
-                  output_ai_score: 0,
-                }),
-              ]);
-            } catch (e) { console.error('Usage tracking error:', e); }
+            void (async () => {
+              try {
+                const supa = createServiceClient();
+                const engineType = 'fast'; // unified — all engines deduct from one pool
+                const toneDb = ({ neutral: 'natural', academic: 'academic', professional: 'business', simple: 'direct' } as Record<string, string>)[tone ?? 'neutral'] ?? 'natural';
+                await withTimeout(
+                  Promise.all([
+                    supa.rpc('increment_usage', { p_user_id: userId, p_words: outputWords, p_engine_type: engineType }),
+                    supa.from('documents').insert({
+                      user_id: userId, title: text.slice(0, 60).replace(/\n/g, ' ').trim() + (text.length > 60 ? '…' : ''),
+                      input_text: text, output_text: humanized,
+                      input_word_count: inputWords, output_word_count: outputWords,
+                      engine_used: eng, strength: effectiveStrength, tone: toneDb,
+                      meaning_preserved: meaningCheck.isSafe, meaning_similarity: meaningCheck.similarity,
+                      input_ai_score: 0,
+                      output_ai_score: 0,
+                    }),
+                  ]),
+                  10_000,
+                  'usage_tracking',
+                );
+              } catch (e) {
+                console.error('Usage tracking error:', e);
+              }
+            })();
           }
 
           controller.close();

@@ -103,14 +103,39 @@ const CONTRACTIONS: Record<string, string> = {
 /* ── Protected Terms (never replace) ──────────────────────────────── */
 
 const PROTECTED = new Set([
+  // Scientific/academic terms that MUST stay
   'hypothesis', 'methodology', 'statistical', 'significance', 'correlation',
-  'empirical', 'qualitative', 'quantitative', 'longitudinal', 'meta-analysis',
+  'empirical', 'qualitative', 'quantitative', 'longitudinal',
   'photosynthesis', 'mitochondria', 'chromosome', 'genome', 'algorithm',
   'quantum', 'thermodynamic', 'electromagnetic', 'gravitational',
   'diagnosis', 'prognosis', 'pathology', 'epidemiology', 'therapeutic',
   'jurisdiction', 'plaintiff', 'defendant', 'statute', 'precedent',
   'infrastructure', 'implementation', 'specification', 'authentication',
-  'artificial', 'intelligence', 'organizations', 'decision',
+  // Core AI/tech terms (terrible dictionary synonyms)
+  'artificial', 'intelligence', 'decision', 'human',
+  'making', 'modern', 'based', 'related', 'driven', 'oriented', 'focused',
+  'learning', 'training', 'network', 'system', 'data', 'information',
+  'technology', 'digital', 'computer', 'machine', 'software', 'hardware',
+  // Domain terms that get terrible dictionary replacements
+  'healthcare', 'medical', 'clinical', 'clinician', 'diagnostic', 'diagnostics',
+  'algorithmic', 'computational', 'multidisciplinary', 'cognitive', 'biased', 'biases',
+  'criminal', 'justice', 'financial', 'forecasting',
+  'model', 'models', 'image', 'images',
+]);
+
+/* ── Replacement Blacklist (never use as synonym output) ───────────── */
+
+const REPLACEMENT_BLACKLIST = new Set([
+  // Taxonomic/offensive substitutions
+  'homo', 'hominid', 'mortal', 'soul', 'mod', 'waterway',
+  // Wrong-POS pronouns (from noun senses of adjectives)
+  'someone', 'somebody', 'anyone', 'nobody', 'nothing', 'everything',
+  'anything', 'whoever', 'whatever',
+  // Too vague verbs (lose meaning)
+  'get', 'got', 'gotten', 'do', 'did', 'done', 'put', 'set', 'let',
+  'go', 'went', 'gone', 'come', 'came', 'run', 'ran',
+  // Single syllable fillers
+  'thing', 'stuff', 'lot', 'bit', 'way',
 ]);
 
 /* ── Stopwords (skip for synonym replacement) ─────────────────────── */
@@ -130,6 +155,270 @@ const STOPWORDS = new Set([
   'which', 'what', 'who', 'whom', 'about', 'also', 'up', 'down', 'much',
 ]);
 
+/* ── Extra Academic Replacements (fills gaps in AI_WORD_REPLACEMENTS) ── */
+
+const EXTRA_REPLACEMENTS: Record<string, string[]> = {
+  // ── Adjectives ──
+  rapid: ['swift', 'fast', 'brisk', 'accelerated'],
+  significant: ['notable', 'marked', 'substantial', 'considerable'],
+  important: ['critical', 'vital', 'key', 'central'],
+  various: ['diverse', 'multiple', 'assorted', 'several'],
+  complex: ['intricate', 'involved', 'elaborate', 'multifaceted'],
+  specific: ['particular', 'certain', 'distinct', 'precise'],
+  current: ['present', 'existing', 'ongoing', 'prevailing'],
+  potential: ['possible', 'likely', 'prospective', 'latent'],
+  effective: ['efficient', 'productive', 'successful', 'capable'],
+  traditional: ['conventional', 'established', 'classical', 'customary'],
+  fundamental: ['core', 'basic', 'essential', 'primary'],
+  substantial: ['considerable', 'meaningful', 'sizable', 'large'],
+  primary: ['chief', 'main', 'principal', 'foremost'],
+  critical: ['vital', 'pivotal', 'essential', 'crucial'],
+  comprehensive: ['thorough', 'broad', 'extensive', 'sweeping'],
+  increasing: ['growing', 'rising', 'expanding', 'mounting'],
+  overall: ['general', 'broad', 'total', 'aggregate'],
+  notable: ['remarkable', 'striking', 'prominent', 'significant'],
+  remarkable: ['striking', 'exceptional', 'outstanding', 'impressive'],
+  sophisticated: ['advanced', 'refined', 'nuanced', 'elaborate'],
+  unprecedented: ['unmatched', 'unparalleled', 'extraordinary', 'novel'],
+  balanced: ['measured', 'equitable', 'proportionate', 'fair'],
+  automated: ['mechanized', 'computerized', 'streamlined', 'automatic'],
+  vast: ['immense', 'enormous', 'extensive', 'broad'],
+  sheer: ['absolute', 'pure', 'utter', 'total'],
+  available: ['accessible', 'obtainable', 'usable', 'present'],
+  early: ['initial', 'preliminary', 'prompt', 'timely'],
+  widespread: ['broad', 'extensive', 'pervasive', 'prevalent'],
+  unfair: ['unjust', 'inequitable', 'uneven', 'lopsided'],
+  ethical: ['moral', 'principled', 'responsible', 'sound'],
+  technical: ['specialized', 'applied', 'practical', 'skilled'],
+  experienced: ['seasoned', 'veteran', 'skilled', 'practiced'],
+  existing: ['current', 'present', 'prevailing', 'ongoing'],
+  central: ['key', 'main', 'pivotal', 'core'],
+  useful: ['helpful', 'valuable', 'practical', 'beneficial'],
+  relevant: ['pertinent', 'applicable', 'fitting', 'suitable'],
+  clear: ['plain', 'obvious', 'apparent', 'evident'],
+  broad: ['wide', 'expansive', 'general', 'sweeping'],
+  main: ['chief', 'principal', 'primary', 'leading'],
+  key: ['central', 'vital', 'crucial', 'essential'],
+  certain: ['particular', 'definite', 'precise', 'specified'],
+  strong: ['robust', 'powerful', 'solid', 'firm'],
+  necessary: ['needed', 'required', 'essential', 'vital'],
+  valuable: ['worthwhile', 'beneficial', 'meaningful', 'useful'],
+  scholarly: ['academic', 'learned', 'intellectual', 'rigorous'],
+  genuine: ['authentic', 'true', 'real', 'sincere'],
+  fresh: ['new', 'recent', 'original', 'novel'],
+  prominent: ['leading', 'major', 'notable', 'distinguished'],
+  evident: ['clear', 'apparent', 'plain', 'visible'],
+  definite: ['specific', 'particular', 'precise', 'concrete'],
+  structured: ['organized', 'systematic', 'orderly', 'arranged'],
+  logical: ['rational', 'coherent', 'sound', 'reasoned'],
+  informative: ['instructive', 'educational', 'enlightening', 'revealing'],
+  practical: ['applied', 'functional', 'concrete', 'usable'],
+  considerable: ['substantial', 'notable', 'meaningful', 'significant'],
+  appropriate: ['suitable', 'fitting', 'proper', 'apt'],
+  common: ['frequent', 'typical', 'usual', 'routine'],
+  entire: ['whole', 'complete', 'full', 'total'],
+  obvious: ['clear', 'apparent', 'plain', 'evident'],
+  recent: ['latest', 'new', 'current', 'fresh'],
+  major: ['chief', 'principal', 'leading', 'primary'],
+  numerous: ['many', 'several', 'multiple', 'abundant'],
+  distinct: ['separate', 'unique', 'individual', 'different'],
+  ongoing: ['continuing', 'persistent', 'sustained', 'active'],
+  academic: ['scholarly', 'educational', 'intellectual', 'learned'],
+  deeper: ['more thorough', 'richer', 'fuller', 'broader'],
+  contemporary: ['current', 'present', 'modern', 'recent'],
+  // ── Verbs (base forms — morphology handles -ed/-ing) ──
+  transform: ['reshape', 'alter', 'shift', 'revamp'],
+  demonstrate: ['show', 'reveal', 'illustrate', 'display'],
+  establish: ['create', 'build', 'found', 'institute'],
+  require: ['demand', 'need', 'necessitate', 'expect'],
+  indicate: ['suggest', 'signal', 'imply', 'denote'],
+  provide: ['offer', 'supply', 'deliver', 'furnish'],
+  achieve: ['reach', 'attain', 'accomplish', 'gain'],
+  maintain: ['keep', 'sustain', 'preserve', 'uphold'],
+  evaluate: ['assess', 'judge', 'appraise', 'review'],
+  influence: ['shape', 'affect', 'sway', 'guide'],
+  process: ['handle', 'manage', 'analyze', 'digest'],
+  identify: ['pinpoint', 'recognize', 'detect', 'spot'],
+  predict: ['forecast', 'anticipate', 'project', 'foresee'],
+  recommend: ['suggest', 'advise', 'propose', 'endorse'],
+  enhance: ['boost', 'improve', 'strengthen', 'elevate'],
+  integrate: ['combine', 'merge', 'blend', 'incorporate'],
+  advocate: ['support', 'champion', 'promote', 'endorse'],
+  ensure: ['guarantee', 'confirm', 'verify', 'safeguard'],
+  augment: ['supplement', 'expand', 'bolster', 'strengthen'],
+  replace: ['substitute', 'displace', 'supplant', 'swap'],
+  struggle: ['grapple', 'contend', 'wrestle', 'strain'],
+  handle: ['manage', 'address', 'tackle', 'oversee'],
+  guide: ['steer', 'direct', 'lead', 'channel'],
+  prompt: ['motivate', 'spur', 'encourage', 'push'],
+  raise: ['pose', 'introduce', 'spark', 'bring'],
+  serve: ['function', 'act', 'operate', 'work'],
+  remain: ['stay', 'persist', 'continue', 'endure'],
+  range: ['span', 'extend', 'stretch', 'vary'],
+  limit: ['restrict', 'constrain', 'bound', 'curb'],
+  exceed: ['surpass', 'outstrip', 'outpace', 'eclipse'],
+  match: ['rival', 'equal', 'parallel', 'mirror'],
+  emerge: ['arise', 'surface', 'appear', 'develop'],
+  adopt: ['embrace', 'implement', 'accept', 'employ'],
+  train: ['educate', 'prepare', 'instruct', 'develop'],
+  perpetuate: ['sustain', 'prolong', 'continue', 'maintain'],
+  amplify: ['intensify', 'magnify', 'heighten', 'increase'],
+  combine: ['unite', 'merge', 'blend', 'fuse'],
+  address: ['tackle', 'confront', 'resolve', 'manage'],
+  assist: ['aid', 'support', 'help', 'facilitate'],
+  help: ['aid', 'assist', 'support', 'enable'],
+  understand: ['grasp', 'comprehend', 'appreciate', 'recognize'],
+  discuss: ['examine', 'explore', 'consider', 'cover'],
+  describe: ['depict', 'portray', 'outline', 'detail'],
+  illustrate: ['show', 'demonstrate', 'highlight', 'display'],
+  highlight: ['emphasize', 'underscore', 'showcase', 'stress'],
+  present: ['introduce', 'put forward', 'outline', 'offer'],
+  examine: ['inspect', 'analyze', 'assess', 'study'],
+  suggest: ['propose', 'imply', 'hint', 'indicate'],
+  contribute: ['add', 'supply', 'lend', 'bring'],
+  determine: ['decide', 'establish', 'figure', 'resolve'],
+  develop: ['build', 'create', 'form', 'craft'],
+  consider: ['weigh', 'assess', 'evaluate', 'contemplate'],
+  engage: ['participate', 'involve', 'interact', 'partake'],
+  follow: ['adhere', 'observe', 'track', 'pursue'],
+  include: ['contain', 'encompass', 'cover', 'embrace'],
+  argue: ['contend', 'assert', 'claim', 'maintain'],
+  note: ['observe', 'mention', 'remark', 'point'],
+  focus: ['concentrate', 'center', 'zero', 'hone'],
+  allow: ['enable', 'permit', 'let', 'empower'],
+  outline: ['detail', 'sketch', 'describe', 'lay'],
+  summarize: ['condense', 'recap', 'encapsulate', 'distill'],
+  conclude: ['finish', 'close', 'wrap', 'end'],
+  stimulate: ['spark', 'encourage', 'inspire', 'promote'],
+  encourage: ['foster', 'promote', 'support', 'inspire'],
+  situate: ['place', 'position', 'locate', 'embed'],
+  compare: ['contrast', 'measure', 'weigh', 'assess'],
+  assess: ['evaluate', 'gauge', 'judge', 'appraise'],
+  inform: ['shape', 'guide', 'educate', 'enrich'],
+  recognize: ['acknowledge', 'identify', 'appreciate', 'see'],
+  publish: ['release', 'issue', 'produce', 'print'],
+  apply: ['use', 'employ', 'utilize', 'exercise'],
+  offer: ['supply', 'give', 'furnish', 'extend'],
+  select: ['choose', 'pick', 'opt', 'designate'],
+  stress: ['emphasize', 'underline', 'underscore', 'accent'],
+  align: ['match', 'correspond', 'agree', 'fit'],
+  preserve: ['protect', 'safeguard', 'uphold', 'maintain'],
+  seek: ['aim', 'strive', 'pursue', 'attempt'],
+  tackle: ['address', 'confront', 'handle', 'deal'],
+  undermine: ['weaken', 'erode', 'damage', 'compromise'],
+  foster: ['promote', 'cultivate', 'nurture', 'support'],
+  strengthen: ['fortify', 'reinforce', 'bolster', 'enhance'],
+  lean: ['rely', 'depend', 'rest', 'count'],
+  // ── Nouns ──
+  rise: ['growth', 'surge', 'expansion', 'climb'],
+  approach: ['method', 'strategy', 'technique', 'framework'],
+  impact: ['effect', 'consequence', 'outcome', 'result'],
+  challenge: ['obstacle', 'hurdle', 'difficulty', 'barrier'],
+  framework: ['structure', 'model', 'system', 'scaffold'],
+  perspective: ['viewpoint', 'angle', 'outlook', 'stance'],
+  evidence: ['proof', 'data', 'findings', 'support'],
+  outcome: ['result', 'consequence', 'product', 'effect'],
+  context: ['setting', 'backdrop', 'circumstances', 'situation'],
+  aspect: ['facet', 'dimension', 'element', 'feature'],
+  ability: ['capacity', 'capability', 'power', 'skill'],
+  accuracy: ['precision', 'exactness', 'correctness', 'fidelity'],
+  integration: ['incorporation', 'merger', 'blending', 'unification'],
+  transparency: ['openness', 'clarity', 'visibility', 'accountability'],
+  bias: ['prejudice', 'partiality', 'slant', 'skew'],
+  concern: ['worry', 'issue', 'reservation', 'apprehension'],
+  tool: ['instrument', 'mechanism', 'resource', 'device'],
+  priority: ['focus', 'goal', 'emphasis', 'concern'],
+  practice: ['application', 'method', 'convention', 'routine'],
+  pattern: ['trend', 'tendency', 'motif', 'theme'],
+  volume: ['amount', 'quantity', 'scale', 'extent'],
+  complexity: ['intricacy', 'difficulty', 'depth', 'nuance'],
+  efficiency: ['productivity', 'economy', 'output', 'effectiveness'],
+  performance: ['output', 'results', 'achievement', 'effectiveness'],
+  advantage: ['benefit', 'strength', 'edge', 'asset'],
+  speed: ['pace', 'rate', 'velocity', 'tempo'],
+  shift: ['change', 'transition', 'move', 'adjustment'],
+  balance: ['equilibrium', 'harmony', 'parity', 'stability'],
+  area: ['field', 'domain', 'sector', 'sphere'],
+  choice: ['selection', 'option', 'pick', 'preference'],
+  action: ['step', 'measure', 'move', 'initiative'],
+  lack: ['absence', 'shortage', 'deficit', 'scarcity'],
+  amount: ['volume', 'quantity', 'total', 'sum'],
+  scholar: ['academic', 'researcher', 'expert', 'specialist'],
+  practitioner: ['professional', 'specialist', 'operator', 'expert'],
+  expertise: ['skill', 'proficiency', 'competence', 'mastery'],
+  question: ['inquiry', 'issue', 'matter', 'concern'],
+  judgment: ['assessment', 'evaluation', 'appraisal', 'discernment'],
+  innovation: ['advancement', 'breakthrough', 'progress', 'invention'],
+  oversight: ['supervision', 'regulation', 'monitoring', 'governance'],
+  adoption: ['uptake', 'acceptance', 'implementation', 'embrace'],
+  inequality: ['disparity', 'imbalance', 'gap', 'divide'],
+  barrier: ['obstacle', 'impediment', 'hurdle', 'hindrance'],
+  analyst: ['examiner', 'evaluator', 'reviewer', 'assessor'],
+  capacity: ['capability', 'ability', 'competence', 'aptitude'],
+  review: ['assessment', 'evaluation', 'critique', 'appraisal'],
+  assessment: ['evaluation', 'review', 'appraisal', 'analysis'],
+  position: ['role', 'place', 'standing', 'status'],
+  discipline: ['field', 'domain', 'branch', 'specialty'],
+  feature: ['trait', 'characteristic', 'attribute', 'quality'],
+  purpose: ['aim', 'goal', 'intent', 'objective'],
+  argument: ['claim', 'thesis', 'contention', 'reasoning'],
+  strength: ['merit', 'asset', 'advantage', 'virtue'],
+  limitation: ['shortcoming', 'weakness', 'drawback', 'flaw'],
+  weakness: ['shortcoming', 'drawback', 'flaw', 'deficiency'],
+  discussion: ['debate', 'dialogue', 'conversation', 'discourse'],
+  structure: ['format', 'layout', 'arrangement', 'organization'],
+  format: ['layout', 'arrangement', 'structure', 'design'],
+  contribution: ['input', 'addition', 'role', 'offering'],
+  goal: ['aim', 'objective', 'target', 'intent'],
+  insight: ['understanding', 'awareness', 'perception', 'grasp'],
+  topic: ['subject', 'theme', 'issue', 'matter'],
+  regulation: ['rule', 'standard', 'guideline', 'policy'],
+  issue: ['matter', 'concern', 'topic', 'problem'],
+  method: ['technique', 'approach', 'procedure', 'process'],
+  characteristic: ['feature', 'trait', 'quality', 'attribute'],
+  relationship: ['connection', 'link', 'bond', 'tie'],
+  effect: ['result', 'consequence', 'outcome', 'influence'],
+  solution: ['remedy', 'answer', 'fix', 'resolution'],
+  significance: ['importance', 'weight', 'value', 'meaning'],
+  difficulty: ['challenge', 'obstacle', 'problem', 'hardship'],
+  advancement: ['progress', 'development', 'growth', 'improvement'],
+  chance: ['opportunity', 'occasion', 'opening', 'prospect'],
+  foundation: ['basis', 'groundwork', 'bedrock', 'core'],
+  application: ['use', 'exercise', 'deployment', 'practice'],
+  remedy: ['solution', 'fix', 'cure', 'answer'],
+  attention: ['focus', 'notice', 'regard', 'awareness'],
+  content: ['substance', 'material', 'body', 'subject'],
+  debate: ['discussion', 'discourse', 'dispute', 'dialogue'],
+  field: ['area', 'domain', 'sector', 'discipline'],
+  work: ['text', 'piece', 'publication', 'study'],
+  trust: ['confidence', 'faith', 'belief', 'reliance'],
+  life: ['existence', 'experience', 'reality', 'livelihood'],
+  freedom: ['liberty', 'autonomy', 'independence', 'right'],
+  body: ['group', 'organization', 'entity', 'assembly'],
+  // ── Adverbs ──
+  significantly: ['markedly', 'considerably', 'substantially', 'notably'],
+  particularly: ['especially', 'specifically', 'notably', 'chiefly'],
+  effectively: ['efficiently', 'capably', 'productively', 'successfully'],
+  increasingly: ['progressively', 'steadily', 'gradually', 'continually'],
+  primarily: ['mainly', 'chiefly', 'largely', 'mostly'],
+  directly: ['immediately', 'straight', 'squarely', 'firsthand'],
+  often: ['frequently', 'regularly', 'commonly', 'routinely'],
+  thereby: ['thus', 'consequently', 'hence', 'accordingly'],
+  remarkably: ['strikingly', 'exceptionally', 'impressively', 'notably'],
+  fundamentally: ['essentially', 'inherently', 'profoundly', 'deeply'],
+  commonly: ['typically', 'usually', 'generally', 'ordinarily'],
+  clearly: ['plainly', 'evidently', 'unmistakably', 'obviously'],
+  simply: ['merely', 'just', 'only', 'purely'],
+  quickly: ['rapidly', 'swiftly', 'promptly', 'speedily'],
+  closely: ['tightly', 'intimately', 'nearly', 'strictly'],
+  merely: ['simply', 'only', 'just', 'purely'],
+  genuinely: ['truly', 'sincerely', 'authentically', 'honestly'],
+  ultimately: ['eventually', 'finally', 'lastly', 'conclusively'],
+  inadvertently: ['accidentally', 'unintentionally', 'unknowingly', 'unwittingly'],
+  considerably: ['substantially', 'markedly', 'greatly', 'notably'],
+  consequent: ['resulting', 'following', 'ensuing', 'subsequent'],
+};
+
 /* ── Morphology Helpers ───────────────────────────────────────────── */
 
 /**
@@ -141,20 +430,51 @@ function transferMorphology(original: string, replacement: string): string {
   const orig = original.toLowerCase();
   const rep = replacement.toLowerCase();
 
+  // Guard: don't inflect nouns/adjectives that can't take verb suffixes
+  const UNINFLECTABLE = /(?:ity|ness|ment|tion|sion|ance|ence|ious|eous|ous|ism|ist|ure|ory|ary|ery|phy|ogy|ics)$/;
+  if (UNINFLECTABLE.test(rep)) return replacement;
+
+  // Known longer words that need final consonant doubling 
+  const DOUBLE_FINAL = new Set(['outstrip', 'admit', 'commit', 'submit', 'permit', 'omit', 'emit', 'refer', 'occur', 'deter', 'prefer', 'regret', 'begin', 'control', 'equip', 'transfer', 'spur', 'spot']);
+
+  // CVC doubling check: short words ending consonant-vowel-consonant
+  const needsDoubling = (w: string) => {
+    const lower = w.toLowerCase();
+    if (DOUBLE_FINAL.has(lower)) return true;
+    if (w.length < 3 || w.length > 4) return false;
+    const vowels = 'aeiou';
+    const last = w[w.length - 1];
+    const secondLast = w[w.length - 2];
+    const thirdLast = w[w.length - 3];
+    return !vowels.includes(last) && vowels.includes(secondLast) && !vowels.includes(thirdLast)
+      && !['w', 'x', 'y'].includes(last);
+  };
+
   // Past tense: -ed
   if (orig.endsWith('ed') && !rep.endsWith('ed') && orig.length > 4) {
     if (rep.endsWith('e')) return replacement + 'd';
-    // Avoid doubling consonant for common patterns — keep it simple
+    if (needsDoubling(rep)) return replacement + rep[rep.length - 1] + 'ed';
     return replacement + 'ed';
   }
 
   // Gerund / present participle: -ing
   if (orig.endsWith('ing') && !rep.endsWith('ing') && orig.length > 5) {
     if (rep.endsWith('e')) return replacement.slice(0, -1) + 'ing';
+    if (needsDoubling(rep)) return replacement + rep[rep.length - 1] + 'ing';
     return replacement + 'ing';
   }
 
   return replacement;
+}
+
+/** Add grammatically correct plural suffix */
+function addPlural(word: string): string {
+  const w = word.toLowerCase();
+  if (w.endsWith('y') && !'aeiou'.includes(w[w.length - 2] || '')) {
+    return word.slice(0, -1) + 'ies';
+  }
+  if (/(?:ch|sh|s|x|z)$/.test(w)) return word + 'es';
+  return word + 's';
 }
 
 /**
@@ -255,7 +575,8 @@ function processSentence(
   const resultTokens: string[] = [];
   let replaceCount = 0;
   const wordCount = text.split(/\s+/).length;
-  const maxReplacements = Math.ceil(wordCount * (strength === 'strong' ? 0.50 : 0.40));
+  const maxReplacements = Math.ceil(wordCount * (strength === 'strong' ? 0.60 : 0.50));
+  const alreadyReplaced = new Set<string>(); // Track Step 2 output words
 
   for (let i = 0; i < tokens.length; i++) {
     const token = tokens[i];
@@ -269,14 +590,16 @@ function processSentence(
       continue;
     }
 
-    // Check AI_WORD_REPLACEMENTS first (high confidence replacements)
+    // Check EXTRA_REPLACEMENTS (curated, high quality) FIRST, then AI_WORD_REPLACEMENTS
     // Try exact match, then stem match (e.g., "transformed" → stem "transform")
-    const aiReps = AI_WORD_REPLACEMENTS[lower] || AI_WORD_REPLACEMENTS[naiveStem(lower)];
-    const usingStem = !AI_WORD_REPLACEMENTS[lower] && !!AI_WORD_REPLACEMENTS[naiveStem(lower)];
+    const stemmed = naiveStem(lower);
+    const aiReps = EXTRA_REPLACEMENTS[lower] || AI_WORD_REPLACEMENTS[lower]
+      || EXTRA_REPLACEMENTS[stemmed] || AI_WORD_REPLACEMENTS[stemmed];
+    const usingStem = !(EXTRA_REPLACEMENTS[lower] || AI_WORD_REPLACEMENTS[lower])
+      && !!(EXTRA_REPLACEMENTS[stemmed] || AI_WORD_REPLACEMENTS[stemmed]);
     if (aiReps && aiReps.length > 0) {
-      // Pick a single-word replacement if available, else first
-      const singleWord = aiReps.filter(r => !r.includes(' ') && r.length >= 2);
-      const pool = singleWord.length > 0 ? singleWord : aiReps.filter(r => r.length >= 2);
+      // ONLY use pure alphabetic single-word replacements — skip if none exist
+      const pool = aiReps.filter(r => /^[a-zA-Z]+$/.test(r) && r.length >= 2);
       if (pool.length > 0) {
         let rep = pool[Math.floor(Math.random() * Math.min(3, pool.length))];
         // Preserve capitalization
@@ -287,11 +610,12 @@ function processSentence(
         if (usingStem) {
           rep = transferMorphology(token, rep);
         }
-        // Preserve plural
-        if (/s$/.test(token) && !/s$/.test(rep) && token.length > 4) {
-          rep = rep + 's';
+        // Preserve plural — only when we stemmed (otherwise "process" → "analyzes" bug)
+        if (usingStem && /s$/.test(token) && !/s$/.test(rep) && token.length > 4) {
+          rep = addPlural(rep);
         }
         resultTokens.push(rep);
+        alreadyReplaced.add(rep.toLowerCase());
         replaceCount++;
         continue;
       }
@@ -301,15 +625,16 @@ function processSentence(
   }
   text = resultTokens.join('');
 
-  // ─── Step 3: Contextual synonym swap for remaining words ─────
-  // Target ~20-30% of content words to reach the 40% change threshold
+  // ─── Step 3: Additional synonym swap — curated first, then extended dict ──
+  // Chain: try curated EXTRA_REPLACEMENTS / AI_WORD_REPLACEMENTS,
+  //        then fall back to extended dictionary with aggressive POS filtering.
   const currentChange = wordChangeRatio(original, text);
-  if (currentChange < 0.40) {
+  if (currentChange < 0.45) {
     const tokens2 = text.split(/(\b)/);
     const result2: string[] = [];
     let extraSwaps = 0;
-    const neededChange = 0.40 - currentChange;
-    const maxExtra = Math.ceil(wordCount * neededChange) + 2;
+    const neededChange = 0.45 - currentChange;
+    const maxExtra = Math.ceil(wordCount * neededChange) + 4;
 
     for (let i = 0; i < tokens2.length; i++) {
       const tk = tokens2[i];
@@ -318,45 +643,114 @@ function processSentence(
         continue;
       }
       const lower = tk.toLowerCase();
-      if (PROTECTED.has(lower) || STOPWORDS.has(lower)) {
+      if (PROTECTED.has(lower) || STOPWORDS.has(lower) || alreadyReplaced.has(lower)) {
         result2.push(tk);
         continue;
       }
 
-      // Probabilistic: ~40% chance per eligible word
-      if (Math.random() < 0.40) {
-        let syn = getBestReplacement(lower, text);
-        // If no result for inflected form, try stem
-        if (!syn || syn.toLowerCase() === lower) {
-          const stemmed = naiveStem(lower);
-          if (stemmed !== lower) {
-            syn = getBestReplacement(stemmed, text);
-          }
-        }
-        if (syn && syn.toLowerCase() !== lower && /^[a-zA-Z]+$/.test(syn) && syn.length >= 2) {
-          let rep = syn;
-          // Transfer morphology (e.g., "transformed" → replacement gets -ed)
-          rep = transferMorphology(tk, rep);
+      // Try curated dictionaries first (100% for each eligible word)
+      const stemmed = naiveStem(lower);
+      const reps = EXTRA_REPLACEMENTS[lower] || AI_WORD_REPLACEMENTS[lower]
+        || EXTRA_REPLACEMENTS[stemmed] || AI_WORD_REPLACEMENTS[stemmed];
+      const usedStem = !(EXTRA_REPLACEMENTS[lower] || AI_WORD_REPLACEMENTS[lower])
+        && !!(EXTRA_REPLACEMENTS[stemmed] || AI_WORD_REPLACEMENTS[stemmed]);
+
+      let replaced = false;
+      if (reps && reps.length > 0) {
+        const pool = reps.filter(r => /^[a-zA-Z]+$/.test(r) && r.length >= 2
+          && !REPLACEMENT_BLACKLIST.has(r.toLowerCase()) && r.toLowerCase() !== lower);
+        if (pool.length > 0) {
+          let rep = pool[Math.floor(Math.random() * Math.min(3, pool.length))];
+          if (usedStem) rep = transferMorphology(tk, rep);
           if (tk[0] === tk[0].toUpperCase()) {
             rep = rep.charAt(0).toUpperCase() + rep.slice(1);
           }
-          if (/s$/.test(tk) && !/s$/.test(rep) && tk.length > 4) {
-            rep = rep + 's';
+          const tkStem = naiveStem(tk.toLowerCase());
+          if (tkStem !== tk.toLowerCase() && /s$/.test(tk) && !/s$/.test(rep) && tk.length > 4) {
+            rep = addPlural(rep);
           }
           result2.push(rep);
           extraSwaps++;
-          continue;
+          replaced = true;
         }
       }
-      result2.push(tk);
+
+      // Fallback: extended dictionary with POS-suffix consistency
+      if (!replaced && Math.random() < 0.60) {
+        let syn = getBestReplacement(lower, text);
+        if (!syn || syn.toLowerCase() === lower) {
+          if (stemmed !== lower) syn = getBestReplacement(stemmed, text);
+        }
+        if (syn && syn.toLowerCase() !== lower && /^[a-zA-Z]+$/.test(syn) && syn.length >= 3
+            && !REPLACEMENT_BLACKLIST.has(syn.toLowerCase())
+            && syn.length <= lower.length * 2 && syn.length >= Math.max(3, lower.length * 0.4)) {
+          // POS-suffix consistency: if original ends -tion/-ment/-ness, synonym must too
+          const origSuffix = lower.match(/(tion|sion|ment|ness|ity|ance|ence|ous|ive|ful|less|able|ible|ing|ated|ized|ally|ily)$/);
+          const synSuffix = syn.toLowerCase().match(/(tion|sion|ment|ness|ity|ance|ence|ous|ive|ful|less|able|ible|ing|ated|ized|ally|ily)$/);
+          // Either both have similar suffixes, or neither has an obvious suffix
+          const suffixOk = (!origSuffix && !synSuffix) // both bare
+            || (origSuffix && synSuffix) // both have suffixes (any combo ok)
+            || (!origSuffix && syn.length <= lower.length * 1.5); // bare → bare-ish
+          if (suffixOk) {
+            let rep = syn;
+            rep = transferMorphology(tk, rep);
+            if (tk[0] === tk[0].toUpperCase()) {
+              rep = rep.charAt(0).toUpperCase() + rep.slice(1);
+            }
+            const tkStem = naiveStem(tk.toLowerCase());
+            if (tkStem !== tk.toLowerCase() && /s$/.test(tk) && !/s$/.test(rep) && tk.length > 4) {
+              rep = addPlural(rep);
+            }
+            result2.push(rep);
+            extraSwaps++;
+            replaced = true;
+          }
+        }
+      }
+
+      if (!replaced) result2.push(tk);
     }
     text = result2.join('');
+  }
+
+  // ─── Step 3b: Clause reordering ──────────────────────────────
+  // Swap independent clauses around ", and ", ", but ", ", which " etc.
+  // This adds structural change without changing any words.
+  if (Math.random() < 0.30 && text.length > 40) {
+    // Try swapping clauses around ", and " or ", but "
+    const clauseSwapRe = /^(.{15,}?),\s+(and|but|yet)\s+(.{15,})$/i;
+    const clauseMatch = text.match(clauseSwapRe);
+    if (clauseMatch) {
+      const [, first, conj, second] = clauseMatch;
+      // Only swap if both parts look like independent clauses (have a verb)
+      const hasVerb = (s: string) => /\b(is|are|was|were|has|have|had|does|did|can|could|will|would|may|might|shall|should)\b/i.test(s);
+      if (hasVerb(first) && hasVerb(second)) {
+        const secondCap = second.charAt(0).toUpperCase() + second.slice(1);
+        const firstLower = first.charAt(0).toLowerCase() + first.slice(1);
+        text = secondCap + ', ' + conj.toLowerCase() + ' ' + firstLower;
+        // Fix ending punctuation
+        if (!/[.!?]$/.test(text)) text += '.';
+      }
+    }
+  }
+
+  // ─── Step 3c: Passive ↔ Active voice toggle ─────────────────
+  // ~20% chance: convert "X is/was Yed by Z" → "Z Yed X" or vice versa
+  if (Math.random() < 0.20 && text.length > 30) {
+    // Passive → Active: "X is/was <verb>ed by Y" → "Y <verb>s X"
+    const passiveRe = /\b(\w[\w\s]{2,30}?)\s+(is|are|was|were)\s+(\w+ed)\s+by\s+(\w[\w\s]{2,30}?)([.,;])/i;
+    const pm = text.match(passiveRe);
+    if (pm) {
+      const [full, subject, , verb, agent, punct] = pm;
+      const activeVerb = verb.replace(/ed$/, 's');
+      text = text.replace(full, agent.trim() + ' ' + activeVerb + ' ' + subject.trim() + punct);
+    }
   }
 
   // ─── Step 4: Probabilistic sentence starter injection ────────
   // ~25% chance, only if sentence doesn't already start with a varied opener
   const starterRoll = Math.random();
-  const alreadyHasStarter = /^(Notably|Historically|Traditionally|In practice|In broad|From a|At its|On balance|By extension|In reality|Against|Under these)/i.test(text);
+  const alreadyHasStarter = /^(Notably|Historically|Traditionally|In practice|In broad|From a|At its|On balance|By extension|In reality|Against|Under these|For instance|For example|To illustrate|In particular|More specifically)/i.test(text);
   if (starterRoll < 0.25 && !alreadyHasStarter && sentenceIndex > 0 && text.length > 30) {
     const available = STARTERS_ACADEMIC.filter(s => !usedStarters.has(s));
     if (available.length > 0) {
@@ -459,11 +853,36 @@ export function stealthHumanize(
     const outputSentences: string[] = [];
 
     for (const sent of sentences) {
-      const processed = processSentence(
+      const originalSent = sent;
+
+      // First pass uses real sentenceIndex (enables starter injection on non-first sentences)
+      let current = processSentence(
         sent, hasFirstPerson, globalSentenceIdx, totalSentences,
         usedStarters, strength,
       );
-      outputSentences.push(processed);
+      let best = current;
+      let bestChange = wordChangeRatio(originalSent, current);
+
+      // Iterative refinement: feed each output as input, up to 10 total passes.
+      // Start checking for ≥40% change vs original after the 5th pass.
+      // Subsequent passes use sentenceIndex=0 to prevent duplicate starter injection.
+      let iter = 1;
+        while (iter <= 35) {
+          const iterStrength = iter > 15 ? 'strong' : strength;
+          const next = processSentence(
+            current, hasFirstPerson, 0, totalSentences, usedStarters, iterStrength as any
+          );
+          const nextChange = wordChangeRatio(originalSent, next);
+          if (nextChange > bestChange) {
+            best = next;
+            bestChange = nextChange;
+          }
+          current = next;
+          if (iter >= 5 && bestChange >= 0.40) break;
+          iter++;
+        }
+
+      outputSentences.push(best);
       globalSentenceIdx++;
     }
 
