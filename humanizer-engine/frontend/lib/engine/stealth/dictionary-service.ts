@@ -454,6 +454,65 @@ export function getBestReplacement(word: string, context: string): string | null
   const synonyms = getSynonyms(word);
   if (synonyms.length === 0) return null;
 
+  // Extended blacklist for contextually wrong WordNet senses
+  const CONTEXT_BLACKLIST = new Set([
+    'breeding', 'rearing', 'upbringing', 'infirmary', 'infirmaries',
+    'asylum', 'asylums', 'clinic', 'clinics', 'dwelling', 'hut',
+    'shanty', 'hovel', 'pedagogue', 'pedagogues', 'schoolmaster',
+    'picture', 'painting', 'scenery', 'vista', 'panorama',
+    'trim', 'prune', 'shave', 'clip', 'chop', 'snip', 'lop',
+    'handle', 'handles', 'knob', 'grip', 'lever', 'crank',
+    'budge', 'nudge', 'shove', 'haul', 'tow', 'drag',
+    'breed', 'mate', 'spawn', 'hatch', 'sow', 'reap',
+    'wield', 'brandish', 'clasp', 'clutch',
+    'folk', 'kin', 'tribe', 'clan', 'mob', 'gang', 'bunch', 'pack',
+    'lad', 'lass', 'chap', 'bloke', 'dude', 'guy', 'gal',
+    'wee', 'tiny', 'itty', 'puny', 'dinky', 'teeny',
+    'nifty', 'groovy', 'swell', 'dandy', 'peachy',
+    'slay', 'smite', 'sever', 'cleave', 'hack', 'slash',
+    'homo', 'hominid', 'mortal', 'soul', 'mod', 'waterway',
+    'indoctrinate', 'brainwash', 'proselytize', 'sufferer', 'quieten',
+    'hush', 'muffle', 'stifle', 'squelch', 'quash', 'quell',
+    'lie', 'fib', 'falsehood', 'untruth', 'deceive',
+    'construction', 'constructions', 'edifice', 'scaffold', 'scaffolding',
+    'movement', 'movements', 'motion', 'locomotion', 'gesture',
+    'environs', 'surroundings', 'locale', 'premises', 'precinct',
+    'motif', 'motifs', 'ornament', 'embellishment', 'adornment',
+    'persons', 'beings', 'creatures', 'mortals', 'souls',
+    'immense', 'colossal', 'gargantuan', 'mammoth', 'titanic',
+    'formula', 'formulas', 'recipe', 'recipes', 'concoction',
+    'pastime', 'hobby', 'recreation',
+    'anxiety', 'angst', 'distress', 'anguish',
+    'specify', 'specified', 'specifyed', 'designate',
+    // Catastrophic wrong-sense outputs found in testing
+    'yangtze', 'yangtzes', 'botany', 'botanical', 'flora',
+    'leash', 'quartet', 'trio', 'duet', 'solo', 'quintet',
+    'capital', 'capitol', 'seasoned', 'molded', 'moulded',
+    'happening', 'happenings', 'occurrence', 'occurrences',
+    'argument', 'quarrel', 'feud', 'spat', 'brawl',
+    'orient', 'oriental', 'occident', 'occidental',
+    'stream', 'streams', 'creek', 'brook', 'rivulet', 'tributary',
+    'rendering', 'renderings', 'rendition', 'portrayal', 'depiction',
+    'outline', 'contour', 'silhouette', 'profile',
+    'abundances', 'abundance', 'bounty', 'plethora', 'cornucopia',
+    'meagreness', 'meagerness', 'scarcity', 'dearth', 'paucity',
+    'entity', 'entities', 'organism', 'specimen',
+    'poorness', 'richness', 'affluence',
+    'renovation', 'refurbishment',
+    'communal', 'communals',
+    'aid', 'aided', 'aiding',
+    'possible', 'probable', 'feasible', // wrong when replacing nouns
+    'likely', 'prospective',
+    'place', 'spot',
+    // Extended dict wrong-sense outputs (found in paragraph testing)
+    'severeness', 'severity', 'entrench', 'entrenched', 'entrenchment',
+    'veteran', 'veterans', 'measured', 'unmeasured',
+    'supplied', 'lent', 'brought', 'fortune', 'fortunes',
+    'institution', 'institutions', 'fields',
+    'variances', 'variance', 'ocean', 'oceans',
+    'consignment', 'consignments', 'stated', 'pecuniary',
+  ]);
+
   // Quality filtering: reject garbled or inappropriate synonyms
   const filtered = synonyms.filter(syn => {
     // Must be at least 2 characters
@@ -461,14 +520,16 @@ export function getBestReplacement(word: string, context: string): string | null
     // Must be purely alphabetic (no apostrophes, numbers, special chars)
     // Allow hyphens inside words only
     if (!/^[a-zA-Z]+(?:-[a-zA-Z]+)*$/.test(syn)) return false;
-    // Reject if too different in length (more than 2.5x longer/shorter)
-    if (syn.length > word.length * 2.5 || syn.length < Math.max(2, word.length / 3)) return false;
+    // Reject if too different in length (more than 2x longer/shorter)
+    if (syn.length > word.length * 2 || syn.length < Math.max(2, word.length / 2.5)) return false;
     // Reject common garble patterns (repeated chars)
     if (/(.)\1{2,}/.test(syn)) return false;
     // Reject the input word itself
     if (syn.toLowerCase() === word.toLowerCase()) return false;
     // Reject single char words
     if (syn.trim().length < 2) return false;
+    // Reject context blacklist
+    if (CONTEXT_BLACKLIST.has(syn.toLowerCase())) return false;
     return true;
   });
 

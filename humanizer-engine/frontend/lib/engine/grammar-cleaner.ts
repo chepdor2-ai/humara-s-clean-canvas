@@ -212,9 +212,9 @@ const STRUCTURAL_FIXES: [RegExp, string][] = [
   [/\s{3,}/g, ' '],
   // Space before comma/period
   [/\s+([,.])/g, '$1'],
-  // Missing space after comma/period
+  // Missing space after comma/period (but NOT inside abbreviations like D.C., U.S.)
   [/([,])(\w)/g, '$1 $2'],
-  [/(\.)([A-Z])/g, '$1 $2'],
+  [/\.([A-Z][a-z]{2,})/g, '. $1'],
 ];
 
 // ── Tense consistency within a sentence ─────────────────────────────
@@ -238,8 +238,12 @@ function fixTenseInconsistency(text: string): string {
       if (w.endsWith('ed') && w.length > 3) pastCount++;
       // Present tense 3sg ending in -s (but not nouns — heuristic: preceded by a/the/this → noun)
       if (w.endsWith('es') && w.length > 4 && !['these', 'those'].includes(w)) {
-        const prev = i > 0 ? words[i - 1].toLowerCase().replace(/[,;:]/g, '') : '';
-        if (!['the', 'a', 'an', 'this', 'that', 'its', 'their', 'our', 'his', 'her', 'my', 'your'].includes(prev)) {
+        // Check preceding 2 words for determiners/prepositions (adj+noun pattern)
+        const determs = new Set(['the', 'a', 'an', 'this', 'that', 'its', 'their', 'our', 'his', 'her', 'my', 'your',
+          'of', 'by', 'in', 'with', 'from', 'about', 'for', 'to', 'on', 'at', 'into', 'through']);
+        const prev1 = i > 0 ? words[i - 1].toLowerCase().replace(/[,;:]/g, '') : '';
+        const prev2 = i > 1 ? words[i - 2].toLowerCase().replace(/[,;:]/g, '') : '';
+        if (!determs.has(prev1) && !determs.has(prev2)) {
           presentCount++;
         }
       }
@@ -250,16 +254,36 @@ function fixTenseInconsistency(text: string): string {
     // This is conservative to avoid false positives
     if (pastCount >= 3 && presentCount === 1) {
       // Find the lone present-tense verb and convert to past
+      const NOUN_ES = new Set(['these', 'those', 'names', 'times', 'types', 'cases', 'uses', 'places',
+        'changes', 'stages', 'ranges', 'causes', 'processes', 'resources',
+        'practices', 'services', 'sources', 'forces', 'courses',
+        // Academic nouns ending in -es that must NOT be converted to -ed
+        'measures', 'degrees', 'extents', 'scales', 'values', 'features',
+        'structures', 'textures', 'procedures', 'figures', 'lines', 'rules',
+        'phrases', 'sentences', 'languages', 'instances', 'devices', 'prices',
+        'wages', 'images', 'pages', 'ages', 'edges', 'bridges', 'judges',
+        'principles', 'articles', 'vehicles', 'tissues', 'issues', 'volumes',
+        'surfaces', 'distances', 'sequences', 'audiences', 'influences',
+        'differences', 'consequences', 'preferences', 'references', 'expenses',
+        'responses', 'purposes', 'databases', 'interfaces', 'landscapes',
+        'challenges', 'advantages', 'percentages', 'averages', 'packages',
+        'messages', 'passages', 'senses', 'phases', 'bases', 'analyses',
+        'hypotheses', 'crises', 'theses', 'diagnoses', 'doses', 'increases',
+        'decreases', 'releases', 'purchases', 'losses', 'successes',
+        'approaches', 'techniques', 'policies', 'strategies',
+        'exchanges', 'indices', 'matrices', 'complexes', 'schedules',
+        'territories', 'categories', 'technologies', 'facilities',
+        'zones', 'areas', 'spaces', 'notes', 'modes', 'codes', 'roles',
+        'rates', 'states', 'dates', 'sites', 'routes', 'files',
+      ]);
       return sent.replace(/\b(\w+)(es)\b/g, (m, stem) => {
-        if (['these', 'those', 'names', 'times', 'types', 'cases', 'uses', 'places',
-          'changes', 'stages', 'ranges', 'causes', 'processes', 'resources',
-          'practices', 'services', 'sources', 'forces', 'courses'].includes(m.toLowerCase())) return m;
+        if (NOUN_ES.has(m.toLowerCase())) return m;
         return stem + 'ed';
       });
     }
 
     return sent;
-  }).join(' ');
+  }).join('');
 }
 
 // ── Main grammar cleaning function ──────────────────────────────────
@@ -296,7 +320,11 @@ export function postCleanGrammar(text: string): string {
   result = fixTenseInconsistency(result);
 
   // 6. Fix sentence-initial lowercase (safety)
-  result = result.replace(/(^|[.!?]\s+)([a-z])/g, (_m, pre, ch) => pre + ch.toUpperCase());
+  // Avoid capitalizing after abbreviation periods (X. where X is uppercase)
+  result = result.replace(/([.!?])\s+([a-z])/g, (m, punct, _ch, offset) => {
+    if (punct === '.' && offset > 0 && /[A-Z]/.test(result[offset - 1])) return m;
+    return m.replace(/([a-z])$/, c => c.toUpperCase());
+  });
 
   // 7. Ensure sentences end with punctuation
   result = result.replace(/([a-zA-Z])(\s*\n)/g, (m) => {

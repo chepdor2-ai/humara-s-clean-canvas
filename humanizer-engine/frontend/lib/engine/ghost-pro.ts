@@ -119,12 +119,12 @@ async function groqCall(system: string, user: string, temperature: number, maxTo
       }
     }
   }
-  // All Groq models failed — fall back to OpenAI
-  console.warn("  [Groq] All models failed, falling back to OpenAI GPT-4o-mini");
-  return llmCall(system, user, temperature, maxTokens);
+  // All Groq models failed
+  throw new Error("All Groq models failed (401 Invalid API Key or other error)");
 }
 
 async function llmCall(system: string, user: string, temperature: number, maxTokens?: number, modelOverride?: string): Promise<string> {
+  // Try OpenAI first
   try {
     const client = getClient();
     const model = modelOverride ?? LLM_MODEL;
@@ -140,8 +140,15 @@ async function llmCall(system: string, user: string, temperature: number, maxTok
     return r.choices[0]?.message?.content?.trim() ?? "";
   } catch (err: any) {
     console.error("  [GhostPro] OpenAI API Error:", err.message);
-    console.warn("  [GhostPro] System fallback to Groq due to OpenAI failure...");
-    return groqCall(system, user, temperature, maxTokens);
+  }
+
+  // OpenAI failed — try Groq as fallback
+  console.warn("  [GhostPro] System fallback to Groq due to OpenAI failure...");
+  try {
+    return await groqCall(system, user, temperature, maxTokens);
+  } catch (groqErr: any) {
+    console.error("  [GhostPro] Groq fallback also failed:", groqErr.message);
+    throw new Error("Both OpenAI and Groq API calls failed. Check your API keys.");
   }
 }
 
@@ -2320,6 +2327,178 @@ CRITICAL RULES:
 
     result = groqResults.join("\n\n");
     console.log(`  [GhostPro]   Pass 1B done: ${result.split(/\s+/).length} words (Groq/Llama, dual-LLM rewrite complete)`);
+
+    // ═══════════════════════════════════════════
+    // PASS 1C: 5x ITERATIVE RE-HUMANIZATION LOOP
+    // Each iteration feeds the previous output back through Groq for aggressive rewriting.
+    // The pass1A output (GPT-4o-mini) is the baseline. After each iteration, we measure
+    // per-sentence word change % vs. the baseline. We run exactly 5 iterations, but can
+    // stop early if ALL sentences have ≥50% word change from the baseline.
+    // ═══════════════════════════════════════════
+
+    const REHUMANIZE_ITERATIONS = 5;
+    const CHANGE_THRESHOLD = 0.50; // 50% word change required
+
+    // Capture the Pass 1A output as the baseline to measure change against
+    const pass1ABaseline = rewrittenParagraphs.slice(); // per-paragraph baseline from GPT
+
+    const rehumanizeSystem = `You are a Wikipedia editor performing a DEEP REWRITE of a paragraph. You will receive a numbered list of sentences. You MUST rewrite EVERY sentence using completely different vocabulary, sentence structure, and phrasing. The output must sound like an entirely different person wrote it.
+
+CRITICAL RULES:
+1. Output EXACTLY N lines for N input sentences — one sentence per line, numbered (1. 2. 3. etc.)
+2. REWRITE EVERY sentence — change at least 60-70% of content words, completely restructure clauses 
+3. Use DIFFERENT sentence openings than the input — if the input starts with "The", start with something else
+4. VARY sentence structures: mix active/passive voice, fronted clauses, relative clauses, simple declaratives
+5. Each rewritten sentence SHOULD stay within ±25% of the original word count shown in parentheses
+6. Preserve ALL citations (Author Year), dates, proper nouns, and placeholder tokens [[PROT_0]] [[TRM_0]] exactly
+7. BANNED words: utilize, leverage, delve, tapestry, cornerstone, multifaceted, holistic, synergy, paradigm, trajectory, discourse, comprehensive, furthermore, moreover, additionally, consequently, significantly
+8. No contractions. No first person. Third person only. Encyclopedic NPOV tone.
+9. Each sentence must be self-contained and grammatically complete
+10. Do NOT add any commentary, labels, or explanations — only the numbered sentences
+11. IMPORTANT: The sentences you receive may already be rewritten versions. Your job is to rewrite them AGAIN so they change even more from the original source material.`;
+
+    for (let iterNum = 1; iterNum <= REHUMANIZE_ITERATIONS; iterNum++) {
+      console.log(`  [GhostPro]   Pass 1C iteration ${iterNum}/${REHUMANIZE_ITERATIONS}: Re-humanizing...`);
+      
+      const iterParagraphs = result.split(/\n\s*\n/).filter(p => p.trim());
+      const iterResults: string[] = [];
+
+      for (let pi = 0; pi < iterParagraphs.length; pi++) {
+        const iterPara = iterParagraphs[pi].trim();
+        if (isTitleOrHeading(iterPara)) {
+          iterResults.push(iterPara);
+          continue;
+        }
+
+        const sentences = robustSentenceSplit(iterPara);
+        if (sentences.length === 0) {
+          iterResults.push(iterPara);
+          continue;
+        }
+
+        // Check which sentences from this paragraph already meet the 50% threshold
+        const baselinePara = (pass1ABaseline[pi] ?? '').trim();
+        const baselineSentences = robustSentenceSplit(baselinePara);
+
+        // Build sentence list — mark sentences that already have ≥50% change as [KEEP]
+        const sentenceLines: string[] = [];
+        const sentenceActions: ('keep' | 'rewrite')[] = [];
+        let allMeetThreshold = true;
+
+        for (let si = 0; si < sentences.length; si++) {
+          const sent = sentences[si].trim();
+          const words = sent.split(/\s+/).length;
+          
+          // Measure change against baseline (Pass 1A output)
+          const baselineSent = si < baselineSentences.length ? baselineSentences[si] : '';
+          const changePercent = baselineSent ? getWordChangePercent(baselineSent, sent) : 1.0;
+
+          if (changePercent >= CHANGE_THRESHOLD) {
+            sentenceActions.push('keep');
+            sentenceLines.push(`${si + 1}. [KEEP] (${words} words): ${placeholdersToLLMFormat(sent)}`);
+          } else {
+            allMeetThreshold = false;
+            sentenceActions.push('rewrite');
+            sentenceLines.push(`${si + 1}. [REWRITE] (${words} words): ${placeholdersToLLMFormat(sent)}`);
+          }
+        }
+
+        // If all sentences in this paragraph already meet threshold, skip it
+        if (allMeetThreshold) {
+          console.log(`  [ReHumanize] Para ${pi}: All sentences ≥${CHANGE_THRESHOLD * 100}% changed, skipping`);
+          iterResults.push(iterPara);
+          continue;
+        }
+
+        const rewriteCount = sentenceActions.filter(a => a === 'rewrite').length;
+        console.log(`  [ReHumanize] Para ${pi}: ${rewriteCount}/${sentences.length} sentences need more rewriting (iter ${iterNum})`);
+
+        const paraWords = iterPara.split(/\s+/).length;
+        const paraTemp = Math.max(0.75, Math.min(1.1, options.temperature + 0.05 + (iterNum * 0.02)));
+        const maxTokens = Math.max(512, Math.ceil(paraWords * 2.5));
+
+        const groqUserPrompt = `Rewrite this paragraph's ${sentences.length} sentences:\n\n${sentenceLines.join('\n')}`;
+
+        try {
+          const rawOutput = await groqCall(rehumanizeSystem, groqUserPrompt, paraTemp, maxTokens) ?? '';
+
+          const outputLines = rawOutput.split('\n')
+            .map(l => l.trim())
+            .filter(l => /^\d+[\.\)]\s/.test(l))
+            .map(l => l.replace(/^\d+[\.\)]\s*/, '').trim());
+
+          if (outputLines.length < sentences.length - 1) {
+            console.warn(`  [ReHumanize] Para ${pi}: expected ${sentences.length} lines, got ${outputLines.length} — keeping current`);
+            iterResults.push(iterPara);
+            continue;
+          }
+
+          const mergedSentences: string[] = [];
+          for (let si = 0; si < sentences.length; si++) {
+            if (sentenceActions[si] === 'keep') {
+              mergedSentences.push(sentences[si].trim());
+            } else if (si < outputLines.length) {
+              let rewritten = llmFormatToPlaceholders(outputLines[si]);
+              rewritten = rewritten.replace(/^\[(?:REWRITE|KEEP)\]\s*/i, '');
+              rewritten = rewritten.replace(/^\(\d+ words\):?\s*/i, '');
+              rewritten = rewritten.replace(/^(Here is|Rewritten|Output|Result):?\s*/i, '');
+              rewritten = enforceSingleSentence(rewritten);
+
+              // Validate word count
+              const origWords = sentences[si].split(/\s+/).length;
+              const newWords = rewritten.split(/\s+/).length;
+              if (newWords < origWords * 0.5 || newWords > origWords * 1.8 || rewritten.length < 10) {
+                mergedSentences.push(sentences[si].trim());
+              } else {
+                mergedSentences.push(rewritten);
+              }
+            } else {
+              mergedSentences.push(sentences[si].trim());
+            }
+          }
+
+          iterResults.push(mergedSentences.join(" "));
+        } catch (err) {
+          console.warn(`  [ReHumanize] Para ${pi} error:`, err);
+          iterResults.push(iterPara);
+        }
+      }
+
+      result = iterResults.join("\n\n");
+
+      // Check overall change stats
+      const finalParas = result.split(/\n\s*\n/).filter(p => p.trim());
+      let totalSents = 0;
+      let sentsMeetingThreshold = 0;
+      
+      for (let pi = 0; pi < finalParas.length; pi++) {
+        const fp = finalParas[pi].trim();
+        if (isTitleOrHeading(fp)) continue;
+        
+        const fSents = robustSentenceSplit(fp);
+        const bPara = (pass1ABaseline[pi] ?? '').trim();
+        const bSents = robustSentenceSplit(bPara);
+        
+        for (let si = 0; si < fSents.length; si++) {
+          totalSents++;
+          const bSent = si < bSents.length ? bSents[si] : '';
+          if (bSent && getWordChangePercent(bSent, fSents[si]) >= CHANGE_THRESHOLD) {
+            sentsMeetingThreshold++;
+          }
+        }
+      }
+
+      const pctMeeting = totalSents > 0 ? (sentsMeetingThreshold / totalSents * 100).toFixed(1) : '0';
+      console.log(`  [GhostPro]   Pass 1C iteration ${iterNum} done: ${sentsMeetingThreshold}/${totalSents} sentences (${pctMeeting}%) meet ≥${CHANGE_THRESHOLD * 100}% change threshold`);
+
+      // Early exit if all sentences meet the threshold
+      if (sentsMeetingThreshold >= totalSents) {
+        console.log(`  [GhostPro]   Pass 1C: All sentences meet threshold after ${iterNum} iterations — stopping early`);
+        break;
+      }
+    }
+
+    console.log(`  [GhostPro]   Pass 1C complete: ${result.split(/\s+/).length} words after iterative re-humanization`);
 
   } else {
     // ── OTHER MODES: Per-sentence independent LLM rewriting ──

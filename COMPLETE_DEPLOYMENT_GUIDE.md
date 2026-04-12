@@ -34,13 +34,13 @@ This guide covers **ALL** deployment methods for your Humanizer Engine project.
 Click **"Environment Variables"** and add these (copy from `.env.production`):
 
 ```env
-OPENAI_API_KEY=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
+OPENAI_API_KEY=your_openai_api_key_here
 
-NEXT_PUBLIC_SUPABASE_URL=https://lqkpjghjermvxzgkocne.supabase.co
+NEXT_PUBLIC_SUPABASE_URL=your_supabase_url_here
 
-NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imxxa3BqZ2hqZXJtdnh6Z2tvY25lIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUxNjkyODQsImV4cCI6MjA5MDc0NTI4NH0.QC4F5yGp2ZoXrXH4wwGjAGB7oPMmDiBN9SurM-kqiW4
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key_here
 
-SUPABASE_SERVICE_ROLE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imxxa3BqZ2hqZXJtdnh6Z2tvY25lIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NTE2OTI4NCwiZXhwIjoyMDkwNzQ1Mjg0fQ.JEcpsIG7K6VqVrD6uKbqqXFKe28JRCAL7sn3v5EiV-w
+SUPABASE_SERVICE_ROLE_KEY=your_supabase_service_role_key_here
 
 LLM_MODEL=gpt-4o-mini
 
@@ -104,7 +104,7 @@ supabase link --project-ref lqkpjghjermvxzgkocne
 supabase functions deploy
 
 # Set secrets
-supabase secrets set OPENAI_API_KEY=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
+supabase secrets set OPENAI_API_KEY=your_openai_api_key_here
 ```
 
 **Edge Functions will be available at:**

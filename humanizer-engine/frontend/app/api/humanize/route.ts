@@ -732,10 +732,37 @@ export async function POST(req: Request) {
       return output;
     };
 
+    // Clean helpers for Deep Kill — NO Nuru tail (Nuru runs once at the very end)
+    const runWikipediaClean = async (input: string): Promise<string> => {
+      let output = await ghostProHumanize(input, {
+        strength: strength ?? 'medium',
+        tone: 'wikipedia',
+        strictMeaning: strict_meaning ?? false,
+        enablePostProcessing: enable_post_processing !== false,
+      });
+      output = breakRepetitiveTemplates(output);
+      output = fixHyphenSpacing(output);
+      return output;
+    };
+
+    const runHumara22Clean = async (input: string): Promise<string> => {
+      const easySBS = body.easy_sentence_by_sentence !== false;
+      const easyResult = await easyHumanize(input, effectiveStrength, tone ?? 'academic', easySBS);
+      return easyResult.humanized;
+    };
+
     const runNuru = (input: string): string => {
       const output = stealthHumanize(input, strength ?? 'medium', tone ?? 'academic');
       return output && output.trim().length > 0 ? output : input;
     };
+
+    // Deep Kill engine set — used to skip destructive post-processors
+    const DEEP_KILL_ENGINES = new Set([
+      'ninja_2', 'ninja_3', 'ninja_4', 'ninja_5',
+      'ghost_trial_2', 'ghost_trial_2_alt',
+      'conscusion_1', 'conscusion_12',
+    ]);
+    const isDeepKill = DEEP_KILL_ENGINES.has(engine);
 
     const runGuarded = async (
       label: string,
@@ -762,44 +789,42 @@ export async function POST(req: Request) {
     } else if (engine === 'humara_v3_3') {
       humanized = await runHumara24(normalizedText);
     } else if (engine === 'ninja_3') {
-      // Ninja 3
+      // Ninja 3: Oxygen → Wikipedia (clean, no Nuru tail)
       const stage1 = runHumara20(normalizedText);
-      humanized = await runGuarded('ninja_3_stage_2', () => runWikipedia(stage1), stage1);
+      humanized = await runGuarded('ninja_3_stage_2', () => runWikipediaClean(stage1), stage1);
     } else if (engine === 'ninja_2') {
-      // Ninja 2
+      // Ninja 2: Oxygen → Nuru (single pass)
       const stage1 = runHumara20(normalizedText);
       humanized = runNuru(stage1);
     } else if (engine === 'ninja_4') {
-      // Ninja 4
+      // Ninja 4: Humara 2.4 → Wikipedia (clean)
       const stage1 = await runGuarded('ninja_4_stage_1', () => runHumara24(normalizedText), normalizedText);
-      humanized = await runGuarded('ninja_4_stage_2', () => runWikipedia(stage1), stage1);
+      humanized = await runGuarded('ninja_4_stage_2', () => runWikipediaClean(stage1), stage1);
     } else if (engine === 'ninja_5') {
-      // Ninja 5
+      // Ninja 5: Humara 2.4 → Nuru (single pass)
       const stage1 = await runGuarded('ninja_5_stage_1', () => runHumara24(normalizedText), normalizedText);
       humanized = runNuru(stage1);
     } else if (engine === 'ghost_trial_2') {
-      // Ghost Trial 2
-      const stage1 = await runGuarded('ghost_trial_2_stage_1', () => runWikipedia(normalizedText), normalizedText);
+      // Ghost Trial 2: Wikipedia (clean) → Humara 2.4 → Nuru (single final)
+      const stage1 = await runGuarded('ghost_trial_2_stage_1', () => runWikipediaClean(normalizedText), normalizedText);
       const stage2 = await runGuarded('ghost_trial_2_stage_2', () => runHumara24(stage1), stage1);
       humanized = runNuru(stage2);
     } else if (engine === 'ghost_trial_2_alt') {
-      // Ghost Trial 2 Alt
-      const stage1 = await runGuarded('ghost_trial_2_alt_stage_1', () => runWikipedia(normalizedText), normalizedText);
+      // Ghost Trial 2 Alt: Wikipedia (clean) → Oxygen → Nuru (single final)
+      const stage1 = await runGuarded('ghost_trial_2_alt_stage_1', () => runWikipediaClean(normalizedText), normalizedText);
       const stage2 = runHumara20(stage1);
       humanized = runNuru(stage2);
     } else if (engine === 'conscusion_1') {
-      // Conscusion 1
-      const stage1 = await runGuarded('conscusion_1_stage_1', () => runHumara22(normalizedText), normalizedText, 35_000);
-      const stage2 = await runGuarded('conscusion_1_stage_2', () => runWikipedia(stage1), stage1);
-      const stage3 = runHumara20(stage2);
-      humanized = runNuru(stage3);
+      // Conscusion 1: Easy (clean) → Wikipedia (clean) → Nuru (single final)
+      const stage1 = await runGuarded('conscusion_1_stage_1', () => runHumara22Clean(normalizedText), normalizedText, 35_000);
+      const stage2 = await runGuarded('conscusion_1_stage_2', () => runWikipediaClean(stage1), stage1);
+      humanized = runNuru(stage2);
     } else if (engine === 'conscusion_12') {
-      // Conscusion 12
+      // Conscusion 12: Ozone → Humara 2.4 → Wikipedia (clean) → Nuru (single final)
       const stage1 = await runGuarded('conscusion_12_stage_1', () => runHumara21(normalizedText), normalizedText, 35_000);
       const stage2 = await runGuarded('conscusion_12_stage_2', () => runHumara24(stage1), stage1);
-      const stage3 = await runGuarded('conscusion_12_stage_3', () => runWikipedia(stage2), stage2);
-      const stage4 = runHumara20(stage3);
-      humanized = runNuru(stage4);
+      const stage3 = await runGuarded('conscusion_12_stage_3', () => runWikipediaClean(stage2), stage2);
+      humanized = runNuru(stage3);
     } else if (engine === 'humara_v1_3') {
       // Humara v1.3: Stealth Humanizer Engine v5 from coursework-champ
       const { pipeline } = await import('@/lib/engine/humara-v1-3');
@@ -916,21 +941,21 @@ export async function POST(req: Request) {
     const FIRST_PERSON_RE_EARLY = /\b(I|me|my|mine|myself|we|us|our|ours|ourselves)\b/i;
     const earlyFirstPerson = FIRST_PERSON_RE_EARLY.test(text);
     const inputAiScore = inputAnalysis.summary.overall_ai_score;
-    if (engine !== 'humara' && engine !== 'humara_v1_3' && engine !== 'nuru' && engine !== 'nuru_v2' && engine !== 'omega' && engine !== 'oxygen' && engine !== 'ozone' && engine !== 'apex' && engine !== 'ghost_pro_wiki') {
+    if (engine !== 'humara' && engine !== 'humara_v1_3' && engine !== 'nuru' && engine !== 'nuru_v2' && engine !== 'omega' && engine !== 'oxygen' && engine !== 'ozone' && engine !== 'apex' && engine !== 'ghost_pro_wiki' && !isDeepKill) {
       humanized = unifiedSentenceProcess(humanized, earlyFirstPerson, inputAiScore);
     }
 
     // ── 60% Restructuring Enforcement ──────────────────────────────
     // Ensures at least 60% of sentences show meaningful word-level changes.
     // Applies additional transforms to under-changed sentences.
-    if (engine !== 'oxygen' && engine !== 'ozone' && engine !== 'apex' && engine !== 'nuru_v2') {
+    if (engine !== 'oxygen' && engine !== 'ozone' && engine !== 'apex' && engine !== 'nuru_v2' && !isDeepKill) {
       humanized = enforceRestructuringThreshold(text, humanized, 0.70);
     }
 
     // Post-capitalization formatting — fix sentence casing for all engine outputs
     // Skip for humara/nuru/omega: they have their own capitalization handling
     // Pass original text so proper nouns from the input are preserved
-    if (engine !== 'humara' && engine !== 'humara_v1_3' && engine !== 'nuru' && engine !== 'nuru_v2' && engine !== 'omega' && engine !== 'oxygen' && engine !== 'ozone' && engine !== 'apex') {
+    if (engine !== 'humara' && engine !== 'humara_v1_3' && engine !== 'nuru' && engine !== 'nuru_v2' && engine !== 'omega' && engine !== 'oxygen' && engine !== 'ozone' && engine !== 'apex' && !isDeepKill) {
       humanized = fixCapitalization(humanized, text);
     }
 
@@ -942,20 +967,21 @@ export async function POST(req: Request) {
 
     // Cross-sentence repetition cleanup — deduplicates phrases repeated across sentences
     // Skip for humara engine: it has its own coherence layer
-    if (engine !== 'humara' && engine !== 'humara_v1_3' && engine !== 'nuru' && engine !== 'nuru_v2' && engine !== 'omega' && engine !== 'oxygen' && engine !== 'ozone') {
+    if (engine !== 'humara' && engine !== 'humara_v1_3' && engine !== 'nuru' && engine !== 'nuru_v2' && engine !== 'omega' && engine !== 'oxygen' && engine !== 'ozone' && !isDeepKill) {
       humanized = deduplicateRepeatedPhrases(humanized);
     }
 
     // Structural post-processing — attacks document-level statistical signals
     // (spectral_flatness, burstiness, sentence_uniformity, readability_consistency, vocabulary_richness)
     // Skip for humara engine: it has its own structural diversity layer
-    if (engine !== 'humara' && engine !== 'humara_v1_3' && engine !== 'nuru' && engine !== 'nuru_v2' && engine !== 'omega' && engine !== 'ninja' && engine !== 'undetectable' && engine !== 'oxygen' && engine !== 'ozone' && engine !== 'ghost_pro_wiki') {
+    if (engine !== 'humara' && engine !== 'humara_v1_3' && engine !== 'nuru' && engine !== 'nuru_v2' && engine !== 'omega' && engine !== 'ninja' && engine !== 'undetectable' && engine !== 'oxygen' && engine !== 'ozone' && engine !== 'ghost_pro_wiki' && !isDeepKill) {
       humanized = structuralPostProcess(humanized);
     }
 
     // Restore the original title/paragraph layout for EVERY engine output.
     // Skip for nuru_v2: it preserves paragraph structure internally.
-    if (engine !== 'nuru_v2') {
+    // Skip for Deep Kill: Nuru V2 already preserves structure and this causes duplication.
+    if (engine !== 'nuru_v2' && !isDeepKill) {
       humanized = preserveInputStructure(normalizedText, humanized);
     }
 
@@ -1162,6 +1188,40 @@ export async function POST(req: Request) {
     humanized = humanized.replace(/\bquislingism\b/gi, "collaboration");
     humanized = humanized.replace(/\bquisling\b/gi, "collaborator");
 
+    // ── DEEP KILL ABBREVIATION & CAPS CLEANUP ──────────────────
+    // LLMs sometimes mangle abbreviations like D.C., U.S., U.K. by
+    // replacing periods with commas/semicolons or inserting conjunctions.
+    // Also fix ALL-CAPS words leaked by the Wikipedia engine in body text.
+    if (isDeepKill) {
+      // Fix D.C. abbreviation corruption variants
+      humanized = humanized.replace(/\bD[,;]\s*c\b\.?/gi, 'D.C.');
+      humanized = humanized.replace(/\bD[,;]\s*and\s*c\b\.?/gi, 'D.C.');
+      humanized = humanized.replace(/\bD\.\s+C\./g, 'D.C.');
+      // Fix U.S. abbreviation corruption variants
+      humanized = humanized.replace(/\bU[,;]\s*s\b[,;.]?/gi, 'U.S.');
+      humanized = humanized.replace(/\bU\.\s+S\./g, 'U.S.');
+      // Fix U.K. abbreviation corruption variants
+      humanized = humanized.replace(/\bU[,;]\s*k\b\.?/gi, 'U.K.');
+      humanized = humanized.replace(/\bU\.\s+K\./g, 'U.K.');
+      // Fix ALL-CAPS words in body text (not in heading lines)
+      // Heading lines: start with Roman numeral or are all-caps short lines
+      const lines = humanized.split('\n');
+      humanized = lines.map(line => {
+        const trimmed = line.trim();
+        // Skip heading lines (start with roman numeral, or short all-caps lines)
+        if (/^[IVX]+\.\s/.test(trimmed)) return line;
+        if (trimmed.length < 120 && trimmed === trimmed.toUpperCase() && /[A-Z]/.test(trimmed)) return line;
+        // Replace ALL-CAPS words (4+ letters) with title case in body text
+        return line.replace(/\b([A-Z]{4,})\b/g, (m) => {
+          // Keep known acronyms
+          if (['HOPE', 'ACS'].includes(m)) return m;
+          return m.charAt(0) + m.slice(1).toLowerCase();
+        });
+      }).join('\n');
+      // Fix heading-adjacent case corruption: "cONCENTRATED" → "CONCENTRATED"
+      humanized = humanized.replace(/\b([a-z])([A-Z]{3,})\b/g, (_m, first, rest) => first.toUpperCase() + rest);
+    }
+
     // ── LAST-MILE MEANING VALIDATOR (2 iterations) ─────────────────
     // Applies to ALL humanizers. Compares each output sentence against
     // the original to ensure the content still communicates the same idea.
@@ -1169,7 +1229,8 @@ export async function POST(req: Request) {
     // lighter transforms that preserve meaning. Runs up to 2 iterations
     // to catch sentences that still drift after the first pass.
     // Skip for nuru_v2: its iterative rewrite loop manages its own meaning check.
-    if (engine !== 'nuru_v2') {
+    // Skip for Deep Kill: Nuru V2 at end of pipeline handles meaning internally.
+    if (engine !== 'nuru_v2' && !isDeepKill) {
       for (let meaningIter = 0; meaningIter < 2; meaningIter++) {
         const beforeFix = humanized;
         humanized = lastMileMeaningValidator(text, humanized, 0.35);
@@ -1181,7 +1242,8 @@ export async function POST(req: Request) {
     // Catch any garbled sentences that slipped through engine-level checks.
     // Replace them with the best-matching original sentence (natural > garbled).
     // Skip for nuru_v2: its own quality gate handles garbled output.
-    if (engine !== 'nuru_v2') {
+    // Skip for Deep Kill: Nuru V2 at end of pipeline handles quality internally.
+    if (engine !== 'nuru_v2' && !isDeepKill) {
       const isLikelyGarbled = (s: string): boolean => {
         const st = s.trim().replace(/^["'\u201C\u201D\u2018\u2019\s]+/, '').replace(/["'\u201C\u201D\u2018\u2019\s]+$/, '');
         const w = st.split(/\s+/);

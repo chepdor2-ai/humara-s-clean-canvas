@@ -696,7 +696,20 @@ export function fixMidSentenceCapitalization(text: string, originalText?: string
 function fixLineCapitalization(line: string, properNouns: Set<string>): string {
   // Split into sentences at . ! ? followed by space+uppercase
   // But also handle sentences starting at the beginning of the line
-  const parts = line.split(/(?<=[.!?])\s+/);
+  const rawParts = line.split(/(?<=[.!?])\s+/);
+  
+  // Merge parts that were incorrectly split inside abbreviations (e.g. "D.C." → "D.C." + "has...")
+  const parts: string[] = [];
+  for (let i = 0; i < rawParts.length; i++) {
+    const p = rawParts[i];
+    // If previous part ends with abbreviation pattern (single uppercase letter + period),
+    // and this part starts lowercase, it wasn't a real sentence boundary
+    if (parts.length > 0 && /[A-Z]\.$/.test(parts[parts.length - 1]) && /^[a-z]/.test(p)) {
+      parts[parts.length - 1] += ' ' + p;
+    } else {
+      parts.push(p);
+    }
+  }
   
   return parts.map((sentence) => {
     if (!sentence.trim()) return sentence;

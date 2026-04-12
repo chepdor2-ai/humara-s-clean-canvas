@@ -38,7 +38,7 @@ supabase functions deploy health
 supabase secrets set NEXT_API_URL=https://your-vercel-app.vercel.app
 
 # Set OpenAI API Key
-supabase secrets set OPENAI_API_KEY=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
+supabase secrets set OPENAI_API_KEY=your_openai_api_key_here
 ```
 
 ## Test Edge Functions Locally
