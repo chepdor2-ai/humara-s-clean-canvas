@@ -1,0 +1,52 @@
+$body = @{
+    text = @"
+Goodmark (2018) critically examines the dominant reliance on criminal justice approaches to addressing domestic violence and proposes alternative policy frameworks. The author argues that punitive measures, while important, may not always lead to improved outcomes for victims and can sometimes create unintended negative consequences. Drawing on legal analysis, case studies, and policy evaluations, the book explores how criminalization may discourage victims from seeking help or exacerbate their vulnerability. Goodmark advocates for a shift toward prevention-focused and victim-centered approaches that prioritize safety, autonomy, and long-term well-being. The work challenges traditional assumptions about the role of the criminal justice system in addressing GBV.
+
+This source is particularly relevant because it introduces a critical perspective on existing policy approaches and highlights the limitations of current legal frameworks. It encourages policymakers to consider alternative strategies that go beyond enforcement and punishment. The insights provided are valuable for evaluating the effectiveness of current GBV policies and identifying areas for reform. By emphasizing prevention and victim support, the book aligns with the research focus on improving institutional responses. This makes it an important contribution to the broader policy debate on GBV.
+
+Heise and Kotsadam (2015) analyze cross-national data to identify the social, economic, and institutional factors that influence intimate partner violence. The authors argue that GBV is shaped by a complex interaction of structural and cultural variables, including gender norms, economic inequality, and governance quality. Using multilevel statistical analysis, the study examines data from population-based surveys across multiple countries to identify patterns and correlations. The findings suggest that both societal attitudes and institutional effectiveness play significant roles in determining GBV prevalence. The research highlights the importance of addressing underlying structural conditions to reduce violence.
+
+This source is highly relevant because it provides a comprehensive framework for understanding the determinants of GBV. It supports the argument that effective policy interventions must address not only legal frameworks but also broader social and economic factors. The study reinforces the need for holistic approaches that integrate legal, social, and economic policies. Additionally, it provides empirical evidence that can inform policy design and evaluation. This makes it a valuable resource for developing a multidimensional understanding of GBV.
+
+Htun and Weldon (2012) examine the role of civil society in driving policy change related to violence against women. The authors argue that feminist movements and advocacy organizations are key actors in promoting progressive policy reforms and influencing government action. The study uses comparative analysis across multiple countries to demonstrate how civic engagement contributes to the development and implementation of policies addressing GBV. It highlights the importance of political will, social mobilization, and institutional openness in achieving policy change. The findings suggest that strong civil society engagement is often associated with more effective policy outcomes.
+
+This source is relevant because it broadens the analysis to include the role of non-state actors in shaping public policy. It complements the focus on institutional effectiveness by demonstrating how external pressures can drive reform. The study provides valuable insights into the dynamics of policy change and the importance of stakeholder engagement. It also highlights the need for collaboration between government institutions and civil society organizations. This perspective is essential for understanding the broader policy environment in which GBV interventions operate.
+
+Reardon (2020) explores the reasons why government policies often prioritize reactive responses rather than preventive strategies. The author argues that political incentives, institutional constraints, and short-term policy cycles contribute to a focus on immediate solutions rather than long-term prevention. The analysis draws on policy theory and case studies to illustrate how these factors shape policy decisions. It highlights the challenges of implementing preventive approaches, particularly in areas such as GBV where outcomes may not be immediately visible. The study calls for a shift toward more proactive and sustainable policy frameworks.
+
+This source is directly relevant to the research question because it addresses the need for prevention-focused policy reforms. It provides a theoretical explanation for why current policies may be ineffective in reducing GBV. The insights help to identify barriers to policy change and opportunities for improvement. By emphasizing the importance of long-term strategies, the study supports the development of more effective interventions. This makes it a valuable contribution to the analysis of GBV policy.
+
+Sardinha et al. (2022) provide updated global estimates of intimate partner violence, offering a comprehensive overview of its prevalence across regions. The authors use advanced statistical methods and large-scale datasets to produce reliable and comparable estimates. The study highlights significant regional variations in GBV prevalence and identifies populations that are particularly at risk. It emphasizes the importance of consistent data collection and monitoring to inform policy decisions. The findings reinforce the persistence of GBV as a major global challenge.
+
+This source is essential for providing current empirical evidence to support policy analysis. It reinforces the urgency of addressing GBV through effective public policy interventions. The data presented can be used to evaluate the effectiveness of existing policies and identify areas for improvement. Additionally, the study supports the use of evidence-based approaches in policymaking. This makes it a critical resource for understanding the scope and scale of the issue.
+
+The United Nations Office on Drugs and Crime (2023) report examines gender-related killings of women and girls, commonly referred to as femicide, and provides a global overview of trends and patterns. The report argues that despite the existence of legal frameworks, many countries continue to struggle with preventing these extreme forms of violence due to weak enforcement and institutional failures. It is based on comprehensive crime data and policy analysis, offering detailed insights into regional differences and risk factors. The findings highlight the critical role of law enforcement and judicial systems in preventing femicide. The report also emphasizes the need for improved data collection and policy coordination.
+
+This source is highly relevant because it focuses on the most severe consequences of GBV and highlights the limitations of current policy approaches. It underscores the importance of strengthening institutional capacity and accountability to prevent violence. The report provides valuable evidence on enforcement gaps and policy failures. It also supports the argument for more coordinated and data-driven policy interventions. This makes it an important contribution to the analysis of GBV policy effectiveness.
+
+UN Women (2022) provides an overview of global progress toward gender equality and evaluates efforts to address GBV within the framework of the Sustainable Development Goals. The report highlights both achievements and persistent challenges in reducing violence against women. It emphasizes the importance of political commitment, resource allocation, and institutional capacity in achieving policy goals. The analysis is supported by global data and policy reviews, offering a comprehensive assessment of progress across countries. The report also identifies key gaps in implementation and accountability.
+
+This source is relevant because it provides a broad policy perspective on GBV and situates it within global development goals. It helps to contextualize national policy efforts within a wider international framework. The findings support the need for continued policy reform and stronger institutional responses. Additionally, the report highlights the importance of monitoring and evaluation in assessing policy effectiveness. This contributes to a deeper understanding of the challenges and opportunities in GBV policymaking.
+
+The World Health Organization (2021) report provides comprehensive global estimates of violence against women, establishing GBV as a major public health issue. The report is based on extensive data collection and analysis, offering reliable prevalence estimates across regions. It highlights the health consequences of GBV, including physical, mental, and reproductive health impacts. The findings emphasize the need for coordinated policy responses that integrate health, legal, and social services. The report also underscores the importance of prevention and early intervention.
+
+This source is foundational because it establishes the public health dimension of GBV and reinforces the need for integrated policy approaches. It supports the argument that addressing GBV requires collaboration across multiple sectors. The data provided can inform evidence-based policymaking and program design. Additionally, the report highlights the role of health systems in identifying and supporting victims. This aligns with the research focus on improving institutional effectiveness and policy outcomes.
+"@
+    engine = "ghost_pro_wiki"
+    strength = "medium"
+} | ConvertTo-Json -Depth 3
+
+$response = Invoke-RestMethod -Uri "http://localhost:3000/api/humanize" -Method Post -Body $body -ContentType "application/json" -TimeoutSec 300
+
+Write-Host "=== HUMANIZED OUTPUT ==="
+Write-Host ""
+Write-Host $response.humanized
+Write-Host ""
+Write-Host "=== DETECTOR SCORES (OUTPUT) ==="
+foreach ($d in $response.output_detector_results.detectors) {
+    Write-Host ("  {0,-25} AI: {1,5}%  Human: {2,5}%" -f $d.detector, $d.ai_score, $d.human_score)
+}
+Write-Host ""
+Write-Host "Overall AI Score: $($response.output_detector_results.overall)%"
+Write-Host "Meaning Similarity: $($response.meaning_similarity)"
+Write-Host "Words In: $($response.input_word_count)  Out: $($response.word_count)"

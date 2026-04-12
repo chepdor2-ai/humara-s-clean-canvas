@@ -155,12 +155,14 @@ const ALL_ENGINES: EngineConfig[] = [
   { id: 'ghost_trial_2_alt', label: 'Ghost Trial 2 Alt' },
   { id: 'conscusion_1', label: 'Conscusion 1' },
   { id: 'conscusion_12', label: 'Conscusion 12' },
+  { id: 'nuru_v2', label: 'Nuru 2.0' },
+  { id: 'ghost_pro_wiki', label: 'Wikipedia' },
 ];
 
 type ModeId = 'stealth_mode' | 'anti_gptzero' | 'deep_signal_kill';
 const MODE_ENGINES: Record<ModeId, Set<string>> = {
   stealth_mode: new Set(['ozone', 'easy']),
-  anti_gptzero: new Set(['oxygen', 'humara_v3_3']),
+  anti_gptzero: new Set(['oxygen', 'humara_v3_3', 'nuru_v2', 'ghost_pro_wiki']),
   deep_signal_kill: new Set([
     'ninja_3',
     'ninja_2',
@@ -983,7 +985,7 @@ export default function EditorPage() {
           <span className="text-orange-400 text-xs mt-0.5">⚡</span>
           <div>
             <p className="text-[10px] font-bold text-orange-300">AntiGPTZero Mode — Tuned to Beat GPTZero</p>
-            <p className="text-[9px] text-orange-200/70 leading-relaxed mt-0.5">Use <span className="font-semibold text-orange-200">2.0</span> or <span className="font-semibold text-orange-200">2.4</span> for GPTZero-focused suppression. Humara 3.0 has been removed from selection for now.</p>
+            <p className="text-[9px] text-orange-200/70 leading-relaxed mt-0.5">Use <span className="font-semibold text-orange-200">2.0</span>, <span className="font-semibold text-orange-200">2.4</span>, <span className="font-semibold text-orange-200">Nuru 2.0</span>, or <span className="font-semibold text-orange-200">Wikipedia</span> for GPTZero-focused suppression.</p>
           </div>
         </div>
       )}
