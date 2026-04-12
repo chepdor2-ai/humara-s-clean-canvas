@@ -955,7 +955,7 @@ export async function POST(req: Request) {
 
     // Restore the original title/paragraph layout for EVERY engine output.
     // Skip for nuru_v2: it preserves paragraph structure internally.
-    if (engine !== 'nuru_v2' && engine !== 'ozone') {
+    if (engine !== 'nuru_v2') {
       humanized = preserveInputStructure(normalizedText, humanized);
     }
 
@@ -967,7 +967,6 @@ export async function POST(req: Request) {
     // ── FINAL SAFETY NET: Zero em-dash enforcement ──────────
     // Remove any em-dashes that may have been reintroduced by post-processors
     humanized = removeEmDashes(humanized);
-
     // ── GRAMMAR SANITIZER ──────────────────────────────────────
     // Fix common grammar errors introduced by synonym replacement
     // 1. "an more" → "a more" (article before consonant multi-word replacement)
@@ -1233,7 +1232,20 @@ export async function POST(req: Request) {
     }
 
     // Fix sentence-initial lowercase after all processing
-    humanized = humanized.replace(/(^|[.!?]\s+)([a-z])/g, (_m, pre, ch) => pre + ch.toUpperCase());
+    // Avoid capitalizing after abbreviation periods (D.C., U.S.)
+    // First: capitalize start of string
+    humanized = humanized.replace(/^([a-z])/, (_m, ch) => ch.toUpperCase());
+    // Then: capitalize after sentence-ending punctuation
+    humanized = humanized.replace(/([.!?])\s+([a-z])/g, (m, punct, ch, offset) => {
+      // Check if the period follows a single uppercase letter (abbreviation pattern)
+      if (punct === '.' && offset > 0) {
+        const charBefore = humanized[offset - 1];
+        // If the char before the period is an uppercase letter, likely an abbreviation
+        if (charBefore && /[A-Z]/.test(charBefore)) return m; // Don't capitalize
+      }
+      return punct + ' ' + ch.toUpperCase();
+    });
+
 
     // ── FINAL CAPITALIZATION FIX ──────────────────────────────
     // Runs AFTER all post-processing to catch mid-sentence capitals

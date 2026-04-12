@@ -1,3 +1,130 @@
+// Deduplicate repetitive AI sentences from the API
+export function deduplicateSentences(txt: string): string {
+    const paragraphs = txt.split(/\n\n+/);
+    const uniqueParagraphs = paragraphs.map(p => {
+         const sentences = p.split(/(?<=[.!?])\s+(?=[A-Z])/);
+         const uniqueSentences: string[] = [];
+         const history: Set<string> = new Set();
+         
+         for (const sent of sentences) {
+             const normalized = sent.toLowerCase().replace(/[^a-z0-9]/g, '');
+             if (normalized.length < 15) {
+                 uniqueSentences.push(sent);
+                 continue;
+             }
+             
+             let isDuplicate = false;
+             for (const prev of history) {
+                 const prevNormalized = prev.toLowerCase().replace(/[^a-z0-9]/g, '');
+                 if (normalized.includes(prevNormalized) || prevNormalized.includes(normalized)) {
+                     isDuplicate = true; break;
+                 }
+                 const w1 = new Set(sent.toLowerCase().replace(/[^a-z\s]/g, '').split(/\s+/).filter(w => w.length > 3));
+                 const w2 = new Set(prev.toLowerCase().replace(/[^a-z\s]/g, '').split(/\s+/).filter(w => w.length > 3));
+                 if (w1.size > 0 && w2.size > 0) {
+                     const overlap = [...w1].filter(w => w2.has(w)).length;
+                     if (overlap / w1.size > 0.8 && overlap / w2.size > 0.8) {
+                         isDuplicate = true; break;
+                     }
+                 }
+             }
+             if (!isDuplicate) {
+                 uniqueSentences.push(sent);
+                 history.add(sent);
+             }
+         }
+         return uniqueSentences.join(' ');
+    });
+    return uniqueParagraphs.join('\n\n');
+}
+
+/**
+ * Extract content words (4+ chars, no stopwords) from text for fingerprinting.
+ */
+function contentFingerprint(text: string): Set<string> {
+  const STOP = new Set([
+    'that','this','these','those','their','there','them','they','have','been','from',
+    'with','were','also','much','more','most','many','some','such','very','just',
+    'about','after','before','between','both','each','even','into','like','only',
+    'other','over','same','than','then','through','under','when','where','while',
+    'which','what','would','could','should','does','will','being',
+  ]);
+  return new Set(
+    text.toLowerCase().replace(/[^a-z\s]/g, '').split(/\s+/)
+      .filter(w => w.length >= 4 && !STOP.has(w))
+  );
+}
+
+/**
+ * Aggressive paragraph-level dedup: drops paragraphs whose content-word
+ * fingerprint overlaps 50%+ with any earlier paragraph. Also strips
+ * meta-messages and hallucinated content from the API.
+ */
+function deduplicateParagraphs(txt: string, inputText: string): string {
+  const paragraphs = txt.split(/\n\n+/).filter(p => p.trim());
+  const inputFP = contentFingerprint(inputText);
+
+  // Strip meta messages from the API (e.g. "Sorry, but I call for the actual text")
+  const META_RE = /\b(sorry|please provide|please deliver|I (?:call for|need|require)|cannot rewrite|no (?:text|content) provided)\b/i;
+
+  const kept: string[] = [];
+  const fingerprints: Set<string>[] = [];
+
+  for (const para of paragraphs) {
+    const trimmed = para.trim();
+    if (!trimmed) continue;
+
+    // Skip meta-messages
+    if (META_RE.test(trimmed) && trimmed.split(/\s+/).length < 30) {
+      console.log('[Ozone] Stripped meta-message from API output');
+      continue;
+    }
+
+    // Check if heading — always keep headings
+    const isHeading = trimmed.length < 80 && !/[.!?]$/.test(trimmed) &&
+      trimmed.split(/\s+/).length <= 12 && /^[A-Z]/.test(trimmed);
+    if (isHeading) {
+      kept.push(trimmed);
+      continue;
+    }
+
+    const fp = contentFingerprint(trimmed);
+    if (fp.size < 3) { kept.push(trimmed); fingerprints.push(fp); continue; }
+
+    // Check if this paragraph is a near-duplicate of any earlier kept paragraph
+    let isDupe = false;
+    for (const prevFP of fingerprints) {
+      if (prevFP.size < 3) continue;
+      const overlap = [...fp].filter(w => prevFP.has(w)).length;
+      const overlapRatioA = overlap / fp.size;
+      const overlapRatioB = overlap / prevFP.size;
+      // If 50%+ of content words overlap in both directions, it's a paraphrased dupe
+      if (overlapRatioA > 0.50 && overlapRatioB > 0.40) {
+        isDupe = true;
+        break;
+      }
+    }
+
+    // Check if paragraph content is completely off-topic (hallucinated)
+    // If <15% of content words appear in the input, likely hallucinated
+    if (!isDupe && fp.size > 5) {
+      const inputOverlap = [...fp].filter(w => inputFP.has(w)).length;
+      if (inputOverlap / fp.size < 0.15) {
+        console.log(`[Ozone] Stripped hallucinated paragraph (${(inputOverlap/fp.size*100).toFixed(0)}% overlap with input)`);
+        isDupe = true;
+      }
+    }
+
+    if (!isDupe) {
+      kept.push(trimmed);
+      fingerprints.push(fp);
+    } else {
+      console.log(`[Ozone] Dropped duplicate paragraph (${trimmed.substring(0, 60)}...)`);
+    }
+  }
+
+  return kept.join('\n\n');
+}
 /**
  * Ozone Humanizer Engine — Ozone API Proxy
  * Calls the external Ozone humanizer API.
@@ -166,10 +293,22 @@ export async function ozoneHumanize(
     // Whole-paper mode: send entire text in one API call
     const data = await callOzoneAPI(text, apiKey);
 
+    // Sentence-level dedup first, then paragraph-level dedup
+    let humanized = deduplicateSentences(data.text);
+    humanized = deduplicateParagraphs(humanized, text);
+
+    // Length guard: if output is >1.4x input word count after dedup,
+    // the API returned garbled/duplicated content — log warning
+    const inputWords = text.trim().split(/\s+/).length;
+    const outputWords = humanized.trim().split(/\s+/).length;
+    if (outputWords > inputWords * 1.4) {
+      console.warn(`[Ozone] Output still ${outputWords} words vs ${inputWords} input after dedup — possible API issue`);
+    }
+
     return {
-      humanized: data.text,
+      humanized,
       inputWords: data.input_words,
-      outputWords: data.output_words,
+      outputWords: humanized.trim().split(/\s+/).length,
       latencyMs: data.latency_ms,
       quotaUsed: data.quota?.used ?? 0,
       quotaLimit: data.quota?.limit ?? 0,
@@ -216,17 +355,68 @@ export async function ozoneHumanize(
     }
   }
 
-  const humanized = reassembleSegments(segments);
+    let humanized = reassembleSegments(segments);
 
-  return {
-    humanized,
-    inputWords: totalInputWords,
-    outputWords: totalOutputWords,
-    latencyMs: totalLatency,
-    quotaUsed: lastQuota.used,
-    quotaLimit: lastQuota.limit,
-    quotaRemaining: lastQuota.remaining,
-  };
+    function deduplicateSentences(txt: string): string {
+        const paragraphs = txt.split(/\n\n+/);
+        const uniqueParagraphs = paragraphs.map(p => {
+             const sentences = p.split(/(?<=[.!?])\s+(?=[A-Z])/);
+             const uniqueSentences: string[] = [];
+             const history: Set<string> = new Set();
+             
+             for (const sent of sentences) {
+                 const normalized = sent.toLowerCase().replace(/[^a-z0-9]/g, '');
+                 if (normalized.length < 15) {
+                     uniqueSentences.push(sent);
+                     continue;
+                 }
+                 
+                 let isDuplicate = false;
+                 for (const prev of history) {
+                     const prevNormalized = prev.toLowerCase().replace(/[^a-z0-9]/g, '');
+                     // Check if one string is a 80%+ substring of another
+                     if (normalized.includes(prevNormalized) || prevNormalized.includes(normalized)) {
+                         isDuplicate = true; break;
+                     }
+                     // Or check for high character overlap sequence
+                     const w1 = new Set(sent.toLowerCase().replace(/[^a-z\s]/g, '').split(/\s+/).filter(w => w.length > 3));
+                     const w2 = new Set(prev.toLowerCase().replace(/[^a-z\s]/g, '').split(/\s+/).filter(w => w.length > 3));
+                     if (w1.size > 0 && w2.size > 0) {
+                         const overlap = [...w1].filter(w => w2.has(w)).length;
+                         if (overlap / w1.size > 0.8 && overlap / w2.size > 0.8) {
+                             isDuplicate = true; break;
+                         }
+                     }
+                 }
+                 if (!isDuplicate) {
+                     uniqueSentences.push(sent);
+                     history.add(sent); // store original for history
+                 }
+             }
+             return uniqueSentences.join(' ');
+        });
+        return uniqueParagraphs.join('\n\n');
+    }
+
+    humanized = deduplicateSentences(humanized);
+    humanized = deduplicateParagraphs(humanized, text);
+
+    // Length guard for sentence-by-sentence path too
+    const inW = text.trim().split(/\s+/).length;
+    const outW = humanized.trim().split(/\s+/).length;
+    if (outW > inW * 1.4) {
+      console.warn(`[Ozone] Sentence-by-sentence output still ${outW} words vs ${inW} input after dedup — possible API issue`);
+    }
+
+    return {
+      humanized,
+      inputWords: totalInputWords,
+      outputWords: totalOutputWords,
+      latencyMs: totalLatency,
+      quotaUsed: lastQuota.used,
+      quotaLimit: lastQuota.limit,
+      quotaRemaining: lastQuota.remaining,
+    };
   } catch (err) {
     // Oxygen TS fallback — instant, serverless, always available
     console.warn(`[Ozone] API failed, falling back to Oxygen TS: ${err instanceof Error ? err.message : err}`);

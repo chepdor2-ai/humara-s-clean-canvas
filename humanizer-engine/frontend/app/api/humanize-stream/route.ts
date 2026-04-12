@@ -497,9 +497,7 @@ export async function POST(req: Request) {
           }
 
           // 10. Structure preservation — skip for engines that preserve structure internally
-          if (eng !== 'ozone') {
-            humanized = preserveInputStructure(normalizedText, humanized);
-          }
+          humanized = preserveInputStructure(normalizedText, humanized);
 
           // 11. Contraction & em-dash enforcement
           humanized = expandContractions(humanized);
@@ -580,6 +578,11 @@ export async function POST(req: Request) {
           humanized = fixMidSentenceCapitalization(humanized, text);
 
           } // end: if (eng !== 'ozone' && eng !== 'oxygen_t5' && eng !== 'dipper' && eng !== 'humarin') post-processing block
+
+          // Structure preservation for ozone (runs after ozone's own dedup, restores heading placement)
+          if (eng === 'ozone') {
+            humanized = preserveInputStructure(normalizedText, humanized);
+          }
 
           // ── EXTERNAL API SANITIZATION (ozone, easy, etc.) ─────────────
           // External APIs can return LLM refusals, garbled phrases, and bad synonyms.
