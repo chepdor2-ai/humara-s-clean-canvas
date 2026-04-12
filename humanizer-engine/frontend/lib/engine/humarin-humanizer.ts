@@ -32,7 +32,7 @@ async function humarinCall(
 ): Promise<{ humanized: string; stats: Record<string, unknown> }> {
   // Pre-flight: verify the Space is awake and not stuck processing
   try {
-    const healthRes = await fetch(`${url}/health`, { signal: AbortSignal.timeout(10_000) });
+    const healthRes = await fetch(`${url}/health`, { signal: AbortSignal.timeout(3_000) });
     if (!healthRes.ok) throw new Error(`Health check failed: ${healthRes.status}`);
   } catch (err) {
     throw new Error(`Humarin Space unavailable (health check failed): ${err instanceof Error ? err.message : err}`);
@@ -143,7 +143,7 @@ export async function humarinHumanize(
   }
 
   const primaryUrl = HUMARIN_API_URL.replace(/\/$/, '');
-  const FAILOVER_TIMEOUT_MS = 20_000;
+  const FAILOVER_TIMEOUT_MS = 5_000;
 
   // Phase 1: Try primary with 20s timeout
   try {

@@ -23,10 +23,45 @@ export interface Props {
 
 /* ── Stage progress mapping ────────────────────────────────────────────── */
 const STAGE_ORDER = ['original', 'Engine', 'Sentence Processing', 'Restructuring', 'Polishing', 'done'];
+const CYCLE_STAGE_RE = /^Cycle\s+(\d+)\/(\d+)$/i;
+const CYCLE_TEXT_COLORS = [
+  'text-rose-400',
+  'text-orange-400',
+  'text-amber-400',
+  'text-yellow-300',
+  'text-lime-300',
+  'text-green-300',
+  'text-emerald-300',
+  'text-teal-300',
+  'text-cyan-300',
+  'text-emerald-400',
+];
 
 function stageProgress(stage: string): number {
+  const cycleMatch = stage.match(CYCLE_STAGE_RE);
+  if (cycleMatch) {
+    const current = Number(cycleMatch[1]);
+    const total = Number(cycleMatch[2]) || 10;
+    if (total > 0) return Math.min(1, Math.max(0, current / total));
+  }
   const idx = STAGE_ORDER.indexOf(stage);
   return idx >= 0 ? idx / (STAGE_ORDER.length - 1) : 0;
+}
+
+function stageColorClass(stage: string, isDone: boolean): string {
+  if (isDone || stage === 'done') return 'text-emerald-400';
+  if (stage === 'original') return 'text-red-500/60';
+
+  const cycleMatch = stage.match(CYCLE_STAGE_RE);
+  if (cycleMatch) {
+    const idx = Math.max(1, Number(cycleMatch[1])) - 1;
+    return CYCLE_TEXT_COLORS[Math.min(idx, CYCLE_TEXT_COLORS.length - 1)] ?? 'text-amber-400';
+  }
+
+  const progress = stageProgress(stage);
+  if (progress < 0.5) return 'text-red-400';
+  if (progress < 0.8) return 'text-amber-400';
+  return 'text-emerald-400/70';
 }
 
 /* ── Component ─────────────────────────────────────────────────────────── */
@@ -113,13 +148,7 @@ export default function LiveTextTransition({
         elements.push(
           <div
             key={`h-${pi}`}
-            className={`font-semibold transition-all duration-500 block ${
-              done
-                ? 'text-emerald-400'
-                : s.stage === 'original'
-                  ? 'text-red-500/60'
-                  : 'text-amber-400'
-            }`}
+            className={`font-semibold transition-all duration-500 block ${stageColorClass(s.stage, done)}`}
           >
             {s.text}
           </div>,
@@ -131,23 +160,9 @@ export default function LiveTextTransition({
       const sentenceEls = paraSentences.map((s, si) => {
         const globalIdx = start + si;
         const done = s.stage === 'done' || isDone;
-        const isOriginal = s.stage === 'original';
-        const progress = stageProgress(s.stage);
         const isFlashing = flashSet.has(globalIdx);
 
-        // Color transitions: original (red) → processing stages → done (green)
-        let colorCls = '';
-        if (done) {
-          colorCls = 'text-emerald-400';
-        } else if (isOriginal) {
-          colorCls = 'text-red-500/60';
-        } else if (progress < 0.5) {
-          colorCls = 'text-red-400';
-        } else if (progress < 0.8) {
-          colorCls = 'text-amber-400';
-        } else {
-          colorCls = 'text-emerald-400/70';
-        }
+        const colorCls = stageColorClass(s.stage, done);
 
         // Flash highlight when text changes
         const flashCls = isFlashing
@@ -223,8 +238,8 @@ export default function LiveTextTransition({
           </div>
         ) : sentences.length > 0 ? (
           <div className="flex items-center gap-2">
-            <Sparkles className="w-3 h-3 text-brand-500 animate-pulse" />
-            <span className="text-xs font-medium text-brand-400">
+            <Sparkles className={`w-3 h-3 animate-pulse ${stageColorClass(globalStage, false)}`} />
+            <span className={`text-xs font-medium ${stageColorClass(globalStage, false)}`}>
               {globalStage} ({changedCount}/{sentences.length})
             </span>
           </div>

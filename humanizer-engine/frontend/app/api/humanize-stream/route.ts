@@ -32,17 +32,17 @@ import { createServiceClient } from '@/lib/supabase';
 
 export const maxDuration = 120;
 
-/* ΓöÇΓöÇ SSE streaming humanization with per-sentence stage updates ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ */
+/* ── SSE streaming humanization with per-sentence stage updates ─────── */
 
 // Event types sent to the client:
 // { type: 'init', sentences: string[], paragraphs: number[] }
-//   ΓåÆ original sentences, with paragraph boundary indices
+//   → original sentences, with paragraph boundary indices
 // { type: 'stage', stage: string }
-//   ΓåÆ a new processing stage has started
+//   → a new processing stage has started
 // { type: 'sentence', index: number, text: string, stage: string }
-//   ΓåÆ sentence at index updated to new text for given stage
+//   → sentence at index updated to new text for given stage
 // { type: 'done', humanized: string, detection: {...}, meaning: number }
-//   ΓåÆ final result with scores
+//   → final result with scores
 
 function sendSSE(controller: ReadableStreamDefaultController, data: unknown) {
   const encoder = new TextEncoder();
@@ -236,7 +236,7 @@ export async function POST(req: Request) {
             /([.!?])\n(?!\n)(?=(?:[IVXLCDM]+\.\s|[A-Z]\.\s|#{1,6}\s|(?:Part|Section|Chapter)\s+\d))/gim, "$1\n\n"
           );
 
-          // 3. Engine stage ΓÇö the main humanization
+          // 3. Engine stage — the main humanization
           sendSSE(controller, { type: 'stage', stage: 'Engine Processing' });
           await flushDelay(20);
 
@@ -300,13 +300,38 @@ export async function POST(req: Request) {
               tone: 'wikipedia',
               strictMeaning: strict_meaning ?? false,
               enablePostProcessing: enable_post_processing !== false,
+              turbo: true,
             });
+          };
+
+          // Clean helpers for Deep Kill — NO Nuru tail (Nuru runs once at the very end)
+          const runWikipediaClean = runWikipedia; // Stream route's runWikipedia is already clean
+          const runHumara22Clean = async (input: string): Promise<string> => {
+            const easySBS = (body as Record<string, unknown>).easy_sentence_by_sentence === true;
+            const easyResult = await easyHumanize(input, effectiveStrength, tone ?? 'academic', easySBS);
+            return easyResult.humanized;
           };
 
           const runNuru = (input: string): string => {
             const output = stealthHumanize(input, strength ?? 'medium', tone ?? 'academic');
             return output && output.trim().length > 0 ? output : input;
           };
+
+          // Nuru 2.0 post-processing depth applied at the tail of every pipeline.
+          const CHAIN_TS = 10;
+          const chainSync = (fn: (s: string) => string, input: string, n: number): string => {
+            let out = input;
+            for (let i = 0; i < n; i++) out = fn(out);
+            return out;
+          };
+
+          // Deep Kill engine set — used to skip destructive post-processors
+          const DEEP_KILL_ENGINES = new Set([
+            'ninja_2', 'ninja_3', 'ninja_4', 'ninja_5',
+            'ghost_trial_2', 'ghost_trial_2_alt',
+            'conscusion_1', 'conscusion_12',
+          ]);
+          const isDeepKill = DEEP_KILL_ENGINES.has(eng);
 
           if (eng === 'easy') {
             humanized = await runHumara22(normalizedText);
@@ -343,44 +368,44 @@ export async function POST(req: Request) {
           } else if (eng === 'ghost_pro_wiki') {
             humanized = await runWikipedia(normalizedText);
           } else if (eng === 'ninja_3') {
-            // Ninja 3
+            // Ninja 3: Oxygen×1 → Wikipedia×1 → Nuru×10
             const stage1 = runHumara20(normalizedText);
-            humanized = await runGuarded('ninja_3_stage_2', () => runWikipedia(stage1), stage1);
+            const stage2 = await runGuarded('ninja_3_stage_2', () => runWikipediaClean(stage1), stage1);
+            humanized = chainSync(runNuru, stage2, CHAIN_TS);
           } else if (eng === 'ninja_2') {
-            // Ninja 2
+            // Ninja 2: Oxygen×1 → Nuru×10
             const stage1 = runHumara20(normalizedText);
-            humanized = runNuru(stage1);
+            humanized = chainSync(runNuru, stage1, CHAIN_TS);
           } else if (eng === 'ninja_4') {
-            // Ninja 4
+            // Ninja 4: Humara 2.4×1 → Wikipedia×1 → Nuru×10
             const stage1 = await runGuarded('ninja_4_stage_1', () => runHumara24(normalizedText), normalizedText);
-            humanized = await runGuarded('ninja_4_stage_2', () => runWikipedia(stage1), stage1);
+            const stage2 = await runGuarded('ninja_4_stage_2', () => runWikipediaClean(stage1), stage1);
+            humanized = chainSync(runNuru, stage2, CHAIN_TS);
           } else if (eng === 'ninja_5') {
-            // Ninja 5
+            // Ninja 5: Humara 2.4×1 → Nuru×10
             const stage1 = await runGuarded('ninja_5_stage_1', () => runHumara24(normalizedText), normalizedText);
-            humanized = runNuru(stage1);
+            humanized = chainSync(runNuru, stage1, CHAIN_TS);
           } else if (eng === 'ghost_trial_2') {
-            // Ghost Trial 2
-            const stage1 = await runGuarded('ghost_trial_2_stage_1', () => runWikipedia(normalizedText), normalizedText);
+            // Ghost Trial 2: Wikipedia×1 → Humara 2.4×1 → Nuru×10
+            const stage1 = await runGuarded('ghost_trial_2_stage_1', () => runWikipediaClean(normalizedText), normalizedText);
             const stage2 = await runGuarded('ghost_trial_2_stage_2', () => runHumara24(stage1), stage1);
-            humanized = runNuru(stage2);
+            humanized = chainSync(runNuru, stage2, CHAIN_TS);
           } else if (eng === 'ghost_trial_2_alt') {
-            // Ghost Trial 2 Alt
-            const stage1 = await runGuarded('ghost_trial_2_alt_stage_1', () => runWikipedia(normalizedText), normalizedText);
+            // Ghost Trial 2 Alt: Wikipedia×1 → Oxygen×1 → Nuru×10
+            const stage1 = await runGuarded('ghost_trial_2_alt_stage_1', () => runWikipediaClean(normalizedText), normalizedText);
             const stage2 = runHumara20(stage1);
-            humanized = runNuru(stage2);
+            humanized = chainSync(runNuru, stage2, CHAIN_TS);
           } else if (eng === 'conscusion_1') {
-            // Conscusion 1
-            const stage1 = await runGuarded('conscusion_1_stage_1', () => runHumara22(normalizedText), normalizedText, 35_000);
-            const stage2 = await runGuarded('conscusion_1_stage_2', () => runWikipedia(stage1), stage1);
-            const stage3 = runHumara20(stage2);
-            humanized = runNuru(stage3);
+            // Conscusion 1: Easy×1 → Wikipedia×1 → Nuru×10
+            const stage1 = await runGuarded('conscusion_1_stage_1', () => runHumara22Clean(normalizedText), normalizedText, 35_000);
+            const stage2 = await runGuarded('conscusion_1_stage_2', () => runWikipediaClean(stage1), stage1);
+            humanized = chainSync(runNuru, stage2, CHAIN_TS);
           } else if (eng === 'conscusion_12') {
-            // Conscusion 12
+            // Conscusion 12: Ozone×1 → Humara 2.4×1 → Wikipedia×1 → Nuru×10
             const stage1 = await runGuarded('conscusion_12_stage_1', () => runHumara21(normalizedText), normalizedText, 35_000);
             const stage2 = await runGuarded('conscusion_12_stage_2', () => runHumara24(stage1), stage1);
-            const stage3 = await runGuarded('conscusion_12_stage_3', () => runWikipedia(stage2), stage2);
-            const stage4 = runHumara20(stage3);
-            humanized = runNuru(stage4);
+            const stage3 = await runGuarded('conscusion_12_stage_3', () => runWikipediaClean(stage2), stage2);
+            humanized = chainSync(runNuru, stage3, CHAIN_TS);
           } else if (eng === 'humara_v1_3') {
             const { pipeline } = await import('@/lib/engine/humara-v1-3');
             humanized = await pipeline(normalizedText, (tone ?? 'academic') as string, strength === 'strong' ? 10 : strength === 'light' ? 4 : 7);
@@ -410,16 +435,68 @@ export async function POST(req: Request) {
             humanized = humanize(normalizedText, { mode: 'ghost_mini', strength: strength ?? 'medium', tone: tone ?? 'neutral', strictMeaning: strict_meaning ?? false, enablePostProcessing: enable_post_processing !== false, stealth: true });
           }
 
-          // Emit engine output ΓÇö sentence-by-sentence with stagger
-          const { sentences: engineSentences } = splitIntoIndexedSentences(humanized);
-          await emitSentencesStaggered(controller, engineSentences, 'Engine', 20);
-          await flushDelay(30); // small stage pause
+          // ═══════════════════════════════════════════════════════════════
+          // 11-PHASE PIPELINE: Main engine × 1 → Nuru 2.0 × 10
+          //
+          // For Oxygen, Humara 2.4, and Wikipedia: the engine runs once to
+          // produce a strong first-pass rewrite (Cycle 1/11), then Nuru 2.0
+          // acts as a post-processing stealth engine for 10 further passes
+          // (Cycles 2/11 – 11/11), each feeding the previous output as input.
+          //
+          // For Nuru 2.0 directly: Cycle 1 uses the already-computed Nuru
+          // output, then 10 more Nuru passes follow (11 total).
+          //
+          // Total visible phases = 11. Total Nuru depth = 10.
+          // ═══════════════════════════════════════════════════════════════
+          const FAST_REHUMANIZE_ENGINES = new Set(['nuru_v2', 'ghost_pro_wiki', 'oxygen', 'humara_v3_3']);
+          const fastLoopEnabled = FAST_REHUMANIZE_ENGINES.has(eng);
+          if (fastLoopEnabled) {
+            const TOTAL_PHASES = 11;      // 1 main engine pass + 10 Nuru passes
+            const INTER_CYCLE_PAUSE_MS = 600;
+            const cycleStart = Date.now();
+            let cycleInput = humanized;
 
-          // Detector + input analysis ΓÇö needed for both post-processing and final detection
+            for (let cycle = 1; cycle <= TOTAL_PHASES; cycle++) {
+              // Cycle 1: already-computed main engine output — emit as-is.
+              // Cycles 2–11: Nuru 2.0 post-processing pass on previous output.
+              const cycleOutput = cycle === 1
+                ? cycleInput
+                : runNuru(cycleInput);
+              humanized = cycleOutput;
+              cycleInput = cycleOutput;
+
+              const cycleStage = `Cycle ${cycle}/${TOTAL_PHASES}`;
+              sendSSE(controller, { type: 'stage', stage: cycleStage });
+              await flushDelay(10);
+
+              // Emit the full cycle output at once — no per-sentence stagger
+              const { sentences: cycleSentences } = splitIntoIndexedSentences(cycleOutput);
+              for (let i = 0; i < cycleSentences.length; i++) {
+                sendSSE(controller, { type: 'sentence', index: i, text: cycleSentences[i], stage: cycleStage });
+              }
+              await flushDelay(10);
+
+              if (cycle < TOTAL_PHASES) {
+                await flushDelay(INTER_CYCLE_PAUSE_MS);
+              }
+              console.log(`[Pipeline-11] Cycle ${cycle}/${TOTAL_PHASES} (${cycle === 1 ? eng : 'nuru'}): ${cycleOutput.split(/\s+/).length} words (${Date.now() - cycleStart}ms)`);
+            }
+
+            console.log(`[Pipeline-11] Complete: ${humanized.split(/\s+/).length} words in ${Date.now() - cycleStart}ms`);
+          }
+
+          // For fast-loop engines the cycles ARE the output stages — skip Engine re-emit
+          if (!fastLoopEnabled) {
+            const { sentences: engineSentences } = splitIntoIndexedSentences(humanized);
+            await emitSentencesStaggered(controller, engineSentences, 'Engine', 20);
+            await flushDelay(30); // small stage pause
+          }
+
+          // Detector + input analysis — needed for both post-processing and final detection
           const detector = getDetector();
           const inputAnalysis = detector.analyze(text);
 
-          // ΓöÇΓöÇ POST-PROCESSING (skip for ozone and oxygen_t5 ΓÇö they handle their own full pipelines) ΓöÇΓöÇ
+          // ── POST-PROCESSING (skip for ozone and oxygen_t5 — they handle their own full pipelines) ──
           if (eng !== 'ozone' && eng !== 'oxygen_t5' && eng !== 'oxygen3' && eng !== 'dipper' && eng !== 'humarin') {
 
           // 4. Unified Sentence Process
@@ -427,18 +504,23 @@ export async function POST(req: Request) {
           const earlyFirstPerson = FIRST_PERSON_RE_EARLY.test(text);
           const inputAiScore = inputAnalysis.summary.overall_ai_score;
 
-          if (eng !== 'humara' && eng !== 'humara_v1_3' && eng !== 'nuru' && eng !== 'omega' && eng !== 'oxygen' && eng !== 'ozone') {
-            sendSSE(controller, { type: 'stage', stage: 'Sentence Processing' });
-            await flushDelay(20);
+          if (eng !== 'humara' && eng !== 'humara_v1_3' && eng !== 'nuru' && eng !== 'omega' && eng !== 'oxygen' && eng !== 'ozone' && !isDeepKill) {
             humanized = unifiedSentenceProcess(humanized, earlyFirstPerson, inputAiScore);
-            const { sentences: uspSentences } = splitIntoIndexedSentences(humanized);
-            await emitSentencesStaggered(controller, uspSentences, 'Sentence Processing', 20);
-            await flushDelay(30);
+            if (!fastLoopEnabled) {
+              sendSSE(controller, { type: 'stage', stage: 'Sentence Processing' });
+              await flushDelay(20);
+              const { sentences: uspSentences } = splitIntoIndexedSentences(humanized);
+              await emitSentencesStaggered(controller, uspSentences, 'Sentence Processing', 20);
+              await flushDelay(30);
+            }
           }
 
           // 5. 40% Restructuring enforcement
-          sendSSE(controller, { type: 'stage', stage: 'Restructuring' });
-          await flushDelay(20);
+          if (!isDeepKill) {
+          if (!fastLoopEnabled) {
+            sendSSE(controller, { type: 'stage', stage: 'Restructuring' });
+            await flushDelay(20);
+          }
           {
             const { sentences: origSents } = splitIntoIndexedSentences(normalizedText);
             const { sentences: humanizedSents, paragraphBoundaries: humanParaBounds } = splitIntoIndexedSentences(humanized);
@@ -470,14 +552,17 @@ export async function POST(req: Request) {
             }
             if (changed) {
               humanized = reassembleText(humanizedSents, humanParaBounds.length ? humanParaBounds : [0]);
-              const { sentences: restructuredSents } = splitIntoIndexedSentences(humanized);
-              await emitSentencesStaggered(controller, restructuredSents, 'Restructuring', 20);
+              if (!fastLoopEnabled) {
+                const { sentences: restructuredSents } = splitIntoIndexedSentences(humanized);
+                await emitSentencesStaggered(controller, restructuredSents, 'Restructuring', 20);
+              }
             }
           }
           await flushDelay(30);
+          } // end !isDeepKill restructuring guard
 
           // 6. Capitalization fix
-          if (eng !== 'humara' && eng !== 'humara_v1_3' && eng !== 'nuru' && eng !== 'omega') {
+          if (eng !== 'humara' && eng !== 'humara_v1_3' && eng !== 'nuru' && eng !== 'omega' && !isDeepKill) {
             humanized = fixCapitalization(humanized, text);
           }
 
@@ -487,17 +572,17 @@ export async function POST(req: Request) {
             .replace(/\bai\b/g, 'AI');
 
           // 8. Repetition cleanup
-          if (eng !== 'humara' && eng !== 'humara_v1_3' && eng !== 'nuru' && eng !== 'omega' && eng !== 'ozone') {
+          if (eng !== 'humara' && eng !== 'humara_v1_3' && eng !== 'nuru' && eng !== 'omega' && eng !== 'ozone' && !isDeepKill) {
             humanized = deduplicateRepeatedPhrases(humanized);
           }
 
           // 9. Structural post-processing
-          if (eng !== 'humara' && eng !== 'humara_v1_3' && eng !== 'nuru' && eng !== 'omega' && eng !== 'ninja' && eng !== 'undetectable' && eng !== 'ozone') {
+          if (eng !== 'humara' && eng !== 'humara_v1_3' && eng !== 'nuru' && eng !== 'omega' && eng !== 'ninja' && eng !== 'undetectable' && eng !== 'ozone' && !isDeepKill) {
             humanized = structuralPostProcess(humanized);
           }
 
-          // 10. Structure preservation ΓÇö skip for engines that preserve structure internally
-          humanized = preserveInputStructure(normalizedText, humanized);
+          // 10. Structure preservation — skip for engines that preserve structure internally
+          if (!isDeepKill) humanized = preserveInputStructure(normalizedText, humanized);
 
           // 11. Contraction & em-dash enforcement
           humanized = expandContractions(humanized);
@@ -536,8 +621,30 @@ export async function POST(req: Request) {
           // Post-clean grammar check (universal for ALL engines)
           humanized = postCleanGrammar(humanized);
 
+          // ── DEEP KILL ABBREVIATION & CAPS CLEANUP ──────────────────
+          if (isDeepKill) {
+            humanized = humanized.replace(/\bD[,;]\s*c\b\.?/gi, 'D.C.');
+            humanized = humanized.replace(/\bD[,;]\s*and\s*c\b\.?/gi, 'D.C.');
+            humanized = humanized.replace(/\bD\.\s+C\./g, 'D.C.');
+            humanized = humanized.replace(/\bU[,;]\s*s\b[,;.]?/gi, 'U.S.');
+            humanized = humanized.replace(/\bU\.\s+S\./g, 'U.S.');
+            humanized = humanized.replace(/\bU[,;]\s*k\b\.?/gi, 'U.K.');
+            humanized = humanized.replace(/\bU\.\s+K\./g, 'U.K.');
+            const dkLines = humanized.split('\n');
+            humanized = dkLines.map(line => {
+              const trimmed = line.trim();
+              if (/^[IVX]+\.\s/.test(trimmed)) return line;
+              if (trimmed.length < 120 && trimmed === trimmed.toUpperCase() && /[A-Z]/.test(trimmed)) return line;
+              return line.replace(/\b([A-Z]{4,})\b/g, (m) => {
+                if (['HOPE', 'ACS'].includes(m)) return m;
+                return m.charAt(0) + m.slice(1).toLowerCase();
+              });
+            }).join('\n');
+            humanized = humanized.replace(/\b([a-z])([A-Z]{3,})\b/g, (_m: string, first: string, rest: string) => first.toUpperCase() + rest);
+          }
+
           // Last-mile meaning validation (2 iterations max)
-          {
+          if (!isDeepKill) {
             const { sentences: origSentsM } = splitIntoIndexedSentences(normalizedText);
             const isHeadingM = (s: string) => s.trim().length < 120 && !/[.!?]$/.test(s.trim()) && s.trim().split(/\s+/).length <= 15;
             const STOPWORDS_M = new Set(['the','a','an','is','are','was','were','be','been','being','have','has','had','do','does','did','will','would','could','should','may','might','can','shall','to','of','in','for','on','with','at','by','from','as','into','through','during','before','after','above','below','between','out','off','over','under','again','further','then','once','here','there','when','where','why','how','all','each','every','both','few','more','most','other','some','such','no','nor','not','only','own','same','so','than','too','very','just','because','but','and','or','if','while','that','this','these','those','it','its','they','them','their','we','our','he','she','his','her','which','what','who','whom','about','also']);
@@ -571,7 +678,7 @@ export async function POST(req: Request) {
               humanized = reassembleText(humanSentsM, humanMParaBounds.length ? humanMParaBounds : [0]);
               humanized = preserveInputStructure(normalizedText, humanized);
             }
-          }
+          } // end !isDeepKill meaning validation guard
 
           // Final sentence-initial caps + mid-sentence caps fix
           humanized = humanized.replace(/(^|[.!?]\s+)([a-z])/g, (_m: string, pre: string, ch: string) => pre + ch.toUpperCase());
@@ -584,7 +691,7 @@ export async function POST(req: Request) {
             humanized = preserveInputStructure(normalizedText, humanized);
           }
 
-          // ΓöÇΓöÇ EXTERNAL API SANITIZATION (ozone, easy, etc.) ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+          // ── EXTERNAL API SANITIZATION (ozone, easy, etc.) ─────────────
           // External APIs can return LLM refusals, garbled phrases, and bad synonyms.
           // This lightweight pass cleans the worst artifacts without full post-processing.
           {
@@ -603,35 +710,35 @@ export async function POST(req: Request) {
             // 2. Fix garbled transition/discourse markers from external APIs
             // These are commonly injected mid-clause in unnatural positions
             const GARBLED_TRANSITIONS: [RegExp, string][] = [
-              // "upon review, " mid-sentence ΓÇö remove
+              // "upon review, " mid-sentence — remove
               [/,\s*upon review,?\s*/gi, ', '],
               [/\bupon review,?\s*/gi, ''],
-              // "at this stage, " mid-sentence ΓÇö remove
+              // "at this stage, " mid-sentence — remove
               [/,\s*at this stage,?\s*/gi, ', '],
               [/\bat this stage,?\s*/gi, ''],
-              // "on closer inspection, " ΓÇö remove
+              // "on closer inspection, " — remove
               [/,\s*on closer inspection,?\s*/gi, ', '],
               [/\bon closer inspection,?\s*/gi, ''],
-              // "in broad terms, " ΓÇö remove
+              // "in broad terms, " — remove
               [/,\s*in broad terms,?\s*/gi, ', '],
               [/\bin broad terms,?\s*/gi, ''],
-              // "to be specific, " ΓÇö remove
+              // "to be specific, " — remove
               [/,\s*to be specific,?\s*/gi, ', '],
               [/\bto be specific,?\s*/gi, ''],
-              // "at its core, " ΓÇö remove
+              // "at its core, " — remove
               [/,\s*at its core,?\s*/gi, ', '],
               [/\bat its core,?\s*/gi, ''],
-              // "on this basis, " ΓÇö remove
+              // "on this basis, " — remove
               [/,\s*on this basis,?\s*/gi, ', '],
               [/\bon this basis,?\s*/gi, ''],
-              // "by comparison, " ΓÇö remove when mid-sentence
+              // "by comparison, " — remove when mid-sentence
               [/,\s*by comparison,?\s*/gi, ', '],
-              // "by all accounts, " ΓÇö remove
+              // "by all accounts, " — remove
               [/,\s*by all accounts,?\s*/gi, ', '],
               [/\bby all accounts,?\s*/gi, ''],
-              // "strikingly, " ΓÇö remove
+              // "strikingly, " — remove
               [/\bstrikingly,?\s*/gi, ''],
-              // "above all, " mid-sentence ΓÇö remove
+              // "above all, " mid-sentence — remove
               [/,\s*above all,?\s*/gi, ', '],
               // Fix "besides" used as conjunction (should be "and also" or removed)
               [/,?\s*besides\s+/gi, ', and '],
@@ -641,13 +748,13 @@ export async function POST(req: Request) {
               [/,?\s*paired with\s+/gi, ', and '],
               // Fix "in tandem with"
               [/,?\s*in tandem with\s+/gi, ', and '],
-              // "supplied that" ΓåÆ "given that"
+              // "supplied that" → "given that"
               [/\bsupplied that\b/gi, 'given that'],
-              // "presented that" ΓåÆ "given that"
+              // "presented that" → "given that"
               [/\bpresented that\b/gi, 'given that'],
-              // "granted that" ΓåÆ "given that"
+              // "granted that" → "given that"
               [/\bgranted that\b/gi, 'given that'],
-              // "offered that" ΓåÆ "given that"
+              // "offered that" → "given that"
               [/\boffered that\b/gi, 'given that'],
               // "provided that" is sometimes valid, but when used as a garbled "given that":
               // Leave it as-is since it can be grammatically correct
@@ -669,9 +776,9 @@ export async function POST(req: Request) {
               [/\bhave too\b/gi, 'have also'],
               [/\bhad too\b/gi, 'had also'],
               [/\btoo (?=sparked|prompted|brought|created|caused|led|produced)/gi, 'also '],
-              // "Eco-friendly progress Goals" ΓåÆ "Sustainable Development Goals"
+              // "Eco-friendly progress Goals" → "Sustainable Development Goals"
               [/\bEco-friendly progress Goals\b/gi, 'Sustainable Development Goals'],
-              // "protocols against's review" ΓåÆ "policies on"
+              // "protocols against's review" → "policies on"
               [/\bprotocols\s+against'?s?\s+review\b/gi, 'policies on'],
               [/\bprotocols\b/gi, 'policies'],
               // "rendering" when used for "making"
@@ -691,7 +798,7 @@ export async function POST(req: Request) {
             humanized = humanized.replace(/(^|[.!?]\s+)([a-z])/g, (_m: string, pre: string, ch: string) => pre + ch.toUpperCase());
           }
 
-          // ΓöÇΓöÇ OXYGEN POLISH PASS (FINAL PHASE) ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+          // ── OXYGEN POLISH PASS (FINAL PHASE) ──────────────────────────
           // Easy engine's output is polished through the Oxygen TS engine
           // as the LAST step after all post-processing, for final cleanup.
           if (eng === 'easy') {
@@ -705,13 +812,13 @@ export async function POST(req: Request) {
                 await emitSentencesStaggered(controller, oxygenSents, 'Oxygen Polish', 20);
               }
             } catch {
-              // Oxygen polish is best-effort ΓÇö never block the pipeline
+              // Oxygen polish is best-effort — never block the pipeline
             }
             await flushDelay(30);
           }
 
-          // Emit polished sentences
-          {
+          // Emit polished sentences (skip visible stage for fast-loop engines)
+          if (!fastLoopEnabled) {
             sendSSE(controller, { type: 'stage', stage: 'Polishing' });
             await flushDelay(20);
             const { sentences: polishedSents } = splitIntoIndexedSentences(humanized);
@@ -719,11 +826,13 @@ export async function POST(req: Request) {
             await flushDelay(30);
           }
 
-          // 14. Meaning check (detection disabled ΓÇö coming soon)
+          // 14. Meaning check (detection disabled — coming soon)
           // Final cleanup: collapse double spaces
           humanized = humanized.replace(/ {2,}/g, ' ');
-          sendSSE(controller, { type: 'stage', stage: 'Analyzing' });
-          await flushDelay(10);
+          if (!fastLoopEnabled) {
+            sendSSE(controller, { type: 'stage', stage: 'Analyzing' });
+            await flushDelay(10);
+          }
           // For engines with server-side meaning checks (oxygen3), use fast sync heuristic
           const meaningCheck = (eng === 'oxygen3')
             ? isMeaningPreservedSync(text, humanized, 0.88)
@@ -732,7 +841,7 @@ export async function POST(req: Request) {
           const inputWords = text.trim().split(/\s+/).length;
           const outputWords = humanized.trim().split(/\s+/).length;
 
-          // Final done event ΓÇö detection results omitted (coming soon)
+          // Final done event — detection results omitted (coming soon)
           sendSSE(controller, {
             type: 'done',
             humanized,
@@ -748,13 +857,13 @@ export async function POST(req: Request) {
             void (async () => {
               try {
                 const supa = createServiceClient();
-                const engineType = 'fast'; // unified ΓÇö all engines deduct from one pool
+                const engineType = 'fast'; // unified — all engines deduct from one pool
                 const toneDb = ({ neutral: 'natural', academic: 'academic', professional: 'business', simple: 'direct' } as Record<string, string>)[tone ?? 'neutral'] ?? 'natural';
                 await withTimeout(
                   Promise.all([
                     supa.rpc('increment_usage', { p_user_id: userId, p_words: outputWords, p_engine_type: engineType }),
                     supa.from('documents').insert({
-                      user_id: userId, title: text.slice(0, 60).replace(/\n/g, ' ').trim() + (text.length > 60 ? 'ΓÇª' : ''),
+                      user_id: userId, title: text.slice(0, 60).replace(/\n/g, ' ').trim() + (text.length > 60 ? '…' : ''),
                       input_text: text, output_text: humanized,
                       input_word_count: inputWords, output_word_count: outputWords,
                       engine_used: eng, strength: effectiveStrength, tone: toneDb,
@@ -787,7 +896,7 @@ export async function POST(req: Request) {
         Connection: 'keep-alive',
       },
     });
-  } catch (err) {
+  } catch {
     return new Response('data: ' + JSON.stringify({ type: 'error', error: 'Server error' }) + '\n\n', {
       status: 500,
       headers: { 'Content-Type': 'text/event-stream' },

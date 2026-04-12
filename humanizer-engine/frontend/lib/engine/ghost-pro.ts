@@ -2087,7 +2087,7 @@ REMEMBER: You are ONLY allowed to touch punctuation marks (. , ; : ! ? —) and 
 async function processChunk(
   chunkText: string,
   features: InputFeatures,
-  options: { strength: string; tone: string; temperature: number },
+  options: { strength: string; tone: string; temperature: number; turbo?: boolean },
 ): Promise<string> {
   const { strength } = options;
   const chunkWords = chunkText.trim().split(/\s+/).length;
@@ -2334,7 +2334,12 @@ CRITICAL RULES:
     // The pass1A output (GPT-4o-mini) is the baseline. After each iteration, we measure
     // per-sentence word change % vs. the baseline. We run exactly 5 iterations, but can
     // stop early if ALL sentences have ≥50% word change from the baseline.
+    // TURBO MODE: Skip entirely — the outer 10x re-humanization loop replaces this.
     // ═══════════════════════════════════════════
+
+    if (options.turbo) {
+      console.log(`  [GhostPro]   Pass 1C: SKIPPED (turbo mode — 10x outer loop handles re-humanization)`);
+    } else {
 
     const REHUMANIZE_ITERATIONS = 5;
     const CHANGE_THRESHOLD = 0.50; // 50% word change required
@@ -2500,6 +2505,8 @@ CRITICAL RULES:
 
     console.log(`  [GhostPro]   Pass 1C complete: ${result.split(/\s+/).length} words after iterative re-humanization`);
 
+    } // end Pass 1C (!turbo)
+
   } else {
     // ── OTHER MODES: Per-sentence independent LLM rewriting ──
     console.log("  [GhostPro]   Pass 1: Per-sentence LLM rewrite...");
@@ -2588,9 +2595,10 @@ CRITICAL RULES:
   // Analyze with detector, apply per-sentence anti-detection + deep cleaning
   // until scores drop or we hit the iteration cap.
   // Wikipedia mode: skip entirely — internal detector is unreliable, LLM prompt handles style
+  // TURBO MODE: Skip entirely — saves 2-5s per chunk
   // ═══════════════════════════════════════════
   const isWikiMode = options.tone === "wikipedia";
-  const maxFeedbackPasses = isWikiMode ? 1 : 1;
+  const maxFeedbackPasses = options.turbo ? 0 : (isWikiMode ? 1 : 1);
   const targetAiScore = strength === "strong" ? 15 : strength === "medium" ? 25 : 35;
 
   for (let fbPass = 0; fbPass < maxFeedbackPasses; fbPass++) {
@@ -2659,6 +2667,7 @@ export async function ghostProHumanize(
     tone?: string;
     strictMeaning?: boolean;
     enablePostProcessing?: boolean;
+    turbo?: boolean;
   } = {},
 ): Promise<string> {
   if (!text?.trim()) return text;
@@ -2730,14 +2739,14 @@ export async function ghostProHumanize(
   if (chunks.length === 1) {
     // Single chunk — standard path
     console.log("  [GhostPro] Processing as single chunk...");
-    result = await processChunk(surgeryText, features, { strength, tone, temperature });
+    result = await processChunk(surgeryText, features, { strength, tone, temperature, turbo: options.turbo });
   } else {
     // Multi-chunk path
     console.log(`  [GhostPro] Splitting into ${chunks.length} chunks for processing...`);
     const processedChunks = await Promise.all(chunks.map(async (chunk, i) => {
       const chunkWords = chunk.trim().split(/\s+/).length;
       console.log(`  [GhostPro] Processing chunk ${i + 1}/${chunks.length} (${chunkWords} words)...`);
-      return processChunk(chunk, features, { strength, tone, temperature });
+      return processChunk(chunk, features, { strength, tone, temperature, turbo: options.turbo });
     }));
 
     result = processedChunks.join("\n\n");
@@ -2803,7 +2812,8 @@ export async function ghostProHumanize(
 
   // ── DETECTOR FEEDBACK LOOP — re-run post-processing if AI score > 15% ──
   // Wikipedia mode: skip — internal detector is unreliable for encyclopedic text
-  if (tone !== "wikipedia") {
+  // Turbo mode: skip — saves 2-5s
+  if (tone !== "wikipedia" && !options.turbo) {
   try {
     const detector = getDetector();
     for (let feedbackRound = 0; feedbackRound < 2; feedbackRound++) {
