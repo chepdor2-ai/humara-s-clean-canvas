@@ -155,7 +155,7 @@ const ALL_ENGINES: EngineConfig[] = [
 // AntiGPTZero mode engines (signal killers — NOT pure humanizers)
 const ANTI_GPTZERO_ENGINES = new Set(['oxygen', 'humara_v3_3', 'oxygen3']);
 // Standard humanizer engines (handle ZeroGPT, Surfer SEO, etc.)
-const STANDARD_ENGINES = new Set(['ozone', 'easy', 'ghost_pro_wiki']);
+const STANDARD_ENGINES = new Set(['ozone', 'easy', 'ghost_pro_wiki', 'nuru_v2']);
 
 const ENGINE_GUIDES: Record<string, string> = {
   oxygen: 'Trained specifically to beat GPTZero. May score slightly higher on other detectors — use this only when GPTZero is the problem.',

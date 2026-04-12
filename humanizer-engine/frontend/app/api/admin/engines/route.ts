@@ -1,19 +1,15 @@
 import { NextResponse } from 'next/server';
 import { createServiceClient } from '../../../../lib/supabase';
 
-// Hardcoded engine defaults — used when engine_config table doesn't exist yet
+// Hardcoded engine defaults — must match ALL_ENGINES in page.tsx
 const DEFAULT_ENGINES = [
-  { engine_id: 'oxygen', label: 'Oxygen', enabled: true, premium: false, sort_order: 1 },
-  { engine_id: 'omega', label: 'Omega', enabled: true, premium: false, sort_order: 2 },
-  { engine_id: 'nuru', label: 'Nuru', enabled: true, premium: false, sort_order: 3 },
-  { engine_id: 'humara_v1_3', label: 'Humara v1.3', enabled: true, premium: false, sort_order: 4 },
-  { engine_id: 'ghost_mini', label: 'Ghost Mini', enabled: true, premium: false, sort_order: 5 },
-  { engine_id: 'ghost_mini_v1_2', label: 'Ghost Mini v1.2', enabled: true, premium: false, sort_order: 6 },
-  { engine_id: 'ghost_pro', label: 'Ghost Pro', enabled: true, premium: false, sort_order: 7 },
-  { engine_id: 'ninja', label: 'Ninja', enabled: true, premium: false, sort_order: 8 },
-  { engine_id: 'undetectable', label: 'Undetectable', enabled: true, premium: false, sort_order: 9 },
-  { engine_id: 'fast_v11', label: 'V1.1', enabled: true, premium: true, sort_order: 10 },
-  { engine_id: 'humara', label: 'Humara', enabled: true, premium: true, sort_order: 11 },
+  { engine_id: 'oxygen', label: 'Humara 2.0', enabled: true, premium: false, sort_order: 1 },
+  { engine_id: 'ozone', label: 'Humara 2.1', enabled: true, premium: false, sort_order: 2 },
+  { engine_id: 'easy', label: 'Humara 2.2', enabled: true, premium: false, sort_order: 3 },
+  { engine_id: 'humara_v3_3', label: 'Humara 2.4', enabled: true, premium: false, sort_order: 4 },
+  { engine_id: 'oxygen3', label: 'Humara 3.0', enabled: true, premium: false, sort_order: 5 },
+  { engine_id: 'ghost_pro_wiki', label: 'Wikipedia', enabled: true, premium: false, sort_order: 6 },
+  { engine_id: 'nuru_v2', label: 'Nuru 2.0', enabled: true, premium: false, sort_order: 7 },
 ];
 
 function getToken(authHeader: string | null) {
@@ -78,16 +74,19 @@ export async function PATCH(request: Request) {
     const results = [];
     for (const eng of engines) {
       if (!eng.engine_id) continue;
-      const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };
-      if (typeof eng.enabled === 'boolean') updates.enabled = eng.enabled;
-      if (typeof eng.premium === 'boolean') updates.premium = eng.premium;
-      if (typeof eng.sort_order === 'number') updates.sort_order = eng.sort_order;
-      if (typeof eng.label === 'string' && eng.label.trim()) updates.label = eng.label.trim();
+      const row: Record<string, unknown> = {
+        engine_id: eng.engine_id,
+        updated_at: new Date().toISOString(),
+      };
+      if (typeof eng.enabled === 'boolean') row.enabled = eng.enabled;
+      if (typeof eng.premium === 'boolean') row.premium = eng.premium;
+      if (typeof eng.sort_order === 'number') row.sort_order = eng.sort_order;
+      if (typeof eng.label === 'string' && eng.label.trim()) row.label = eng.label.trim();
 
+      // Upsert: insert new engines or update existing ones
       const { data, error } = await supabase
         .from('engine_config')
-        .update(updates)
-        .eq('engine_id', eng.engine_id)
+        .upsert(row, { onConflict: 'engine_id' })
         .select()
         .single();
 
