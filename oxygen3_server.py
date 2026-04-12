@@ -894,7 +894,8 @@ def t5_generate_sentence(sentence: str, num_beams: int = 4,
         padding=True,
     ).to(device)
 
-    max_new = min(256, max(word_count * 2, 40))
+    # Tight output budget: ~1.3x input length
+    max_new = min(128, max(int(word_count * 1.5), 30))
 
     candidates = []
 
@@ -974,7 +975,7 @@ MODE_PRESETS = {
         "max_retries": 8,
     },
     "turbo": {
-        "num_beams": 2,
+        "num_beams": 1,
         "no_repeat_ngram": 2,
         "length_penalty": 1.0,
         "repetition_penalty": 1.3,

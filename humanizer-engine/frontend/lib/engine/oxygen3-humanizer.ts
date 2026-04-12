@@ -30,18 +30,6 @@ async function oxygen3Call(
   text: string,
   mode: string,
 ): Promise<{ humanized: string; stats: Record<string, unknown> }> {
-  // Health check
-  try {
-    const healthRes = await fetch(`${OXYGEN3_API_URL}/health`, {
-      signal: AbortSignal.timeout(10_000),
-    });
-    if (!healthRes.ok) throw new Error(`Health check failed: ${healthRes.status}`);
-  } catch (err) {
-    throw new Error(
-      `Oxygen 3.0 server unavailable: ${err instanceof Error ? err.message : err}`,
-    );
-  }
-
   const response = await fetch(`${OXYGEN3_API_URL}/humanize`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -50,7 +38,7 @@ async function oxygen3Call(
       mode,
       sentence_by_sentence: true,
     }),
-    signal: AbortSignal.timeout(120_000),
+    signal: AbortSignal.timeout(300_000),
   });
 
   if (!response.ok) {

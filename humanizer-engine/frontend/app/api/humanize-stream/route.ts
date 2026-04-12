@@ -1,6 +1,6 @@
 import { robustSentenceSplit } from '@/lib/engine/content-protection';
 import { getDetector } from '@/lib/engine/multi-detector';
-import { isMeaningPreserved } from '@/lib/engine/semantic-guard';
+import { isMeaningPreserved, isMeaningPreservedSync } from '@/lib/engine/semantic-guard';
 import { fixCapitalization } from '@/lib/engine/shared-dictionaries';
 import { deduplicateRepeatedPhrases } from '@/lib/engine/premium-deep-clean';
 import { preserveInputStructure } from '@/lib/engine/structure-preserver';
@@ -266,7 +266,7 @@ export async function POST(req: Request) {
             );
           } else if (eng === 'oxygen3') {
             // Oxygen 3.0: Fine-tuned T5 model (strict sentence-by-sentence, first-person guard)
-            const o3Mode = effectiveStrength === 'light' ? 'turbo' : effectiveStrength === 'strong' ? 'quality' : 'fast';
+            const o3Mode = effectiveStrength === 'strong' ? 'fast' : 'turbo';
             const o3Result = await oxygen3Humanize(normalizedText, o3Mode);
             humanized = o3Result.humanized;
           } else if (eng === 'oxygen_t5') {
@@ -630,7 +630,10 @@ export async function POST(req: Request) {
           humanized = humanized.replace(/ {2,}/g, ' ');
           sendSSE(controller, { type: 'stage', stage: 'Analyzing' });
           await flushDelay(50);
-          const meaningCheck = await isMeaningPreserved(text, humanized, 0.88);
+          // For engines with server-side meaning checks (oxygen3), use fast sync heuristic
+          const meaningCheck = (eng === 'oxygen3')
+            ? isMeaningPreservedSync(text, humanized, 0.88)
+            : await isMeaningPreserved(text, humanized, 0.88);
 
           const inputWords = text.trim().split(/\s+/).length;
           const outputWords = humanized.trim().split(/\s+/).length;
