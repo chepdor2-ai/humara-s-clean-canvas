@@ -16,10 +16,7 @@ venv_clean/
 .env.local
 *.log
 
-# Data and dictionaries (too large for deployment)
-# Keep frontend engine data because the Next.js build imports it.
-data/
-!frontend/lib/**/data/
+# Data and dictionaries (keep data because frontend engine builds import JSON assets)
 dictionaries/
 tests/
 
