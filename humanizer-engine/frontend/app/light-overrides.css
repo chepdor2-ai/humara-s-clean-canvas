@@ -263,6 +263,176 @@
 }
 
 /* ═══════════════════════════════════════════════════════════════
+   APP WORKSPACE LIGHT THEME (STEALTH/DASHBOARD)
+   ───────────────────────────────────────────────────────────────
+   These rules are stripped by Tailwind v4 when placed in
+   globals.css. They MUST live here to survive.
+   ═══════════════════════════════════════════════════════════════ */
+
+/* Humanizer page cards → white background, light border, soft shadow */
+:root:not(.dark) .stealth-control-card,
+:root:not(.dark) .stealth-editor-panel,
+:root:not(.dark) .stealth-hint-bar,
+:root:not(.dark) .stealth-history,
+:root:not(.dark) .stealth-popup {
+  background: #ffffff !important;
+  background-image: none !important;
+  border-color: #dce5f0 !important;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08) !important;
+}
+
+/* Stealth-shell inner dark bg helpers → light */
+:root:not(.dark) .stealth-shell .bg-\[\#090d14\],
+:root:not(.dark) .stealth-shell .bg-\[\#0a1018\],
+:root:not(.dark) .stealth-shell .bg-\[\#0c0c14\],
+:root:not(.dark) .stealth-shell .bg-zinc-950\/60,
+:root:not(.dark) .stealth-shell .bg-zinc-900\/70,
+:root:not(.dark) .stealth-shell .bg-zinc-900\/60,
+:root:not(.dark) .stealth-shell .bg-zinc-800\/60,
+:root:not(.dark) .stealth-shell .bg-zinc-800\/50,
+:root:not(.dark) .stealth-shell .bg-zinc-800\/30,
+:root:not(.dark) .stealth-shell .bg-zinc-800\/20 {
+  background-color: #f1f5f9 !important;
+}
+
+/* Text inside stealth-shell → dark for visibility */
+:root:not(.dark) .stealth-shell .text-zinc-100,
+:root:not(.dark) .stealth-shell .text-zinc-200,
+:root:not(.dark) .stealth-shell .text-zinc-300 {
+  color: #0f172a !important;
+}
+:root:not(.dark) .stealth-shell .text-zinc-400,
+:root:not(.dark) .stealth-shell .text-zinc-500,
+:root:not(.dark) .stealth-shell .text-zinc-600,
+:root:not(.dark) .stealth-shell .text-zinc-700 {
+  color: #475569 !important;
+}
+
+/* Borders inside stealth-shell → light */
+:root:not(.dark) .stealth-shell .border-cyan-900\/30,
+:root:not(.dark) .stealth-shell .border-cyan-900\/40,
+:root:not(.dark) .stealth-shell .border-cyan-900\/50,
+:root:not(.dark) .stealth-shell .border-cyan-950\/60,
+:root:not(.dark) .stealth-shell .border-zinc-800,
+:root:not(.dark) .stealth-shell .border-zinc-800\/60 {
+  border-color: #dce5f0 !important;
+}
+
+/* Hovers inside stealth-shell → light */
+:root:not(.dark) .stealth-shell .hover\:bg-zinc-800\/30:hover,
+:root:not(.dark) .stealth-shell .hover\:bg-zinc-800\/50:hover,
+:root:not(.dark) .stealth-shell .hover\:bg-cyan-950\/30:hover {
+  background-color: #e9f2ff !important;
+}
+
+/* Tinted pill backgrounds */
+:root:not(.dark) .stealth-shell .bg-orange-950\/30 {
+  background-color: rgba(255, 237, 213, 0.78) !important;
+}
+:root:not(.dark) .stealth-shell .bg-teal-950\/30 {
+  background-color: rgba(204, 251, 241, 0.78) !important;
+}
+:root:not(.dark) .stealth-shell .bg-fuchsia-950\/30 {
+  background-color: rgba(250, 232, 255, 0.78) !important;
+}
+:root:not(.dark) .stealth-shell .bg-red-950\/30 {
+  background-color: rgba(254, 226, 226, 0.78) !important;
+}
+
+/* Textarea/select inside stealth */
+:root:not(.dark) .stealth-shell textarea,
+:root:not(.dark) .stealth-shell select {
+  color: #0f172a !important;
+}
+:root:not(.dark) .stealth-shell textarea::placeholder {
+  color: #64748b !important;
+}
+
+/* Grey-bar zinc-700 → lighter */
+:root:not(.dark) .stealth-shell .bg-zinc-700 {
+  background-color: #94a3b8 !important;
+}
+
+/* Dashboard cards */
+:root:not(.dark) .dashboard-card {
+  background: #ffffff !important;
+  border-color: #dce5f0 !important;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08) !important;
+}
+:root:not(.dark) .dashboard-plan-badge {
+  background: #eef2ff !important;
+  border-color: #c7d2fe !important;
+  color: #5b21b6 !important;
+}
+:root:not(.dark) .dashboard-shell .bg-\[\#0c0c14\],
+:root:not(.dark) .dashboard-shell .bg-\[\#12121a\],
+:root:not(.dark) .dashboard-shell .bg-zinc-800\/80,
+:root:not(.dark) .dashboard-shell .bg-zinc-800\/50 {
+  background-color: #ffffff !important;
+}
+:root:not(.dark) .dashboard-shell .hover\:bg-white\/\[0\.02\]:hover {
+  background-color: #f1f5f9 !important;
+}
+:root:not(.dark) .dashboard-shell .text-white,
+:root:not(.dark) .dashboard-shell .text-zinc-200,
+:root:not(.dark) .dashboard-shell .text-zinc-300 {
+  color: #0f172a !important;
+}
+:root:not(.dark) .dashboard-shell .text-zinc-400,
+:root:not(.dark) .dashboard-shell .text-zinc-500,
+:root:not(.dark) .dashboard-shell .text-zinc-600,
+:root:not(.dark) .dashboard-shell .text-zinc-700 {
+  color: #475569 !important;
+}
+:root:not(.dark) .dashboard-shell .border-zinc-800\/60,
+:root:not(.dark) .dashboard-shell .border-zinc-800\/50,
+:root:not(.dark) .dashboard-shell .border-zinc-800\/30,
+:root:not(.dark) .dashboard-shell .border-zinc-800 {
+  border-color: #dce5f0 !important;
+}
+
+/* Dark inline CSS function gradients → light */
+:root:not(.dark) .bg-\[linear-gradient\(145deg\,rgba\(8\,11\,16\,\.95\)\,rgba\(10\,13\,19\,\.92\)\)\] {
+  background: linear-gradient(145deg, rgba(255,255,255,.98), rgba(248,250,252,.96)) !important;
+}
+:root:not(.dark) .bg-\[linear-gradient\(145deg\,rgba\(9\,14\,22\,\.95\)\,rgba\(9\,12\,19\,\.94\)\)\] {
+  background: linear-gradient(145deg, rgba(255,255,255,.98), rgba(248,250,252,.96)) !important;
+}
+
+/* Auth-page logo gradient text */
+:root:not(.dark) .bg-gradient-to-r.from-white.via-purple-200.to-purple-400 {
+  background-image: linear-gradient(to right, #1e1b4b, #7c3aed, #a855f7) !important;
+}
+
+/* Dark shadows → soft light */
+:root:not(.dark) .shadow-\[0_16px_40px_-22px_rgba\(6\,182\,212\,\.45\)\],
+:root:not(.dark) .shadow-\[0_20px_40px_-28px_rgba\(8\,145\,178\,\.5\)\] {
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08) !important;
+}
+
+/* Premium-bg overlay → transparent in light */
+:root:not(.dark) .premium-bg::before {
+  background-image: radial-gradient(circle at 1px 1px, rgba(0, 0, 0, 0.02) 1px, transparent 0) !important;
+}
+
+/* bg-zinc-800/80 → light */
+:root:not(.dark) .bg-zinc-800\/80 {
+  background-color: #f1f5f9 !important;
+}
+
+/* Hero section overrides */
+:root:not(.dark) .container-snap > section:first-of-type {
+  background:
+    radial-gradient(900px 420px at 15% -5%, rgba(147, 51, 234, 0.08), transparent 65%),
+    radial-gradient(700px 360px at 85% -15%, rgba(56, 189, 248, 0.08), transparent 60%),
+    linear-gradient(180deg, #ffffff 0%, #fafbff 55%, #f5f7ff 100%);
+}
+:root:not(.dark) .container-snap > section:first-of-type > .absolute.inset-0.overflow-hidden > video {
+  opacity: 0.18;
+  filter: saturate(0.7) brightness(1.18);
+}
+
+/* ═══════════════════════════════════════════════════════════════
    FORCE-DARK RESTORATION
    ───────────────────────────────────────────────────────────────
    Components with .force-dark (HeroAnimation, IPhoneMockup)
