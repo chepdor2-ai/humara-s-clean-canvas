@@ -31,45 +31,45 @@ export default function BlogPage() {
   return (
     <div className="flex flex-col items-center min-h-screen">
       {/* Hero */}
-      <section className="w-full bg-zinc-900 pt-32 pb-24">
+      <section className="w-full bg-slate-50 dark:bg-zinc-900 pt-32 pb-24">
         <div className="max-w-5xl mx-auto px-6 text-center mt-12">
           <span className="inline-block py-1 px-3 rounded-full bg-brand-900/30 text-brand-300 font-semibold uppercase text-xs mb-6 border border-brand-700">
             Blog
           </span>
-          <h1 className="text-4xl md:text-6xl font-bold text-white mb-8">
+          <h1 className="text-4xl md:text-6xl font-bold text-slate-900 dark:text-white mb-8">
             AI Humanization Insights
           </h1>
-          <p className="text-xl text-zinc-400 max-w-3xl mx-auto font-medium leading-relaxed">
+          <p className="text-xl text-slate-500 dark:text-zinc-400 max-w-3xl mx-auto font-medium leading-relaxed">
             Expert guides on making AI content undetectable, bypassing detectors, and building an effective AI-assisted content strategy.
           </p>
         </div>
       </section>
 
       {/* Posts Grid */}
-      <section className="w-full bg-zinc-950 py-24">
+      <section className="w-full bg-white dark:bg-zinc-950 py-24">
         <div className="max-w-7xl mx-auto px-6">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
             {BLOG_POSTS.map((post) => (
               <Link
                 key={post.slug}
                 href={`/blog/${post.slug}`}
-                className="group bg-zinc-900 border border-zinc-800 rounded-2xl p-8 hover:border-purple-700/50 hover:bg-zinc-900/80 transition-all duration-300 flex flex-col"
+                className="group bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-2xl p-8 hover:border-purple-700/50 hover:bg-slate-50 dark:bg-zinc-900/80 transition-all duration-300 flex flex-col"
               >
                 <div className="flex items-center gap-3 mb-5">
-                  <span className={`text-[10px] font-bold uppercase px-2.5 py-1 rounded-full border ${CATEGORY_COLORS[post.category] || 'bg-zinc-800 text-zinc-300 border-zinc-700'}`}>
+                  <span className={`text-[10px] font-bold uppercase px-2.5 py-1 rounded-full border ${CATEGORY_COLORS[post.category] || 'bg-slate-200 dark:bg-zinc-800 text-slate-600 dark:text-zinc-300 border-slate-300 dark:border-zinc-700'}`}>
                     {post.category}
                   </span>
                 </div>
 
-                <h2 className="text-xl font-bold text-white mb-3 group-hover:text-purple-300 transition-colors leading-tight">
+                <h2 className="text-xl font-bold text-slate-900 dark:text-white mb-3 group-hover:text-purple-300 transition-colors leading-tight">
                   {post.title}
                 </h2>
 
-                <p className="text-zinc-400 text-sm leading-relaxed mb-6 flex-1">
+                <p className="text-slate-500 dark:text-zinc-400 text-sm leading-relaxed mb-6 flex-1">
                   {post.description}
                 </p>
 
-                <div className="flex items-center justify-between text-xs text-zinc-500">
+                <div className="flex items-center justify-between text-xs text-slate-500 dark:text-zinc-500">
                   <div className="flex items-center gap-4">
                     <span className="flex items-center gap-1.5">
                       <Calendar className="w-3.5 h-3.5" />
@@ -89,12 +89,12 @@ export default function BlogPage() {
       </section>
 
       {/* CTA */}
-      <section className="w-full bg-zinc-900 py-24 border-t border-zinc-800">
+      <section className="w-full bg-slate-50 dark:bg-zinc-900 py-24 border-t border-slate-200 dark:border-zinc-800">
         <div className="max-w-3xl mx-auto px-6 text-center">
-          <h2 className="text-3xl md:text-4xl font-bold text-white mb-6">
+          <h2 className="text-3xl md:text-4xl font-bold text-slate-900 dark:text-white mb-6">
             Ready to Humanize Your Content?
           </h2>
-          <p className="text-zinc-400 text-lg mb-8">
+          <p className="text-slate-500 dark:text-zinc-400 text-lg mb-8">
             Try HumaraGPT free — no credit card required. See your AI scores drop to human levels in seconds.
           </p>
           <Link

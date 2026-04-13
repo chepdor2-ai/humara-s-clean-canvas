@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../../AuthProvider';
 import { supabase } from '../../../lib/supabase';
@@ -164,8 +164,8 @@ export default function AdminDashboard() {
       <div className="flex items-center justify-center min-h-[60vh]">
         <div className="text-center">
           <Shield className="w-12 h-12 text-red-400 mx-auto mb-4" />
-          <h2 className="text-lg font-semibold text-white mb-2">Access Denied</h2>
-          <p className="text-sm text-zinc-500">You do not have admin privileges.</p>
+          <h2 className="text-lg font-semibold text-slate-900 dark:text-white mb-2">Access Denied</h2>
+          <p className="text-sm text-slate-500 dark:text-zinc-500">You do not have admin privileges.</p>
         </div>
       </div>
     );
@@ -329,20 +329,20 @@ export default function AdminDashboard() {
     <div className="animate-in fade-in duration-500">
       <header className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-xl font-bold text-white tracking-tight">Admin Dashboard</h1>
-          <p className="text-[13px] text-zinc-500">Manage users, subscriptions, and platform data</p>
+          <h1 className="text-xl font-bold text-slate-900 dark:text-white tracking-tight">Admin Dashboard</h1>
+          <p className="text-[13px] text-slate-500 dark:text-zinc-500">Manage users, subscriptions, and platform data</p>
         </div>
-        <button onClick={() => { fetchData(); if (tab === 'users') fetchUsers(); }} disabled={loading} className="text-xs font-medium text-zinc-400 hover:text-white px-3 py-2 rounded-lg hover:bg-zinc-800 transition-colors flex items-center gap-1.5 disabled:opacity-50">
+        <button onClick={() => { fetchData(); if (tab === 'users') fetchUsers(); }} disabled={loading} className="text-xs font-medium text-slate-500 dark:text-zinc-400 hover:text-white px-3 py-2 rounded-lg hover:bg-slate-100 dark:bg-zinc-800 transition-colors flex items-center gap-1.5 disabled:opacity-50">
           <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} /> Refresh
         </button>
       </header>
 
       {/* Tabs */}
-      <div className="flex gap-1 bg-zinc-900 rounded-lg p-1 mb-6 overflow-x-auto">
+      <div className="flex gap-1 bg-white dark:bg-zinc-900 rounded-lg p-1 mb-6 overflow-x-auto">
         {TABS.map(t => (
           <button key={t.id} onClick={() => setTab(t.id)}
             className={`flex items-center gap-1.5 px-4 py-2 text-xs font-semibold rounded-md transition-all whitespace-nowrap ${
-              tab === t.id ? 'bg-zinc-800 text-white shadow-sm' : 'text-zinc-500 hover:text-white'
+              tab === t.id ? 'bg-slate-100 dark:bg-zinc-800 text-slate-900 dark:text-white shadow-sm' : 'text-slate-500 dark:text-zinc-500 hover:text-white'
             }`}>
             <t.icon className="w-3.5 h-3.5" /> {t.label}
           </button>
@@ -360,12 +360,12 @@ export default function AdminDashboard() {
             { label: 'Feedback', val: stats.totalFeedback, icon: MessageSquare, color: 'text-amber-400' },
             { label: 'Revenue', val: `$${stats.revenueThisMonth.toFixed(0)}`, icon: BarChart3, color: 'text-purple-400' },
           ].map(s => (
-            <div key={s.label} className="bg-[#0c0c14] border border-zinc-800/60 rounded-xl p-4">
+            <div key={s.label} className="bg-[#0c0c14] border border-slate-200 dark:border-zinc-800/60 rounded-xl p-4">
               <div className="flex items-center justify-between mb-3">
-                <span className="text-[11px] font-semibold text-zinc-500 uppercase tracking-wider">{s.label}</span>
+                <span className="text-[11px] font-semibold text-slate-500 dark:text-zinc-500 uppercase tracking-wider">{s.label}</span>
                 <s.icon className={`w-4 h-4 ${s.color}`} />
               </div>
-              <p className="text-2xl font-bold text-white">{s.val}</p>
+              <p className="text-2xl font-bold text-slate-900 dark:text-white">{s.val}</p>
             </div>
           ))}
         </div>
@@ -375,26 +375,26 @@ export default function AdminDashboard() {
       {tab === 'engines' && (
         <div className="space-y-4">
           <div className="grid grid-cols-3 gap-3">
-            <div className="bg-[#0c0c14] border border-zinc-800/60 rounded-xl p-4">
+            <div className="bg-[#0c0c14] border border-slate-200 dark:border-zinc-800/60 rounded-xl p-4">
               <div className="flex items-center justify-between mb-2">
-                <span className="text-[11px] font-semibold text-zinc-500 uppercase tracking-wider">Enabled</span>
+                <span className="text-[11px] font-semibold text-slate-500 dark:text-zinc-500 uppercase tracking-wider">Enabled</span>
                 <Eye className="w-4 h-4 text-emerald-400" />
               </div>
-              <p className="text-2xl font-bold text-white">{enabledCount} <span className="text-sm font-normal text-zinc-500">/ {engineDraft.length}</span></p>
+              <p className="text-2xl font-bold text-slate-900 dark:text-white">{enabledCount} <span className="text-sm font-normal text-slate-500 dark:text-zinc-500">/ {engineDraft.length}</span></p>
             </div>
-            <div className="bg-[#0c0c14] border border-zinc-800/60 rounded-xl p-4">
+            <div className="bg-[#0c0c14] border border-slate-200 dark:border-zinc-800/60 rounded-xl p-4">
               <div className="flex items-center justify-between mb-2">
-                <span className="text-[11px] font-semibold text-zinc-500 uppercase tracking-wider">Free Tier</span>
+                <span className="text-[11px] font-semibold text-slate-500 dark:text-zinc-500 uppercase tracking-wider">Free Tier</span>
                 <Cpu className="w-4 h-4 text-purple-400" />
               </div>
-              <p className="text-2xl font-bold text-white">{freeCount}</p>
+              <p className="text-2xl font-bold text-slate-900 dark:text-white">{freeCount}</p>
             </div>
-            <div className="bg-[#0c0c14] border border-zinc-800/60 rounded-xl p-4">
+            <div className="bg-[#0c0c14] border border-slate-200 dark:border-zinc-800/60 rounded-xl p-4">
               <div className="flex items-center justify-between mb-2">
-                <span className="text-[11px] font-semibold text-zinc-500 uppercase tracking-wider">Premium</span>
+                <span className="text-[11px] font-semibold text-slate-500 dark:text-zinc-500 uppercase tracking-wider">Premium</span>
                 <Crown className="w-4 h-4 text-amber-400" />
               </div>
-              <p className="text-2xl font-bold text-white">{premiumCount}</p>
+              <p className="text-2xl font-bold text-slate-900 dark:text-white">{premiumCount}</p>
             </div>
           </div>
 
@@ -437,61 +437,61 @@ export default function AdminDashboard() {
             </div>
           )}
 
-          <div className="bg-[#0c0c14] border border-zinc-800/60 rounded-xl overflow-hidden">
-            <div className="px-4 py-3 border-b border-zinc-800/50 flex items-center justify-between">
+          <div className="bg-[#0c0c14] border border-slate-200 dark:border-zinc-800/60 rounded-xl overflow-hidden">
+            <div className="px-4 py-3 border-b border-slate-200 dark:border-zinc-800/50 flex items-center justify-between">
               <div>
-                <h3 className="text-sm font-bold text-white">Engine Configuration</h3>
-                <p className="text-[11px] text-zinc-500 mt-0.5">Drag to reorder. Toggle visibility and tier.</p>
+                <h3 className="text-sm font-bold text-slate-900 dark:text-white">Engine Configuration</h3>
+                <p className="text-[11px] text-slate-500 dark:text-zinc-500 mt-0.5">Drag to reorder. Toggle visibility and tier.</p>
               </div>
               <div className="flex items-center gap-2">
                 {engineDirty && (
-                  <button onClick={resetEngines} className="px-3 py-1.5 text-xs font-medium text-zinc-400 hover:text-white rounded-lg hover:bg-zinc-800 transition-colors">Reset</button>
+                  <button onClick={resetEngines} className="px-3 py-1.5 text-xs font-medium text-slate-500 dark:text-zinc-400 hover:text-white rounded-lg hover:bg-slate-100 dark:bg-zinc-800 transition-colors">Reset</button>
                 )}
                 <button onClick={saveEngines} disabled={!engineDirty || engineSaving}
-                  className={`flex items-center gap-1.5 px-4 py-1.5 text-xs font-bold rounded-lg transition-all ${engineDirty ? 'bg-purple-600 hover:bg-purple-700 text-white' : 'bg-zinc-800 text-zinc-500 cursor-not-allowed'}`}>
+                  className={`flex items-center gap-1.5 px-4 py-1.5 text-xs font-bold rounded-lg transition-all ${engineDirty ? 'bg-purple-600 hover:bg-purple-700 text-white' : 'bg-slate-100 dark:bg-zinc-800 text-slate-500 dark:text-zinc-500 cursor-not-allowed'}`}>
                   {engineSaving ? <RefreshCw className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />}
                   {engineSaving ? 'Savingâ€¦' : 'Save'}
                 </button>
               </div>
             </div>
 
-            <div className="grid grid-cols-[32px_1fr_80px_80px_80px_80px] gap-2 px-4 py-2 border-b border-zinc-800/50 text-[11px] font-semibold text-zinc-500 uppercase tracking-wider">
+            <div className="grid grid-cols-[32px_1fr_80px_80px_80px_80px] gap-2 px-4 py-2 border-b border-slate-200 dark:border-zinc-800/50 text-[11px] font-semibold text-slate-500 dark:text-zinc-500 uppercase tracking-wider">
               <div></div><div>Engine</div><div className="text-center">Visible</div><div className="text-center">Tier</div><div className="text-center">Order</div><div className="text-center">Status</div>
             </div>
 
             {engineDraft.map((eng, idx) => (
               <div key={eng.engine_id} draggable onDragStart={() => handleDragStart(idx)} onDragOver={(e) => handleDragOver(e, idx)} onDragEnd={handleDragEnd}
-                className={`grid grid-cols-[32px_1fr_80px_80px_80px_80px] gap-2 px-4 py-3 items-center border-b border-zinc-800/30 last:border-b-0 transition-colors ${dragIdx === idx ? 'bg-purple-950/20' : 'hover:bg-zinc-800/50'} ${!eng.enabled ? 'opacity-50' : ''}`}>
-                <div className="cursor-grab active:cursor-grabbing text-zinc-600 hover:text-zinc-400"><GripVertical className="w-4 h-4" /></div>
+                className={`grid grid-cols-[32px_1fr_80px_80px_80px_80px] gap-2 px-4 py-3 items-center border-b border-slate-200 dark:border-zinc-800/30 last:border-b-0 transition-colors ${dragIdx === idx ? 'bg-purple-950/20' : 'hover:bg-slate-100 dark:bg-zinc-800/50'} ${!eng.enabled ? 'opacity-50' : ''}`}>
+                <div className="cursor-grab active:cursor-grabbing text-slate-400 dark:text-zinc-600 hover:text-slate-500 dark:text-zinc-400"><GripVertical className="w-4 h-4" /></div>
                 <div className="flex items-center gap-2">
                   <input value={eng.label} onChange={(e) => updateEngineDraft(idx, 'label', e.target.value)}
-                    className="text-sm font-semibold text-white bg-transparent border-b border-transparent hover:border-zinc-600 focus:border-purple-400 outline-none transition-colors py-0.5 w-full max-w-[180px]" />
-                  <span className="text-[10px] font-mono text-zinc-500">{eng.engine_id}</span>
+                    className="text-sm font-semibold text-slate-900 dark:text-white bg-transparent border-b border-transparent hover:border-zinc-600 focus:border-purple-400 outline-none transition-colors py-0.5 w-full max-w-[180px]" />
+                  <span className="text-[10px] font-mono text-slate-500 dark:text-zinc-500">{eng.engine_id}</span>
                 </div>
                 <div className="flex justify-center">
-                  <button onClick={() => updateEngineDraft(idx, 'enabled', !eng.enabled)} className={`p-1.5 rounded-lg transition-colors ${eng.enabled ? 'text-emerald-400 bg-emerald-950/30' : 'text-zinc-500 bg-zinc-800'}`}>
+                  <button onClick={() => updateEngineDraft(idx, 'enabled', !eng.enabled)} className={`p-1.5 rounded-lg transition-colors ${eng.enabled ? 'text-emerald-400 bg-emerald-950/30' : 'text-slate-500 dark:text-zinc-500 bg-slate-100 dark:bg-zinc-800'}`}>
                     {eng.enabled ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
                   </button>
                 </div>
                 <div className="flex justify-center">
                   <button onClick={() => updateEngineDraft(idx, 'premium', !eng.premium)}
-                    className={`px-2 py-1 rounded-lg text-[10px] font-bold uppercase transition-colors ${eng.premium ? 'bg-amber-900/30 text-amber-400' : 'bg-zinc-800 text-zinc-400'}`}>
+                    className={`px-2 py-1 rounded-lg text-[10px] font-bold uppercase transition-colors ${eng.premium ? 'bg-amber-900/30 text-amber-400' : 'bg-slate-100 dark:bg-zinc-800 text-slate-500 dark:text-zinc-400'}`}>
                     {eng.premium ? 'Pro' : 'Free'}
                   </button>
                 </div>
                 <div className="flex justify-center items-center gap-1">
-                  <button onClick={() => moveEngine(idx, idx - 1)} disabled={idx === 0} className="text-zinc-500 hover:text-zinc-300 disabled:opacity-30 p-0.5"><ChevronDown className="w-3.5 h-3.5 rotate-180" /></button>
-                  <span className="text-xs font-mono text-zinc-500 w-5 text-center">{idx + 1}</span>
-                  <button onClick={() => moveEngine(idx, idx + 1)} disabled={idx === engineDraft.length - 1} className="text-zinc-500 hover:text-zinc-300 disabled:opacity-30 p-0.5"><ChevronDown className="w-3.5 h-3.5" /></button>
+                  <button onClick={() => moveEngine(idx, idx - 1)} disabled={idx === 0} className="text-slate-500 dark:text-zinc-500 hover:text-slate-600 dark:text-zinc-300 disabled:opacity-30 p-0.5"><ChevronDown className="w-3.5 h-3.5 rotate-180" /></button>
+                  <span className="text-xs font-mono text-slate-500 dark:text-zinc-500 w-5 text-center">{idx + 1}</span>
+                  <button onClick={() => moveEngine(idx, idx + 1)} disabled={idx === engineDraft.length - 1} className="text-slate-500 dark:text-zinc-500 hover:text-slate-600 dark:text-zinc-300 disabled:opacity-30 p-0.5"><ChevronDown className="w-3.5 h-3.5" /></button>
                 </div>
                 <div className="flex justify-center">
-                  <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full ${eng.enabled ? 'bg-emerald-950/40 text-emerald-400' : 'bg-zinc-800 text-zinc-500'}`}>
+                  <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full ${eng.enabled ? 'bg-emerald-950/40 text-emerald-400' : 'bg-slate-100 dark:bg-zinc-800 text-slate-500 dark:text-zinc-500'}`}>
                     {eng.enabled ? 'Live' : 'Off'}
                   </span>
                 </div>
               </div>
             ))}
-            {engineDraft.length === 0 && <div className="px-4 py-8 text-center text-sm text-zinc-500">No engine configuration found.</div>}
+            {engineDraft.length === 0 && <div className="px-4 py-8 text-center text-sm text-slate-500 dark:text-zinc-500">No engine configuration found.</div>}
           </div>
         </div>
       )}
@@ -499,27 +499,27 @@ export default function AdminDashboard() {
       {/* â”€â”€ Users Management Tab (enhanced) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       {tab === 'users' && (
         <div className="space-y-4">
-          <div className="bg-[#0c0c14] border border-zinc-800/60 rounded-xl overflow-hidden">
-            <div className="px-4 py-3 border-b border-zinc-800/50 flex items-center gap-3">
-              <Search className="w-4 h-4 text-zinc-500" />
+          <div className="bg-[#0c0c14] border border-slate-200 dark:border-zinc-800/60 rounded-xl overflow-hidden">
+            <div className="px-4 py-3 border-b border-slate-200 dark:border-zinc-800/50 flex items-center gap-3">
+              <Search className="w-4 h-4 text-slate-500 dark:text-zinc-500" />
               <input
                 value={search}
                 onChange={e => { setSearch(e.target.value); setUserPage(1); }}
                 placeholder="Search by name or emailâ€¦"
-                className="flex-1 text-sm bg-transparent outline-none text-zinc-200 placeholder-zinc-600"
+                className="flex-1 text-sm bg-transparent outline-none text-zinc-200 placeholder-slate-400 dark:placeholder-zinc-600"
               />
-              <span className="text-xs text-zinc-500">{totalUsers} users</span>
+              <span className="text-xs text-slate-500 dark:text-zinc-500">{totalUsers} users</span>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b border-zinc-800/50 text-left">
-                    <th className="px-4 py-3 text-[11px] font-semibold text-zinc-500 uppercase">User</th>
-                    <th className="px-4 py-3 text-[11px] font-semibold text-zinc-500 uppercase">Plan</th>
-                    <th className="px-4 py-3 text-[11px] font-semibold text-zinc-500 uppercase">Status</th>
-                    <th className="px-4 py-3 text-[11px] font-semibold text-zinc-500 uppercase">Days Left</th>
-                    <th className="px-4 py-3 text-[11px] font-semibold text-zinc-500 uppercase">Joined</th>
-                    <th className="px-4 py-3 text-[11px] font-semibold text-zinc-500 uppercase">Actions</th>
+                  <tr className="border-b border-slate-200 dark:border-zinc-800/50 text-left">
+                    <th className="px-4 py-3 text-[11px] font-semibold text-slate-500 dark:text-zinc-500 uppercase">User</th>
+                    <th className="px-4 py-3 text-[11px] font-semibold text-slate-500 dark:text-zinc-500 uppercase">Plan</th>
+                    <th className="px-4 py-3 text-[11px] font-semibold text-slate-500 dark:text-zinc-500 uppercase">Status</th>
+                    <th className="px-4 py-3 text-[11px] font-semibold text-slate-500 dark:text-zinc-500 uppercase">Days Left</th>
+                    <th className="px-4 py-3 text-[11px] font-semibold text-slate-500 dark:text-zinc-500 uppercase">Joined</th>
+                    <th className="px-4 py-3 text-[11px] font-semibold text-slate-500 dark:text-zinc-500 uppercase">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -528,15 +528,15 @@ export default function AdminDashboard() {
                     const status = getSubscriptionStatus(u);
                     const daysLeft = getSubscriptionDaysLeft(u);
                     return (
-                      <tr key={u.id} className="border-b border-zinc-800/30 last:border-b-0 hover:bg-zinc-800/50">
+                      <tr key={u.id} className="border-b border-slate-200 dark:border-zinc-800/30 last:border-b-0 hover:bg-slate-100 dark:bg-zinc-800/50">
                         <td className="px-4 py-3">
                           <div>
-                            <p className="font-medium text-white text-sm">{u.full_name || 'Unnamed'}</p>
-                            <p className="text-xs text-zinc-500">{u.email || u.id.slice(0, 12) + 'â€¦'}</p>
+                            <p className="font-medium text-slate-900 dark:text-white text-sm">{u.full_name || 'Unnamed'}</p>
+                            <p className="text-xs text-slate-500 dark:text-zinc-500">{u.email || u.id.slice(0, 12) + 'â€¦'}</p>
                           </div>
                         </td>
                         <td className="px-4 py-3">
-                          <span className="text-xs font-medium text-zinc-300 capitalize">
+                          <span className="text-xs font-medium text-slate-600 dark:text-zinc-300 capitalize">
                             {sub?.plan_name || u.plans?.display_name || 'Free'}
                           </span>
                         </td>
@@ -544,19 +544,19 @@ export default function AdminDashboard() {
                           <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
                             status === 'active' ? 'bg-emerald-950/40 text-emerald-400' :
                             status === 'suspended' ? 'bg-red-950/40 text-red-400' :
-                            'bg-zinc-800 text-zinc-500'
+                            'bg-slate-100 dark:bg-zinc-800 text-slate-500 dark:text-zinc-500'
                           }`}>
                             {status}
                           </span>
                         </td>
                         <td className="px-4 py-3">
                           {daysLeft !== null ? (
-                            <span className={`text-xs font-medium ${daysLeft <= 3 ? 'text-red-400' : daysLeft <= 7 ? 'text-amber-400' : 'text-zinc-400'}`}>
+                            <span className={`text-xs font-medium ${daysLeft <= 3 ? 'text-red-400' : daysLeft <= 7 ? 'text-amber-400' : 'text-slate-500 dark:text-zinc-400'}`}>
                               {daysLeft > 0 ? `${daysLeft}d` : 'Expired'}
                             </span>
-                          ) : <span className="text-xs text-zinc-600">â€”</span>}
+                          ) : <span className="text-xs text-slate-400 dark:text-zinc-600">â€”</span>}
                         </td>
-                        <td className="px-4 py-3 text-zinc-500 text-xs">{new Date(u.created_at).toLocaleDateString()}</td>
+                        <td className="px-4 py-3 text-slate-500 dark:text-zinc-500 text-xs">{new Date(u.created_at).toLocaleDateString()}</td>
                         <td className="px-4 py-3">
                           <button
                             onClick={() => openUserModal(u)}
@@ -574,15 +574,15 @@ export default function AdminDashboard() {
 
             {/* Pagination */}
             {totalUserPages > 1 && (
-              <div className="px-4 py-3 border-t border-zinc-800/50 flex items-center justify-between">
-                <p className="text-xs text-zinc-500">Page {userPage} of {totalUserPages}</p>
+              <div className="px-4 py-3 border-t border-slate-200 dark:border-zinc-800/50 flex items-center justify-between">
+                <p className="text-xs text-slate-500 dark:text-zinc-500">Page {userPage} of {totalUserPages}</p>
                 <div className="flex items-center gap-2">
                   <button onClick={() => setUserPage(p => Math.max(1, p - 1))} disabled={userPage <= 1}
-                    className="p-1.5 text-zinc-400 hover:text-white disabled:opacity-30 rounded-lg hover:bg-zinc-800 transition-colors">
+                    className="p-1.5 text-slate-500 dark:text-zinc-400 hover:text-white disabled:opacity-30 rounded-lg hover:bg-slate-100 dark:bg-zinc-800 transition-colors">
                     <ChevronLeft className="w-4 h-4" />
                   </button>
                   <button onClick={() => setUserPage(p => Math.min(totalUserPages, p + 1))} disabled={userPage >= totalUserPages}
-                    className="p-1.5 text-zinc-400 hover:text-white disabled:opacity-30 rounded-lg hover:bg-zinc-800 transition-colors">
+                    className="p-1.5 text-slate-500 dark:text-zinc-400 hover:text-white disabled:opacity-30 rounded-lg hover:bg-slate-100 dark:bg-zinc-800 transition-colors">
                     <ChevronRight className="w-4 h-4" />
                   </button>
                 </div>
@@ -595,13 +595,13 @@ export default function AdminDashboard() {
       {/* â”€â”€ User Management Modal â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       {userModalOpen && selectedUser && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={() => setUserModalOpen(false)}>
-          <div className="bg-zinc-900 border border-zinc-700 rounded-2xl shadow-2xl w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
-            <div className="p-6 border-b border-zinc-800 flex items-center justify-between">
+          <div className="bg-white dark:bg-zinc-900 border border-slate-300 dark:border-zinc-700 rounded-2xl shadow-2xl w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+            <div className="p-6 border-b border-slate-200 dark:border-zinc-800 flex items-center justify-between">
               <div>
-                <h3 className="text-lg font-bold text-white">{selectedUser.full_name || 'Unnamed User'}</h3>
-                <p className="text-xs text-zinc-500 mt-0.5">{selectedUser.email || selectedUser.id}</p>
+                <h3 className="text-lg font-bold text-slate-900 dark:text-white">{selectedUser.full_name || 'Unnamed User'}</h3>
+                <p className="text-xs text-slate-500 dark:text-zinc-500 mt-0.5">{selectedUser.email || selectedUser.id}</p>
               </div>
-              <button onClick={() => setUserModalOpen(false)} className="p-2 text-zinc-400 hover:text-white rounded-lg hover:bg-zinc-800 transition-colors">
+              <button onClick={() => setUserModalOpen(false)} className="p-2 text-slate-500 dark:text-zinc-400 hover:text-white rounded-lg hover:bg-slate-100 dark:bg-zinc-800 transition-colors">
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -609,23 +609,23 @@ export default function AdminDashboard() {
             <div className="p-6 space-y-5">
               {/* Current status */}
               <div className="grid grid-cols-2 gap-3">
-                <div className="bg-zinc-800 rounded-xl p-3">
-                  <p className="text-[11px] font-semibold text-zinc-500 uppercase">Status</p>
-                  <p className={`text-sm font-bold mt-1 capitalize ${getSubscriptionStatus(selectedUser) === 'active' ? 'text-emerald-400' : getSubscriptionStatus(selectedUser) === 'suspended' ? 'text-red-400' : 'text-zinc-400'}`}>
+                <div className="bg-slate-100 dark:bg-zinc-800 rounded-xl p-3">
+                  <p className="text-[11px] font-semibold text-slate-500 dark:text-zinc-500 uppercase">Status</p>
+                  <p className={`text-sm font-bold mt-1 capitalize ${getSubscriptionStatus(selectedUser) === 'active' ? 'text-emerald-400' : getSubscriptionStatus(selectedUser) === 'suspended' ? 'text-red-400' : 'text-slate-500 dark:text-zinc-400'}`}>
                     {getSubscriptionStatus(selectedUser)}
                   </p>
                 </div>
-                <div className="bg-zinc-800 rounded-xl p-3">
-                  <p className="text-[11px] font-semibold text-zinc-500 uppercase">Plan</p>
-                  <p className="text-sm font-bold text-white mt-1 capitalize">{getUserSubscription(selectedUser)?.plan_name || 'Free'}</p>
+                <div className="bg-slate-100 dark:bg-zinc-800 rounded-xl p-3">
+                  <p className="text-[11px] font-semibold text-slate-500 dark:text-zinc-500 uppercase">Plan</p>
+                  <p className="text-sm font-bold text-slate-900 dark:text-white mt-1 capitalize">{getUserSubscription(selectedUser)?.plan_name || 'Free'}</p>
                 </div>
-                <div className="bg-zinc-800 rounded-xl p-3">
-                  <p className="text-[11px] font-semibold text-zinc-500 uppercase">Days Left</p>
-                  <p className="text-sm font-bold text-white mt-1">{getSubscriptionDaysLeft(selectedUser) ?? 'â€”'}</p>
+                <div className="bg-slate-100 dark:bg-zinc-800 rounded-xl p-3">
+                  <p className="text-[11px] font-semibold text-slate-500 dark:text-zinc-500 uppercase">Days Left</p>
+                  <p className="text-sm font-bold text-slate-900 dark:text-white mt-1">{getSubscriptionDaysLeft(selectedUser) ?? 'â€”'}</p>
                 </div>
-                <div className="bg-zinc-800 rounded-xl p-3">
-                  <p className="text-[11px] font-semibold text-zinc-500 uppercase">Joined</p>
-                  <p className="text-sm font-bold text-white mt-1">{new Date(selectedUser.created_at).toLocaleDateString()}</p>
+                <div className="bg-slate-100 dark:bg-zinc-800 rounded-xl p-3">
+                  <p className="text-[11px] font-semibold text-slate-500 dark:text-zinc-500 uppercase">Joined</p>
+                  <p className="text-sm font-bold text-slate-900 dark:text-white mt-1">{new Date(selectedUser.created_at).toLocaleDateString()}</p>
                 </div>
               </div>
 
@@ -641,7 +641,7 @@ export default function AdminDashboard() {
 
               {/* Quick Actions */}
               <div>
-                <p className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-3">Quick Actions</p>
+                <p className="text-xs font-semibold text-slate-500 dark:text-zinc-400 uppercase tracking-wider mb-3">Quick Actions</p>
                 <div className="flex flex-wrap gap-2">
                   {getSubscriptionStatus(selectedUser) !== 'suspended' ? (
                     <button
@@ -671,16 +671,16 @@ export default function AdminDashboard() {
               </div>
 
               {/* Set Subscription */}
-              <div className="border-t border-zinc-800 pt-5">
-                <p className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-3">Set Subscription</p>
+              <div className="border-t border-slate-200 dark:border-zinc-800 pt-5">
+                <p className="text-xs font-semibold text-slate-500 dark:text-zinc-400 uppercase tracking-wider mb-3">Set Subscription</p>
                 <div className="space-y-3">
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="block text-xs font-medium text-zinc-400 mb-1">Plan</label>
+                      <label className="block text-xs font-medium text-slate-500 dark:text-zinc-400 mb-1">Plan</label>
                       <select
                         value={modalPlan}
                         onChange={e => setModalPlan(e.target.value)}
-                        className="w-full px-3 py-2 text-sm bg-zinc-800 border border-zinc-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
+                        className="w-full px-3 py-2 text-sm bg-slate-100 dark:bg-zinc-800 border border-slate-300 dark:border-zinc-700 rounded-lg text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
                         title="Select plan"
                       >
                         {AVAILABLE_PLANS.map(p => (
@@ -689,14 +689,14 @@ export default function AdminDashboard() {
                       </select>
                     </div>
                     <div>
-                      <label className="block text-xs font-medium text-zinc-400 mb-1">Duration (days)</label>
+                      <label className="block text-xs font-medium text-slate-500 dark:text-zinc-400 mb-1">Duration (days)</label>
                       <input
                         type="number"
                         value={modalDays}
                         onChange={e => setModalDays(parseInt(e.target.value) || 1)}
                         min={1}
                         max={365}
-                        className="w-full px-3 py-2 text-sm bg-zinc-800 border border-zinc-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
+                        className="w-full px-3 py-2 text-sm bg-slate-100 dark:bg-zinc-800 border border-slate-300 dark:border-zinc-700 rounded-lg text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
                       />
                     </div>
                   </div>
@@ -704,13 +704,13 @@ export default function AdminDashboard() {
                     <button
                       onClick={() => handleUserAction('set_plan', { plan_name: modalPlan, days: modalDays })}
                       disabled={modalLoading}
-                      className="flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-white bg-purple-600 hover:bg-purple-700 rounded-lg transition-colors disabled:opacity-50"
+                      className="flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-slate-900 dark:text-white bg-purple-600 hover:bg-purple-700 rounded-lg transition-colors disabled:opacity-50"
                     >
                       {modalLoading ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Clock className="w-3.5 h-3.5" />}
                       Set Plan for {modalDays} Days
                     </button>
                   </div>
-                  <p className="text-[11px] text-zinc-600">Subscription starts now and counts down from {modalDays} days.</p>
+                  <p className="text-[11px] text-slate-400 dark:text-zinc-600">Subscription starts now and counts down from {modalDays} days.</p>
                 </div>
               </div>
             </div>
@@ -720,24 +720,24 @@ export default function AdminDashboard() {
 
       {/* Subscriptions tab */}
       {tab === 'subscriptions' && (
-        <div className="bg-[#0c0c14] border border-zinc-800/60 rounded-xl overflow-hidden">
+        <div className="bg-[#0c0c14] border border-slate-200 dark:border-zinc-800/60 rounded-xl overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-zinc-800/50 text-left">
-                  <th className="px-4 py-3 text-[11px] font-semibold text-zinc-500 uppercase">User ID</th>
-                  <th className="px-4 py-3 text-[11px] font-semibold text-zinc-500 uppercase">Plan</th>
-                  <th className="px-4 py-3 text-[11px] font-semibold text-zinc-500 uppercase">Status</th>
-                  <th className="px-4 py-3 text-[11px] font-semibold text-zinc-500 uppercase">Expires</th>
+                <tr className="border-b border-slate-200 dark:border-zinc-800/50 text-left">
+                  <th className="px-4 py-3 text-[11px] font-semibold text-slate-500 dark:text-zinc-500 uppercase">User ID</th>
+                  <th className="px-4 py-3 text-[11px] font-semibold text-slate-500 dark:text-zinc-500 uppercase">Plan</th>
+                  <th className="px-4 py-3 text-[11px] font-semibold text-slate-500 dark:text-zinc-500 uppercase">Status</th>
+                  <th className="px-4 py-3 text-[11px] font-semibold text-slate-500 dark:text-zinc-500 uppercase">Expires</th>
                 </tr>
               </thead>
               <tbody>
                 {subs.map(s => (
-                  <tr key={s.id} className="border-b border-zinc-800/30 last:border-b-0 hover:bg-zinc-800/50">
-                    <td className="px-4 py-3 text-zinc-500 font-mono text-xs">{s.user_id.slice(0, 8)}â€¦</td>
-                    <td className="px-4 py-3 font-medium text-white">{s.plan_name}</td>
-                    <td className="px-4 py-3"><span className={`text-xs font-medium px-2 py-0.5 rounded-full ${s.status === 'active' ? 'bg-emerald-950/40 text-emerald-400' : s.status === 'suspended' ? 'bg-red-950/40 text-red-400' : 'bg-zinc-800 text-zinc-500'}`}>{s.status}</span></td>
-                    <td className="px-4 py-3 text-zinc-500 text-xs">{new Date(s.current_period_end).toLocaleDateString()}</td>
+                  <tr key={s.id} className="border-b border-slate-200 dark:border-zinc-800/30 last:border-b-0 hover:bg-slate-100 dark:bg-zinc-800/50">
+                    <td className="px-4 py-3 text-slate-500 dark:text-zinc-500 font-mono text-xs">{s.user_id.slice(0, 8)}â€¦</td>
+                    <td className="px-4 py-3 font-medium text-slate-900 dark:text-white">{s.plan_name}</td>
+                    <td className="px-4 py-3"><span className={`text-xs font-medium px-2 py-0.5 rounded-full ${s.status === 'active' ? 'bg-emerald-950/40 text-emerald-400' : s.status === 'suspended' ? 'bg-red-950/40 text-red-400' : 'bg-slate-100 dark:bg-zinc-800 text-slate-500 dark:text-zinc-500'}`}>{s.status}</span></td>
+                    <td className="px-4 py-3 text-slate-500 dark:text-zinc-500 text-xs">{new Date(s.current_period_end).toLocaleDateString()}</td>
                   </tr>
                 ))}
               </tbody>
@@ -748,26 +748,26 @@ export default function AdminDashboard() {
 
       {/* Documents tab */}
       {tab === 'documents' && (
-        <div className="bg-[#0c0c14] border border-zinc-800/60 rounded-xl overflow-hidden">
+        <div className="bg-[#0c0c14] border border-slate-200 dark:border-zinc-800/60 rounded-xl overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-zinc-800/50 text-left">
-                  <th className="px-4 py-3 text-[11px] font-semibold text-zinc-500 uppercase">Title</th>
-                  <th className="px-4 py-3 text-[11px] font-semibold text-zinc-500 uppercase">Engine</th>
-                  <th className="px-4 py-3 text-[11px] font-semibold text-zinc-500 uppercase">Words</th>
-                  <th className="px-4 py-3 text-[11px] font-semibold text-zinc-500 uppercase">AI Score</th>
-                  <th className="px-4 py-3 text-[11px] font-semibold text-zinc-500 uppercase">Date</th>
+                <tr className="border-b border-slate-200 dark:border-zinc-800/50 text-left">
+                  <th className="px-4 py-3 text-[11px] font-semibold text-slate-500 dark:text-zinc-500 uppercase">Title</th>
+                  <th className="px-4 py-3 text-[11px] font-semibold text-slate-500 dark:text-zinc-500 uppercase">Engine</th>
+                  <th className="px-4 py-3 text-[11px] font-semibold text-slate-500 dark:text-zinc-500 uppercase">Words</th>
+                  <th className="px-4 py-3 text-[11px] font-semibold text-slate-500 dark:text-zinc-500 uppercase">AI Score</th>
+                  <th className="px-4 py-3 text-[11px] font-semibold text-slate-500 dark:text-zinc-500 uppercase">Date</th>
                 </tr>
               </thead>
               <tbody>
                 {docs.map(d => (
-                  <tr key={d.id} className="border-b border-zinc-800/30 last:border-b-0 hover:bg-zinc-800/50">
-                    <td className="px-4 py-3 font-medium text-white truncate max-w-[200px]">{d.title}</td>
-                    <td className="px-4 py-3 text-zinc-500 text-xs">{d.engine_used || 'â€”'}</td>
-                    <td className="px-4 py-3 text-zinc-400 tabular-nums">{d.input_word_count}</td>
+                  <tr key={d.id} className="border-b border-slate-200 dark:border-zinc-800/30 last:border-b-0 hover:bg-slate-100 dark:bg-zinc-800/50">
+                    <td className="px-4 py-3 font-medium text-slate-900 dark:text-white truncate max-w-[200px]">{d.title}</td>
+                    <td className="px-4 py-3 text-slate-500 dark:text-zinc-500 text-xs">{d.engine_used || 'â€”'}</td>
+                    <td className="px-4 py-3 text-slate-500 dark:text-zinc-400 tabular-nums">{d.input_word_count}</td>
                     <td className="px-4 py-3">{d.output_ai_score !== null ? <span className={`text-xs font-bold ${d.output_ai_score <= 20 ? 'text-emerald-400' : 'text-red-400'}`}>{Math.round(d.output_ai_score)}%</span> : 'â€”'}</td>
-                    <td className="px-4 py-3 text-zinc-500 text-xs">{new Date(d.created_at).toLocaleDateString()}</td>
+                    <td className="px-4 py-3 text-slate-500 dark:text-zinc-500 text-xs">{new Date(d.created_at).toLocaleDateString()}</td>
                   </tr>
                 ))}
               </tbody>
@@ -780,22 +780,22 @@ export default function AdminDashboard() {
       {tab === 'feedback' && (
         <div className="space-y-3">
           {feedback.map(f => (
-            <div key={f.id} className="bg-[#0c0c14] border border-zinc-800/60 rounded-xl p-4">
+            <div key={f.id} className="bg-[#0c0c14] border border-slate-200 dark:border-zinc-800/60 rounded-xl p-4">
               <div className="flex items-center justify-between mb-2">
                 <div className="flex items-center gap-2">
                   <div className="flex gap-0.5">
                     {[1,2,3,4,5].map(s => (
-                      <div key={s} className={`w-3 h-3 rounded-full ${s <= (f.rating || 0) ? 'bg-amber-400' : 'bg-zinc-800'}`} />
+                      <div key={s} className={`w-3 h-3 rounded-full ${s <= (f.rating || 0) ? 'bg-amber-400' : 'bg-slate-100 dark:bg-zinc-800'}`} />
                     ))}
                   </div>
-                  <span className="text-xs font-medium text-zinc-500 uppercase">{f.category || 'General'}</span>
+                  <span className="text-xs font-medium text-slate-500 dark:text-zinc-500 uppercase">{f.category || 'General'}</span>
                 </div>
-                <span className="text-xs text-zinc-500">{new Date(f.created_at).toLocaleDateString()}</span>
+                <span className="text-xs text-slate-500 dark:text-zinc-500">{new Date(f.created_at).toLocaleDateString()}</span>
               </div>
-              <p className="text-sm text-zinc-300 leading-relaxed">{f.comment || 'No comment'}</p>
+              <p className="text-sm text-slate-600 dark:text-zinc-300 leading-relaxed">{f.comment || 'No comment'}</p>
             </div>
           ))}
-          {feedback.length === 0 && <p className="text-center text-sm text-zinc-500 py-8">No feedback yet</p>}
+          {feedback.length === 0 && <p className="text-center text-sm text-slate-500 dark:text-zinc-500 py-8">No feedback yet</p>}
         </div>
       )}
 

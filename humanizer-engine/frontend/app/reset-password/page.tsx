@@ -44,7 +44,7 @@ export default function ResetPasswordPage() {
   }
 
   return (
-    <main className="min-h-[80vh] flex items-center justify-center p-4 sm:p-6 bg-[#05050A] relative premium-dots">
+    <main className="min-h-[80vh] flex items-center justify-center p-4 sm:p-6 bg-white dark:bg-[#05050A] relative premium-dots">
       <div className="absolute inset-0 pointer-events-none overflow-hidden">
         <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-purple-600/5 rounded-full blur-[100px]" />
       </div>
@@ -62,14 +62,14 @@ export default function ResetPasswordPage() {
           </Link>
         </div>
 
-        <div className="bg-zinc-900/80 backdrop-blur-xl rounded-3xl border border-purple-500/10 shadow-2xl shadow-purple-900/20 p-7 sm:p-9">
+        <div className="bg-white/80 dark:bg-zinc-900/80 backdrop-blur-xl rounded-3xl border border-purple-500/10 shadow-2xl shadow-purple-900/20 p-7 sm:p-9">
           <div className="flex justify-center mb-6">
             <div className="bg-purple-950/40 p-3 rounded-xl">
               <Mail className="w-8 h-8 text-purple-400" />
             </div>
           </div>
 
-          <h2 className="text-2xl font-semibold text-center mb-2 text-white">Reset Password</h2>
+          <h2 className="text-2xl font-semibold text-center mb-2 text-slate-900 dark:text-white">Reset Password</h2>
           <p className="text-center text-zinc-500 text-sm mb-8">Enter your email and we&apos;ll send a magic link.</p>
 
           {submitted ? (
@@ -93,7 +93,7 @@ export default function ResetPasswordPage() {
                     required
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    className="w-full pl-10 pr-4 py-3 rounded-xl border border-zinc-700/80 bg-zinc-950/80 text-white placeholder-zinc-600 focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 focus:outline-none transition-all text-sm"
+                    className="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-300 dark:border-zinc-700/80 bg-white dark:bg-zinc-950/80 text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-zinc-600 focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 focus:outline-none transition-all text-sm"
                     placeholder="user@example.com"
                   />
                 </div>

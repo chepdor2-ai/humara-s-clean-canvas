@@ -228,7 +228,7 @@ export default function LiveTextTransition({
       </div>
 
       {/* Bottom status bar */}
-      <div className="relative z-10 border-t border-zinc-800 px-4 py-2.5 flex items-center gap-3">
+      <div className="relative z-10 border-t border-slate-200 dark:border-zinc-800 px-4 py-2.5 flex items-center gap-3">
         {isDone ? (
           <div className="flex items-center gap-2">
             <Check className="w-3.5 h-3.5 text-emerald-500" />
@@ -253,7 +253,7 @@ export default function LiveTextTransition({
         )}
 
         {/* Progress bar */}
-        <div className="flex-1 max-w-[200px] ml-auto h-1.5 bg-zinc-800 rounded-full overflow-hidden">
+        <div className="flex-1 max-w-[200px] ml-auto h-1.5 bg-slate-100 dark:bg-zinc-800 rounded-full overflow-hidden">
           <div
             className={`h-full rounded-full transition-all duration-700 ease-out ${
               isDone

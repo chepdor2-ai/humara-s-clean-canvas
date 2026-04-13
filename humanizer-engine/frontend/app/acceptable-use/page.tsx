@@ -13,24 +13,24 @@ export default function AcceptableUsePage() {
   return (
     <div className="flex flex-col items-center min-h-screen">
       {/* Hero */}
-      <section className="w-full bg-zinc-900 pt-32 pb-24">
+      <section className="w-full bg-slate-50 dark:bg-zinc-900 pt-32 pb-24">
         <div className="max-w-5xl mx-auto px-6 text-center mt-12">
           <div className="flex justify-center mb-6">
             <div className="p-3 bg-brand-950/30 rounded-xl">
               <Shield className="w-8 h-8 text-brand-400" strokeWidth={2} />
             </div>
           </div>
-          <h1 className="text-4xl md:text-6xl font-bold text-white mb-8">
+          <h1 className="text-4xl md:text-6xl font-bold text-slate-900 dark:text-white mb-8">
             Acceptable Use Policy
           </h1>
-          <p className="text-xl text-zinc-400 max-w-3xl mx-auto font-medium leading-relaxed">
+          <p className="text-xl text-slate-500 dark:text-zinc-400 max-w-3xl mx-auto font-medium leading-relaxed">
             HumaraGPT is a professional AI text humanization tool. This policy outlines what you can and cannot use it for. Please read it carefully before using our service.
           </p>
         </div>
       </section>
 
       {/* Main Content */}
-      <section className="w-full bg-zinc-950 py-24 border-y border-zinc-800">
+      <section className="w-full bg-white dark:bg-zinc-950 py-24 border-y border-slate-200 dark:border-zinc-800">
         <div className="max-w-4xl mx-auto px-6 space-y-16">
 
           {/* PROHIBITED: Academic Use */}
@@ -43,8 +43,8 @@ export default function AcceptableUsePage() {
               HumaraGPT unconditionally prohibits all use of its services for academic purposes. This is a zero-tolerance, non-negotiable policy.
             </p>
 
-            <h3 className="text-xl font-bold text-white mb-4">What is considered academic use?</h3>
-            <p className="text-zinc-300 leading-relaxed mb-6">
+            <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-4">What is considered academic use?</h3>
+            <p className="text-slate-600 dark:text-zinc-300 leading-relaxed mb-6">
               Any use of HumaraGPT in connection with formal education, graded coursework, or academic credentialing is prohibited. This includes but is not limited to:
             </p>
 
@@ -65,13 +65,13 @@ export default function AcceptableUsePage() {
               ].map((item) => (
                 <div key={item} className="flex items-start gap-3">
                   <AlertTriangle className="w-5 h-5 text-red-400 shrink-0 mt-0.5" />
-                  <span className="text-sm text-zinc-300 font-medium">{item}</span>
+                  <span className="text-sm text-slate-600 dark:text-zinc-300 font-medium">{item}</span>
                 </div>
               ))}
             </div>
 
-            <h3 className="text-xl font-bold text-white mb-4">Why we prohibit academic use</h3>
-            <div className="space-y-4 text-zinc-300 leading-relaxed">
+            <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-4">Why we prohibit academic use</h3>
+            <div className="space-y-4 text-slate-600 dark:text-zinc-300 leading-relaxed">
               <p>
                 <strong>Academic integrity matters.</strong> Education systems rely on honest assessment of student knowledge and ability. Using AI humanization tools to disguise machine-generated work as your own is a form of academic fraud that:
               </p>
@@ -111,9 +111,9 @@ export default function AcceptableUsePage() {
           <div>
             <div className="flex items-center gap-3 mb-6">
               <CheckCircle2 className="w-8 h-8 text-emerald-400 flex-shrink-0" strokeWidth={2} />
-              <h2 className="text-3xl font-bold text-white">Permitted: Professional Uses</h2>
+              <h2 className="text-3xl font-bold text-slate-900 dark:text-white">Permitted: Professional Uses</h2>
             </div>
-            <p className="text-zinc-300 text-lg leading-relaxed mb-8">
+            <p className="text-slate-600 dark:text-zinc-300 text-lg leading-relaxed mb-8">
               HumaraGPT is designed for legitimate professional and commercial applications where AI text humanization adds genuine value:
             </p>
 
@@ -140,16 +140,16 @@ export default function AcceptableUsePage() {
                   items: ['Technical documentation', 'User guides and manuals', 'API documentation', 'Knowledge base articles', 'Training materials (non-academic)'],
                 },
               ].map((category) => (
-                <div key={category.title} className="bg-zinc-900 rounded-xl border border-zinc-800 p-6">
+                <div key={category.title} className="bg-slate-50 dark:bg-zinc-900 rounded-xl border border-slate-200 dark:border-zinc-800 p-6">
                   <div className="flex items-center gap-3 mb-4">
                     <div className="w-10 h-10 bg-brand-950/30 rounded-lg flex items-center justify-center">
                       <category.icon className="w-5 h-5 text-brand-400" />
                     </div>
-                    <h3 className="text-lg font-semibold text-white">{category.title}</h3>
+                    <h3 className="text-lg font-semibold text-slate-900 dark:text-white">{category.title}</h3>
                   </div>
                   <ul className="space-y-2">
                     {category.items.map((item) => (
-                      <li key={item} className="flex items-center gap-2 text-sm text-zinc-400">
+                      <li key={item} className="flex items-center gap-2 text-sm text-slate-500 dark:text-zinc-400">
                         <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
                         <span>{item}</span>
                       </li>
@@ -164,12 +164,12 @@ export default function AcceptableUsePage() {
           <div>
             <div className="flex items-center gap-3 mb-6">
               <Ban className="w-8 h-8 text-red-400 flex-shrink-0" strokeWidth={2} />
-              <h2 className="text-3xl font-bold text-white">Other Prohibited Uses</h2>
+              <h2 className="text-3xl font-bold text-slate-900 dark:text-white">Other Prohibited Uses</h2>
             </div>
-            <p className="text-zinc-300 leading-relaxed mb-6">
+            <p className="text-slate-600 dark:text-zinc-300 leading-relaxed mb-6">
               In addition to academic use, the following activities are also prohibited:
             </p>
-            <ul className="space-y-3 text-zinc-300 font-medium">
+            <ul className="space-y-3 text-slate-600 dark:text-zinc-300 font-medium">
               {[
                 'Generating or distributing misinformation, disinformation, or propaganda',
                 'Creating content that is illegal, harmful, harassing, or discriminatory',
@@ -192,9 +192,9 @@ export default function AcceptableUsePage() {
           <div>
             <div className="flex items-center gap-3 mb-6">
               <Shield className="w-8 h-8 text-brand-400 flex-shrink-0" strokeWidth={2} />
-              <h2 className="text-3xl font-bold text-white">Your Responsibility</h2>
+              <h2 className="text-3xl font-bold text-slate-900 dark:text-white">Your Responsibility</h2>
             </div>
-            <div className="space-y-4 text-zinc-300 leading-relaxed">
+            <div className="space-y-4 text-slate-600 dark:text-zinc-300 leading-relaxed">
               <p>
                 By using HumaraGPT, you acknowledge and agree that:
               </p>
@@ -216,11 +216,11 @@ export default function AcceptableUsePage() {
           </div>
 
           {/* Contact & Last Updated */}
-          <div className="border-t-2 border-zinc-700 pt-8">
-            <p className="text-center text-sm text-zinc-400 mb-2">
+          <div className="border-t-2 border-slate-300 dark:border-zinc-700 pt-8">
+            <p className="text-center text-sm text-slate-500 dark:text-zinc-400 mb-2">
               Questions about this policy? <Link href="/contact" className="text-brand-400 hover:underline font-semibold">Contact us</Link>
             </p>
-            <p className="text-center text-sm font-bold text-zinc-500 italic">
+            <p className="text-center text-sm font-bold text-slate-500 dark:text-zinc-500 italic">
               Last updated: April 2026
             </p>
           </div>
@@ -228,17 +228,17 @@ export default function AcceptableUsePage() {
       </section>
 
       {/* CTA */}
-      <section className="w-full py-20 px-6 bg-zinc-900">
+      <section className="w-full py-20 px-6 bg-slate-50 dark:bg-zinc-900">
         <div className="max-w-4xl mx-auto text-center">
-          <h2 className="text-2xl md:text-3xl font-bold text-white mb-6">Ready for professional-grade content humanization?</h2>
-          <p className="text-zinc-400 text-lg mb-8 font-medium">
+          <h2 className="text-2xl md:text-3xl font-bold text-slate-900 dark:text-white mb-6">Ready for professional-grade content humanization?</h2>
+          <p className="text-slate-500 dark:text-zinc-400 text-lg mb-8 font-medium">
             HumaraGPT is the leading AI text humanization platform for professionals and businesses.
           </p>
           <div className="flex flex-col sm:flex-row justify-center gap-4">
             <Link href="/app" className="bg-brand-600 hover:bg-brand-700 text-white px-8 py-3 font-medium rounded-lg transition-colors inline-flex items-center gap-2 justify-center">
               Try the Humanizer <ArrowRight className="w-4 h-4" />
             </Link>
-            <Link href="/terms" className="bg-zinc-950 text-white px-8 py-3 font-medium rounded-lg border border-zinc-700 hover:bg-zinc-900 transition-colors">
+            <Link href="/terms" className="bg-white dark:bg-zinc-950 text-slate-900 dark:text-white px-8 py-3 font-medium rounded-lg border border-slate-300 dark:border-zinc-700 hover:bg-slate-50 dark:bg-zinc-900 transition-colors">
               Terms of Service
             </Link>
           </div>

@@ -161,15 +161,15 @@ export default function SettingsPage() {
   return (
     <div className="max-w-5xl mx-auto flex flex-col gap-5">
       <header>
-        <h1 className="text-xl font-semibold text-white flex items-center gap-2">
+        <h1 className="text-xl font-semibold text-slate-900 dark:text-white flex items-center gap-2">
           <Settings className="text-brand-600 w-5 h-5" /> Settings
         </h1>
-        <p className="text-sm text-zinc-400 mt-0.5">Manage account, billing, and preferences</p>
+        <p className="text-sm text-slate-500 dark:text-zinc-400 mt-0.5">Manage account, billing, and preferences</p>
       </header>
 
-      <div className="flex bg-zinc-900 rounded-xl border border-zinc-800 overflow-hidden flex-col lg:flex-row min-h-[500px]">
+      <div className="flex bg-white dark:bg-zinc-900 rounded-xl border border-slate-200 dark:border-zinc-800 overflow-hidden flex-col lg:flex-row min-h-[500px]">
         {/* Sidebar navigation */}
-        <nav className="w-full lg:w-56 bg-zinc-800/50 p-4 border-b lg:border-b-0 lg:border-r border-zinc-800 space-y-0.5">
+        <nav className="w-full lg:w-56 bg-slate-100 dark:bg-zinc-800/50 p-4 border-b lg:border-b-0 lg:border-r border-slate-200 dark:border-zinc-800 space-y-0.5">
           {NAV_ITEMS.map((item) => {
             const Icon = item.icon;
             const isActive = activeTab === item.id;
@@ -178,7 +178,7 @@ export default function SettingsPage() {
                 key={item.id}
                 onClick={() => setActiveTab(item.id)}
                 className={`w-full text-left px-3 py-2.5 text-sm font-medium transition-colors flex items-center gap-2.5 rounded-lg ${
-                  isActive ? 'bg-brand-950 text-brand-300' : 'text-zinc-400 hover:bg-zinc-800 hover:text-white'
+                  isActive ? 'bg-brand-950 text-brand-300' : 'text-slate-500 dark:text-zinc-400 hover:bg-slate-100 dark:bg-zinc-800 hover:text-white'
                 }`}
               >
                 <Icon className="w-4 h-4" />
@@ -186,7 +186,7 @@ export default function SettingsPage() {
               </button>
             );
           })}
-          <div className="pt-4 mt-4 border-t border-zinc-700">
+          <div className="pt-4 mt-4 border-t border-slate-300 dark:border-zinc-700">
             <button onClick={handleSignOut} className="w-full text-left px-3 py-2.5 text-sm font-medium text-red-500 hover:bg-red-950 flex items-center gap-2.5 transition-colors rounded-lg">
               <LogOut className="w-4 h-4" /> Sign Out
             </button>
@@ -200,41 +200,41 @@ export default function SettingsPage() {
           {activeTab === 'profile' && (
             <div className="space-y-6">
               <div>
-                <h2 className="text-lg font-semibold text-white mb-1">Profile</h2>
-                <p className="text-sm text-zinc-400">Update your personal information</p>
+                <h2 className="text-lg font-semibold text-slate-900 dark:text-white mb-1">Profile</h2>
+                <p className="text-sm text-slate-500 dark:text-zinc-400">Update your personal information</p>
               </div>
               {profileLoading ? (
                 <div className="flex items-center justify-center py-12"><RotateCcw className="w-5 h-5 text-brand-600 animate-spin" /></div>
               ) : (
                 <div className="space-y-5">
-                  <div className="flex items-center gap-4 p-4 bg-zinc-800 rounded-xl border border-zinc-700">
+                  <div className="flex items-center gap-4 p-4 bg-slate-100 dark:bg-zinc-800 rounded-xl border border-slate-300 dark:border-zinc-700">
                     <div className="w-14 h-14 bg-brand-900 rounded-full flex items-center justify-center text-brand-300 text-xl font-semibold">
                       {fullName ? fullName.charAt(0).toUpperCase() : (profile?.email?.charAt(0)?.toUpperCase() || 'U')}
                     </div>
                     <div>
-                      <p className="text-sm font-medium text-white">{fullName || 'No name set'}</p>
-                      <p className="text-xs text-zinc-500 flex items-center gap-1"><Mail className="w-3 h-3" /> {profile?.email}</p>
+                      <p className="text-sm font-medium text-slate-900 dark:text-white">{fullName || 'No name set'}</p>
+                      <p className="text-xs text-slate-500 dark:text-zinc-500 flex items-center gap-1"><Mail className="w-3 h-3" /> {profile?.email}</p>
                     </div>
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-zinc-300 mb-1.5">Full Name</label>
+                    <label className="block text-sm font-medium text-slate-600 dark:text-zinc-300 mb-1.5">Full Name</label>
                     <input
                       type="text"
                       value={fullName}
                       onChange={e => setFullName(e.target.value)}
                       placeholder="Enter your name"
-                      className="w-full px-3 py-2.5 text-sm border border-zinc-700 rounded-lg bg-zinc-800 text-white focus:outline-none focus:ring-2 focus:ring-brand-500"
+                      className="w-full px-3 py-2.5 text-sm border border-slate-300 dark:border-zinc-700 rounded-lg bg-slate-100 dark:bg-zinc-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500"
                     />
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-zinc-300 mb-1.5">Primary Use Case</label>
+                    <label className="block text-sm font-medium text-slate-600 dark:text-zinc-300 mb-1.5">Primary Use Case</label>
                     <select
                       value={useCase}
                       onChange={e => setUseCase(e.target.value)}
                       title="Select use case"
-                      className="w-full px-3 py-2.5 text-sm border border-zinc-700 rounded-lg bg-zinc-800 text-white focus:outline-none focus:ring-2 focus:ring-brand-500"
+                      className="w-full px-3 py-2.5 text-sm border border-slate-300 dark:border-zinc-700 rounded-lg bg-slate-100 dark:bg-zinc-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500"
                     >
                       <option value="">Select use case</option>
                       <option value="academic">Academic</option>
@@ -259,8 +259,8 @@ export default function SettingsPage() {
           {activeTab === 'billing' && (
             <div className="space-y-8">
               <div>
-                <h2 className="text-lg font-semibold text-white mb-1">Billing & Plans</h2>
-                <p className="text-sm text-zinc-400">
+                <h2 className="text-lg font-semibold text-slate-900 dark:text-white mb-1">Billing & Plans</h2>
+                <p className="text-sm text-slate-500 dark:text-zinc-400">
                   {plan ? <>You are on the <strong className="text-purple-400">{plan.display_name} (${plan.price_monthly}/mo)</strong>.</> : 'Loading plan details...'}
                 </p>
               </div>
@@ -270,16 +270,16 @@ export default function SettingsPage() {
                 <div className="flex items-center gap-3 p-4 bg-purple-950/20 border border-purple-800/30 rounded-xl">
                   <Clock className="w-5 h-5 text-purple-400 shrink-0" />
                   <div className="flex-1">
-                    <p className="text-sm font-medium text-white">Subscription Active</p>
-                    <p className={`text-xs mt-0.5 ${usage.daysRemaining <= 3 ? 'text-red-400' : usage.daysRemaining <= 7 ? 'text-amber-400' : 'text-zinc-400'}`}>
+                    <p className="text-sm font-medium text-slate-900 dark:text-white">Subscription Active</p>
+                    <p className={`text-xs mt-0.5 ${usage.daysRemaining <= 3 ? 'text-red-400' : usage.daysRemaining <= 7 ? 'text-amber-400' : 'text-slate-500 dark:text-zinc-400'}`}>
                       {usage.daysRemaining} day{usage.daysRemaining !== 1 ? 's' : ''} remaining · {usage.wordsUsed.toLocaleString()} / {usage.wordsLimit.toLocaleString()} words used today
                     </p>
                   </div>
                   <div className="text-right">
-                    <span className={`text-2xl font-bold tabular-nums ${usage.daysRemaining <= 3 ? 'text-red-400' : 'text-white'}`}>
+                    <span className={`text-2xl font-bold tabular-nums ${usage.daysRemaining <= 3 ? 'text-red-400' : 'text-slate-900 dark:text-white'}`}>
                       {usage.daysRemaining}
                     </span>
-                    <p className="text-[10px] text-zinc-500 uppercase">days</p>
+                    <p className="text-[10px] text-slate-500 dark:text-zinc-500 uppercase">days</p>
                   </div>
                 </div>
               )}
@@ -292,14 +292,14 @@ export default function SettingsPage() {
                     style={{ '--plan-color': pColor } as React.CSSProperties}
                   >
                     <span
-                      className="absolute -top-3 right-4 text-white text-[10px] font-bold uppercase tracking-wider px-3 py-1 rounded-full shadow-lg flex items-center gap-1"
+                      className="absolute -top-3 right-4 text-slate-900 dark:text-white text-[10px] font-bold uppercase tracking-wider px-3 py-1 rounded-full shadow-lg flex items-center gap-1"
                       style={{ backgroundColor: pColor, boxShadow: `0 4px 14px ${pColor}40` }}
                     >
                       <Crown className="w-3 h-3" /> Current Plan
                     </span>
-                    <h3 className="text-lg font-bold text-white">{plan.display_name}</h3>
-                    <div className="text-3xl font-bold text-white my-3 tracking-tight">${plan.price_monthly} <span className="text-sm text-zinc-500 font-normal">/month</span></div>
-                    <ul className="space-y-2.5 text-sm text-zinc-400 mb-6">
+                    <h3 className="text-lg font-bold text-slate-900 dark:text-white">{plan.display_name}</h3>
+                    <div className="text-3xl font-bold text-slate-900 dark:text-white my-3 tracking-tight">${plan.price_monthly} <span className="text-sm text-slate-500 dark:text-zinc-500 font-normal">/month</span></div>
+                    <ul className="space-y-2.5 text-sm text-slate-500 dark:text-zinc-400 mb-6">
                       {planFeatures.map((f, i) => (
                         <li key={i} className="flex items-start gap-2.5">
                           <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5" style={{ color: pColor }} />
@@ -307,7 +307,7 @@ export default function SettingsPage() {
                         </li>
                       ))}
                     </ul>
-                    <a href="/pricing" className="inline-block w-full text-center py-2.5 bg-zinc-800 text-zinc-300 text-sm font-semibold hover:bg-zinc-700 transition-all border border-zinc-700 rounded-xl hover:shadow-md">
+                    <a href="/pricing" className="inline-block w-full text-center py-2.5 bg-slate-100 dark:bg-zinc-800 text-slate-600 dark:text-zinc-300 text-sm font-semibold hover:bg-zinc-700 transition-all border border-slate-300 dark:border-zinc-700 rounded-xl hover:shadow-md">
                       {plan.price_monthly > 0 ? 'Change Plan' : 'Upgrade Plan'}
                     </a>
                   </div>
@@ -315,18 +315,18 @@ export default function SettingsPage() {
               })()}
 
               {!plan && (
-                <div className="p-6 bg-zinc-800 rounded-xl border border-zinc-700 text-center">
-                  <Crown className="w-8 h-8 text-zinc-500 mx-auto mb-3" />
-                  <p className="text-sm text-zinc-400 mb-3">You&apos;re on the Free plan</p>
+                <div className="p-6 bg-slate-100 dark:bg-zinc-800 rounded-xl border border-slate-300 dark:border-zinc-700 text-center">
+                  <Crown className="w-8 h-8 text-slate-500 dark:text-zinc-500 mx-auto mb-3" />
+                  <p className="text-sm text-slate-500 dark:text-zinc-400 mb-3">You&apos;re on the Free plan</p>
                   <a href="/pricing" className="inline-block px-6 py-2.5 bg-purple-600 hover:bg-purple-500 text-white text-sm font-semibold rounded-xl transition-colors">
                     Upgrade Now
                   </a>
                 </div>
               )}
 
-              <div className="pt-6 border-t border-zinc-800 space-y-4">
-                <h3 className="text-sm font-semibold text-white">Payment History</h3>
-                <p className="text-xs text-zinc-500">Payments are processed securely via Paystack. View your transaction history on the Paystack dashboard.</p>
+              <div className="pt-6 border-t border-slate-200 dark:border-zinc-800 space-y-4">
+                <h3 className="text-sm font-semibold text-slate-900 dark:text-white">Payment History</h3>
+                <p className="text-xs text-slate-500 dark:text-zinc-500">Payments are processed securely via Paystack. View your transaction history on the Paystack dashboard.</p>
                 <a href="/pricing" className="text-purple-400 hover:text-purple-300 text-sm font-medium transition-colors">View Pricing Plans &rarr;</a>
               </div>
             </div>
@@ -336,8 +336,8 @@ export default function SettingsPage() {
           {activeTab === 'api-keys' && (
             <div className="space-y-6">
               <div>
-                <h2 className="text-lg font-semibold text-white mb-1">API Keys</h2>
-                <p className="text-sm text-zinc-400">Create and manage API keys for programmatic access</p>
+                <h2 className="text-lg font-semibold text-slate-900 dark:text-white mb-1">API Keys</h2>
+                <p className="text-sm text-slate-500 dark:text-zinc-400">Create and manage API keys for programmatic access</p>
               </div>
 
               {/* New key alert */}
@@ -345,7 +345,7 @@ export default function SettingsPage() {
                 <div className="p-4 bg-emerald-950/30 border border-emerald-800 rounded-xl space-y-2">
                   <p className="text-sm font-medium text-emerald-300 flex items-center gap-2"><Shield className="w-4 h-4" /> Your new API key (copy it now � it won&apos;t be shown again):</p>
                   <div className="flex items-center gap-2">
-                    <code className="flex-1 text-xs bg-zinc-800 px-3 py-2 rounded-lg border border-zinc-700 text-white font-mono break-all">{newKeyValue}</code>
+                    <code className="flex-1 text-xs bg-slate-100 dark:bg-zinc-800 px-3 py-2 rounded-lg border border-slate-300 dark:border-zinc-700 text-slate-900 dark:text-white font-mono break-all">{newKeyValue}</code>
                     <button onClick={copyKey} className="p-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition-colors">
                       {copiedKey ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
                     </button>
@@ -361,7 +361,7 @@ export default function SettingsPage() {
                   value={newKeyName}
                   onChange={e => setNewKeyName(e.target.value)}
                   placeholder="Key name (e.g. My App)"
-                  className="flex-1 px-3 py-2.5 text-sm border border-zinc-700 rounded-lg bg-zinc-800 text-white focus:outline-none focus:ring-2 focus:ring-brand-500"
+                  className="flex-1 px-3 py-2.5 text-sm border border-slate-300 dark:border-zinc-700 rounded-lg bg-slate-100 dark:bg-zinc-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500"
                   onKeyDown={e => e.key === 'Enter' && createApiKey()}
                 />
                 <button
@@ -378,20 +378,20 @@ export default function SettingsPage() {
               {keysLoading ? (
                 <div className="flex items-center justify-center py-12"><RotateCcw className="w-5 h-5 text-brand-600 animate-spin" /></div>
               ) : apiKeys.length === 0 ? (
-                <div className="text-center py-12 bg-zinc-800 rounded-xl border border-zinc-700">
-                  <Key className="w-10 h-10 text-zinc-600 mx-auto mb-3" />
-                  <p className="text-sm text-zinc-400">No API keys yet</p>
-                  <p className="text-xs text-zinc-500 mt-1">Create one above to get started</p>
+                <div className="text-center py-12 bg-slate-100 dark:bg-zinc-800 rounded-xl border border-slate-300 dark:border-zinc-700">
+                  <Key className="w-10 h-10 text-slate-400 dark:text-zinc-600 mx-auto mb-3" />
+                  <p className="text-sm text-slate-500 dark:text-zinc-400">No API keys yet</p>
+                  <p className="text-xs text-slate-500 dark:text-zinc-500 mt-1">Create one above to get started</p>
                 </div>
               ) : (
                 <div className="space-y-2">
                   {apiKeys.map(k => (
-                    <div key={k.id} className={`flex items-center justify-between p-4 rounded-xl border transition-colors ${k.is_active ? 'bg-zinc-800 border-zinc-700' : 'bg-zinc-800/50 border-zinc-800 opacity-60'}`}>
+                    <div key={k.id} className={`flex items-center justify-between p-4 rounded-xl border transition-colors ${k.is_active ? 'bg-slate-100 dark:bg-zinc-800 border-slate-300 dark:border-zinc-700' : 'bg-slate-100 dark:bg-zinc-800/50 border-slate-200 dark:border-zinc-800 opacity-60'}`}>
                       <div className="flex items-center gap-3">
-                        <Key className={`w-4 h-4 ${k.is_active ? 'text-brand-600' : 'text-zinc-500'}`} />
+                        <Key className={`w-4 h-4 ${k.is_active ? 'text-brand-600' : 'text-slate-500 dark:text-zinc-500'}`} />
                         <div>
-                          <p className="text-sm font-medium text-white">{k.name}</p>
-                          <p className="text-xs text-zinc-500 font-mono">{k.key_prefix} � {k.requests} requests � Created {new Date(k.created_at).toLocaleDateString()}</p>
+                          <p className="text-sm font-medium text-slate-900 dark:text-white">{k.name}</p>
+                          <p className="text-xs text-slate-500 dark:text-zinc-500 font-mono">{k.key_prefix} � {k.requests} requests � Created {new Date(k.created_at).toLocaleDateString()}</p>
                         </div>
                       </div>
                       {k.is_active ? (
@@ -412,8 +412,8 @@ export default function SettingsPage() {
           {activeTab === 'notifications' && (
             <div className="space-y-6">
               <div>
-                <h2 className="text-lg font-semibold text-white mb-1">Notifications</h2>
-                <p className="text-sm text-zinc-400">Choose what you want to be notified about</p>
+                <h2 className="text-lg font-semibold text-slate-900 dark:text-white mb-1">Notifications</h2>
+                <p className="text-sm text-slate-500 dark:text-zinc-400">Choose what you want to be notified about</p>
               </div>
               <div className="space-y-4">
                 {[
@@ -422,10 +422,10 @@ export default function SettingsPage() {
                   { label: 'Security Alerts', desc: 'Sign-in from new devices, password changes, and unusual activity', value: notifSecurity, set: setNotifSecurity },
                   { label: 'Marketing', desc: 'Tips, best practices, and promotional offers', value: notifMarketing, set: setNotifMarketing },
                 ].map(item => (
-                  <div key={item.label} className="flex items-center justify-between p-4 bg-zinc-800 border border-zinc-700 rounded-xl">
+                  <div key={item.label} className="flex items-center justify-between p-4 bg-slate-100 dark:bg-zinc-800 border border-slate-300 dark:border-zinc-700 rounded-xl">
                     <div>
-                      <p className="text-sm font-medium text-white">{item.label}</p>
-                      <p className="text-xs text-zinc-500 mt-0.5">{item.desc}</p>
+                      <p className="text-sm font-medium text-slate-900 dark:text-white">{item.label}</p>
+                      <p className="text-xs text-slate-500 dark:text-zinc-500 mt-0.5">{item.desc}</p>
                     </div>
                     <button
                       onClick={() => item.set(!item.value)}
@@ -444,33 +444,33 @@ export default function SettingsPage() {
           {activeTab === 'support' && (
             <div className="space-y-6">
               <div>
-                <h2 className="text-lg font-semibold text-white mb-1">Support</h2>
-                <p className="text-sm text-zinc-400">Get help from our team</p>
+                <h2 className="text-lg font-semibold text-slate-900 dark:text-white mb-1">Support</h2>
+                <p className="text-sm text-slate-500 dark:text-zinc-400">Get help from our team</p>
               </div>
               <div className="space-y-4">
-                <a href="/contact" className="flex items-center justify-between p-5 bg-zinc-800 border border-zinc-700 rounded-xl hover:border-brand-700 transition-colors group">
+                <a href="/contact" className="flex items-center justify-between p-5 bg-slate-100 dark:bg-zinc-800 border border-slate-300 dark:border-zinc-700 rounded-xl hover:border-brand-700 transition-colors group">
                   <div className="flex items-center gap-3">
                     <div className="w-10 h-10 bg-brand-950 flex items-center justify-center rounded-lg"><Mail className="w-5 h-5 text-brand-600" /></div>
                     <div>
-                      <p className="text-sm font-medium text-white">Contact Us</p>
-                      <p className="text-xs text-zinc-500">Send a message to our support team</p>
+                      <p className="text-sm font-medium text-slate-900 dark:text-white">Contact Us</p>
+                      <p className="text-xs text-slate-500 dark:text-zinc-500">Send a message to our support team</p>
                     </div>
                   </div>
-                  <ExternalLink className="w-4 h-4 text-zinc-500 group-hover:text-brand-600 transition-colors" />
+                  <ExternalLink className="w-4 h-4 text-slate-500 dark:text-zinc-500 group-hover:text-brand-600 transition-colors" />
                 </a>
-                <a href="mailto:support@humaragpt.com" className="flex items-center justify-between p-5 bg-zinc-800 border border-zinc-700 rounded-xl hover:border-brand-700 transition-colors group">
+                <a href="mailto:support@humaragpt.com" className="flex items-center justify-between p-5 bg-slate-100 dark:bg-zinc-800 border border-slate-300 dark:border-zinc-700 rounded-xl hover:border-brand-700 transition-colors group">
                   <div className="flex items-center gap-3">
                     <div className="w-10 h-10 bg-purple-950 flex items-center justify-center rounded-lg"><Mail className="w-5 h-5 text-purple-600" /></div>
                     <div>
-                      <p className="text-sm font-medium text-white">Email Support</p>
-                      <p className="text-xs text-zinc-500">support@humaragpt.com</p>
+                      <p className="text-sm font-medium text-slate-900 dark:text-white">Email Support</p>
+                      <p className="text-xs text-slate-500 dark:text-zinc-500">support@humaragpt.com</p>
                     </div>
                   </div>
-                  <ExternalLink className="w-4 h-4 text-zinc-500 group-hover:text-brand-600 transition-colors" />
+                  <ExternalLink className="w-4 h-4 text-slate-500 dark:text-zinc-500 group-hover:text-brand-600 transition-colors" />
                 </a>
-                <div className="p-5 bg-zinc-800 border border-zinc-700 rounded-xl">
-                  <p className="text-sm font-medium text-white mb-1">Response Times</p>
-                  <div className="space-y-1 text-xs text-zinc-400">
+                <div className="p-5 bg-slate-100 dark:bg-zinc-800 border border-slate-300 dark:border-zinc-700 rounded-xl">
+                  <p className="text-sm font-medium text-slate-900 dark:text-white mb-1">Response Times</p>
+                  <div className="space-y-1 text-xs text-slate-500 dark:text-zinc-400">
                     <p>Starter plan: within 48 hours</p>
                     <p>Creator plan: within 24 hours</p>
                     <p>Professional+ plans: within 4 hours (priority)</p>

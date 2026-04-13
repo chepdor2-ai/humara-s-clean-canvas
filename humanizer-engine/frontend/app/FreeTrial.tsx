@@ -67,23 +67,23 @@ export default function FreeTrial() {
     <div className="max-w-4xl mx-auto">
       <div className="grid md:grid-cols-2 gap-4">
         {/* Input */}
-        <div className="bg-zinc-900 rounded-xl border border-zinc-800 overflow-hidden flex flex-col">
-          <div className="flex items-center justify-between px-4 py-2.5 border-b border-zinc-800 bg-zinc-900/80">
-            <span className="text-sm font-semibold text-white">Paste AI Text</span>
-            <span className={`text-[11px] tabular-nums ${wordCount > MAX_WORDS ? 'text-red-400 font-bold' : 'text-zinc-500'}`}>{wordCount}/{MAX_WORDS} words</span>
+        <div className="bg-white dark:bg-zinc-900 rounded-xl border border-slate-200 dark:border-zinc-800 overflow-hidden flex flex-col">
+          <div className="flex items-center justify-between px-4 py-2.5 border-b border-slate-200 dark:border-zinc-800 bg-zinc-900/80">
+            <span className="text-sm font-semibold text-slate-900 dark:text-white">Paste AI Text</span>
+            <span className={`text-[11px] tabular-nums ${wordCount > MAX_WORDS ? 'text-red-400 font-bold' : 'text-slate-500 dark:text-zinc-500'}`}>{wordCount}/{MAX_WORDS} words</span>
           </div>
           <textarea
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            className="flex-1 min-h-[200px] bg-transparent outline-none resize-none text-[14px] leading-relaxed text-zinc-200 p-4 placeholder-zinc-600"
+            className="flex-1 min-h-[200px] bg-transparent outline-none resize-none text-[14px] leading-relaxed text-zinc-200 p-4 placeholder-slate-400 dark:placeholder-zinc-600"
             placeholder="Paste your AI-generated text here…"
           />
         </div>
 
         {/* Output */}
-        <div className="bg-zinc-900 rounded-xl border border-zinc-800 overflow-hidden flex flex-col">
-          <div className="flex items-center justify-between px-4 py-2.5 border-b border-zinc-800 bg-zinc-900/80">
-            <span className="text-sm font-semibold text-white">Humanized Output</span>
+        <div className="bg-white dark:bg-zinc-900 rounded-xl border border-slate-200 dark:border-zinc-800 overflow-hidden flex flex-col">
+          <div className="flex items-center justify-between px-4 py-2.5 border-b border-slate-200 dark:border-zinc-800 bg-zinc-900/80">
+            <span className="text-sm font-semibold text-slate-900 dark:text-white">Humanized Output</span>
             {output && (
               <button onClick={handleCopy} className="p-1 text-purple-400 hover:bg-purple-950/50 rounded-md transition-colors" title="Copy">
                 {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
@@ -103,7 +103,7 @@ export default function FreeTrial() {
               <div className="relative z-10 min-h-[200px] text-[14px] leading-relaxed text-zinc-200 p-4 whitespace-pre-wrap">{output}</div>
             </div>
           ) : (
-            <div className="flex-1 min-h-[200px] flex items-center justify-center text-zinc-600">
+            <div className="flex-1 min-h-[200px] flex items-center justify-center text-slate-400 dark:text-zinc-600">
               <span className="text-xs">Output appears here</span>
             </div>
           )}
@@ -118,10 +118,10 @@ export default function FreeTrial() {
             {loading ? <RotateCcw className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4" />}
             {loading ? 'Humanizing…' : 'Humanize Free'}
           </button>
-          <span className="text-xs text-zinc-500">{remaining > 0 ? `${remaining} free attempt${remaining === 1 ? '' : 's'} remaining` : 'Free attempts used'}</span>
+          <span className="text-xs text-slate-500 dark:text-zinc-500">{remaining > 0 ? `${remaining} free attempt${remaining === 1 ? '' : 's'} remaining` : 'Free attempts used'}</span>
         </div>
-        <p className="text-[11px] text-zinc-500 text-center sm:text-right">
-          Fine-tuned to beat <span className="font-semibold text-zinc-400">GPTZero</span> · Stealth engine · No signup required
+        <p className="text-[11px] text-slate-500 dark:text-zinc-500 text-center sm:text-right">
+          Fine-tuned to beat <span className="font-semibold text-slate-500 dark:text-zinc-400">GPTZero</span> · Stealth engine · No signup required
         </p>
       </div>
 

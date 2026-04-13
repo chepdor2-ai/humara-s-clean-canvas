@@ -175,10 +175,10 @@ export default function StylePage() {
     <div className="max-w-6xl mx-auto space-y-6">
       <header className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-semibold text-white flex items-center gap-3">
+          <h1 className="text-2xl font-semibold text-slate-900 dark:text-white flex items-center gap-3">
             <Palette className="text-brand-600 w-7 h-7" /> Style Profiles
           </h1>
-          <p className="text-sm text-zinc-400 mt-1">Create profiles so your writing always points to you.</p>
+          <p className="text-sm text-slate-500 dark:text-slate-500 dark:text-zinc-400 mt-1">Create profiles so your writing always points to you.</p>
         </div>
         {!showForm && (
           <button
@@ -192,44 +192,44 @@ export default function StylePage() {
 
       {/* Create/Edit form */}
       {showForm && (
-        <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6 space-y-4">
+        <div className="bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-xl p-6 space-y-4">
           <div className="flex items-center justify-between">
-            <h2 className="text-sm font-semibold text-white">{editingId ? 'Edit Profile' : 'Create New Profile'}</h2>
-            <button onClick={resetForm} title="Close" className="p-1.5 text-zinc-400 hover:text-zinc-300 rounded-lg hover:bg-zinc-800 transition-colors">
+            <h2 className="text-sm font-semibold text-slate-900 dark:text-white">{editingId ? 'Edit Profile' : 'Create New Profile'}</h2>
+            <button onClick={resetForm} title="Close" className="p-1.5 text-slate-500 dark:text-zinc-400 hover:text-slate-600 dark:text-zinc-300 rounded-lg hover:bg-slate-100 dark:bg-zinc-800 transition-colors">
               <X className="w-4 h-4" />
             </button>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-medium text-zinc-400 mb-1">Profile Name</label>
+              <label className="block text-xs font-medium text-slate-500 dark:text-slate-500 dark:text-zinc-400 mb-1">Profile Name</label>
               <input
                 type="text"
                 value={formName}
                 onChange={e => setFormName(e.target.value)}
                 placeholder="e.g. Academic Default"
-                className="w-full px-3 py-2.5 text-sm border border-zinc-700 rounded-lg bg-zinc-800 text-white focus:outline-none focus:ring-2 focus:ring-brand-500"
+                className="w-full px-3 py-2.5 text-sm border border-slate-300 dark:border-zinc-700 rounded-lg bg-slate-100 dark:bg-zinc-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500"
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-zinc-400 mb-1">Tone</label>
+              <label className="block text-xs font-medium text-slate-500 dark:text-slate-500 dark:text-zinc-400 mb-1">Tone</label>
               <select
                 value={formTone}
                 onChange={e => setFormTone(e.target.value)}
                 title="Select tone"
-                className="w-full px-3 py-2.5 text-sm border border-zinc-700 rounded-lg bg-zinc-800 text-white focus:outline-none focus:ring-2 focus:ring-brand-500"
+                className="w-full px-3 py-2.5 text-sm border border-slate-300 dark:border-zinc-700 rounded-lg bg-slate-100 dark:bg-zinc-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500"
               >
                 {TONE_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
               </select>
             </div>
           </div>
           <div>
-            <label className="block text-xs font-medium text-zinc-400 mb-1">Description</label>
+            <label className="block text-xs font-medium text-slate-500 dark:text-slate-500 dark:text-zinc-400 mb-1">Description</label>
             <textarea
               value={formDesc}
               onChange={e => setFormDesc(e.target.value)}
               placeholder="Describe this writing style..."
               rows={2}
-              className="w-full px-3 py-2.5 text-sm border border-zinc-700 rounded-lg bg-zinc-800 text-white focus:outline-none focus:ring-2 focus:ring-brand-500 resize-none"
+              className="w-full px-3 py-2.5 text-sm border border-slate-300 dark:border-zinc-700 rounded-lg bg-slate-100 dark:bg-zinc-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500 resize-none"
             />
           </div>
           <div className="flex items-center gap-2">
@@ -241,7 +241,7 @@ export default function StylePage() {
               {creating ? <RotateCcw className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
               {editingId ? 'Update' : 'Create'}
             </button>
-            <button onClick={resetForm} className="px-4 py-2.5 text-sm text-zinc-400 hover:text-white font-medium transition-colors">Cancel</button>
+            <button onClick={resetForm} className="px-4 py-2.5 text-sm text-slate-500 dark:text-slate-500 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white font-medium transition-colors">Cancel</button>
           </div>
         </div>
       )}
@@ -250,10 +250,10 @@ export default function StylePage() {
       {loading ? (
         <div className="flex items-center justify-center py-20"><RotateCcw className="w-6 h-6 text-brand-600 animate-spin" /></div>
       ) : profiles.length === 0 ? (
-        <div className="text-center py-20 bg-zinc-900 rounded-xl border border-zinc-800">
-          <PenTool className="w-12 h-12 text-zinc-600 mx-auto mb-4" />
-          <p className="text-zinc-400 font-medium">No style profiles yet</p>
-          <p className="text-sm text-zinc-500 mt-1">Create your first profile to customize humanization output.</p>
+        <div className="text-center py-20 bg-white dark:bg-zinc-900 rounded-xl border border-slate-200 dark:border-zinc-800">
+          <PenTool className="w-12 h-12 text-slate-400 dark:text-slate-400 dark:text-zinc-600 mx-auto mb-4" />
+          <p className="text-slate-500 dark:text-slate-500 dark:text-zinc-400 font-medium">No style profiles yet</p>
+          <p className="text-sm text-slate-500 dark:text-slate-500 dark:text-zinc-500 mt-1">Create your first profile to customize humanization output.</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -263,32 +263,32 @@ export default function StylePage() {
               className={`group relative p-6 border rounded-xl transition-all ${
                 profile.is_default
                   ? 'bg-brand-600 text-white border-brand-700 shadow-lg shadow-brand-900/30'
-                  : 'bg-zinc-900 text-white border-zinc-800 hover:border-brand-700 hover:shadow-md'
+                  : 'bg-white dark:bg-zinc-900 text-slate-900 dark:text-white border-slate-200 dark:border-zinc-800 hover:border-brand-700 hover:shadow-md'
               }`}
             >
               {/* Actions */}
               <div className="absolute top-3 right-3 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                <button onClick={() => startEdit(profile)} title="Edit profile" className={`p-1.5 rounded-lg transition-colors ${profile.is_default ? 'hover:bg-white/20 text-white/80' : 'hover:bg-zinc-800 text-slate-400'}`}>
+                <button onClick={() => startEdit(profile)} title="Edit profile" className={`p-1.5 rounded-lg transition-colors ${profile.is_default ? 'hover:bg-white/20 text-white/80' : 'hover:bg-slate-100 dark:bg-zinc-800 text-slate-400'}`}>
                   <Edit3 className="w-3.5 h-3.5" />
                 </button>
                 <button
                   onClick={() => deleteProfile(profile.id)}
                   disabled={deletingId === profile.id}
-                  className={`p-1.5 rounded-lg transition-colors ${profile.is_default ? 'hover:bg-white/20 text-white/80' : 'hover:bg-red-950 text-slate-400 hover:text-red-500'}`}
+                  className={`p-1.5 rounded-lg transition-colors ${profile.is_default ? 'hover:bg-white/20 text-white/80' : 'hover:bg-red-50 dark:hover:bg-red-950 text-slate-400 hover:text-red-500'}`}
                 >
                   {deletingId === profile.id ? <RotateCcw className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
                 </button>
               </div>
 
               <div className="flex items-center justify-between mb-4">
-                <PenTool className={`w-5 h-5 ${profile.is_default ? 'text-white' : 'text-brand-600'}`} />
+                <PenTool className={`w-5 h-5 ${profile.is_default ? 'text-slate-900 dark:text-white' : 'text-brand-600'}`} />
                 {profile.is_default ? (
                   <span className="text-xs font-medium bg-white text-brand-600 px-2.5 py-1 rounded-full">Active</span>
                 ) : (
                   <button
                     onClick={() => setDefault(profile.id)}
                     disabled={activatingId === profile.id}
-                    className="text-xs font-medium px-2.5 py-1 rounded-full bg-zinc-800 text-zinc-400 hover:bg-brand-950 hover:text-brand-600 transition-colors"
+                    className="text-xs font-medium px-2.5 py-1 rounded-full bg-slate-100 dark:bg-zinc-800 text-slate-500 dark:text-zinc-400 hover:bg-brand-950 hover:text-brand-600 transition-colors"
                   >
                     {activatingId === profile.id ? <RotateCcw className="w-3 h-3 animate-spin inline" /> : 'Set Active'}
                   </button>
@@ -296,14 +296,14 @@ export default function StylePage() {
               </div>
 
               <h3 className="text-lg font-semibold mb-1">{profile.name}</h3>
-              <p className={`text-xs font-medium mb-3 ${profile.is_default ? 'text-white/70' : 'text-zinc-500'}`}>
+              <p className={`text-xs font-medium mb-3 ${profile.is_default ? 'text-white/70' : 'text-slate-500 dark:text-zinc-500'}`}>
                 {getTone(profile)}
               </p>
-              <p className={`text-sm leading-relaxed ${profile.is_default ? 'text-white/80' : 'text-zinc-400'}`}>
+              <p className={`text-sm leading-relaxed ${profile.is_default ? 'text-white/80' : 'text-slate-500 dark:text-zinc-400'}`}>
                 {profile.description || 'No description set.'}
               </p>
 
-              <div className={`mt-4 pt-3 border-t text-xs flex items-center gap-3 ${profile.is_default ? 'border-white/20 text-white/60' : 'border-zinc-800 text-slate-400'}`}>
+              <div className={`mt-4 pt-3 border-t text-xs flex items-center gap-3 ${profile.is_default ? 'border-white/20 text-white/60' : 'border-slate-200 dark:border-zinc-800 text-slate-400'}`}>
                 <span>Created {new Date(profile.created_at).toLocaleDateString()}</span>
               </div>
             </div>

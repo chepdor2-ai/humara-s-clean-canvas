@@ -95,24 +95,24 @@ export default function PricingCards() {
         {/* Billing toggle + Currency selector */}
         <div className="flex flex-col items-center gap-4 mb-12">
           <div className="flex items-center gap-3">
-            <span className={`text-sm font-medium ${!yearly ? 'text-white' : 'text-zinc-400'}`}>Monthly</span>
+            <span className={`text-sm font-medium ${!yearly ? 'text-slate-900 dark:text-white' : 'text-slate-500 dark:text-zinc-400'}`}>Monthly</span>
             <button onClick={() => setYearly(!yearly)}
               className={`relative w-12 h-6 rounded-full transition-colors ${yearly ? 'bg-brand-600' : 'bg-zinc-700'}`}>
               <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all shadow-sm ${yearly ? 'left-7' : 'left-1'}`} />
             </button>
-            <span className={`text-sm font-medium ${yearly ? 'text-white' : 'text-zinc-400'}`}>Yearly</span>
+            <span className={`text-sm font-medium ${yearly ? 'text-slate-900 dark:text-white' : 'text-slate-500 dark:text-zinc-400'}`}>Yearly</span>
             {yearly && <span className="text-xs font-bold text-emerald-400 bg-emerald-950 px-2 py-0.5 rounded-full">Save 15%</span>}
           </div>
-          <div className="flex items-center gap-1 bg-zinc-800 rounded-lg p-0.5">
+          <div className="flex items-center gap-1 bg-slate-100 dark:bg-zinc-800 rounded-lg p-0.5">
             <button
               onClick={() => setCurrency('USD')}
-              className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${currency === 'USD' ? 'bg-zinc-700 text-white shadow-sm' : 'text-zinc-400 hover:text-zinc-300'}`}
+              className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${currency === 'USD' ? 'bg-zinc-700 text-slate-900 dark:text-white shadow-sm' : 'text-slate-500 dark:text-zinc-400 hover:text-zinc-300'}`}
             >
               USD ($)
             </button>
             <button
               onClick={() => setCurrency('KES')}
-              className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${currency === 'KES' ? 'bg-zinc-700 text-white shadow-sm' : 'text-zinc-400 hover:text-zinc-300'}`}
+              className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${currency === 'KES' ? 'bg-zinc-700 text-slate-900 dark:text-white shadow-sm' : 'text-slate-500 dark:text-zinc-400 hover:text-zinc-300'}`}
             >
               KSh
             </button>
@@ -127,8 +127,8 @@ export default function PricingCards() {
                 key={i}
                 className={`rounded-2xl p-7 flex flex-col relative z-10 ${
                   tier.featured
-                    ? 'tier-glow-featured bg-zinc-800 text-white shadow-2xl shadow-brand-500/15 scale-[1.03]'
-                    : 'tier-glow bg-zinc-900 text-white border border-zinc-700/60'
+                    ? 'tier-glow-featured bg-slate-100 dark:bg-zinc-800 text-slate-900 dark:text-white shadow-2xl shadow-brand-500/15 scale-[1.03]'
+                    : 'tier-glow bg-white dark:bg-zinc-900 text-slate-900 dark:text-white border border-slate-300 dark:border-zinc-700/60'
                 }`}
                 style={{ '--tier-color': tier.color } as React.CSSProperties}
               >
@@ -138,12 +138,12 @@ export default function PricingCards() {
                   <span className="absolute -top-3 left-1/2 -translate-x-1/2 bg-gradient-to-r from-brand-600 to-brand-500 text-white text-[10px] font-bold uppercase tracking-wider py-1 px-3 rounded-full shadow-lg shadow-brand-500/25">Most Popular</span>
                 )}
                 <h3 className={`text-xs font-bold uppercase tracking-wider mb-2 ${tier.featured ? 'text-brand-400' : ''}`} style={!tier.featured ? { color: tier.color } : {}}>{tier.name}</h3>
-                <p className={`text-sm mb-5 ${tier.featured ? 'text-zinc-400' : 'text-zinc-400'}`}>{tier.description}</p>
+                <p className={`text-sm mb-5 ${tier.featured ? 'text-slate-500 dark:text-zinc-400' : 'text-slate-500 dark:text-zinc-400'}`}>{tier.description}</p>
 
                 <div className="mb-6">
                   <span className="text-4xl font-bold tracking-tight">{formatPrice(price)}</span>
-                  <span className={`text-sm ml-1 ${tier.featured ? 'text-zinc-500' : 'text-zinc-400'}`}>/mo</span>
-                  {yearly && <span className="block text-[11px] text-zinc-400 mt-0.5">billed {formatPrice(price * 12)}/year</span>}
+                  <span className={`text-sm ml-1 ${tier.featured ? 'text-slate-500 dark:text-zinc-500' : 'text-slate-500 dark:text-zinc-400'}`}>/mo</span>
+                  {yearly && <span className="block text-[11px] text-slate-500 dark:text-zinc-400 mt-0.5">billed {formatPrice(price * 12)}/year</span>}
                 </div>
 
                 <div className="space-y-3 mb-7 flex-1">
@@ -172,10 +172,10 @@ export default function PricingCards() {
         </div>
 
         {/* Custom plan */}
-        <div className="mt-8 p-6 bg-zinc-900 rounded-xl border border-zinc-700 flex flex-col md:flex-row items-center justify-between gap-4">
+        <div className="mt-8 p-6 bg-white dark:bg-zinc-900 rounded-xl border border-slate-300 dark:border-zinc-700 flex flex-col md:flex-row items-center justify-between gap-4">
           <div>
-            <h3 className="text-lg font-semibold text-white mb-1">Need a custom package?</h3>
-            <p className="text-sm text-zinc-400">Custom word limits, SLA, dedicated support, and tailored integrations.</p>
+            <h3 className="text-lg font-semibold text-slate-900 dark:text-white mb-1">Need a custom package?</h3>
+            <p className="text-sm text-slate-500 dark:text-zinc-400">Custom word limits, SLA, dedicated support, and tailored integrations.</p>
           </div>
           <Link href="/contact" className="bg-white text-zinc-900 px-6 py-2.5 rounded-lg text-sm font-medium hover:bg-zinc-100 transition-colors whitespace-nowrap">
             Contact Sales

@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import { Shield } from 'lucide-react';
 import Link from 'next/link';
@@ -10,12 +10,12 @@ export default function DetectorPage() {
         <Shield className="w-10 h-10 text-purple-400" />
       </div>
       <div className="text-center space-y-2 max-w-md">
-        <h1 className="text-2xl font-bold text-white tracking-tight">AI Detector</h1>
+        <h1 className="text-2xl font-bold text-slate-900 dark:text-white tracking-tight">AI Detector</h1>
         <div className="inline-flex items-center gap-2 px-4 py-2 bg-amber-950/30 border border-amber-800/40 rounded-full">
           <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
           <span className="text-sm font-semibold text-amber-300">Coming Soon</span>
         </div>
-        <p className="text-sm text-zinc-400 leading-relaxed mt-3">
+        <p className="text-sm text-slate-500 dark:text-zinc-400 leading-relaxed mt-3">
           We&apos;re building a more accurate AI detection system. The detector will return with improved reliability across all major AI detection platforms.
         </p>
       </div>

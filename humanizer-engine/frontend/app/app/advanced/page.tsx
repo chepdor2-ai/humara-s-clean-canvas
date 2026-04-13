@@ -81,7 +81,7 @@ export default function AdvancedPage() {
   const Slider = ({ label, value, onChange, desc }: { label: string; value: number; onChange: (v: number) => void; desc: string }) => (
     <div className="space-y-2">
       <div className="flex items-center justify-between">
-        <label className="text-sm font-medium text-zinc-300">{label}</label>
+        <label className="text-sm font-medium text-slate-600 dark:text-zinc-300">{label}</label>
         <span className="text-sm font-semibold text-brand-600">{value}%</span>
       </div>
       <input type="range" min={0} max={100} value={value} onChange={e => onChange(Number(e.target.value))} title={label} className="w-full h-1.5 bg-zinc-700 rounded-full appearance-none cursor-pointer accent-brand-600" />
@@ -92,14 +92,14 @@ export default function AdvancedPage() {
   return (
     <div className="max-w-6xl mx-auto space-y-6">
       <header>
-        <h1 className="text-2xl font-semibold text-white flex items-center gap-3">
+        <h1 className="text-2xl font-semibold text-slate-900 dark:text-white flex items-center gap-3">
           <FlaskConical className="text-brand-600 w-7 h-7" /> Advanced Tools
         </h1>
-        <p className="text-sm text-zinc-400 mt-1">Fine-tune engine parameters and run batch operations.</p>
+        <p className="text-sm text-slate-500 dark:text-zinc-400 mt-1">Fine-tune engine parameters and run batch operations.</p>
       </header>
 
       {/* Tabs */}
-      <div className="flex gap-1 p-1 bg-zinc-800 rounded-lg w-fit">
+      <div className="flex gap-1 p-1 bg-slate-100 dark:bg-zinc-800 rounded-lg w-fit">
         {[
           { id: 'tuning' as const, label: 'Parameter Tuning', icon: Sliders },
           { id: 'batch' as const, label: 'Batch Processing', icon: Gauge },
@@ -107,7 +107,7 @@ export default function AdvancedPage() {
         ].map(tab => {
           const Icon = tab.icon;
           return (
-            <button key={tab.id} onClick={() => setActiveTab(tab.id)} className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-md transition-colors ${activeTab === tab.id ? 'bg-zinc-900 text-white shadow-sm' : 'text-zinc-400 hover:text-zinc-300'}`}>
+            <button key={tab.id} onClick={() => setActiveTab(tab.id)} className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-md transition-colors ${activeTab === tab.id ? 'bg-white dark:bg-zinc-900 text-slate-900 dark:text-white shadow-sm' : 'text-slate-500 dark:text-zinc-400 hover:text-slate-600 dark:text-zinc-300'}`}>
               <Icon className="w-4 h-4" /> {tab.label}
             </button>
           );
@@ -117,35 +117,35 @@ export default function AdvancedPage() {
       {/* Parameter Tuning */}
       {activeTab === 'tuning' && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <div className="bg-zinc-900 rounded-xl border border-zinc-800 p-6 space-y-6">
-            <h2 className="text-sm font-semibold text-white">Humanization Parameters</h2>
+          <div className="bg-white dark:bg-zinc-900 rounded-xl border border-slate-200 dark:border-zinc-800 p-6 space-y-6">
+            <h2 className="text-sm font-semibold text-slate-900 dark:text-white">Humanization Parameters</h2>
             <Slider label="Rewrite Strength" value={strength} onChange={setStrength} desc="Higher = more aggressive rewriting, lower = closer to original" />
             <Slider label="Burstiness" value={burstiness} onChange={setBurstiness} desc="Sentence length variation. Higher = more varied, more human-like" />
             <Slider label="Vocabulary Diversity" value={vocabDiversity} onChange={setVocabDiversity} desc="Range of vocabulary used in replacements" />
             <Slider label="Meaning Preservation" value={meaningWeight} onChange={setMeaningWeight} desc="Higher = stricter semantic similarity to the original" />
           </div>
-          <div className="bg-zinc-900 rounded-xl border border-zinc-800 p-6 space-y-4">
-            <h2 className="text-sm font-semibold text-white">Preview</h2>
-            <div className="p-4 bg-zinc-800 rounded-lg border border-zinc-700 space-y-3">
-              <div className="flex items-center justify-between text-xs text-zinc-400">
+          <div className="bg-white dark:bg-zinc-900 rounded-xl border border-slate-200 dark:border-zinc-800 p-6 space-y-4">
+            <h2 className="text-sm font-semibold text-slate-900 dark:text-white">Preview</h2>
+            <div className="p-4 bg-slate-100 dark:bg-zinc-800 rounded-lg border border-slate-300 dark:border-zinc-700 space-y-3">
+              <div className="flex items-center justify-between text-xs text-slate-500 dark:text-zinc-400">
                 <span>Estimated output profile:</span>
               </div>
               <div className="grid grid-cols-2 gap-3">
-                <div className="p-3 bg-zinc-900 rounded-lg border border-zinc-700">
+                <div className="p-3 bg-white dark:bg-zinc-900 rounded-lg border border-slate-300 dark:border-zinc-700">
                   <p className="text-xs text-slate-400 mb-1">Avg Sentence Length</p>
-                  <p className="text-lg font-semibold text-white">{Math.round(12 + burstiness * 0.16)} words</p>
+                  <p className="text-lg font-semibold text-slate-900 dark:text-white">{Math.round(12 + burstiness * 0.16)} words</p>
                 </div>
-                <div className="p-3 bg-zinc-900 rounded-lg border border-zinc-700">
+                <div className="p-3 bg-white dark:bg-zinc-900 rounded-lg border border-slate-300 dark:border-zinc-700">
                   <p className="text-xs text-slate-400 mb-1">Lexical Diversity</p>
-                  <p className="text-lg font-semibold text-white">{(0.4 + vocabDiversity * 0.004).toFixed(2)}</p>
+                  <p className="text-lg font-semibold text-slate-900 dark:text-white">{(0.4 + vocabDiversity * 0.004).toFixed(2)}</p>
                 </div>
-                <div className="p-3 bg-zinc-900 rounded-lg border border-zinc-700">
+                <div className="p-3 bg-white dark:bg-zinc-900 rounded-lg border border-slate-300 dark:border-zinc-700">
                   <p className="text-xs text-slate-400 mb-1">Rewrite Coverage</p>
-                  <p className="text-lg font-semibold text-white">{Math.round(strength * 0.8 + 10)}%</p>
+                  <p className="text-lg font-semibold text-slate-900 dark:text-white">{Math.round(strength * 0.8 + 10)}%</p>
                 </div>
-                <div className="p-3 bg-zinc-900 rounded-lg border border-zinc-700">
+                <div className="p-3 bg-white dark:bg-zinc-900 rounded-lg border border-slate-300 dark:border-zinc-700">
                   <p className="text-xs text-slate-400 mb-1">Meaning Score</p>
-                  <p className="text-lg font-semibold text-white">{(0.7 + meaningWeight * 0.003).toFixed(2)}</p>
+                  <p className="text-lg font-semibold text-slate-900 dark:text-white">{(0.7 + meaningWeight * 0.003).toFixed(2)}</p>
                 </div>
               </div>
             </div>
@@ -159,17 +159,17 @@ export default function AdvancedPage() {
       {/* Batch Processing */}
       {activeTab === 'batch' && (
         <div className="space-y-6">
-          <div className="bg-zinc-900 rounded-xl border border-zinc-800 p-6 space-y-4">
-            <h2 className="text-sm font-semibold text-white">Upload Documents</h2>
+          <div className="bg-white dark:bg-zinc-900 rounded-xl border border-slate-200 dark:border-zinc-800 p-6 space-y-4">
+            <h2 className="text-sm font-semibold text-slate-900 dark:text-white">Upload Documents</h2>
             <div className="flex items-center gap-4">
-              <select value={batchEngine} onChange={e => setBatchEngine(e.target.value)} title="Select engine" className="px-3 py-2.5 text-sm border border-zinc-700 rounded-lg bg-zinc-800 text-white focus:outline-none focus:ring-2 focus:ring-brand-500">
+              <select value={batchEngine} onChange={e => setBatchEngine(e.target.value)} title="Select engine" className="px-3 py-2.5 text-sm border border-slate-300 dark:border-zinc-700 rounded-lg bg-slate-100 dark:bg-zinc-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500">
                 <option value="humara_v1_3">Humara v1.3 (Stealth)</option>
                 <option value="ghost_pro">Ghost Pro (Hybrid)</option>
                 <option value="ghost_mini">Ghost Mini (Fast)</option>
                 <option value="ninja">Ninja (4-Layer)</option>
                 <option value="fast_v11">V1.1 (15-Phase)</option>
               </select>
-              <label className="flex items-center gap-2 px-4 py-2.5 bg-zinc-800 border border-zinc-700 rounded-lg text-sm font-medium text-zinc-300 hover:bg-zinc-700 cursor-pointer transition-colors">
+              <label className="flex items-center gap-2 px-4 py-2.5 bg-slate-100 dark:bg-zinc-800 border border-slate-300 dark:border-zinc-700 rounded-lg text-sm font-medium text-slate-600 dark:text-zinc-300 hover:bg-zinc-700 cursor-pointer transition-colors">
                 <Upload className="w-4 h-4" /> Upload .txt files
                 <input type="file" accept=".txt" multiple onChange={handleFileUpload} className="hidden" />
               </label>
@@ -177,11 +177,11 @@ export default function AdvancedPage() {
 
             {batchTexts.length > 0 && (
               <div className="space-y-2">
-                <p className="text-sm text-zinc-400">{batchTexts.length} document{batchTexts.length !== 1 ? 's' : ''} loaded</p>
+                <p className="text-sm text-slate-500 dark:text-zinc-400">{batchTexts.length} document{batchTexts.length !== 1 ? 's' : ''} loaded</p>
                 {batchTexts.map((t, i) => (
-                  <div key={i} className="flex items-center gap-3 p-3 bg-zinc-800 rounded-lg border border-zinc-700">
+                  <div key={i} className="flex items-center gap-3 p-3 bg-slate-100 dark:bg-zinc-800 rounded-lg border border-slate-300 dark:border-zinc-700">
                     <FileText className="w-4 h-4 text-slate-400" />
-                    <span className="text-sm text-zinc-300 truncate flex-1">Document {i + 1} — {t.split(/\s+/).length} words</span>
+                    <span className="text-sm text-slate-600 dark:text-zinc-300 truncate flex-1">Document {i + 1} — {t.split(/\s+/).length} words</span>
                     {batchResults[i] && <Check className="w-4 h-4 text-emerald-500" />}
                   </div>
                 ))}
@@ -191,7 +191,7 @@ export default function AdvancedPage() {
             {batchProcessing && (
               <div className="space-y-2">
                 <div className="flex items-center justify-between text-sm">
-                  <span className="text-zinc-400 flex items-center gap-2"><RotateCcw className="w-4 h-4 animate-spin" /> Processing...</span>
+                  <span className="text-slate-500 dark:text-zinc-400 flex items-center gap-2"><RotateCcw className="w-4 h-4 animate-spin" /> Processing...</span>
                   <span className="font-medium text-brand-600">{batchProgress}%</span>
                 </div>
                 <div className="w-full bg-zinc-700 rounded-full h-2">
@@ -206,7 +206,7 @@ export default function AdvancedPage() {
                 Process All
               </button>
               {batchResults.length > 0 && (
-                <button onClick={downloadResults} className="flex items-center gap-2 px-4 py-2.5 bg-zinc-800 border border-zinc-700 text-zinc-300 text-sm font-medium rounded-lg hover:bg-zinc-700 transition-colors">
+                <button onClick={downloadResults} className="flex items-center gap-2 px-4 py-2.5 bg-slate-100 dark:bg-zinc-800 border border-slate-300 dark:border-zinc-700 text-slate-600 dark:text-zinc-300 text-sm font-medium rounded-lg hover:bg-zinc-700 transition-colors">
                   <Download className="w-4 h-4" /> Download Results
                 </button>
               )}
@@ -218,25 +218,25 @@ export default function AdvancedPage() {
       {/* Analytics */}
       {activeTab === 'analytics' && (
         <div className="space-y-6">
-          <div className="bg-zinc-900 rounded-xl border border-zinc-800 p-6">
+          <div className="bg-white dark:bg-zinc-900 rounded-xl border border-slate-200 dark:border-zinc-800 p-6">
             <div className="flex items-center gap-3 mb-6">
               <AlertTriangle className="w-5 h-5 text-amber-500" />
-              <p className="text-sm text-zinc-400">Analytics dashboard is populated as you humanize more documents. Start processing to see trends.</p>
+              <p className="text-sm text-slate-500 dark:text-zinc-400">Analytics dashboard is populated as you humanize more documents. Start processing to see trends.</p>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="p-5 bg-zinc-800 rounded-xl border border-zinc-700">
-                <p className="text-xs text-zinc-400 mb-1">Total Documents</p>
-                <p className="text-2xl font-semibold text-white">—</p>
+              <div className="p-5 bg-slate-100 dark:bg-zinc-800 rounded-xl border border-slate-300 dark:border-zinc-700">
+                <p className="text-xs text-slate-500 dark:text-zinc-400 mb-1">Total Documents</p>
+                <p className="text-2xl font-semibold text-slate-900 dark:text-white">—</p>
                 <p className="text-xs text-slate-400 mt-1">Humanized this month</p>
               </div>
-              <div className="p-5 bg-zinc-800 rounded-xl border border-zinc-700">
-                <p className="text-xs text-zinc-400 mb-1">Avg AI Score After</p>
-                <p className="text-2xl font-semibold text-white">—</p>
+              <div className="p-5 bg-slate-100 dark:bg-zinc-800 rounded-xl border border-slate-300 dark:border-zinc-700">
+                <p className="text-xs text-slate-500 dark:text-zinc-400 mb-1">Avg AI Score After</p>
+                <p className="text-2xl font-semibold text-slate-900 dark:text-white">—</p>
                 <p className="text-xs text-slate-400 mt-1">Cross all detectors</p>
               </div>
-              <div className="p-5 bg-zinc-800 rounded-xl border border-zinc-700">
-                <p className="text-xs text-zinc-400 mb-1">Most Used Engine</p>
-                <p className="text-2xl font-semibold text-white">—</p>
+              <div className="p-5 bg-slate-100 dark:bg-zinc-800 rounded-xl border border-slate-300 dark:border-zinc-700">
+                <p className="text-xs text-slate-500 dark:text-zinc-400 mb-1">Most Used Engine</p>
+                <p className="text-2xl font-semibold text-slate-900 dark:text-white">—</p>
                 <p className="text-xs text-slate-400 mt-1">Based on usage patterns</p>
               </div>
             </div>

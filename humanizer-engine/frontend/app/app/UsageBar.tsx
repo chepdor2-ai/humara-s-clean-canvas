@@ -128,7 +128,7 @@ export default function UsageBar() {
       </div>
       <div className="flex items-center gap-1.5 min-w-[200px]">
         <span className="text-[9px] font-semibold text-zinc-500 uppercase">Words</span>
-        <div className="flex-1 h-1.5 bg-zinc-800/50 rounded-full overflow-hidden">
+        <div className="flex-1 h-1.5 bg-slate-100 dark:bg-zinc-800/50 rounded-full overflow-hidden">
           <div className={`h-full rounded-full transition-all duration-700 ${barColor}`}
             style={{ width: `${pct}%` }} />
         </div>

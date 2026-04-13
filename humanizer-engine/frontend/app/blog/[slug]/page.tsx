@@ -71,7 +71,7 @@ function renderMarkdown(content: string) {
             <thead>
               <tr>
                 {header.map((cell, ci) => (
-                  <th key={ci} className="text-left px-4 py-3 font-semibold text-white bg-zinc-800 border border-zinc-700 first:rounded-tl-lg last:rounded-tr-lg">
+                  <th key={ci} className="text-left px-4 py-3 font-semibold text-slate-900 dark:text-white bg-slate-100 dark:bg-zinc-800 border border-slate-300 dark:border-zinc-700 first:rounded-tl-lg last:rounded-tr-lg">
                     {cell}
                   </th>
                 ))}
@@ -81,7 +81,7 @@ function renderMarkdown(content: string) {
               {body.map((row, ri) => (
                 <tr key={ri}>
                   {row.map((cell, ci) => (
-                    <td key={ci} className="px-4 py-3 text-zinc-300 border border-zinc-800">
+                    <td key={ci} className="px-4 py-3 text-slate-600 dark:text-zinc-300 border border-slate-200 dark:border-zinc-800">
                       {cell}
                     </td>
                   ))}
@@ -101,12 +101,12 @@ function renderMarkdown(content: string) {
 
     // Headers
     if (line.startsWith('### ')) {
-      elements.push(<h3 key={i} className="text-xl font-bold text-white mt-10 mb-4">{line.slice(4)}</h3>);
+      elements.push(<h3 key={i} className="text-xl font-bold text-slate-900 dark:text-white mt-10 mb-4">{line.slice(4)}</h3>);
       i++;
       continue;
     }
     if (line.startsWith('## ')) {
-      elements.push(<h2 key={i} className="text-2xl md:text-3xl font-bold text-white mt-14 mb-6">{line.slice(3)}</h2>);
+      elements.push(<h2 key={i} className="text-2xl md:text-3xl font-bold text-slate-900 dark:text-white mt-14 mb-6">{line.slice(3)}</h2>);
       i++;
       continue;
     }
@@ -121,7 +121,7 @@ function renderMarkdown(content: string) {
       elements.push(
         <ul key={`ul-${i}`} className="space-y-2 my-6 ml-1">
           {listItems.map((item, li) => (
-            <li key={li} className="flex gap-3 text-zinc-300 leading-relaxed">
+            <li key={li} className="flex gap-3 text-slate-600 dark:text-zinc-300 leading-relaxed">
               <span className="text-purple-400 mt-1.5 shrink-0">•</span>
               <span dangerouslySetInnerHTML={{ __html: inlineMarkdown(item) }} />
             </li>
@@ -141,7 +141,7 @@ function renderMarkdown(content: string) {
       elements.push(
         <ol key={`ol-${i}`} className="space-y-2 my-6 ml-1 list-decimal list-inside">
           {listItems.map((item, li) => (
-            <li key={li} className="text-zinc-300 leading-relaxed">
+            <li key={li} className="text-slate-600 dark:text-zinc-300 leading-relaxed">
               <span dangerouslySetInnerHTML={{ __html: inlineMarkdown(item) }} />
             </li>
           ))}
@@ -152,7 +152,7 @@ function renderMarkdown(content: string) {
 
     // Paragraph
     elements.push(
-      <p key={i} className="text-zinc-300 leading-relaxed my-5 text-lg" dangerouslySetInnerHTML={{ __html: inlineMarkdown(line) }} />
+      <p key={i} className="text-slate-600 dark:text-zinc-300 leading-relaxed my-5 text-lg" dangerouslySetInnerHTML={{ __html: inlineMarkdown(line) }} />
     );
     i++;
   }
@@ -166,7 +166,7 @@ function renderMarkdown(content: string) {
           <thead>
             <tr>
               {header.map((cell, ci) => (
-                <th key={ci} className="text-left px-4 py-3 font-semibold text-white bg-zinc-800 border border-zinc-700">{cell}</th>
+                <th key={ci} className="text-left px-4 py-3 font-semibold text-slate-900 dark:text-white bg-slate-100 dark:bg-zinc-800 border border-slate-300 dark:border-zinc-700">{cell}</th>
               ))}
             </tr>
           </thead>
@@ -174,7 +174,7 @@ function renderMarkdown(content: string) {
             {body.map((row, ri) => (
               <tr key={ri}>
                 {row.map((cell, ci) => (
-                  <td key={ci} className="px-4 py-3 text-zinc-300 border border-zinc-800">{cell}</td>
+                  <td key={ci} className="px-4 py-3 text-slate-600 dark:text-zinc-300 border border-slate-200 dark:border-zinc-800">{cell}</td>
                 ))}
               </tr>
             ))}
@@ -189,7 +189,7 @@ function renderMarkdown(content: string) {
 
 function inlineMarkdown(text: string): string {
   return text
-    .replace(/\*\*(.+?)\*\*/g, '<strong class="text-white font-semibold">$1</strong>')
+    .replace(/\*\*(.+?)\*\*/g, '<strong class="text-slate-900 dark:text-white font-semibold">$1</strong>')
     .replace(/\*(.+?)\*/g, '<em class="text-zinc-200">$1</em>');
 }
 
@@ -205,9 +205,9 @@ export default async function BlogPostPage({ params }: Props) {
   return (
     <div className="flex flex-col items-center min-h-screen">
       {/* Hero */}
-      <section className="w-full bg-zinc-900 pt-32 pb-16">
+      <section className="w-full bg-white dark:bg-zinc-900 pt-32 pb-16">
         <div className="max-w-4xl mx-auto px-6 mt-12">
-          <Link href="/blog" className="inline-flex items-center gap-2 text-sm text-zinc-400 hover:text-purple-400 mb-8 transition-colors">
+          <Link href="/blog" className="inline-flex items-center gap-2 text-sm text-slate-500 dark:text-zinc-400 hover:text-purple-400 mb-8 transition-colors">
             <ArrowLeft className="w-4 h-4" /> Back to Blog
           </Link>
 
@@ -217,15 +217,15 @@ export default async function BlogPostPage({ params }: Props) {
             </span>
           </div>
 
-          <h1 className="text-3xl md:text-5xl font-bold text-white mb-6 leading-tight">
+          <h1 className="text-3xl md:text-5xl font-bold text-slate-900 dark:text-white mb-6 leading-tight">
             {post.title}
           </h1>
 
-          <p className="text-xl text-zinc-400 max-w-3xl font-medium leading-relaxed mb-8">
+          <p className="text-xl text-slate-500 dark:text-zinc-400 max-w-3xl font-medium leading-relaxed mb-8">
             {post.description}
           </p>
 
-          <div className="flex items-center gap-6 text-sm text-zinc-500">
+          <div className="flex items-center gap-6 text-sm text-slate-500 dark:text-zinc-500">
             <span className="flex items-center gap-2">
               <Calendar className="w-4 h-4" />
               {new Date(post.date).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
@@ -248,9 +248,9 @@ export default async function BlogPostPage({ params }: Props) {
       {/* Keywords / Tags */}
       <section className="w-full bg-zinc-950 pb-16">
         <div className="max-w-4xl mx-auto px-6">
-          <div className="flex flex-wrap gap-2 pt-8 border-t border-zinc-800">
+          <div className="flex flex-wrap gap-2 pt-8 border-t border-slate-200 dark:border-zinc-800">
             {post.keywords.map((kw) => (
-              <span key={kw} className="inline-flex items-center gap-1.5 text-xs text-zinc-400 bg-zinc-900 px-3 py-1.5 rounded-full border border-zinc-800">
+              <span key={kw} className="inline-flex items-center gap-1.5 text-xs text-slate-500 dark:text-zinc-400 bg-white dark:bg-zinc-900 px-3 py-1.5 rounded-full border border-slate-200 dark:border-zinc-800">
                 <Tag className="w-3 h-3" /> {kw}
               </span>
             ))}
@@ -263,15 +263,15 @@ export default async function BlogPostPage({ params }: Props) {
         <div className="max-w-4xl mx-auto px-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {prevPost && (
-              <Link href={`/blog/${prevPost.slug}`} className="group bg-zinc-900 border border-zinc-800 rounded-xl p-6 hover:border-purple-700/50 transition-all">
-                <span className="text-xs text-zinc-500 mb-2 block">← Previous</span>
-                <span className="text-white font-semibold group-hover:text-purple-300 transition-colors">{prevPost.title}</span>
+              <Link href={`/blog/${prevPost.slug}`} className="group bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-xl p-6 hover:border-purple-700/50 transition-all">
+                <span className="text-xs text-slate-500 dark:text-zinc-500 mb-2 block">← Previous</span>
+                <span className="text-slate-900 dark:text-white font-semibold group-hover:text-purple-300 transition-colors">{prevPost.title}</span>
               </Link>
             )}
             {nextPost && (
-              <Link href={`/blog/${nextPost.slug}`} className="group bg-zinc-900 border border-zinc-800 rounded-xl p-6 hover:border-purple-700/50 transition-all md:text-right md:col-start-2">
-                <span className="text-xs text-zinc-500 mb-2 block">Next →</span>
-                <span className="text-white font-semibold group-hover:text-purple-300 transition-colors">{nextPost.title}</span>
+              <Link href={`/blog/${nextPost.slug}`} className="group bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-xl p-6 hover:border-purple-700/50 transition-all md:text-right md:col-start-2">
+                <span className="text-xs text-slate-500 dark:text-zinc-500 mb-2 block">Next →</span>
+                <span className="text-slate-900 dark:text-white font-semibold group-hover:text-purple-300 transition-colors">{nextPost.title}</span>
               </Link>
             )}
           </div>
@@ -279,10 +279,10 @@ export default async function BlogPostPage({ params }: Props) {
       </section>
 
       {/* CTA */}
-      <section className="w-full bg-zinc-900 py-24 border-t border-zinc-800">
+      <section className="w-full bg-white dark:bg-zinc-900 py-24 border-t border-slate-200 dark:border-zinc-800">
         <div className="max-w-3xl mx-auto px-6 text-center">
-          <h2 className="text-3xl font-bold text-white mb-6">Try HumaraGPT Today</h2>
-          <p className="text-zinc-400 text-lg mb-8">
+          <h2 className="text-3xl font-bold text-slate-900 dark:text-white mb-6">Try HumaraGPT Today</h2>
+          <p className="text-slate-500 dark:text-zinc-400 text-lg mb-8">
             Transform your AI content into natural, undetectable human writing in seconds.
           </p>
           <Link

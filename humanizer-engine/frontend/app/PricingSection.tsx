@@ -43,7 +43,7 @@ export default function PricingSection() {
             onClick={() => setIsYearly(false)}
             className={`px-5 py-2 rounded-full text-sm font-medium transition-all ${
               !isYearly
-                ? 'bg-white/10 text-white shadow-sm'
+                ? 'bg-white/10 text-slate-900 dark:text-white shadow-sm'
                 : 'text-gray-400 hover:text-gray-300'
             }`}
           >
@@ -53,7 +53,7 @@ export default function PricingSection() {
             onClick={() => setIsYearly(true)}
             className={`px-5 py-2 rounded-full text-sm font-medium transition-all ${
               isYearly
-                ? 'bg-white/10 text-white shadow-sm'
+                ? 'bg-white/10 text-slate-900 dark:text-white shadow-sm'
                 : 'text-gray-400 hover:text-gray-300'
             }`}
           >
@@ -78,10 +78,10 @@ export default function PricingSection() {
                 Popular
               </span>
             )}
-            <h3 className="text-lg font-semibold text-white">{plan.name}</h3>
+            <h3 className="text-lg font-semibold text-slate-900 dark:text-white">{plan.name}</h3>
             <p className="text-xs text-gray-500 mt-1 mb-6">{plan.desc}</p>
             <p className="mb-8">
-              <span className="text-5xl sm:text-6xl font-bold text-white">
+              <span className="text-5xl sm:text-6xl font-bold text-slate-900 dark:text-white">
                 ${isYearly ? Math.round(plan.yearly / 12) : plan.monthly}
               </span>
               <span className="text-sm text-gray-500 font-normal ml-1">/mo</span>
