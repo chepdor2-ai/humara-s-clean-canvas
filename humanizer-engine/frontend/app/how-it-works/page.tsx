@@ -57,7 +57,7 @@ export default function HowItWorksPage() {
 
             {/* Step 2: Pre-detection scan */}
             <div className="flex justify-center">
-              <div className="w-px h-8 bg-slate-200" />
+              <div className="w-px h-8 bg-slate-200 dark:bg-zinc-700" />
             </div>
             <div className="bg-white dark:bg-[#0a0a0b] rounded-xl border border-slate-200 dark:border-zinc-800 p-4 sm:p-6 card-tilt">
               <div className="flex items-start gap-3 sm:gap-5">
@@ -85,7 +85,7 @@ export default function HowItWorksPage() {
 
             {/* Step 3: Pattern Analysis */}
             <div className="flex justify-center">
-              <div className="w-px h-8 bg-slate-200" />
+              <div className="w-px h-8 bg-slate-200 dark:bg-zinc-700" />
             </div>
             <div className="bg-white dark:bg-[#0a0a0b] rounded-xl border border-slate-200 dark:border-zinc-800 p-4 sm:p-6 card-tilt">
               <div className="flex items-start gap-3 sm:gap-5">
@@ -118,7 +118,7 @@ export default function HowItWorksPage() {
 
             {/* Step 4: Structural Rewrite */}
             <div className="flex justify-center">
-              <div className="w-px h-8 bg-slate-200" />
+              <div className="w-px h-8 bg-slate-200 dark:bg-zinc-700" />
             </div>
             <div className="bg-white dark:bg-[#0a0a0b] rounded-xl border border-slate-200 dark:border-zinc-800 p-4 sm:p-6 card-tilt">
               <div className="flex items-start gap-3 sm:gap-5">
@@ -151,7 +151,7 @@ export default function HowItWorksPage() {
 
             {/* Step 5: Tone Calibration */}
             <div className="flex justify-center">
-              <div className="w-px h-8 bg-slate-200" />
+              <div className="w-px h-8 bg-slate-200 dark:bg-zinc-700" />
             </div>
             <div className="bg-white dark:bg-[#0a0a0b] rounded-xl border border-slate-200 dark:border-zinc-800 p-4 sm:p-6 card-tilt">
               <div className="flex items-start gap-3 sm:gap-5">
@@ -171,7 +171,7 @@ export default function HowItWorksPage() {
 
             {/* Step 6: Post-detection */}
             <div className="flex justify-center">
-              <div className="w-px h-8 bg-slate-200" />
+              <div className="w-px h-8 bg-slate-200 dark:bg-zinc-700" />
             </div>
             <div className="bg-white dark:bg-[#0a0a0b] rounded-xl border border-slate-200 dark:border-zinc-800 p-4 sm:p-6 card-tilt">
               <div className="flex items-start gap-3 sm:gap-5">

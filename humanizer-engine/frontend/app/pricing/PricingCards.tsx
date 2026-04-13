@@ -177,7 +177,7 @@ export default function PricingCards() {
             <h3 className="text-lg font-semibold text-slate-900 dark:text-white mb-1">Need a custom package?</h3>
             <p className="text-sm text-slate-500 dark:text-zinc-400">Custom word limits, SLA, dedicated support, and tailored integrations.</p>
           </div>
-          <Link href="/contact" className="bg-white text-zinc-900 px-6 py-2.5 rounded-lg text-sm font-medium hover:bg-zinc-100 transition-colors whitespace-nowrap">
+          <Link href="/contact" className="bg-white dark:bg-zinc-700 text-zinc-900 dark:text-white px-6 py-2.5 rounded-lg text-sm font-medium hover:bg-zinc-100 dark:hover:bg-zinc-600 transition-colors whitespace-nowrap">
             Contact Sales
           </Link>
         </div>

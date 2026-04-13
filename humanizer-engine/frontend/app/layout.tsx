@@ -80,7 +80,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               (function() {
                 try {
                   var stored = localStorage.getItem('humara-theme');
-                  var dark = stored ? stored === 'dark' : window.matchMedia('(prefers-color-scheme: dark)').matches;
+                  var dark = stored === 'dark';
                   document.documentElement.classList.toggle('dark', dark);
                   document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
                   document.documentElement.style.colorScheme = dark ? 'dark' : 'light';

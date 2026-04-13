@@ -35,7 +35,7 @@ export default function ThemeProvider({ children }: { children: React.ReactNode 
   const [theme, setThemeState] = useState<Theme>(() => {
     if (typeof window === 'undefined') return 'light';
     const stored = localStorage.getItem(THEME_STORAGE_KEY);
-    return stored === 'dark' || stored === 'light' ? stored : getSystemTheme();
+    return stored === 'dark' || stored === 'light' ? stored : 'light';
   });
 
   useEffect(() => {

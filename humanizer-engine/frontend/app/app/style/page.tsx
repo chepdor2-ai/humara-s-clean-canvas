@@ -283,7 +283,7 @@ export default function StylePage() {
               <div className="flex items-center justify-between mb-4">
                 <PenTool className={`w-5 h-5 ${profile.is_default ? 'text-slate-900 dark:text-white' : 'text-brand-600'}`} />
                 {profile.is_default ? (
-                  <span className="text-xs font-medium bg-white text-brand-600 px-2.5 py-1 rounded-full">Active</span>
+                  <span className="text-xs font-medium bg-white dark:bg-brand-950 text-brand-600 dark:text-brand-400 px-2.5 py-1 rounded-full">Active</span>
                 ) : (
                   <button
                     onClick={() => setDefault(profile.id)}

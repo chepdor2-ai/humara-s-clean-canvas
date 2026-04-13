@@ -19,7 +19,7 @@ export default function Home() {
     <div className="flex flex-col items-center container-snap">
 
       {/* ═══════════════ HERO ═══════════════ */}
-      <section className="w-full pt-20 sm:pt-28 pb-16 sm:pb-24 bg-white dark:bg-white dark:bg-[#05050A] relative overflow-hidden min-h-[90vh] flex items-center">
+      <section className="w-full pt-20 sm:pt-28 pb-16 sm:pb-24 bg-white dark:bg-[#05050A] relative overflow-hidden min-h-[90vh] flex items-center">
         {/* Video background */}
         <HeroVideo />
 
@@ -119,7 +119,7 @@ export default function Home() {
       </section>
 
       {/* ═══════════════ FEATURES (2×2 grid with arrow icons) ═══════════════ */}
-      <section className="py-20 sm:py-28 bg-white dark:bg-white dark:bg-[#05050A] w-full relative overflow-hidden">
+      <section className="py-20 sm:py-28 bg-white dark:bg-[#05050A] w-full relative overflow-hidden">
         {/* Wave background */}
         <div className="absolute inset-0 pointer-events-none">
           <img src="/wave-bg-1.webp" alt="" className="absolute inset-0 w-full h-full object-cover opacity-[0.07]" />
@@ -148,7 +148,7 @@ export default function Home() {
               { icon: Brain, title: 'Context Preservation', desc: 'Maps entities, arguments, and key concepts before rewriting. Technical accuracy and semantic meaning stay perfectly intact.' },
               { icon: Zap, title: 'Multiple Engine Modes', desc: 'Five distinct modes — Fast, Academic, Standard, Stealth, and Undetectable — each tuned for different use cases and detection levels.' },
             ].map((f) => (
-              <div key={f.title} className="group ref-card p-7 sm:p-8 bg-white dark:bg-white dark:bg-[#0F0F17] rounded-3xl border border-slate-200 dark:border-white/10">
+              <div key={f.title} className="group ref-card p-7 sm:p-8 bg-white dark:bg-[#0F0F17] rounded-3xl border border-slate-200 dark:border-white/10">
                 <div className="flex items-start justify-between mb-4">
                   <div className="w-10 h-10 bg-brand-950/40 rounded-xl flex items-center justify-center">
                     <f.icon className="w-5 h-5 text-brand-400" />
@@ -177,7 +177,7 @@ export default function Home() {
       </section>
 
       {/* ═══════════════ MACBOOK SHOWCASE ═══════════════ */}
-      <section className="py-20 sm:py-28 bg-white dark:bg-white dark:bg-[#05050A] w-full relative overflow-hidden">
+      <section className="py-20 sm:py-28 bg-white dark:bg-[#05050A] w-full relative overflow-hidden">
         <div className="absolute inset-0 pointer-events-none overflow-hidden">
           <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[80%] h-[60%] bg-[radial-gradient(ellipse_at_center,#9333ea08_0%,transparent_70%)]" />
         </div>
@@ -202,7 +202,7 @@ export default function Home() {
       </section>
 
       {/* ═══════════════ SOCIAL PROOF / QUOTE + STATS ═══════════════ */}
-      <section className="py-20 sm:py-28 bg-white dark:bg-white dark:bg-[#05050A] w-full relative overflow-hidden">
+      <section className="py-20 sm:py-28 bg-white dark:bg-[#05050A] w-full relative overflow-hidden">
         <div className="arc-decor arc-decor--lg -top-32 -right-32 hidden md:block" />
 
         <div className="max-w-4xl mx-auto px-4 sm:px-6 relative z-10">
@@ -222,7 +222,7 @@ export default function Home() {
               { val: '99.2%', label: 'Average Human Score' },
               { val: '<3s', label: 'Processing Time' },
             ].map((stat) => (
-              <div key={stat.label} className="text-center py-6 px-4 rounded-3xl bg-white dark:bg-white dark:bg-[#0F0F17] border border-slate-200 dark:border-white/10">
+              <div key={stat.label} className="text-center py-6 px-4 rounded-3xl bg-white dark:bg-[#0F0F17] border border-slate-200 dark:border-white/10">
                 <p className="text-3xl sm:text-4xl font-bold text-slate-900 dark:text-white mb-1">{stat.val}</p>
                 <p className="text-xs text-slate-500 dark:text-slate-500 dark:text-gray-500 font-medium">{stat.label}</p>
               </div>
@@ -248,7 +248,7 @@ export default function Home() {
       </section>
 
       {/* ═══════════════ HOW IT WORKS (3-step) ═══════════════ */}
-      <section className="py-20 sm:py-28 bg-white dark:bg-white dark:bg-[#05050A] w-full relative overflow-hidden">
+      <section className="py-20 sm:py-28 bg-white dark:bg-[#05050A] w-full relative overflow-hidden">
         {/* Wave background */}
         <div className="absolute inset-0 pointer-events-none">
           <img src="/wave-bg-2.webp" alt="" className="absolute inset-0 w-full h-full object-cover opacity-[0.06]" />
@@ -264,7 +264,7 @@ export default function Home() {
               { step: '02', title: 'Structural Rewrite', desc: 'Sentences are restructured with natural burstiness — varying lengths that match genuine human writing.' },
               { step: '03', title: 'Tone Calibration', desc: 'Output adjusted to match your target voice — academic, professional, conversational, or direct.' },
             ].map((item) => (
-              <div key={item.step} className="ref-card p-7 sm:p-8 bg-white dark:bg-white dark:bg-[#0F0F17] rounded-3xl border border-slate-200 dark:border-white/10">
+              <div key={item.step} className="ref-card p-7 sm:p-8 bg-white dark:bg-[#0F0F17] rounded-3xl border border-slate-200 dark:border-white/10">
                 <span className="text-3xl sm:text-4xl font-bold text-brand-900/60 mb-4 block">{item.step}</span>
                 <h3 className="text-base sm:text-lg font-semibold text-slate-900 dark:text-white mb-2">{item.title}</h3>
                 <p className="text-sm text-slate-500 dark:text-slate-500 dark:text-gray-400 leading-relaxed">{item.desc}</p>
@@ -287,7 +287,7 @@ export default function Home() {
               { icon: Globe, title: 'SEO Professionals', desc: 'High-volume, human-sounding content that ranks and passes publisher AI filters.' },
               { icon: Briefcase, title: 'Enterprise Teams', desc: 'Compliant documentation, marketing copy, and communications meeting corporate AI policies.' },
             ].map((uc) => (
-              <div key={uc.title} className="group ref-card p-7 sm:p-8 bg-white dark:bg-white dark:bg-[#0F0F17] rounded-3xl border border-slate-200 dark:border-white/10">
+              <div key={uc.title} className="group ref-card p-7 sm:p-8 bg-white dark:bg-[#0F0F17] rounded-3xl border border-slate-200 dark:border-white/10">
                 <div className="w-10 h-10 bg-brand-950/40 rounded-xl flex items-center justify-center mb-5">
                   <uc.icon className="w-5 h-5 text-brand-400" />
                 </div>
@@ -300,7 +300,7 @@ export default function Home() {
       </section>
 
       {/* ═══════════════ DEVICE SHOWCASE (Both devices) ═══════════════ */}
-      <section className="py-20 sm:py-28 bg-white dark:bg-white dark:bg-[#05050A] w-full relative overflow-hidden">
+      <section className="py-20 sm:py-28 bg-white dark:bg-[#05050A] w-full relative overflow-hidden">
         <div className="absolute inset-0 pointer-events-none overflow-hidden">
           <div className="absolute top-0 left-1/4 w-[50%] h-[40%] bg-[radial-gradient(ellipse_at_center,#9333ea06_0%,transparent_70%)]" />
           <div className="absolute bottom-0 right-1/4 w-[50%] h-[40%] bg-[radial-gradient(ellipse_at_center,#9333ea06_0%,transparent_70%)]" />
@@ -350,7 +350,7 @@ export default function Home() {
       </section>
 
       {/* ═══════════════ PRICING (4 cards with toggle) ═══════════════ */}
-      <section className="py-20 sm:py-28 bg-white dark:bg-white dark:bg-[#05050A] w-full relative overflow-hidden">
+      <section className="py-20 sm:py-28 bg-white dark:bg-[#05050A] w-full relative overflow-hidden">
         {/* Wave background */}
         <div className="absolute inset-0 pointer-events-none">
           <img src="/wave-bg-3.webp" alt="" className="absolute inset-0 w-full h-full object-cover opacity-[0.06]" />
@@ -449,7 +449,7 @@ export default function Home() {
       </section>
 
       {/* ═══════════════ SEO CONTENT BLOCK ═══════════════ */}
-      <section className="py-20 sm:py-28 bg-white dark:bg-white dark:bg-[#05050A] w-full">
+      <section className="py-20 sm:py-28 bg-white dark:bg-[#05050A] w-full">
         <div className="max-w-4xl mx-auto px-4 sm:px-6">
           <div className="text-center mb-12">
             <h2 className="text-2xl sm:text-3xl font-bold text-slate-900 dark:text-white mb-3">What is AI text humanization?</h2>
@@ -502,7 +502,7 @@ export default function Home() {
 
           <div className="grid md:grid-cols-2 gap-5 sm:gap-6 mb-10">
             {/* Before */}
-            <div className="p-6 sm:p-8 bg-white dark:bg-white dark:bg-[#0F0F17] rounded-3xl border border-red-500/20 relative">
+            <div className="p-6 sm:p-8 bg-white dark:bg-[#0F0F17] rounded-3xl border border-red-500/20 relative">
               <div className="absolute -top-3 left-6">
                 <span className="px-3 py-1 text-xs font-semibold bg-red-500/20 text-red-400 rounded-full">AI-Generated</span>
               </div>
@@ -517,7 +517,7 @@ export default function Home() {
               </div>
             </div>
             {/* After */}
-            <div className="p-6 sm:p-8 bg-white dark:bg-white dark:bg-[#0F0F17] rounded-3xl border border-emerald-500/20 relative">
+            <div className="p-6 sm:p-8 bg-white dark:bg-[#0F0F17] rounded-3xl border border-emerald-500/20 relative">
               <div className="absolute -top-3 left-6">
                 <span className="px-3 py-1 text-xs font-semibold bg-emerald-500/20 text-emerald-400 rounded-full">HumaraGPT Output</span>
               </div>
@@ -541,7 +541,7 @@ export default function Home() {
               { name: 'Originality.AI', before: '91%', after: '5%' },
               { name: 'Copyleaks', before: '96%', after: '3%' },
             ].map((d) => (
-              <div key={d.name} className="ref-card p-4 bg-white dark:bg-white dark:bg-[#0F0F17] rounded-2xl border border-slate-200 dark:border-white/10 text-center">
+              <div key={d.name} className="ref-card p-4 bg-white dark:bg-[#0F0F17] rounded-2xl border border-slate-200 dark:border-white/10 text-center">
                 <p className="text-xs font-medium text-slate-600 dark:text-slate-600 dark:text-gray-500 mb-2">{d.name}</p>
                 <div className="flex items-center justify-center gap-2">
                   <span className="text-sm font-bold text-red-500 line-through">{d.before}</span>
@@ -570,7 +570,7 @@ export default function Home() {
               { icon: BarChart3, title: 'Marketing Copy', desc: 'Generate ad copy with AI, then humanize to avoid platform penalties.' },
               { icon: FileText, title: 'Tech Documentation', desc: 'Speed up docs with AI, then humanize for natural readability.' },
             ].map((uc) => (
-              <div key={uc.title} className="ref-card p-5 sm:p-6 bg-white dark:bg-white dark:bg-[#0F0F17] rounded-3xl border border-slate-200 dark:border-white/10">
+              <div key={uc.title} className="ref-card p-5 sm:p-6 bg-white dark:bg-[#0F0F17] rounded-3xl border border-slate-200 dark:border-white/10">
                 <uc.icon className="w-5 h-5 text-brand-400 mb-3" />
                 <h4 className="text-sm sm:text-base font-semibold text-slate-900 dark:text-white mb-1">{uc.title}</h4>
                 <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-500 dark:text-gray-400 leading-relaxed">{uc.desc}</p>
@@ -581,7 +581,7 @@ export default function Home() {
       </section>
 
       {/* ═══════════════ WORKFLOW PIPELINE VISUAL ═══════════════ */}
-      <section className="py-20 sm:py-28 bg-white dark:bg-white dark:bg-[#05050A] w-full relative overflow-hidden">
+      <section className="py-20 sm:py-28 bg-white dark:bg-[#05050A] w-full relative overflow-hidden">
         <div className="absolute inset-0 pointer-events-none">
           <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[60%] h-[50%] bg-[radial-gradient(ellipse_at_center,#9333ea05_0%,transparent_65%)]" />
         </div>
@@ -604,7 +604,7 @@ export default function Home() {
                 { icon: CheckCircle2, label: 'Output', desc: '99.2% human', color: 'text-emerald-400' },
               ].map((step, i) => (
                 <div key={step.label} className="flex flex-col items-center text-center">
-                  <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl bg-white dark:bg-white dark:bg-[#0F0F17] border border-slate-200 dark:border-white/10 flex items-center justify-center mb-3 shadow-sm">
+                  <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl bg-white dark:bg-[#0F0F17] border border-slate-200 dark:border-white/10 flex items-center justify-center mb-3 shadow-sm">
                     <step.icon className={`w-6 h-6 ${step.color}`} />
                   </div>
                   <p className="text-sm font-semibold text-slate-900 dark:text-white">{step.label}</p>
@@ -615,7 +615,7 @@ export default function Home() {
           </div>
 
           {/* Performance metrics bar */}
-          <div className="mt-14 p-6 sm:p-8 bg-white dark:bg-white dark:bg-[#0F0F17] rounded-3xl border border-slate-200 dark:border-white/10">
+          <div className="mt-14 p-6 sm:p-8 bg-white dark:bg-[#0F0F17] rounded-3xl border border-slate-200 dark:border-white/10">
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-6 text-center">
               {[
                 { val: '<3s', label: 'Average Processing', icon: Zap },
