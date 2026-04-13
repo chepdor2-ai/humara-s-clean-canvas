@@ -286,9 +286,91 @@ function fixTenseInconsistency(text: string): string {
   }).join('');
 }
 
+// ── Consecutive filler / transition phrase cleanup ──────────────────
+// Detects back-to-back transition phrases that make text nonsensical
+const TRANSITION_PHRASES = [
+  'in reality', 'in fact', 'in truth', 'in practice', 'in essence',
+  'in that sentence', 'in this case', 'in this regard', 'in this context',
+  'in other words', 'in particular', 'in addition', 'in contrast',
+  'in the same way', 'in light of this', 'in any case', 'in any event',
+  'consequently', 'furthermore', 'moreover', 'nevertheless', 'nonetheless',
+  'accordingly', 'subsequently', 'meanwhile', 'conversely', 'alternatively',
+  'additionally', 'similarly', 'likewise', 'hence', 'thereby', 'thus',
+  'therefore', 'however', 'indeed', 'certainly', 'undoubtedly',
+  'essentially', 'fundamentally', 'basically', 'specifically',
+  'notably', 'importantly', 'significantly', 'interestingly',
+  'surprisingly', 'remarkably', 'admittedly', 'evidently',
+  'as a result', 'as a matter of fact', 'as such', 'as it were',
+  'on the other hand', 'on the contrary', 'on top of that',
+  'at the same time', 'at any rate', 'by contrast', 'by the same token',
+  'for this reason', 'for that matter', 'for instance', 'for example',
+  'to that end', 'to this effect', 'to be sure', 'to put it simply',
+  'after all', 'above all', 'all in all', 'all things considered',
+  'having said that', 'that being said', 'that said', 'with that said',
+  'needless to say', 'it is worth noting', 'it should be noted',
+  'as a consequence', 'as mentioned', 'as noted',
+  'in the meantime', 'in the end', 'in summary', 'in conclusion',
+  'to summarize', 'to conclude', 'to illustrate', 'to clarify',
+  'put simply', 'simply put', 'more importantly', 'most importantly',
+  'first and foremost', 'last but not least',
+];
+
+// Build a regex that matches two or more consecutive transition phrases
+// separated by commas, semicolons, or sentence boundaries
+function removeConsecutiveFillers(text: string): string {
+  // Escape special regex chars in phrases
+  const escaped = TRANSITION_PHRASES.map(p => p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+  // Sort by length desc so longer phrases match first
+  escaped.sort((a, b) => b.length - a.length);
+  const phrasePattern = escaped.join('|');
+
+  // Match 2+ transitions in a row separated by commas/semicolons
+  // e.g. "in reality, in that sentence, consequently, the text..."
+  const consecutiveRe = new RegExp(
+    `(?:(?:${phrasePattern})\\s*[,;]\\s*){2,}(?:${phrasePattern})\\s*[,;]?\\s*`,
+    'gi'
+  );
+
+  let result = text;
+  // Replace consecutive fillers — keep just the last one (most contextually relevant)
+  result = result.replace(consecutiveRe, (match) => {
+    const phrases = match.match(new RegExp(phrasePattern, 'gi'));
+    if (phrases && phrases.length > 0) {
+      const last = phrases[phrases.length - 1];
+      // Capitalize if at sentence start
+      return last.charAt(0).toUpperCase() + last.slice(1) + ', ';
+    }
+    return '';
+  });
+
+  // Also catch pairs: "transition, transition, actual content"
+  const pairRe = new RegExp(
+    `\\b(${phrasePattern})\\s*[,;]\\s*(${phrasePattern})\\s*[,;]\\s*`,
+    'gi'
+  );
+  result = result.replace(pairRe, (_match, _first, second: string) => {
+    return second.charAt(0).toUpperCase() + second.slice(1) + ', ';
+  });
+
+  // Remove sentence-initial fillers that repeat the pattern from previous sentence ending
+  // e.g. "...something. Furthermore, moreover, the text" → "...something. Moreover, the text"
+  const sentStartDoubleRe = new RegExp(
+    `([.!?])\\s+(${phrasePattern})\\s*[,;]\\s*(${phrasePattern})\\s*[,;]?\\s*`,
+    'gi'
+  );
+  result = result.replace(sentStartDoubleRe, (_match, punct: string, _first, second: string) => {
+    return `${punct} ${second.charAt(0).toUpperCase() + second.slice(1)}, `;
+  });
+
+  return result;
+}
+
 // ── Main grammar cleaning function ──────────────────────────────────
 export function postCleanGrammar(text: string): string {
   let result = text;
+
+  // 0. Remove consecutive filler/transition phrases
+  result = removeConsecutiveFillers(result);
 
   // 1. Irregular verb fixes (highest priority — non-words)
   for (const [pattern, replacement] of IRREGULAR_VERB_FIXES) {

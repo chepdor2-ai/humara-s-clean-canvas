@@ -210,8 +210,8 @@ export default function LiveTextTransition({
       <div
         className={`absolute inset-0 transition-colors duration-1000 rounded-b-xl pointer-events-none ${
           isDone
-            ? 'bg-emerald-950/20'
-            : 'bg-red-950/10'
+            ? 'bg-emerald-50/50 dark:bg-emerald-950/20'
+            : 'bg-white/80 dark:bg-red-950/10'
         }`}
       />
 

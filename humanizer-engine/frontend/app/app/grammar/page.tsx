@@ -24,6 +24,14 @@ const SEV: Record<Severity, { label: string; dot: string; underline: string; cat
 };
 
 type EngineMode = 'rules' | 'ai' | 'both';
+type CategoryFilter = 'all' | 'correctness' | 'clarity' | 'engagement' | 'ai';
+
+const CATEGORIES: { key: CategoryFilter; icon: string; label: string; desc: string; match: (i: Issue) => boolean }[] = [
+  { key: 'correctness', icon: '📤', label: 'Correctness', desc: 'Spelling, grammar, agreement', match: i => i.severity === 'error' && !i.aiDetected },
+  { key: 'clarity',     icon: '💡', label: 'Clarity',     desc: 'Fragments, run-ons, commas', match: i => i.severity === 'warning' && !i.aiDetected },
+  { key: 'engagement',  icon: '✨', label: 'Engagement',  desc: 'Passive voice, word choice',  match: i => i.severity === 'style' && !i.aiDetected },
+  { key: 'ai',          icon: '🧠', label: 'AI Detection', desc: 'LLM-powered detection',       match: i => !!i.aiDetected },
+];
 
 /* â”€â”€ Score circle (Grammarly-style single ring) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
@@ -291,6 +299,7 @@ export default function GrammarPage() {
   const [engineMode, setEngineMode] = useState<EngineMode>('rules');
   const [aiLoading, setAiLoading] = useState(false);
   const [dismissed, setDismissed] = useState<Set<number>>(new Set());
+  const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>('all');
   const issueListRef = useRef<HTMLDivElement>(null);
 
   /* â”€â”€ Analysis â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
@@ -298,6 +307,7 @@ export default function GrammarPage() {
   const handleCheck = useCallback(async () => {
     if (!inputText.trim()) return;
     setDismissed(new Set());
+    setCategoryFilter('all');
     const checker = new GrammarChecker();
     const r = checker.check(inputText);
 
@@ -413,6 +423,20 @@ export default function GrammarPage() {
     if (!result) return [];
     return result.issues.filter((_, i) => !dismissed.has(i));
   }, [result, dismissed]);
+
+  const filteredIssues = useMemo(() => {
+    if (categoryFilter === 'all') return visibleIssues;
+    const cat = CATEGORIES.find(c => c.key === categoryFilter);
+    return cat ? visibleIssues.filter(cat.match) : visibleIssues;
+  }, [visibleIssues, categoryFilter]);
+
+  const categoryCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const cat of CATEGORIES) {
+      counts[cat.key] = visibleIssues.filter(cat.match).length;
+    }
+    return counts;
+  }, [visibleIssues]);
 
   const fixableCount = useMemo(() => visibleIssues.filter(i => i.replacements.length > 0).length, [visibleIssues]);
 
@@ -584,24 +608,61 @@ export default function GrammarPage() {
                 </div>
               </div>
 
+              {/* Category filter bar */}
+              <div className="px-4 py-3 border-b border-slate-100 dark:border-zinc-800/60">
+                <div className="grid grid-cols-4 gap-1.5">
+                  {CATEGORIES.map(cat => {
+                    const count = categoryCounts[cat.key] || 0;
+                    const active = categoryFilter === cat.key;
+                    return (
+                      <button key={cat.key}
+                        onClick={() => setCategoryFilter(active ? 'all' : cat.key)}
+                        className={`flex flex-col items-center gap-0.5 px-2 py-2 rounded-lg text-center transition-all
+                          ${active
+                            ? 'bg-emerald-50 dark:bg-emerald-950/30 ring-1 ring-emerald-300 dark:ring-emerald-700'
+                            : count > 0
+                              ? 'hover:bg-slate-50 dark:hover:bg-zinc-800/50'
+                              : 'opacity-40 cursor-default'
+                          }`}
+                        disabled={count === 0 && !active}>
+                        <span className="text-base leading-none">{cat.icon}</span>
+                        <span className={`text-[10px] font-bold leading-tight ${
+                          active ? 'text-emerald-700 dark:text-emerald-400' : 'text-slate-600 dark:text-zinc-400'
+                        }`}>{count}</span>
+                        <span className="text-[9px] text-slate-400 dark:text-zinc-500 leading-tight">{cat.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
               {/* Suggestions header */}
               <div className="px-5 py-3 border-b border-slate-100 dark:border-zinc-800/60 flex items-center justify-between">
                 <h3 className="text-sm font-bold text-slate-900 dark:text-white">
-                  Suggestions <span className="text-xs font-normal text-slate-400">({visibleIssues.length})</span>
+                  {categoryFilter === 'all' ? 'All Suggestions' : CATEGORIES.find(c => c.key === categoryFilter)?.label}
+                  {' '}<span className="text-xs font-normal text-slate-400">({filteredIssues.length})</span>
                 </h3>
-                {fixableCount > 0 && (
-                  <button onClick={handleAcceptAll}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-bold
-                      bg-emerald-500 hover:bg-emerald-600 text-white transition-all">
-                    <CheckCircle2 className="w-3.5 h-3.5" /> Accept All ({fixableCount})
-                  </button>
-                )}
+                <div className="flex items-center gap-2">
+                  {categoryFilter !== 'all' && (
+                    <button onClick={() => setCategoryFilter('all')}
+                      className="text-[10px] text-slate-400 hover:text-slate-600 dark:hover:text-zinc-300 transition-colors">
+                      Show all
+                    </button>
+                  )}
+                  {fixableCount > 0 && (
+                    <button onClick={handleAcceptAll}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-bold
+                        bg-emerald-500 hover:bg-emerald-600 text-white transition-all">
+                      <CheckCircle2 className="w-3.5 h-3.5" /> Accept All ({fixableCount})
+                    </button>
+                  )}
+                </div>
               </div>
 
               {/* Cards */}
               <div ref={issueListRef} className="flex-1 overflow-y-auto p-3 space-y-2">
-                {visibleIssues.length > 0 ? (
-                  visibleIssues.map((issue) => {
+                {filteredIssues.length > 0 ? (
+                  filteredIssues.map((issue) => {
                     const realIdx = result.issues.indexOf(issue);
                     return (
                       <SuggestionCard key={`${issue.ruleId}-${issue.start}-${realIdx}`}
@@ -616,8 +677,12 @@ export default function GrammarPage() {
                     <div className="p-3 rounded-2xl bg-green-50 dark:bg-green-950/30 mb-3">
                       <CheckCircle2 className="w-10 h-10 text-green-500" />
                     </div>
-                    <h3 className="text-sm font-bold text-slate-900 dark:text-white mb-1">Looking good!</h3>
-                    <p className="text-xs text-slate-500 dark:text-zinc-500">No more suggestions.</p>
+                    <h3 className="text-sm font-bold text-slate-900 dark:text-white mb-1">
+                      {categoryFilter !== 'all' ? `No ${CATEGORIES.find(c => c.key === categoryFilter)?.label.toLowerCase()} issues` : 'Looking good!'}
+                    </h3>
+                    <p className="text-xs text-slate-500 dark:text-zinc-500">
+                      {categoryFilter !== 'all' ? 'Try checking another category.' : 'No more suggestions.'}
+                    </p>
                   </div>
                 )}
               </div>

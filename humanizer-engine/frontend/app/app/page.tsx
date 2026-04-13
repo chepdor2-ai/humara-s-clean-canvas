@@ -405,10 +405,34 @@ export default function EditorPage() {
     setStreamGlobalStage('Initializing…');
   }, []);
 
+  /** Clean input text — strip emoji, bullets, line artifacts, numbering */
+  const cleanInputText = (raw: string): string => {
+    let cleaned = raw;
+    // Remove emoji (Unicode emoji ranges)
+    cleaned = cleaned.replace(/[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F1E0}-\u{1F1FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{FE00}-\u{FE0F}\u{1F900}-\u{1F9FF}\u{1FA00}-\u{1FA6F}\u{1FA70}-\u{1FAFF}\u{200D}\u{20E3}\u{E0020}-\u{E007F}]/gu, '');
+    // Remove bullet points and list markers
+    cleaned = cleaned.replace(/^[\s]*[•●○◉◆◇▪▫►▸▹▻★☆✦✧✩✪✫✬✭✮✯✰⭐⭑⚫⚪➤➣➢➡→⮕↗↘⇒⇨»«‣⁃∙⬤⬥⬦]\s*/gm, '');
+    // Remove numbered list markers: "1." "1)" "1-" "(1)" etc.
+    cleaned = cleaned.replace(/^[\s]*(?:\(?\d{1,3}[.):\-]\)?|\(?[a-zA-Z][.):\-]\)?)\s+/gm, '');
+    // Remove decorative horizontal lines and separators
+    cleaned = cleaned.replace(/^[\s]*[─━═—\-_~]{3,}[\s]*$/gm, '');
+    // Remove decorative bracket/pipe patterns: "| text |", "[ text ]"
+    cleaned = cleaned.replace(/^\s*[|│┃]\s*/gm, '');
+    // Remove leading/trailing asterisks used for markdown bold (but keep the text)
+    cleaned = cleaned.replace(/\*{1,2}([^*]+)\*{1,2}/g, '$1');
+    // Collapse multiple blank lines to one
+    cleaned = cleaned.replace(/\n{3,}/g, '\n\n');
+    // Trim each line
+    cleaned = cleaned.split('\n').map(l => l.trim()).join('\n');
+    // Remove completely empty lines at start/end
+    cleaned = cleaned.trim();
+    return cleaned;
+  };
+
   /** Shared SSE streaming handler used by humanize & rephrase */
   const runStreamingHumanize = async (inputText: string, signal: AbortSignal) => {
     const requestBody: Record<string, unknown> = {
-      text: inputText,
+      text: cleanInputText(inputText),
       engine,
       strength,
       tone,
