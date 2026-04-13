@@ -269,6 +269,16 @@
    globals.css. They MUST live here to survive.
    ═══════════════════════════════════════════════════════════════ */
 
+/* Stealth-shell wrapper → white in light mode (Tailwind v4 merges dark variant) */
+:root:not(.dark) .stealth-shell {
+  background: #ffffff !important;
+}
+
+/* Stealth-top-glow → light blue tint */
+:root:not(.dark) .stealth-top-glow {
+  background: radial-gradient(1200px 280px at 12% -10%, rgba(14, 165, 233, 0.12), transparent 60%) !important;
+}
+
 /* Humanizer page cards → white background, light border, soft shadow */
 :root:not(.dark) .stealth-control-card,
 :root:not(.dark) .stealth-editor-panel,
