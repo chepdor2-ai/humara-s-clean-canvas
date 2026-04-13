@@ -360,7 +360,7 @@ export default function AdminDashboard() {
             { label: 'Feedback', val: stats.totalFeedback, icon: MessageSquare, color: 'text-amber-400' },
             { label: 'Revenue', val: `$${stats.revenueThisMonth.toFixed(0)}`, icon: BarChart3, color: 'text-purple-400' },
           ].map(s => (
-            <div key={s.label} className="bg-[#0c0c14] border border-slate-200 dark:border-zinc-800/60 rounded-xl p-4">
+            <div key={s.label} className="bg-white dark:bg-[#0c0c14] border border-slate-200 dark:border-zinc-800/60 rounded-xl p-4">
               <div className="flex items-center justify-between mb-3">
                 <span className="text-[11px] font-semibold text-slate-500 dark:text-zinc-500 uppercase tracking-wider">{s.label}</span>
                 <s.icon className={`w-4 h-4 ${s.color}`} />
@@ -375,21 +375,21 @@ export default function AdminDashboard() {
       {tab === 'engines' && (
         <div className="space-y-4">
           <div className="grid grid-cols-3 gap-3">
-            <div className="bg-[#0c0c14] border border-slate-200 dark:border-zinc-800/60 rounded-xl p-4">
+            <div className="bg-white dark:bg-[#0c0c14] border border-slate-200 dark:border-zinc-800/60 rounded-xl p-4">
               <div className="flex items-center justify-between mb-2">
                 <span className="text-[11px] font-semibold text-slate-500 dark:text-zinc-500 uppercase tracking-wider">Enabled</span>
                 <Eye className="w-4 h-4 text-emerald-400" />
               </div>
               <p className="text-2xl font-bold text-slate-900 dark:text-white">{enabledCount} <span className="text-sm font-normal text-slate-500 dark:text-zinc-500">/ {engineDraft.length}</span></p>
             </div>
-            <div className="bg-[#0c0c14] border border-slate-200 dark:border-zinc-800/60 rounded-xl p-4">
+            <div className="bg-white dark:bg-[#0c0c14] border border-slate-200 dark:border-zinc-800/60 rounded-xl p-4">
               <div className="flex items-center justify-between mb-2">
                 <span className="text-[11px] font-semibold text-slate-500 dark:text-zinc-500 uppercase tracking-wider">Free Tier</span>
                 <Cpu className="w-4 h-4 text-purple-400" />
               </div>
               <p className="text-2xl font-bold text-slate-900 dark:text-white">{freeCount}</p>
             </div>
-            <div className="bg-[#0c0c14] border border-slate-200 dark:border-zinc-800/60 rounded-xl p-4">
+            <div className="bg-white dark:bg-[#0c0c14] border border-slate-200 dark:border-zinc-800/60 rounded-xl p-4">
               <div className="flex items-center justify-between mb-2">
                 <span className="text-[11px] font-semibold text-slate-500 dark:text-zinc-500 uppercase tracking-wider">Premium</span>
                 <Crown className="w-4 h-4 text-amber-400" />
@@ -437,7 +437,7 @@ export default function AdminDashboard() {
             </div>
           )}
 
-          <div className="bg-[#0c0c14] border border-slate-200 dark:border-zinc-800/60 rounded-xl overflow-hidden">
+          <div className="bg-white dark:bg-[#0c0c14] border border-slate-200 dark:border-zinc-800/60 rounded-xl overflow-hidden">
             <div className="px-4 py-3 border-b border-slate-200 dark:border-zinc-800/50 flex items-center justify-between">
               <div>
                 <h3 className="text-sm font-bold text-slate-900 dark:text-white">Engine Configuration</h3>
@@ -499,14 +499,14 @@ export default function AdminDashboard() {
       {/* â”€â”€ Users Management Tab (enhanced) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       {tab === 'users' && (
         <div className="space-y-4">
-          <div className="bg-[#0c0c14] border border-slate-200 dark:border-zinc-800/60 rounded-xl overflow-hidden">
+          <div className="bg-white dark:bg-[#0c0c14] border border-slate-200 dark:border-zinc-800/60 rounded-xl overflow-hidden">
             <div className="px-4 py-3 border-b border-slate-200 dark:border-zinc-800/50 flex items-center gap-3">
               <Search className="w-4 h-4 text-slate-500 dark:text-zinc-500" />
               <input
                 value={search}
                 onChange={e => { setSearch(e.target.value); setUserPage(1); }}
                 placeholder="Search by name or emailâ€¦"
-                className="flex-1 text-sm bg-transparent outline-none text-zinc-200 placeholder-slate-400 dark:placeholder-zinc-600"
+                className="flex-1 text-sm bg-transparent outline-none text-slate-900 dark:text-zinc-200 placeholder-slate-400 dark:placeholder-zinc-600"
               />
               <span className="text-xs text-slate-500 dark:text-zinc-500">{totalUsers} users</span>
             </div>
@@ -720,7 +720,7 @@ export default function AdminDashboard() {
 
       {/* Subscriptions tab */}
       {tab === 'subscriptions' && (
-        <div className="bg-[#0c0c14] border border-slate-200 dark:border-zinc-800/60 rounded-xl overflow-hidden">
+        <div className="bg-white dark:bg-[#0c0c14] border border-slate-200 dark:border-zinc-800/60 rounded-xl overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
@@ -748,7 +748,7 @@ export default function AdminDashboard() {
 
       {/* Documents tab */}
       {tab === 'documents' && (
-        <div className="bg-[#0c0c14] border border-slate-200 dark:border-zinc-800/60 rounded-xl overflow-hidden">
+        <div className="bg-white dark:bg-[#0c0c14] border border-slate-200 dark:border-zinc-800/60 rounded-xl overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
@@ -780,7 +780,7 @@ export default function AdminDashboard() {
       {tab === 'feedback' && (
         <div className="space-y-3">
           {feedback.map(f => (
-            <div key={f.id} className="bg-[#0c0c14] border border-slate-200 dark:border-zinc-800/60 rounded-xl p-4">
+            <div key={f.id} className="bg-white dark:bg-[#0c0c14] border border-slate-200 dark:border-zinc-800/60 rounded-xl p-4">
               <div className="flex items-center justify-between mb-2">
                 <div className="flex items-center gap-2">
                   <div className="flex gap-0.5">

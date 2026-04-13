@@ -95,7 +95,7 @@ export default function DocsPage() {
                   <code className="text-sm font-mono text-slate-900 dark:text-white">/api/humanize</code>
                 </div>
                 <p className="text-sm text-slate-500 dark:text-zinc-400">Humanize AI-generated text.</p>
-                <h3 className="text-sm font-semibold text-zinc-200">Request Body</h3>
+                <h3 className="text-sm font-semibold text-slate-900 dark:text-zinc-200">Request Body</h3>
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
                     <thead><tr className="border-b border-slate-300 dark:border-zinc-700"><th className="text-left py-2 text-slate-500 dark:text-zinc-400 font-medium">Field</th><th className="text-left py-2 text-slate-500 dark:text-zinc-400 font-medium">Type</th><th className="text-left py-2 text-slate-500 dark:text-zinc-400 font-medium">Required</th><th className="text-left py-2 text-slate-500 dark:text-zinc-400 font-medium">Description</th></tr></thead>

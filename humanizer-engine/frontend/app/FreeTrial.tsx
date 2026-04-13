@@ -40,7 +40,7 @@ export default function FreeTrial() {
       const res = await fetch('/api/humanize', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: input, engine: 'ninja', strength: 'medium', tone: 'academic', strict_meaning: true, enable_post_processing: true }),
+        body: JSON.stringify({ text: input, engine: 'ninja_5', strength: 'medium', tone: 'academic', strict_meaning: true, enable_post_processing: true }),
       });
       const data = await res.json();
       if (!res.ok || data.error) throw new Error(data.error || 'Humanization failed');
@@ -68,21 +68,21 @@ export default function FreeTrial() {
       <div className="grid md:grid-cols-2 gap-4">
         {/* Input */}
         <div className="bg-white dark:bg-zinc-900 rounded-xl border border-slate-200 dark:border-zinc-800 overflow-hidden flex flex-col">
-          <div className="flex items-center justify-between px-4 py-2.5 border-b border-slate-200 dark:border-zinc-800 bg-zinc-900/80">
+          <div className="flex items-center justify-between px-4 py-2.5 border-b border-slate-200 dark:border-zinc-800 bg-slate-50 dark:bg-zinc-900/80">
             <span className="text-sm font-semibold text-slate-900 dark:text-white">Paste AI Text</span>
             <span className={`text-[11px] tabular-nums ${wordCount > MAX_WORDS ? 'text-red-400 font-bold' : 'text-slate-500 dark:text-zinc-500'}`}>{wordCount}/{MAX_WORDS} words</span>
           </div>
           <textarea
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            className="flex-1 min-h-[200px] bg-transparent outline-none resize-none text-[14px] leading-relaxed text-zinc-200 p-4 placeholder-slate-400 dark:placeholder-zinc-600"
+            className="flex-1 min-h-[200px] bg-transparent outline-none resize-none text-[14px] leading-relaxed text-slate-900 dark:text-zinc-200 p-4 placeholder-slate-400 dark:placeholder-zinc-600"
             placeholder="Paste your AI-generated text here…"
           />
         </div>
 
         {/* Output */}
         <div className="bg-white dark:bg-zinc-900 rounded-xl border border-slate-200 dark:border-zinc-800 overflow-hidden flex flex-col">
-          <div className="flex items-center justify-between px-4 py-2.5 border-b border-slate-200 dark:border-zinc-800 bg-zinc-900/80">
+          <div className="flex items-center justify-between px-4 py-2.5 border-b border-slate-200 dark:border-zinc-800 bg-slate-50 dark:bg-zinc-900/80">
             <span className="text-sm font-semibold text-slate-900 dark:text-white">Humanized Output</span>
             {output && (
               <button onClick={handleCopy} className="p-1 text-purple-400 hover:bg-purple-950/50 rounded-md transition-colors" title="Copy">
@@ -99,8 +99,8 @@ export default function FreeTrial() {
             </div>
           ) : output ? (
             <div className="relative flex-1">
-              <div className="absolute inset-0 bg-emerald-950/20 pointer-events-none rounded-b-xl" />
-              <div className="relative z-10 min-h-[200px] text-[14px] leading-relaxed text-zinc-200 p-4 whitespace-pre-wrap">{output}</div>
+              <div className="absolute inset-0 bg-emerald-50/50 dark:bg-emerald-950/20 pointer-events-none rounded-b-xl" />
+              <div className="relative z-10 min-h-[200px] text-[14px] leading-relaxed text-slate-900 dark:text-zinc-200 p-4 whitespace-pre-wrap">{output}</div>
             </div>
           ) : (
             <div className="flex-1 min-h-[200px] flex items-center justify-center text-slate-400 dark:text-zinc-600">
@@ -121,7 +121,7 @@ export default function FreeTrial() {
           <span className="text-xs text-slate-500 dark:text-zinc-500">{remaining > 0 ? `${remaining} free attempt${remaining === 1 ? '' : 's'} remaining` : 'Free attempts used'}</span>
         </div>
         <p className="text-[11px] text-slate-500 dark:text-zinc-500 text-center sm:text-right">
-          Fine-tuned to beat <span className="font-semibold text-slate-500 dark:text-zinc-400">GPTZero</span> · Stealth engine · No signup required
+          Fine-tuned to beat <span className="font-semibold text-slate-500 dark:text-zinc-400">GPTZero</span> · Humara 2.4 + Nuru 2.0 · No signup required
         </p>
       </div>
 

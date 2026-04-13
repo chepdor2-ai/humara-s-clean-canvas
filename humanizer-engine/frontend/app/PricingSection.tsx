@@ -69,8 +69,8 @@ export default function PricingSection() {
             key={plan.name}
             className={`relative p-7 sm:p-8 rounded-3xl flex flex-col transition-all duration-300 ${
               plan.popular
-                ? 'bg-[#0F0F17] border-2 border-purple-500 shadow-lg shadow-purple-500/10 scale-[1.03] lg:scale-105'
-                : 'bg-[#0F0F17] border border-white/10'
+                ? 'bg-white dark:bg-[#0F0F17] border-2 border-purple-500 shadow-lg shadow-purple-500/10 scale-[1.03] lg:scale-105'
+                : 'bg-white dark:bg-[#0F0F17] border border-slate-200 dark:border-white/10'
             }`}
           >
             {plan.popular && (
@@ -93,7 +93,7 @@ export default function PricingSection() {
             )}
             <ul className="space-y-3 mb-8 flex-1">
               {plan.features.map((f) => (
-                <li key={f} className="flex items-center gap-2 text-sm text-gray-300">
+                <li key={f} className="flex items-center gap-2 text-sm text-slate-600 dark:text-gray-300">
                   <CheckCircle2 className={`w-4 h-4 shrink-0 ${plan.popular ? 'text-purple-500' : 'text-emerald-500'}`} />
                   {f}
                 </li>

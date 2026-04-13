@@ -190,7 +190,7 @@ function renderMarkdown(content: string) {
 function inlineMarkdown(text: string): string {
   return text
     .replace(/\*\*(.+?)\*\*/g, '<strong class="text-slate-900 dark:text-white font-semibold">$1</strong>')
-    .replace(/\*(.+?)\*/g, '<em class="text-zinc-200">$1</em>');
+    .replace(/\*(.+?)\*/g, '<em class="text-slate-700 dark:text-zinc-200">$1</em>');
 }
 
 export default async function BlogPostPage({ params }: Props) {

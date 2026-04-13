@@ -137,7 +137,7 @@ export default function SignupPage() {
             <button
               onClick={handleGoogleSignIn}
               disabled={googleLoading}
-              className="w-full flex items-center justify-center gap-3 bg-white/[0.04] border border-slate-300 dark:border-zinc-700/60 hover:bg-white/[0.08] hover:border-zinc-600 text-zinc-200 font-medium py-3 rounded-xl transition-all disabled:opacity-50 text-sm"
+              className="w-full flex items-center justify-center gap-3 bg-slate-100 dark:bg-white/[0.04] border border-slate-300 dark:border-zinc-700/60 hover:bg-slate-200 dark:hover:bg-white/[0.08] hover:border-zinc-600 text-slate-800 dark:text-zinc-200 font-medium py-3 rounded-xl transition-all disabled:opacity-50 text-sm"
             >
               <svg className="w-[18px] h-[18px]" viewBox="0 0 24 24">
                 <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4"/>
