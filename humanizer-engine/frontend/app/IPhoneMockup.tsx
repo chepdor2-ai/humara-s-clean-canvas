@@ -65,7 +65,7 @@ export default function IPhoneMockup() {
   const isDone = phase === 'complete';
 
   return (
-    <div className="relative" style={{ perspective: '1200px' }}>
+    <div className="relative force-dark" style={{ perspective: '1200px' }}>
       {/* Glow behind phone */}
       <div className="absolute -inset-10 bg-gradient-to-br from-purple-500/25 via-purple-600/15 to-transparent rounded-full blur-[60px] pointer-events-none" />
 

@@ -100,7 +100,7 @@ export default function HeroAnimation() {
   const isDone = phase === 'complete';
 
   return (
-    <div className="bg-[#0F0F17] border border-white/10 rounded-xl overflow-hidden shadow-2xl shadow-purple-900/10">
+    <div className="force-dark bg-[#0F0F17] border border-white/10 rounded-xl overflow-hidden shadow-2xl shadow-purple-900/10">
       {/* Title bar */}
       <div className="flex items-center gap-2 px-5 py-3 border-b border-white/5 bg-[#0A0A12]">
         <div className="w-2.5 h-2.5 bg-red-500/80 rounded-full" />

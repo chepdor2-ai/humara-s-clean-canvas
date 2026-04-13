@@ -1,0 +1,317 @@
+/* ═══════════════════════════════════════════════════════════════
+   LIGHT-MODE OVERRIDES
+   ───────────────────────────────────────────────────────────────
+   This file is separate from globals.css to avoid being stripped
+   by Tailwind CSS v4's PostCSS processing pipeline.
+   ═══════════════════════════════════════════════════════════════ */
+
+/* ── 1. Dark Hex Backgrounds → White ─────────────────────────── */
+[data-theme="light"] [class~="bg-[#05050A]"],
+[data-theme="light"] [class~="bg-[#0F0F17]"],
+[data-theme="light"] [class~="bg-[#0A0A12]"],
+[data-theme="light"] [class~="bg-[#09090F]"],
+[data-theme="light"] [class~="bg-[#0c0c14]"],
+[data-theme="light"] [class~="bg-[#12121a]"],
+[data-theme="light"] [class~="bg-[#090d14]"],
+[data-theme="light"] [class~="bg-[#0a1018]"],
+[data-theme="light"] [class~="bg-[#0a0a0b]"] {
+  background-color: #ffffff !important;
+  background-image: none !important;
+}
+
+/* ── 2. Named Dark Backgrounds → Light ───────────────────────── */
+[data-theme="light"] [class~="bg-black"] {
+  background-color: #f8fafc !important;
+}
+[data-theme="light"] [class~="bg-zinc-950"],
+[data-theme="light"] [class~="bg-zinc-900"],
+[data-theme="light"] [class~="bg-slate-950"],
+[data-theme="light"] [class~="bg-slate-900"],
+[data-theme="light"] [class~="bg-gray-900"] {
+  background-color: #ffffff !important;
+}
+[data-theme="light"] [class~="bg-zinc-800"] {
+  background-color: #f1f5f9 !important;
+}
+
+/* ── 3. Opacity Dark Backgrounds → Light ─────────────────────── */
+[data-theme="light"] [class~="bg-zinc-950/60"],
+[data-theme="light"] [class~="bg-zinc-950/80"],
+[data-theme="light"] [class~="bg-zinc-900/90"],
+[data-theme="light"] [class~="bg-zinc-900/80"],
+[data-theme="light"] [class~="bg-zinc-900/60"],
+[data-theme="light"] [class~="bg-zinc-900/70"] {
+  background-color: #ffffff !important;
+  border-color: #e2e8f0 !important;
+}
+[data-theme="light"] [class~="bg-zinc-800/80"],
+[data-theme="light"] [class~="bg-zinc-800/60"],
+[data-theme="light"] [class~="bg-zinc-800/50"],
+[data-theme="light"] [class~="bg-zinc-800/30"],
+[data-theme="light"] [class~="bg-zinc-800/20"] {
+  background-color: #f1f5f9 !important;
+}
+
+/* ── 4. Near-transparent Overlays → Transparent ──────────────── */
+[data-theme="light"] [class~="bg-white/[0.02]"],
+[data-theme="light"] [class~="bg-white/[0.04]"],
+[data-theme="light"] [class~="bg-white/[0.08]"],
+[data-theme="light"] [class~="bg-white/5"],
+[data-theme="light"] [class~="bg-white/10"] {
+  background-color: transparent !important;
+}
+
+/* ── 5. Gradient Overlays → Transparent ──────────────────────── */
+[data-theme="light"] [class~="from-[#05050A]"],
+[data-theme="light"] [class~="from-[#05050A]/60"],
+[data-theme="light"] [class~="from-[#05050A]/50"],
+[data-theme="light"] [class~="from-[#05050A]/40"],
+[data-theme="light"] [class~="from-[#09090F]"] {
+  background-image: none !important;
+}
+[data-theme="light"] [class~="via-[#05050A]"],
+[data-theme="light"] [class~="via-[#05050A]/40"],
+[data-theme="light"] [class~="via-[#09090F]/80"] {
+  background-image: none !important;
+}
+
+/* ── 6. Text Color Shifts ────────────────────────────────────── */
+/* text-white → dark inside overridden dark sections */
+[data-theme="light"] [class~="bg-[#05050A]"] [class~="text-white"],
+[data-theme="light"] [class~="bg-[#0F0F17]"] [class~="text-white"],
+[data-theme="light"] [class~="bg-[#0A0A12]"] [class~="text-white"],
+[data-theme="light"] [class~="bg-[#0c0c14]"] [class~="text-white"],
+[data-theme="light"] [class~="bg-[#12121a]"] [class~="text-white"],
+[data-theme="light"] [class~="bg-black"] [class~="text-white"],
+[data-theme="light"] [class~="bg-zinc-950"] [class~="text-white"],
+[data-theme="light"] [class~="bg-zinc-900"] [class~="text-white"],
+[data-theme="light"] [class~="bg-slate-950"] [class~="text-white"],
+[data-theme="light"] [class~="bg-slate-900"] [class~="text-white"],
+[data-theme="light"] [class~="bg-gray-900"] [class~="text-white"],
+[data-theme="light"] [class~="bg-[#05050A]"][class~="text-white"],
+[data-theme="light"] [class~="bg-black"][class~="text-white"],
+[data-theme="light"] [class~="bg-zinc-900"][class~="text-white"],
+[data-theme="light"] [class~="bg-zinc-950"][class~="text-white"],
+[data-theme="light"] [class~="bg-slate-950"][class~="text-white"] {
+  color: #0f172a !important;
+}
+
+/* Keep white text on colored/gradient backgrounds */
+[data-theme="light"] [class*="from-purple"][class~="text-white"],
+[data-theme="light"] [class*="bg-purple"][class~="text-white"],
+[data-theme="light"] [class*="bg-emerald"][class~="text-white"],
+[data-theme="light"] [class*="bg-orange"][class~="text-white"],
+[data-theme="light"] [class*="bg-red-"][class~="text-white"],
+[data-theme="light"] [class*="bg-blue"][class~="text-white"],
+[data-theme="light"] [class*="bg-cyan"][class~="text-white"],
+[data-theme="light"] [class*="bg-gradient"][class~="text-white"] {
+  color: #ffffff !important;
+}
+
+/* text-zinc-100/200 → dark inside overridden sections */
+[data-theme="light"] [class~="bg-[#05050A]"] [class~="text-zinc-100"],
+[data-theme="light"] [class~="bg-[#05050A]"] [class~="text-zinc-200"],
+[data-theme="light"] [class~="bg-black"] [class~="text-zinc-100"],
+[data-theme="light"] [class~="bg-black"] [class~="text-zinc-200"],
+[data-theme="light"] [class~="bg-zinc-900"] [class~="text-zinc-100"],
+[data-theme="light"] [class~="bg-zinc-900"] [class~="text-zinc-200"],
+[data-theme="light"] [class~="bg-zinc-950"] [class~="text-zinc-100"],
+[data-theme="light"] [class~="bg-slate-950"] [class~="text-zinc-100"] {
+  color: #1e293b !important;
+}
+
+/* Muted text: gray-300/zinc-300 → darker equivalent */
+[data-theme="light"] [class~="bg-[#05050A]"] [class~="text-gray-300"],
+[data-theme="light"] [class~="bg-[#0F0F17]"] [class~="text-gray-300"],
+[data-theme="light"] [class~="bg-black"] [class~="text-gray-300"],
+[data-theme="light"] [class~="bg-zinc-900"] [class~="text-gray-300"],
+[data-theme="light"] [class~="bg-zinc-950"] [class~="text-gray-300"],
+[data-theme="light"] [class~="bg-slate-950"] [class~="text-gray-300"],
+[data-theme="light"] [class~="bg-[#05050A]"] [class~="text-zinc-300"],
+[data-theme="light"] [class~="bg-black"] [class~="text-zinc-300"],
+[data-theme="light"] [class~="bg-zinc-900"] [class~="text-zinc-300"] {
+  color: #475569 !important;
+}
+
+/* Muted text: gray-400/zinc-400 → medium gray */
+[data-theme="light"] [class~="bg-[#05050A]"] [class~="text-gray-400"],
+[data-theme="light"] [class~="bg-[#0F0F17]"] [class~="text-gray-400"],
+[data-theme="light"] [class~="bg-black"] [class~="text-gray-400"],
+[data-theme="light"] [class~="bg-zinc-900"] [class~="text-gray-400"],
+[data-theme="light"] [class~="bg-zinc-950"] [class~="text-gray-400"],
+[data-theme="light"] [class~="bg-slate-950"] [class~="text-gray-400"],
+[data-theme="light"] [class~="bg-[#05050A]"] [class~="text-zinc-400"],
+[data-theme="light"] [class~="bg-black"] [class~="text-zinc-400"],
+[data-theme="light"] [class~="bg-zinc-900"] [class~="text-zinc-400"],
+[data-theme="light"] [class~="bg-zinc-950"] [class~="text-zinc-400"],
+[data-theme="light"] [class~="bg-slate-950"] [class~="text-zinc-400"] {
+  color: #64748b !important;
+}
+
+/* Muted text: gray-500/zinc-500 → slate-500 equivalent */
+[data-theme="light"] [class~="bg-[#05050A]"] [class~="text-gray-500"],
+[data-theme="light"] [class~="bg-[#0F0F17]"] [class~="text-gray-500"],
+[data-theme="light"] [class~="bg-black"] [class~="text-gray-500"],
+[data-theme="light"] [class~="bg-zinc-900"] [class~="text-gray-500"],
+[data-theme="light"] [class~="bg-zinc-950"] [class~="text-gray-500"],
+[data-theme="light"] [class~="bg-slate-950"] [class~="text-gray-500"],
+[data-theme="light"] [class~="bg-[#05050A]"] [class~="text-zinc-500"],
+[data-theme="light"] [class~="bg-black"] [class~="text-zinc-500"],
+[data-theme="light"] [class~="bg-zinc-900"] [class~="text-zinc-500"] {
+  color: #64748b !important;
+}
+
+/* Muted text: zinc-600 */
+[data-theme="light"] [class~="bg-[#05050A]"] [class~="text-zinc-600"],
+[data-theme="light"] [class~="bg-black"] [class~="text-zinc-600"],
+[data-theme="light"] [class~="bg-zinc-900"] [class~="text-zinc-600"] {
+  color: #94a3b8 !important;
+}
+
+/* ── 7. Border Color Shifts ──────────────────────────────────── */
+[data-theme="light"] [class~="border-white/10"],
+[data-theme="light"] [class~="border-white/5"] {
+  border-color: #e2e8f0 !important;
+}
+[data-theme="light"] [class~="border-zinc-800"],
+[data-theme="light"] [class~="border-zinc-800/50"],
+[data-theme="light"] [class~="border-zinc-800/60"],
+[data-theme="light"] [class~="border-zinc-800/40"],
+[data-theme="light"] [class~="border-zinc-800/30"],
+[data-theme="light"] [class~="border-zinc-700"],
+[data-theme="light"] [class~="border-zinc-700/60"],
+[data-theme="light"] [class~="border-zinc-700/80"],
+[data-theme="light"] [class~="border-slate-800"] {
+  border-color: #e2e8f0 !important;
+}
+[data-theme="light"] [class~="border-purple-500/10"] {
+  border-color: rgba(168, 85, 247, 0.08) !important;
+}
+[data-theme="light"] [class~="border-purple-800/60"] {
+  border-color: rgba(168, 85, 247, 0.15) !important;
+}
+[data-theme="light"] [class~="border-cyan-900/30"],
+[data-theme="light"] [class~="border-cyan-900/40"],
+[data-theme="light"] [class~="border-cyan-900/50"],
+[data-theme="light"] [class~="border-cyan-950/60"] {
+  border-color: #e2e8f0 !important;
+}
+
+/* ── 8. Ring Colors ──────────────────────────────────────────── */
+[data-theme="light"] [class~="ring-white/5"] {
+  --tw-ring-color: rgba(148, 163, 184, 0.15) !important;
+}
+
+/* ── 9. Shadow Normalization ─────────────────────────────────── */
+[data-theme="light"] [class~="shadow-purple-900/10"] {
+  --tw-shadow-color: rgba(168, 85, 247, 0.06) !important;
+}
+[data-theme="light"] [class~="shadow-purple-900/20"] {
+  --tw-shadow-color: rgba(168, 85, 247, 0.08) !important;
+}
+[data-theme="light"] [class~="shadow-black/60"] {
+  --tw-shadow-color: rgba(148, 163, 184, 0.2) !important;
+}
+
+/* ── 10. Auth Page Input/Card Refinements ────────────────────── */
+[data-theme="light"] input[class~="bg-zinc-950/80"],
+[data-theme="light"] textarea[class~="bg-zinc-950/80"],
+[data-theme="light"] select[class~="bg-zinc-950/80"] {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+}
+[data-theme="light"] input[class~="text-white"],
+[data-theme="light"] textarea[class~="text-white"] {
+  color: #0f172a !important;
+}
+[data-theme="light"] input[class~="placeholder-zinc-600"]::placeholder,
+[data-theme="light"] textarea[class~="placeholder-zinc-600"]::placeholder {
+  color: #94a3b8 !important;
+}
+
+/* ── 11. Auth Divider Line Text ──────────────────────────────── */
+[data-theme="light"] span[class~="bg-zinc-900"] {
+  background-color: #ffffff !important;
+  color: #94a3b8 !important;
+}
+
+/* ── 12. Premium Dots Light Mode ─────────────────────────────── */
+[data-theme="light"] .premium-dots {
+  background-image: radial-gradient(circle, rgba(147, 51, 234, 0.04) 1px, transparent 1px) !important;
+  background-color: #ffffff !important;
+}
+
+/* ── 13. Ref-Card Light Styling ──────────────────────────────── */
+[data-theme="light"] .ref-card {
+  background-color: #ffffff !important;
+  border: 1px solid #e2e8f0 !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06) !important;
+}
+[data-theme="light"] .ref-card:hover {
+  box-shadow: 0 10px 30px -8px rgba(147, 51, 234, 0.12) !important;
+  border-color: rgba(168, 85, 247, 0.2) !important;
+}
+
+/* ── 14. Auth Logo Gradient Text Fix ─────────────────────────── */
+[data-theme="light"] [class*="bg-clip-text"][class*="from-white"] {
+  background-image: linear-gradient(to right, #6b21a8, #9333ea, #c084fc) !important;
+}
+
+/* ── 15. Radial Gradient Glow → Softer in Light ──────────────── */
+[data-theme="light"] [class*="bg-[radial-gradient"] {
+  opacity: 0.4;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   FORCE-DARK RESTORATION
+   ───────────────────────────────────────────────────────────────
+   Components with .force-dark (HeroAnimation, IPhoneMockup)
+   stay dark in light mode as product demos / mockups.
+   ═══════════════════════════════════════════════════════════════ */
+
+[data-theme="light"] .force-dark [class~="bg-[#0F0F17]"],
+[data-theme="light"] .force-dark[class~="bg-[#0F0F17]"] {
+  background-color: #0F0F17 !important;
+}
+[data-theme="light"] .force-dark [class~="bg-[#0A0A12]"],
+[data-theme="light"] .force-dark[class~="bg-[#0A0A12]"] {
+  background-color: #0A0A12 !important;
+}
+[data-theme="light"] .force-dark [class~="bg-[#05050A]"],
+[data-theme="light"] .force-dark[class~="bg-[#05050A]"] {
+  background-color: #05050A !important;
+}
+[data-theme="light"] .force-dark [class~="bg-[#0c0c14]"],
+[data-theme="light"] .force-dark[class~="bg-[#0c0c14]"] {
+  background-color: #0c0c14 !important;
+}
+[data-theme="light"] .force-dark [class~="bg-[#09090F]"],
+[data-theme="light"] .force-dark[class~="bg-[#09090F]"] {
+  background-color: #09090F !important;
+}
+
+/* Restore text colors inside force-dark */
+[data-theme="light"] .force-dark [class~="text-white"] {
+  color: #ffffff !important;
+}
+[data-theme="light"] .force-dark [class~="text-gray-400"] {
+  color: #9ca3af !important;
+}
+[data-theme="light"] .force-dark [class~="text-gray-300"] {
+  color: #d1d5db !important;
+}
+[data-theme="light"] .force-dark [class~="text-gray-600"] {
+  color: #4b5563 !important;
+}
+[data-theme="light"] .force-dark [class~="text-zinc-100"],
+[data-theme="light"] .force-dark [class~="text-zinc-200"],
+[data-theme="light"] .force-dark [class~="text-zinc-300"],
+[data-theme="light"] .force-dark [class~="text-zinc-400"] {
+  color: revert !important;
+}
+
+/* Restore borders inside force-dark */
+[data-theme="light"] .force-dark [class~="border-white/10"],
+[data-theme="light"] .force-dark [class~="border-white/5"] {
+  border-color: rgba(255, 255, 255, 0.1) !important;
+}

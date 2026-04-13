@@ -808,24 +808,24 @@ export default function EditorPage() {
 
       {/* ═══ Combined Control Card ═══ */}
       <div
-        className={`relative overflow-hidden bg-[linear-gradient(145deg,rgba(8,11,16,.95),rgba(10,13,19,.92))] border border-cyan-900/40 rounded-2xl shadow-[0_16px_40px_-22px_rgba(6,182,212,.45)] ${planColor ? 'plan-glow' : ''}`}
+        className={`stealth-control-card relative overflow-hidden bg-white dark:bg-[linear-gradient(145deg,rgba(8,11,16,.95),rgba(10,13,19,.92))] border border-slate-200 dark:border-cyan-900/40 rounded-2xl shadow-sm dark:shadow-[0_16px_40px_-22px_rgba(6,182,212,.45)] ${planColor ? 'plan-glow' : ''}`}
       >
-        <div className="stealth-top-glow pointer-events-none absolute inset-0 opacity-70" />
+        <div className="stealth-top-glow pointer-events-none absolute inset-0 opacity-0 dark:opacity-70" />
         {/* Row 1: Brand + Usage + Nav */}
-        <div className="relative flex items-center justify-between px-4 sm:px-5 py-3 border-b border-cyan-900/30">
+        <div className="relative flex items-center justify-between px-4 sm:px-5 py-3 border-b border-slate-200 dark:border-cyan-900/30">
           <div className="flex items-center gap-4">
-            <h1 className="text-lg font-black text-cyan-100 tracking-tight">Humara Stealth</h1>
-            <div className="w-px h-4 bg-cyan-900/50" />
+            <h1 className="text-lg font-black text-cyan-600 dark:text-cyan-100 tracking-tight">Humara Stealth</h1>
+            <div className="w-px h-4 bg-slate-300 dark:bg-cyan-900/50" />
             <UsageBar />
           </div>
           <div className="flex items-center gap-1.5">
             {isAdmin && (
               <Link href="/app/admin"
-                className="flex items-center gap-1 px-2 py-1.5 text-[10px] font-semibold text-amber-300 bg-amber-950/30 border border-amber-700/60 rounded-lg hover:bg-amber-900/30 transition-colors">
+                className="flex items-center gap-1 px-2 py-1.5 text-[10px] font-semibold text-amber-600 dark:text-amber-300 bg-amber-100 dark:bg-amber-950/30 border border-amber-300 dark:border-amber-700/60 rounded-lg hover:bg-amber-200 dark:hover:bg-amber-900/30 transition-colors">
                 <Shield className="w-3 h-3" /> Admin
               </Link>
             )}
-            <Link href="/app/settings" className="p-1.5 text-zinc-500 hover:text-cyan-100 rounded-lg hover:bg-cyan-950/30 transition-colors">
+            <Link href="/app/settings" className="p-1.5 text-slate-400 dark:text-zinc-500 hover:text-cyan-600 dark:hover:text-cyan-100 rounded-lg hover:bg-slate-100 dark:hover:bg-cyan-950/30 transition-colors">
               <Settings className="w-3.5 h-3.5" />
             </Link>
           </div>
@@ -834,8 +834,8 @@ export default function EditorPage() {
         {/* Row 2: Mode + Engine + Depth + Tone + Meaning + Humanize */}
         <div className="relative flex flex-wrap items-center gap-x-4 gap-y-2 px-4 sm:px-5 py-3">
           <div className="flex items-center gap-1.5">
-            <span className="text-[10px] font-semibold uppercase text-zinc-500">Mode</span>
-            <div className="flex bg-zinc-950/60 rounded-md p-0.5 border border-cyan-900/40">
+            <span className="text-[10px] font-semibold uppercase text-slate-500 dark:text-zinc-500">Mode</span>
+            <div className="flex bg-slate-100 dark:bg-zinc-950/60 rounded-md p-0.5 border border-slate-200 dark:border-cyan-900/40">
               {([
                 { id: 'stealth_mode', label: 'Stealth' },
                 { id: 'anti_gptzero', label: 'Anti GPTZero' },
@@ -845,7 +845,7 @@ export default function EditorPage() {
                   key={m.id}
                   onClick={() => setMode(m.id)}
                   className={`px-2 py-1 text-[10px] font-semibold rounded transition-all ${
-                    mode === m.id ? 'bg-cyan-700/70 text-white' : 'text-zinc-500 hover:text-zinc-300'
+                    mode === m.id ? 'bg-cyan-500 dark:bg-cyan-700/70 text-white' : 'text-slate-500 dark:text-zinc-500 hover:text-slate-700 dark:hover:text-zinc-300'
                   }`}
                 >
                   {m.label}
@@ -853,25 +853,25 @@ export default function EditorPage() {
               ))}
             </div>
           </div>
-          <div className="w-px h-4 bg-cyan-950/70 hidden sm:block" />
+          <div className="w-px h-4 bg-slate-200 dark:bg-cyan-950/70 hidden sm:block" />
           <div className="flex items-center gap-1.5 relative">
-            <span className="text-[10px] font-semibold text-zinc-500 uppercase">Engine</span>
+            <span className="text-[10px] font-semibold text-slate-500 dark:text-zinc-500 uppercase">Engine</span>
             <div className="relative group">
               <button ref={engineBtnRef} type="button" onClick={() => setEngineDropdownOpen(!engineDropdownOpen)}
-                className="flex items-center gap-1.5 bg-zinc-950/60 border border-cyan-900/40 rounded-md px-2 py-1 text-[11px] font-semibold text-zinc-300 outline-none hover:border-cyan-700/60 transition-colors min-w-[118px]">
+                className="flex items-center gap-1.5 bg-slate-100 dark:bg-zinc-950/60 border border-slate-200 dark:border-cyan-900/40 rounded-md px-2 py-1 text-[11px] font-semibold text-slate-700 dark:text-zinc-300 outline-none hover:border-slate-300 dark:hover:border-cyan-700/60 transition-colors min-w-[118px]">
                 <span>{ENGINES.find(e => e.id === engine)?.label}</span>
-                <svg className={`ml-auto w-3 h-3 text-zinc-500 transition-transform ${engineDropdownOpen ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+                <svg className={`ml-auto w-3 h-3 text-slate-400 dark:text-zinc-500 transition-transform ${engineDropdownOpen ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
               </button>
               {ENGINE_GUIDES[engine] && !engineDropdownOpen && (
-                <div className="absolute left-0 top-full mt-2 z-30 w-[260px] bg-[#0c0c14] border border-purple-800/60 rounded-lg px-3 py-2 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none shadow-lg">
-                  <p className="text-[10px] text-zinc-400 leading-relaxed"><span className="font-bold text-purple-400">{ENGINES.find(e => e.id === engine)?.label}:</span> {ENGINE_GUIDES[engine]}</p>
+                <div className="absolute left-0 top-full mt-2 z-30 w-[260px] bg-white dark:bg-[#0c0c14] border border-slate-200 dark:border-purple-800/60 rounded-lg px-3 py-2 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none shadow-lg">
+                  <p className="text-[10px] text-slate-600 dark:text-zinc-400 leading-relaxed"><span className="font-bold text-purple-600 dark:text-purple-400">{ENGINES.find(e => e.id === engine)?.label}:</span> {ENGINE_GUIDES[engine]}</p>
                 </div>
               )}
               {engineDropdownOpen && (
                 <>
                   <div className="fixed inset-0 z-[9998]" onClick={() => setEngineDropdownOpen(false)} />
                   <div
-                    className="fixed z-[9999] w-[200px] bg-[#090d14] border border-cyan-900/50 rounded-xl shadow-2xl shadow-black/60 overflow-hidden animate-in fade-in slide-in-from-top-1 duration-150"
+                    className="fixed z-[9999] w-[200px] bg-white dark:bg-[#090d14] border border-slate-200 dark:border-cyan-900/50 rounded-xl shadow-2xl shadow-slate-200/50 dark:shadow-black/60 overflow-hidden animate-in fade-in slide-in-from-top-1 duration-150"
                     style={{
                       top: engineBtnRef.current ? engineBtnRef.current.getBoundingClientRect().bottom + 6 : 0,
                       left: engineBtnRef.current ? engineBtnRef.current.getBoundingClientRect().left : 0,
@@ -879,9 +879,9 @@ export default function EditorPage() {
                   >
                     {ENGINES.map(e => (
                       <button key={e.id} type="button" onClick={() => { setEngine(e.id); setEngineDropdownOpen(false); }}
-                        className={`w-full text-left px-3.5 py-2.5 hover:bg-cyan-950/30 transition-colors border-b border-zinc-800/40 last:border-b-0 flex items-center gap-2 ${engine === e.id ? 'bg-cyan-950/40' : ''}`}>
-                        <span className="text-sm font-medium text-zinc-200">{e.label}</span>
-                        {engine === e.id && <svg className="ml-auto w-4 h-4 text-cyan-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>}
+                        className={`w-full text-left px-3.5 py-2.5 hover:bg-slate-50 dark:hover:bg-cyan-950/30 transition-colors border-b border-slate-100 dark:border-zinc-800/40 last:border-b-0 flex items-center gap-2 ${engine === e.id ? 'bg-slate-50 dark:bg-cyan-950/40' : ''}`}>
+                        <span className="text-sm font-medium text-slate-700 dark:text-zinc-200">{e.label}</span>
+                        {engine === e.id && <svg className="ml-auto w-4 h-4 text-cyan-600 dark:text-cyan-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>}
                       </button>
                     ))}
                   </div>
@@ -889,36 +889,36 @@ export default function EditorPage() {
               )}
             </div>
           </div>
-          <div className="w-px h-4 bg-cyan-950/70 hidden sm:block" />
+          <div className="w-px h-4 bg-slate-200 dark:bg-cyan-950/70 hidden sm:block" />
           <div className="flex items-center gap-1.5">
-            <span className="text-[10px] font-semibold text-zinc-500 uppercase">Depth</span>
-            <div className="flex bg-zinc-950/60 rounded-md p-0.5 border border-cyan-900/40">
+            <span className="text-[10px] font-semibold text-slate-500 dark:text-zinc-500 uppercase">Depth</span>
+            <div className="flex bg-slate-100 dark:bg-zinc-950/60 rounded-md p-0.5 border border-slate-200 dark:border-cyan-900/40">
               {STRENGTHS.map(s => (
                 <button key={s.id} onClick={() => setStrength(s.id)}
-                  className={`px-2 py-1 text-[10px] font-semibold rounded transition-all ${strength === s.id ? 'bg-cyan-700/70 text-white' : 'text-zinc-500 hover:text-zinc-300'}`}>
+                  className={`px-2 py-1 text-[10px] font-semibold rounded transition-all ${strength === s.id ? 'bg-cyan-500 dark:bg-cyan-700/70 text-white' : 'text-slate-500 dark:text-zinc-500 hover:text-slate-700 dark:hover:text-zinc-300'}`}>
                   {s.label}
                 </button>
               ))}
             </div>
           </div>
-          <div className="w-px h-4 bg-cyan-950/70 hidden sm:block" />
+          <div className="w-px h-4 bg-slate-200 dark:bg-cyan-950/70 hidden sm:block" />
           <div className="flex items-center gap-1.5">
-            <span className="text-[10px] font-semibold text-zinc-500 uppercase">Tone</span>
+            <span className="text-[10px] font-semibold text-slate-500 dark:text-zinc-500 uppercase">Tone</span>
             <select value={tone} onChange={(e) => setTone(e.target.value)} title="Tone"
-              className="bg-zinc-950/60 border border-cyan-900/40 rounded-md px-2 py-1 text-[10px] font-semibold text-zinc-300 outline-none focus:border-cyan-500">
+              className="bg-slate-100 dark:bg-zinc-950/60 border border-slate-200 dark:border-cyan-900/40 rounded-md px-2 py-1 text-[10px] font-semibold text-slate-700 dark:text-zinc-300 outline-none focus:border-cyan-500">
               {TONES.map(t => <option key={t.id} value={t.id}>{t.label}</option>)}
             </select>
           </div>
-          <div className="w-px h-4 bg-cyan-950/70 hidden sm:block" />
+          <div className="w-px h-4 bg-slate-200 dark:bg-cyan-950/70 hidden sm:block" />
           <label className="flex items-center gap-1.5 cursor-pointer select-none">
-            <span className="text-[10px] font-semibold text-zinc-500 uppercase">Meaning</span>
+            <span className="text-[10px] font-semibold text-slate-500 dark:text-zinc-500 uppercase">Meaning</span>
             <button onClick={() => setStrictMeaning(!strictMeaning)} title={strictMeaning ? 'On' : 'Off'}
-              className={`w-7 h-[16px] rounded-full transition-all relative ${strictMeaning ? 'bg-cyan-600' : 'bg-zinc-700'}`}>
+              className={`w-7 h-[16px] rounded-full transition-all relative ${strictMeaning ? 'bg-cyan-500 dark:bg-cyan-600' : 'bg-slate-300 dark:bg-zinc-700'}`}>
               <div className={`w-2.5 h-2.5 bg-white rounded-full absolute top-[3px] transition-all shadow-sm ${strictMeaning ? 'left-[13px]' : 'left-[3px]'}`} />
             </button>
           </label>
           <button onClick={handleHumanize} disabled={!text.trim() || loading || rephrasing}
-            className="ml-auto bg-gradient-to-r from-cyan-700 to-teal-600 hover:from-cyan-600 hover:to-teal-500 text-white text-[11px] font-bold rounded-lg px-4 py-2 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center gap-1.5 shadow-md hover:shadow-lg active:scale-[0.97]">
+            className="ml-auto bg-gradient-to-r from-cyan-600 to-teal-500 dark:from-cyan-700 dark:to-teal-600 hover:from-cyan-500 hover:to-teal-400 dark:hover:from-cyan-600 dark:hover:to-teal-500 text-white text-[11px] font-bold rounded-lg px-4 py-2 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center gap-1.5 shadow-md hover:shadow-lg active:scale-[0.97]">
             {loading ? <RotateCcw className="w-3 h-3 animate-spin" /> : <Zap className="w-3 h-3" />}
             {loading ? 'Humanizing…' : 'Humanize'}
           </button>
@@ -926,13 +926,13 @@ export default function EditorPage() {
       </div>
 
       {/* Stealth Hint Bar */}
-      <div className="flex flex-wrap items-center gap-2.5 px-3 py-2 rounded-xl border border-cyan-950/60 bg-[#0a1018]">
-        <span className="text-[10px] font-semibold uppercase tracking-wide text-cyan-300">Profile</span>
-        <span className="text-[11px] text-zinc-300">Simple controls, stealth output, editable result.</span>
+      <div className="stealth-hint-bar flex flex-wrap items-center gap-2.5 px-3 py-2 rounded-xl border border-slate-200 dark:border-cyan-950/60 bg-white dark:bg-[#0a1018] shadow-sm dark:shadow-none">
+        <span className="text-[10px] font-semibold uppercase tracking-wide text-cyan-600 dark:text-cyan-300">Profile</span>
+        <span className="text-[11px] text-slate-600 dark:text-zinc-300">Simple controls, stealth output, editable result.</span>
         <div className="ml-auto flex flex-wrap items-center gap-1.5">
-          <span className="text-[10px] px-2 py-0.5 rounded-full bg-cyan-950/50 border border-cyan-900/60 text-cyan-200">{MODE_LABELS[mode]}</span>
-          <span className="text-[10px] px-2 py-0.5 rounded-full bg-zinc-900/70 border border-zinc-800 text-zinc-300">{ENGINES.find(e => e.id === engine)?.label}</span>
-          <span className="text-[10px] px-2 py-0.5 rounded-full bg-zinc-900/70 border border-zinc-800 text-zinc-300">{TONES.find(t => t.id === tone)?.label}</span>
+          <span className="text-[10px] px-2 py-0.5 rounded-full bg-cyan-50 dark:bg-cyan-950/50 border border-cyan-200 dark:border-cyan-900/60 text-cyan-700 dark:text-cyan-200">{MODE_LABELS[mode]}</span>
+          <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-100 dark:bg-zinc-900/70 border border-slate-200 dark:border-zinc-800 text-slate-700 dark:text-zinc-300">{ENGINES.find(e => e.id === engine)?.label}</span>
+          <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-100 dark:bg-zinc-900/70 border border-slate-200 dark:border-zinc-800 text-slate-700 dark:text-zinc-300">{TONES.find(t => t.id === tone)?.label}</span>
         </div>
       </div>
 
@@ -942,21 +942,21 @@ export default function EditorPage() {
           {engine === 'ozone' && (
             <>
               <div className="flex items-center gap-1.5">
-                <span className="text-[9px] font-semibold text-zinc-500 uppercase">🛡️ Undetectable</span>
-                <div className="relative inline-flex h-4 w-7 items-center rounded-full bg-teal-600 opacity-90">
+                <span className="text-[9px] font-semibold text-slate-500 dark:text-zinc-500 uppercase">🛡️ Undetectable</span>
+                <div className="relative inline-flex h-4 w-7 items-center rounded-full bg-teal-500 dark:bg-teal-600 opacity-90">
                   <span className="inline-block h-2.5 w-2.5 transform rounded-full bg-white translate-x-3.5" />
                 </div>
-                <span className="text-[8px] px-1 py-0.5 rounded-full bg-teal-900/60 text-teal-300 font-bold uppercase">On</span>
+                <span className="text-[8px] px-1 py-0.5 rounded-full bg-teal-100 dark:bg-teal-900/60 text-teal-700 dark:text-teal-300 font-bold uppercase">On</span>
               </div>
-              <div className="w-px h-3 bg-zinc-800" />
+              <div className="w-px h-3 bg-slate-200 dark:bg-zinc-800" />
             </>
           )}
           <label className="flex items-center gap-1.5 cursor-pointer">
-            <span className="text-[9px] font-semibold text-zinc-500">Sentence-by-Sentence</span>
+            <span className="text-[9px] font-semibold text-slate-500 dark:text-zinc-500">Sentence-by-Sentence</span>
             <button
               onClick={() => engine === 'easy' ? setEasySentenceBySentence(!easySentenceBySentence) : setOzoneSentenceBySentence(!ozoneSentenceBySentence)}
               className={`relative inline-flex h-4 w-7 items-center rounded-full transition-colors ${
-                (engine === 'easy' ? easySentenceBySentence : ozoneSentenceBySentence) ? 'bg-purple-600' : 'bg-zinc-700'
+                (engine === 'easy' ? easySentenceBySentence : ozoneSentenceBySentence) ? 'bg-purple-500 dark:bg-purple-600' : 'bg-slate-300 dark:bg-zinc-700'
               }`}
             >
               <span className={`inline-block h-2.5 w-2.5 transform rounded-full bg-white transition-transform ${
@@ -969,41 +969,41 @@ export default function EditorPage() {
       {strength === 'strong' && (
         <div className="flex items-center gap-1.5 px-1">
           <AlertTriangle className="w-2.5 h-2.5 text-amber-500 shrink-0" />
-          <p className="text-[9px] text-amber-400"><span className="font-bold">Strong:</span> Prioritizes detection bypass over meaning</p>
+          <p className="text-[9px] text-amber-600 dark:text-amber-400"><span className="font-bold">Strong:</span> Prioritizes detection bypass over meaning</p>
         </div>
       )}
       {ozoneUndetectWarning && (
         <div className="flex items-center gap-1.5 px-1 animate-pulse">
           <span className="text-amber-500 text-[9px]">⚠️</span>
-          <p className="text-[9px] text-amber-400 font-medium">Undetectability always enabled for Humara 2.1</p>
+          <p className="text-[9px] text-amber-600 dark:text-amber-400 font-medium">Undetectability always enabled for Humara 2.1</p>
         </div>
       )}
 
       {/* Mode Info Banner */}
       {mode === 'anti_gptzero' && (
-        <div className="flex items-start gap-2 px-3 py-2 bg-orange-950/30 border border-orange-800/40 rounded-lg mx-1">
-          <span className="text-orange-400 text-xs mt-0.5">⚡</span>
+        <div className="flex items-start gap-2 px-3 py-2 bg-orange-50 dark:bg-orange-950/30 border border-orange-200 dark:border-orange-800/40 rounded-lg mx-1">
+          <span className="text-orange-500 dark:text-orange-400 text-xs mt-0.5">⚡</span>
           <div>
-            <p className="text-[10px] font-bold text-orange-300">AntiGPTZero Mode — Tuned to Beat GPTZero</p>
-            <p className="text-[9px] text-orange-200/70 leading-relaxed mt-0.5">Use <span className="font-semibold text-orange-200">2.0</span>, <span className="font-semibold text-orange-200">2.4</span>, <span className="font-semibold text-orange-200">Nuru 2.0</span>, or <span className="font-semibold text-orange-200">Wikipedia</span> for GPTZero-focused suppression.</p>
+            <p className="text-[10px] font-bold text-orange-700 dark:text-orange-300">AntiGPTZero Mode — Tuned to Beat GPTZero</p>
+            <p className="text-[9px] text-orange-600/80 dark:text-orange-200/70 leading-relaxed mt-0.5">Use <span className="font-semibold text-orange-600 dark:text-orange-200">2.0</span>, <span className="font-semibold text-orange-600 dark:text-orange-200">2.4</span>, <span className="font-semibold text-orange-600 dark:text-orange-200">Nuru 2.0</span>, or <span className="font-semibold text-orange-600 dark:text-orange-200">Wikipedia</span> for GPTZero-focused suppression.</p>
           </div>
         </div>
       )}
       {mode === 'stealth_mode' && (
-        <div className="flex items-start gap-2 px-3 py-2 bg-teal-950/30 border border-teal-800/40 rounded-lg mx-1">
-          <span className="text-teal-400 text-xs mt-0.5">🛡️</span>
+        <div className="flex items-start gap-2 px-3 py-2 bg-teal-50 dark:bg-teal-950/30 border border-teal-200 dark:border-teal-800/40 rounded-lg mx-1">
+          <span className="text-teal-500 dark:text-teal-400 text-xs mt-0.5">🛡️</span>
           <div>
-            <p className="text-[10px] font-bold text-teal-300">Stealth Mode — 2.1 and 2.2</p>
-            <p className="text-[9px] text-teal-200/70 leading-relaxed mt-0.5">General detector cleaning for natural output. Use <span className="font-semibold text-teal-200">2.1</span> for stronger external rewrite or <span className="font-semibold text-teal-200">2.2</span> for balanced broad coverage.</p>
+            <p className="text-[10px] font-bold text-teal-700 dark:text-teal-300">Stealth Mode — 2.1 and 2.2</p>
+            <p className="text-[9px] text-teal-600/80 dark:text-teal-200/70 leading-relaxed mt-0.5">General detector cleaning for natural output. Use <span className="font-semibold text-teal-600 dark:text-teal-200">2.1</span> for stronger external rewrite or <span className="font-semibold text-teal-600 dark:text-teal-200">2.2</span> for balanced broad coverage.</p>
           </div>
         </div>
       )}
       {mode === 'deep_signal_kill' && (
-        <div className="flex items-start gap-2 px-3 py-2 bg-fuchsia-950/30 border border-fuchsia-800/40 rounded-lg mx-1">
-          <span className="text-fuchsia-300 text-xs mt-0.5">🧪</span>
+        <div className="flex items-start gap-2 px-3 py-2 bg-fuchsia-50 dark:bg-fuchsia-950/30 border border-fuchsia-200 dark:border-fuchsia-800/40 rounded-lg mx-1">
+          <span className="text-fuchsia-500 dark:text-fuchsia-300 text-xs mt-0.5">🧪</span>
           <div>
-            <p className="text-[10px] font-bold text-fuchsia-200">Deep Signal Kill</p>
-            <p className="text-[9px] text-fuchsia-100/70 leading-relaxed mt-0.5">High-intensity profile set for deeper detector suppression.</p>
+            <p className="text-[10px] font-bold text-fuchsia-700 dark:text-fuchsia-200">Deep Signal Kill</p>
+            <p className="text-[9px] text-fuchsia-600/80 dark:text-fuchsia-100/70 leading-relaxed mt-0.5">High-intensity profile set for deeper detector suppression.</p>
           </div>
         </div>
       )}
@@ -1026,7 +1026,7 @@ export default function EditorPage() {
       {engine === 'oxygen' && (
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-1">
           <div className="flex items-center gap-1.5">
-            <span className="text-[9px] font-bold text-purple-400 uppercase">Pipeline</span>
+            <span className="text-[9px] font-bold text-purple-600 dark:text-purple-400 uppercase">Pipeline</span>
             <div className="flex gap-1">
               {[
                 { id: 'quality', label: 'Quality' },
@@ -1035,35 +1035,35 @@ export default function EditorPage() {
               ].map(mode => (
                 <button key={mode.id} onClick={() => setOxygenMode(mode.id as typeof oxygenMode)}
                   className={`px-2 py-0.5 rounded text-[9px] font-semibold transition-all ${
-                    oxygenMode === mode.id ? 'bg-purple-600 text-white' : 'bg-zinc-800/60 text-zinc-500 hover:text-zinc-300'
+                    oxygenMode === mode.id ? 'bg-purple-600 text-white' : 'bg-slate-100 dark:bg-zinc-800/60 text-slate-500 dark:text-zinc-500 hover:text-slate-700 dark:hover:text-zinc-300'
                   }`}>{mode.label}</button>
               ))}
             </div>
           </div>
-          <div className="w-px h-3 bg-zinc-800" />
+          <div className="w-px h-3 bg-slate-200 dark:bg-zinc-800" />
           <label className="flex items-center gap-1.5 cursor-pointer">
-            <span className="text-[9px] font-semibold text-zinc-500">Sentence</span>
+            <span className="text-[9px] font-semibold text-slate-500 dark:text-zinc-500">Sentence</span>
             <button onClick={() => setOxygenSentenceBySentence(!oxygenSentenceBySentence)}
-              className={`relative inline-flex h-4 w-7 items-center rounded-full transition-colors ${oxygenSentenceBySentence ? 'bg-purple-600' : 'bg-zinc-700'}`}>
+              className={`relative inline-flex h-4 w-7 items-center rounded-full transition-colors ${oxygenSentenceBySentence ? 'bg-purple-600' : 'bg-slate-300 dark:bg-zinc-700'}`}>
               <span className={`inline-block h-2.5 w-2.5 transform rounded-full bg-white transition-transform ${oxygenSentenceBySentence ? 'translate-x-3.5' : 'translate-x-0.5'}`} />
             </button>
           </label>
-          <div className="w-px h-3 bg-zinc-800" />
+          <div className="w-px h-3 bg-slate-200 dark:bg-zinc-800" />
           <div className="flex items-center gap-2">
-            <span className="text-[9px] text-purple-400">Threshold <span className="font-bold">{(oxygenMinChangeRatio * 100).toFixed(0)}%</span></span>
+            <span className="text-[9px] text-purple-600 dark:text-purple-400">Threshold <span className="font-bold">{(oxygenMinChangeRatio * 100).toFixed(0)}%</span></span>
             <input type="range" min="0.2" max="0.8" step="0.05" value={oxygenMinChangeRatio}
               onChange={(e) => setOxygenMinChangeRatio(parseFloat(e.target.value))}
               title="Oxygen threshold"
               aria-label="Oxygen threshold"
-              className="w-16 h-1 bg-purple-900/50 rounded appearance-none cursor-pointer accent-purple-600" />
+              className="w-16 h-1 bg-purple-200 dark:bg-purple-900/50 rounded appearance-none cursor-pointer accent-purple-600" />
           </div>
           <div className="flex items-center gap-2">
-            <span className="text-[9px] text-purple-400">Retries <span className="font-bold">{oxygenMaxRetries}</span></span>
+            <span className="text-[9px] text-purple-600 dark:text-purple-400">Retries <span className="font-bold">{oxygenMaxRetries}</span></span>
             <input type="range" min="1" max="15" step="1" value={oxygenMaxRetries}
               onChange={(e) => setOxygenMaxRetries(parseInt(e.target.value))}
               title="Oxygen retries"
               aria-label="Oxygen retries"
-              className="w-16 h-1 bg-purple-900/50 rounded appearance-none cursor-pointer accent-purple-600" />
+              className="w-16 h-1 bg-purple-200 dark:bg-purple-900/50 rounded appearance-none cursor-pointer accent-purple-600" />
           </div>
         </div>
       )}
@@ -1071,15 +1071,15 @@ export default function EditorPage() {
       {/* Editor Stack */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-stretch">
         {/* Input Panel */}
-        <div className="bg-[linear-gradient(145deg,rgba(9,14,22,.95),rgba(9,12,19,.94))] border border-cyan-900/30 rounded-2xl overflow-hidden flex flex-col hover:border-cyan-800/40 transition-all shadow-[0_20px_40px_-28px_rgba(8,145,178,.5)]">
-          <div className="flex items-center justify-between px-4 py-3 border-b border-cyan-900/25 gap-3">
+        <div className="stealth-editor-panel bg-[linear-gradient(145deg,rgba(255,255,255,.95),rgba(255,255,255,.94))] dark:bg-[linear-gradient(145deg,rgba(9,14,22,.95),rgba(9,12,19,.94))] border border-slate-200 dark:border-cyan-900/30 rounded-2xl overflow-hidden flex flex-col hover:border-slate-300 dark:hover:border-cyan-800/40 transition-all shadow-sm dark:shadow-[0_20px_40px_-28px_rgba(8,145,178,.5)]">
+          <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100 dark:border-cyan-900/25 gap-3">
             <div className="flex items-center gap-2.5">
-              <div className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse" />
-              <span className="text-sm font-semibold text-zinc-100 tracking-tight">Input</span>
+              <div className="w-2 h-2 rounded-full bg-cyan-500 dark:bg-cyan-400 animate-pulse" />
+              <span className="text-sm font-semibold text-slate-800 dark:text-zinc-100 tracking-tight">Input</span>
             </div>
             <div className="flex items-center gap-2.5 shrink-0">
-              <span className="text-[11px] text-zinc-500 tabular-nums font-medium">{inputWords} words</span>
-              <button onClick={handleClear} className="text-xs font-medium text-zinc-500 hover:text-red-400 px-2 py-1 rounded-lg hover:bg-red-950/30 transition-all flex items-center gap-1">
+              <span className="text-[11px] text-slate-500 dark:text-zinc-500 tabular-nums font-medium">{inputWords} words</span>
+              <button onClick={handleClear} className="text-xs font-medium text-slate-500 dark:text-zinc-500 hover:text-red-600 dark:hover:text-red-400 px-2 py-1 rounded-lg hover:bg-slate-100 dark:hover:bg-red-950/30 transition-all flex items-center gap-1">
                 <Eraser className="w-3 h-3" /> Clear
               </button>
             </div>
@@ -1089,13 +1089,13 @@ export default function EditorPage() {
           <div className="flex-1 relative">
             <textarea ref={inputRef} value={text}
               onChange={(e) => setText(e.target.value)}
-              className={`w-full ${EDITOR_HEIGHT_CLASS} bg-transparent outline-none resize-y overflow-y-auto text-[14px] leading-[1.8] text-zinc-200 p-5 placeholder:text-zinc-600`}
+              className={`w-full ${EDITOR_HEIGHT_CLASS} bg-transparent outline-none resize-y overflow-y-auto text-[14px] leading-[1.8] text-slate-800 dark:text-zinc-200 p-5 placeholder:text-slate-400 dark:placeholder:text-zinc-600`}
               placeholder="Paste text you want to humanize..." />
             {!text && (
               <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                 <button
                   onClick={async () => { try { const t = await navigator.clipboard.readText(); if (t) setText(t); } catch {} }}
-                  className="pointer-events-auto flex items-center gap-2 px-5 py-3 rounded-xl bg-cyan-950/35 border border-cyan-900/50 text-cyan-200 hover:bg-cyan-900/35 hover:border-cyan-700/60 transition-all text-sm font-medium"
+                  className="pointer-events-auto flex items-center gap-2 px-5 py-3 rounded-xl bg-cyan-50 dark:bg-cyan-950/35 border border-cyan-200 dark:border-cyan-900/50 text-cyan-700 dark:text-cyan-200 hover:bg-cyan-100 dark:hover:bg-cyan-900/35 hover:border-cyan-300 dark:hover:border-cyan-700/60 transition-all text-sm font-medium"
                 >
                   <ClipboardPaste className="w-4 h-4" />
                   Paste from clipboard
@@ -1107,36 +1107,36 @@ export default function EditorPage() {
         </div>
 
         {/* Output Panel */}
-        <div className={`bg-[linear-gradient(145deg,rgba(9,14,22,.95),rgba(9,12,19,.94))] border rounded-2xl overflow-hidden flex flex-col relative hover:border-cyan-800/40 transition-all ${result && !loading && !rephrasing ? 'border-emerald-500/25' : 'border-cyan-900/30'} shadow-[0_20px_40px_-28px_rgba(8,145,178,.5)]`}>
-          <div className={`flex items-center justify-between px-4 py-3 border-b gap-3 ${result && !loading && !rephrasing ? 'border-emerald-900/30' : 'border-cyan-900/25'}`}>
+        <div className={`stealth-editor-panel bg-[linear-gradient(145deg,rgba(255,255,255,.95),rgba(255,255,255,.94))] dark:bg-[linear-gradient(145deg,rgba(9,14,22,.95),rgba(9,12,19,.94))] border rounded-2xl overflow-hidden flex flex-col relative transition-all shadow-sm dark:shadow-[0_20px_40px_-28px_rgba(8,145,178,.5)] ${result && !loading && !rephrasing ? 'border-emerald-200 dark:border-emerald-500/25 hover:border-emerald-300 dark:hover:border-emerald-500/40' : 'border-slate-200 dark:border-cyan-900/30 hover:border-slate-300 dark:hover:border-cyan-800/40'}`}>
+          <div className={`flex items-center justify-between px-4 py-3 border-b gap-3 ${result && !loading && !rephrasing ? 'border-emerald-100 dark:border-emerald-900/30' : 'border-slate-100 dark:border-cyan-900/25'}`}>
             <div className="flex items-center gap-2.5 min-w-0">
-              <div className={`w-2 h-2 rounded-full ${result && !loading ? 'bg-emerald-400' : 'bg-zinc-600'}`} />
-              <span className="text-sm font-semibold text-zinc-100 tracking-tight">Output</span>
+              <div className={`w-2 h-2 rounded-full ${result && !loading ? 'bg-emerald-500 dark:bg-emerald-400' : 'bg-slate-300 dark:bg-zinc-600'}`} />
+              <span className="text-sm font-semibold text-slate-800 dark:text-zinc-100 tracking-tight">Output</span>
               {result && !loading && !rephrasing && (
                 <div className="flex items-center gap-1.5 min-w-0">
-                  <span className="text-[10px] font-medium text-emerald-300/80 bg-emerald-900/20 px-2 py-0.5 rounded-full whitespace-nowrap overflow-hidden text-ellipsis max-w-[230px] hidden sm:inline-block">
+                  <span className="text-[10px] font-medium text-emerald-700 dark:text-emerald-300/80 bg-emerald-50 dark:bg-emerald-900/20 px-2 py-0.5 rounded-full whitespace-nowrap overflow-hidden text-ellipsis max-w-[230px] hidden sm:inline-block">
                     Editable: click to edit, select text for alternatives
                   </span>
                 </div>
               )}
             </div>
             <div className="flex items-center gap-1.5 sm:gap-2 flex-nowrap shrink-0 whitespace-nowrap">
-              <span className="text-[11px] text-zinc-500 tabular-nums font-medium hidden sm:inline">{outputWords} words</span>
+              <span className="text-[11px] text-slate-500 dark:text-zinc-500 tabular-nums font-medium hidden sm:inline">{outputWords} words</span>
               {result && !isAnimating && (
                 <>
                   <button onClick={handleRehumanizeFlagged} disabled={rehumanizing || loading}
-                    className="text-[11px] font-semibold text-amber-500 hover:text-amber-300 px-1.5 sm:px-2 py-1 rounded-lg hover:bg-amber-950/30 transition-all flex items-center gap-1 disabled:opacity-50"
+                    className="text-[11px] font-semibold text-amber-600 dark:text-amber-500 hover:text-amber-700 dark:hover:text-amber-300 px-1.5 sm:px-2 py-1 rounded-lg hover:bg-amber-50 dark:hover:bg-amber-950/30 transition-all flex items-center gap-1 disabled:opacity-50"
                     title="Fix flagged AI sentences">
                     <AlertTriangle className={`w-3 h-3 ${rehumanizing ? 'animate-pulse' : ''}`} />
                     {rehumanizing ? 'Fixing…' : 'Fix AI'}
                   </button>
                   <button onClick={handleRephrase} disabled={rephrasing || loading}
-                    className="text-[11px] font-semibold text-cyan-400 hover:text-cyan-300 px-1.5 sm:px-2 py-1 rounded-lg hover:bg-cyan-950/30 transition-all flex items-center gap-1 disabled:opacity-50"
+                    className="text-[11px] font-semibold text-cyan-600 dark:text-cyan-400 hover:text-cyan-700 dark:hover:text-cyan-300 px-1.5 sm:px-2 py-1 rounded-lg hover:bg-cyan-50 dark:hover:bg-cyan-950/30 transition-all flex items-center gap-1 disabled:opacity-50"
                     title="Rephrase output">
                     <RefreshCw className={`w-3 h-3 ${rephrasing ? 'animate-spin' : ''}`} />
                     {rephrasing ? 'Rephrasing…' : 'Rephrase'}
                   </button>
-                  <button onClick={handleCopy} className="p-1.5 text-brand-400 hover:bg-brand-950 rounded-md transition-colors" title="Copy">
+                  <button onClick={handleCopy} className="p-1.5 text-slate-500 dark:text-brand-400 hover:text-slate-700 hover:bg-slate-100 dark:hover:bg-brand-950 rounded-md transition-colors" title="Copy">
                     {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
                   </button>
                 </>
@@ -1156,62 +1156,62 @@ export default function EditorPage() {
             </div>
           ) : result ? (
             <div className={`relative flex-1 ${EDITOR_HEIGHT_CLASS} overflow-hidden`}>
-              <div className="absolute inset-0 bg-emerald-950/10 pointer-events-none rounded-b-2xl" />
+              <div className="absolute inset-0 bg-emerald-50 dark:bg-emerald-950/10 pointer-events-none rounded-b-2xl" />
               <textarea ref={outputRef} value={result}
                 onChange={(e) => setResult(e.target.value)} onSelect={handleOutputSelect}
-                className={`relative z-10 flex-1 w-full ${EDITOR_HEIGHT_CLASS} bg-transparent outline-none resize-y overflow-y-auto text-[14px] leading-[1.8] text-zinc-200 p-5 cursor-text`}
+                className={`relative z-10 flex-1 w-full ${EDITOR_HEIGHT_CLASS} bg-transparent outline-none resize-y overflow-y-auto text-[14px] leading-[1.8] text-slate-800 dark:text-zinc-200 p-5 cursor-text`}
                 style={{ fontFamily: 'inherit' }}
                 placeholder="Output appears here…" />
             </div>
           ) : (
-            <div className="flex flex-col items-center justify-center min-h-[260px] text-zinc-700 gap-4 px-8 text-center">
-              <div className="w-12 h-12 rounded-2xl bg-cyan-950/35 flex items-center justify-center border border-cyan-900/40">
-                <Zap className="w-5 h-5 text-cyan-400" />
+            <div className="flex flex-col items-center justify-center min-h-[260px] text-slate-400 dark:text-zinc-700 gap-4 px-8 text-center">
+              <div className="w-12 h-12 rounded-2xl bg-cyan-100 dark:bg-cyan-950/35 flex items-center justify-center border border-cyan-200 dark:border-cyan-900/40">
+                <Zap className="w-5 h-5 text-cyan-500 dark:text-cyan-400" />
               </div>
               <div className="space-y-1">
-                <span className="text-sm font-medium text-zinc-300 block">Stealth humanized text appears here</span>
-                <span className="text-[11px] text-zinc-500 max-w-xs leading-relaxed block">Paste text, pick style, then click Humanize</span>
+                <span className="text-sm font-medium text-slate-700 dark:text-zinc-300 block">Stealth humanized text appears here</span>
+                <span className="text-[11px] text-slate-500 dark:text-zinc-500 max-w-xs leading-relaxed block">Paste text, pick style, then click Humanize</span>
               </div>
             </div>
           )}
 
           {/* Synonym Popup */}
           {popupType === 'synonym' && selectionInfo && (
-            <div ref={popupRef} className="fixed z-50 bg-[#0c0c14] border border-zinc-800/60 rounded-xl shadow-xl py-1.5 w-[200px]"
+            <div ref={popupRef} className="stealth-popup fixed z-50 bg-white dark:bg-[#0c0c14] border border-slate-200 dark:border-zinc-800/60 rounded-xl shadow-xl py-1.5 w-[200px]"
               style={{ left: `${Math.min(selectionInfo.rect.x, window.innerWidth - 220)}px`, top: `${selectionInfo.rect.y}px`, transform: 'translateX(-50%)' }}>
-              <div className="px-3 py-1.5 text-xs font-medium text-zinc-400 border-b border-zinc-800/60 flex items-center gap-1.5">
+              <div className="px-3 py-1.5 text-xs font-medium text-slate-500 dark:text-zinc-400 border-b border-slate-100 dark:border-zinc-800/60 flex items-center gap-1.5">
                 <Type className="w-3 h-3" /> Synonyms for &ldquo;{selectionInfo.text}&rdquo;
               </div>
               <div className="max-h-56 overflow-y-auto">
                 {loadingPopup ? (
-                  <div className="px-3 py-4 text-xs text-zinc-500 text-center flex items-center justify-center gap-1.5">
+                  <div className="px-3 py-4 text-xs text-slate-400 dark:text-zinc-500 text-center flex items-center justify-center gap-1.5">
                     <RotateCcw className="w-3 h-3 animate-spin" /> Finding…
                   </div>
                 ) : synonyms.length > 0 ? (
                   synonyms.map((syn, idx) => (
                     <button key={idx} onClick={() => applyReplacement(syn.word)}
                       className={`w-full text-left px-3 py-2 text-sm transition-colors flex items-center justify-between ${
-                        syn.isOriginal ? 'text-red-400 font-medium bg-red-950/30 hover:bg-red-950/50' : 'text-zinc-300 hover:bg-zinc-800/50'
+                        syn.isOriginal ? 'text-red-600 dark:text-red-400 font-medium bg-red-50 dark:bg-red-950/30 hover:bg-red-100 dark:hover:bg-red-950/50' : 'text-slate-700 dark:text-zinc-300 hover:bg-slate-50 dark:hover:bg-zinc-800/50'
                       }`}>
                       <span>{syn.word}</span>
-                      {syn.isOriginal && <span className="text-[10px] bg-red-900/30 text-red-400 px-1.5 py-0.5 rounded-full font-medium">original</span>}
+                      {syn.isOriginal && <span className="text-[10px] bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 px-1.5 py-0.5 rounded-full font-medium">original</span>}
                     </button>
                   ))
-                ) : <div className="px-3 py-3 text-xs text-zinc-500 text-center">No synonyms found</div>}
+                ) : <div className="px-3 py-3 text-xs text-slate-500 dark:text-zinc-500 text-center">No synonyms found</div>}
               </div>
             </div>
           )}
 
           {/* Sentence Alternatives Popup */}
           {popupType === 'sentence' && selectionInfo && (
-            <div ref={popupRef} className="fixed z-50 bg-[#0c0c14] border border-zinc-800/60 rounded-xl shadow-xl py-1.5 w-[480px] max-w-[90vw]"
+            <div ref={popupRef} className="stealth-popup fixed z-50 bg-white dark:bg-[#0c0c14] border border-slate-200 dark:border-zinc-800/60 rounded-xl shadow-xl py-1.5 w-[480px] max-w-[90vw]"
               style={{ left: `${Math.min(selectionInfo.rect.x, window.innerWidth - 500)}px`, top: `${selectionInfo.rect.y}px`, transform: 'translateX(-50%)' }}>
-              <div className="px-3 py-1.5 text-xs font-medium text-zinc-400 border-b border-zinc-800/60 flex items-center gap-1.5">
+              <div className="px-3 py-1.5 text-xs font-medium text-slate-500 dark:text-zinc-400 border-b border-slate-100 dark:border-zinc-800/60 flex items-center gap-1.5">
                 <AlignLeft className="w-3 h-3" /> Selected text
               </div>
               {pendingAlternatives ? (
                 <div className="px-3 py-3 flex flex-col items-center gap-2">
-                  <p className="text-xs text-zinc-400 text-center leading-relaxed max-w-xs">
+                  <p className="text-xs text-slate-500 dark:text-zinc-400 text-center leading-relaxed max-w-xs">
                     Select text and click below to generate alternative phrasings
                   </p>
                   <button
@@ -1224,21 +1224,21 @@ export default function EditorPage() {
               ) : (
               <div className="max-h-[350px] overflow-y-auto">
                 {loadingPopup ? (
-                  <div className="px-3 py-5 text-xs text-zinc-500 text-center flex flex-col items-center gap-2">
+                  <div className="px-3 py-5 text-xs text-slate-500 dark:text-zinc-500 text-center flex flex-col items-center gap-2">
                     <RotateCcw className="w-4 h-4 animate-spin" /> Generating…
                   </div>
                 ) : sentenceAlternatives.length > 0 ? (
                   sentenceAlternatives.map((alt, idx) => (
                     <button key={idx} onClick={() => applyReplacement(alt.text)}
-                      className="w-full text-left px-3 py-2.5 text-sm border-b border-zinc-800/40 last:border-0 hover:bg-purple-900/20 transition-colors">
+                      className="w-full text-left px-3 py-2.5 text-sm border-b border-slate-100 dark:border-zinc-800/40 last:border-0 hover:bg-purple-50 dark:hover:bg-purple-900/20 transition-colors">
                       <div className="flex items-start gap-2.5">
-                        <span className="text-xs font-semibold text-purple-400 bg-purple-900/30 px-1.5 py-0.5 rounded mt-0.5 shrink-0">{idx + 1}</span>
-                        <span className="flex-1 text-zinc-200 leading-relaxed">{alt.text}</span>
-                        <span className="text-xs text-zinc-500 font-medium whitespace-nowrap mt-0.5">{Math.round(alt.score * 100)}%</span>
+                        <span className="text-xs font-semibold text-purple-600 dark:text-purple-400 bg-purple-100 dark:bg-purple-900/30 px-1.5 py-0.5 rounded mt-0.5 shrink-0">{idx + 1}</span>
+                        <span className="flex-1 text-slate-800 dark:text-zinc-200 leading-relaxed">{alt.text}</span>
+                        <span className="text-xs text-slate-500 dark:text-zinc-500 font-medium whitespace-nowrap mt-0.5">{Math.round(alt.score * 100)}%</span>
                       </div>
                     </button>
                   ))
-                ) : <div className="px-3 py-4 text-xs text-zinc-500 text-center">No alternatives available</div>}
+                ) : <div className="px-3 py-4 text-xs text-slate-500 dark:text-zinc-500 text-center">No alternatives available</div>}
               </div>
               )}
             </div>
@@ -1248,27 +1248,27 @@ export default function EditorPage() {
 
       {/* Error */}
       {error && (
-        <div className="p-3 bg-red-950/30 border border-red-800/40 rounded-lg text-sm text-red-400 flex items-center gap-2">
+        <div className="p-3 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800/40 rounded-lg text-sm text-red-600 dark:text-red-400 flex items-center gap-2">
           <div className="w-1.5 h-1.5 bg-red-500 rounded-full" /> {error}
         </div>
       )}
 
       {/* Temporary History (auto-expires after 4 min) */}
       {history.length > 0 && (
-        <div className="bg-[#0c0c14] border border-zinc-800/60 rounded-xl overflow-hidden">
+        <div className="stealth-history bg-white dark:bg-[#0c0c14] border border-slate-200 dark:border-zinc-800/60 rounded-xl overflow-hidden">
           <button
             onClick={() => setHistoryOpen(!historyOpen)}
-            className="w-full flex items-center justify-between px-4 py-3 hover:bg-zinc-800/30 transition-colors"
+            className="w-full flex items-center justify-between px-4 py-3 hover:bg-slate-50 dark:hover:bg-zinc-800/30 transition-colors"
           >
             <div className="flex items-center gap-2">
-              <Clock className="w-3.5 h-3.5 text-zinc-500" />
-              <span className="text-xs font-semibold text-zinc-300">Recent ({history.length})</span>
-              <span className="text-[10px] text-zinc-500">auto-clears in a few minutes</span>
+              <Clock className="w-3.5 h-3.5 text-slate-500 dark:text-zinc-500" />
+              <span className="text-xs font-semibold text-slate-700 dark:text-zinc-300">Recent ({history.length})</span>
+              <span className="text-[10px] text-slate-500 dark:text-zinc-500">auto-clears in a few minutes</span>
             </div>
-            {historyOpen ? <ChevronUp className="w-3.5 h-3.5 text-zinc-500" /> : <ChevronDown className="w-3.5 h-3.5 text-zinc-500" />}
+            {historyOpen ? <ChevronUp className="w-3.5 h-3.5 text-slate-400 dark:text-zinc-500" /> : <ChevronDown className="w-3.5 h-3.5 text-slate-400 dark:text-zinc-500" />}
           </button>
           {historyOpen && (
-            <div className="border-t border-zinc-800/60 divide-y divide-zinc-800/40 max-h-[300px] overflow-y-auto">
+            <div className="border-t border-slate-100 dark:border-zinc-800/60 divide-y divide-slate-100 dark:divide-zinc-800/40 max-h-[300px] overflow-y-auto">
               {history.map(h => {
                 const ago = Math.round((Date.now() - h.timestamp) / 1000);
                 const agoStr = ago < 60 ? `${ago}s ago` : `${Math.round(ago / 60)}m ago`;
@@ -1278,18 +1278,18 @@ export default function EditorPage() {
                   <button
                     key={h.id}
                     onClick={() => { setText(h.fullInput); setResult(h.fullOutput); }}
-                    className="w-full text-left px-4 py-2.5 hover:bg-zinc-800/30 transition-colors group"
+                    className="w-full text-left px-4 py-2.5 hover:bg-slate-50 dark:hover:bg-zinc-800/30 transition-colors group"
                   >
                     <div className="flex items-center justify-between mb-1">
-                      <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider">{h.engine}</span>
+                      <span className="text-[10px] font-bold text-slate-400 dark:text-zinc-500 uppercase tracking-wider">{h.engine}</span>
                       <div className="flex items-center gap-2">
-                        <span className="text-[10px] text-zinc-500">{agoStr}</span>
-                        <span className="text-[10px] text-amber-500 font-medium">{remainStr}</span>
+                        <span className="text-[10px] text-slate-500 dark:text-zinc-500">{agoStr}</span>
+                        <span className="text-[10px] text-amber-600 dark:text-amber-500 font-medium">{remainStr}</span>
                       </div>
                     </div>
-                    <p className="text-xs text-zinc-400 truncate">{h.inputSnippet}</p>
+                    <p className="text-xs text-slate-600 dark:text-zinc-400 truncate">{h.inputSnippet}</p>
                     <div className="flex items-center gap-3 mt-1">
-                      <span className="text-[10px] text-zinc-500">{h.wordCount} words</span>
+                      <span className="text-[10px] text-slate-500 dark:text-zinc-500">{h.wordCount} words</span>
                     </div>
                   </button>
                 );

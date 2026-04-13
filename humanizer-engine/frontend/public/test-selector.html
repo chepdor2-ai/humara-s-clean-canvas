@@ -1,0 +1,18 @@
+﻿<!DOCTYPE html>
+<html data-theme="light">
+<head>
+<style>
+[data-theme="light"] [class~="bg-[#05050A]"] {
+  background-color: red !important;
+}
+</style>
+</head>
+<body>
+<div class="bg-[#05050A]" style="width:100px;height:100px;background:black" id="test">TEST</div>
+<script>
+var el = document.getElementById('test');
+var computed = window.getComputedStyle(el);
+document.title = 'BG: ' + computed.backgroundColor;
+</script>
+</body>
+</html>

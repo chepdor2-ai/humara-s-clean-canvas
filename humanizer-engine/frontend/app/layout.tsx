@@ -2,6 +2,7 @@
 import { Inter } from 'next/font/google';
 import Script from 'next/script';
 import './globals.css';
+import './light-overrides.css';
 import RootLayoutClient from './RootLayoutClient';
 import ThemeProvider from './ThemeProvider';
 import { AuthProvider } from './AuthProvider';
@@ -69,35 +70,53 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={`${inter.variable} dark`} suppressHydrationWarning>
+    <html lang="en" className={inter.variable} suppressHydrationWarning>
       <head>
         <Script
-          id="remove-extension-attrs"
+          id="theme-init"
           strategy="beforeInteractive"
           dangerouslySetInnerHTML={{
             __html: `
               (function() {
+                try {
+                  var stored = localStorage.getItem('humara-theme');
+                  var dark = stored ? stored === 'dark' : window.matchMedia('(prefers-color-scheme: dark)').matches;
+                  document.documentElement.classList.toggle('dark', dark);
+                  document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
+                  document.documentElement.style.colorScheme = dark ? 'dark' : 'light';
+                } catch (e) {}
+              })();
+            `,
+          }}
+        />
+        <Script
+          id="remove-extension-attrs"
+          strategy="afterInteractive"
+          dangerouslySetInnerHTML={{
+            __html: `
+              (function() {
+                var extAttrs = ['bis_skin_checked','bis_use','data-bis-config','data-dynamic-id'];
                 var removeExtensionAttrs = function() {
-                  document.querySelectorAll('[bis_skin_checked]').forEach(function(el) {
-                    el.removeAttribute('bis_skin_checked');
+                  extAttrs.forEach(function(attr) {
+                    document.querySelectorAll('[' + attr + ']').forEach(function(el) {
+                      el.removeAttribute(attr);
+                    });
                   });
                 };
                 removeExtensionAttrs();
                 var observer = new MutationObserver(removeExtensionAttrs);
                 observer.observe(document.documentElement, { 
                   attributes: true, 
-                  attributeFilter: ['bis_skin_checked'],
+                  attributeFilter: extAttrs,
                   childList: true, 
                   subtree: true 
                 });
-                var interval = setInterval(removeExtensionAttrs, 10);
-                setTimeout(function() { clearInterval(interval); }, 1000);
               })();
             `,
           }}
         />
       </head>
-      <body className="bg-[#05050A] text-zinc-100 antialiased font-sans" suppressHydrationWarning>
+      <body className="bg-slate-50 text-slate-900 dark:bg-[#05050A] dark:text-zinc-100 antialiased font-sans" suppressHydrationWarning>
         <Script
           id="json-ld-org"
           type="application/ld+json"
