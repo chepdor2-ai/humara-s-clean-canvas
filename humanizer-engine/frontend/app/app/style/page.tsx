@@ -178,7 +178,7 @@ export default function StylePage() {
           <h1 className="text-2xl font-semibold text-slate-900 dark:text-white flex items-center gap-3">
             <Palette className="text-brand-600 w-7 h-7" /> Style Profiles
           </h1>
-          <p className="text-sm text-slate-500 dark:text-slate-500 dark:text-zinc-400 mt-1">Create profiles so your writing always points to you.</p>
+          <p className="text-sm text-slate-600 dark:text-zinc-400 mt-1">Create profiles so your writing always points to you.</p>
         </div>
         {!showForm && (
           <button
@@ -201,7 +201,7 @@ export default function StylePage() {
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-medium text-slate-500 dark:text-slate-500 dark:text-zinc-400 mb-1">Profile Name</label>
+              <label className="block text-xs font-medium text-slate-600 dark:text-zinc-400 mb-1">Profile Name</label>
               <input
                 type="text"
                 value={formName}
@@ -211,7 +211,7 @@ export default function StylePage() {
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-slate-500 dark:text-slate-500 dark:text-zinc-400 mb-1">Tone</label>
+              <label className="block text-xs font-medium text-slate-600 dark:text-zinc-400 mb-1">Tone</label>
               <select
                 value={formTone}
                 onChange={e => setFormTone(e.target.value)}
@@ -223,7 +223,7 @@ export default function StylePage() {
             </div>
           </div>
           <div>
-            <label className="block text-xs font-medium text-slate-500 dark:text-slate-500 dark:text-zinc-400 mb-1">Description</label>
+            <label className="block text-xs font-medium text-slate-600 dark:text-zinc-400 mb-1">Description</label>
             <textarea
               value={formDesc}
               onChange={e => setFormDesc(e.target.value)}
@@ -241,7 +241,7 @@ export default function StylePage() {
               {creating ? <RotateCcw className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
               {editingId ? 'Update' : 'Create'}
             </button>
-            <button onClick={resetForm} className="px-4 py-2.5 text-sm text-slate-500 dark:text-slate-500 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white font-medium transition-colors">Cancel</button>
+            <button onClick={resetForm} className="px-4 py-2.5 text-sm text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white font-medium transition-colors">Cancel</button>
           </div>
         </div>
       )}
@@ -251,9 +251,9 @@ export default function StylePage() {
         <div className="flex items-center justify-center py-20"><RotateCcw className="w-6 h-6 text-brand-600 animate-spin" /></div>
       ) : profiles.length === 0 ? (
         <div className="text-center py-20 bg-white dark:bg-zinc-900 rounded-xl border border-slate-200 dark:border-zinc-800">
-          <PenTool className="w-12 h-12 text-slate-400 dark:text-slate-400 dark:text-zinc-600 mx-auto mb-4" />
-          <p className="text-slate-500 dark:text-slate-500 dark:text-zinc-400 font-medium">No style profiles yet</p>
-          <p className="text-sm text-slate-500 dark:text-slate-500 dark:text-zinc-500 mt-1">Create your first profile to customize humanization output.</p>
+          <PenTool className="w-12 h-12 text-slate-400 dark:text-zinc-600 mx-auto mb-4" />
+          <p className="text-slate-600 dark:text-zinc-400 font-medium">No style profiles yet</p>
+          <p className="text-sm text-slate-500 dark:text-zinc-500 mt-1">Create your first profile to customize humanization output.</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">

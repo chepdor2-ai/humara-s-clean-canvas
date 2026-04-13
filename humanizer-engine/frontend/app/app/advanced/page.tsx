@@ -84,8 +84,8 @@ export default function AdvancedPage() {
         <label className="text-sm font-medium text-slate-600 dark:text-zinc-300">{label}</label>
         <span className="text-sm font-semibold text-brand-600">{value}%</span>
       </div>
-      <input type="range" min={0} max={100} value={value} onChange={e => onChange(Number(e.target.value))} title={label} className="w-full h-1.5 bg-zinc-700 rounded-full appearance-none cursor-pointer accent-brand-600" />
-      <p className="text-xs text-slate-400">{desc}</p>
+      <input type="range" min={0} max={100} value={value} onChange={e => onChange(Number(e.target.value))} title={label} className="w-full h-1.5 bg-slate-200 dark:bg-zinc-700 rounded-full appearance-none cursor-pointer accent-brand-600" />
+      <p className="text-xs text-slate-500 dark:text-slate-400">{desc}</p>
     </div>
   );
 
@@ -132,19 +132,19 @@ export default function AdvancedPage() {
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div className="p-3 bg-white dark:bg-zinc-900 rounded-lg border border-slate-300 dark:border-zinc-700">
-                  <p className="text-xs text-slate-400 mb-1">Avg Sentence Length</p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mb-1">Avg Sentence Length</p>
                   <p className="text-lg font-semibold text-slate-900 dark:text-white">{Math.round(12 + burstiness * 0.16)} words</p>
                 </div>
                 <div className="p-3 bg-white dark:bg-zinc-900 rounded-lg border border-slate-300 dark:border-zinc-700">
-                  <p className="text-xs text-slate-400 mb-1">Lexical Diversity</p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mb-1">Lexical Diversity</p>
                   <p className="text-lg font-semibold text-slate-900 dark:text-white">{(0.4 + vocabDiversity * 0.004).toFixed(2)}</p>
                 </div>
                 <div className="p-3 bg-white dark:bg-zinc-900 rounded-lg border border-slate-300 dark:border-zinc-700">
-                  <p className="text-xs text-slate-400 mb-1">Rewrite Coverage</p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mb-1">Rewrite Coverage</p>
                   <p className="text-lg font-semibold text-slate-900 dark:text-white">{Math.round(strength * 0.8 + 10)}%</p>
                 </div>
                 <div className="p-3 bg-white dark:bg-zinc-900 rounded-lg border border-slate-300 dark:border-zinc-700">
-                  <p className="text-xs text-slate-400 mb-1">Meaning Score</p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mb-1">Meaning Score</p>
                   <p className="text-lg font-semibold text-slate-900 dark:text-white">{(0.7 + meaningWeight * 0.003).toFixed(2)}</p>
                 </div>
               </div>
@@ -180,7 +180,7 @@ export default function AdvancedPage() {
                 <p className="text-sm text-slate-500 dark:text-zinc-400">{batchTexts.length} document{batchTexts.length !== 1 ? 's' : ''} loaded</p>
                 {batchTexts.map((t, i) => (
                   <div key={i} className="flex items-center gap-3 p-3 bg-slate-100 dark:bg-zinc-800 rounded-lg border border-slate-300 dark:border-zinc-700">
-                    <FileText className="w-4 h-4 text-slate-400" />
+                    <FileText className="w-4 h-4 text-slate-500 dark:text-slate-400" />
                     <span className="text-sm text-slate-600 dark:text-zinc-300 truncate flex-1">Document {i + 1} — {t.split(/\s+/).length} words</span>
                     {batchResults[i] && <Check className="w-4 h-4 text-emerald-500" />}
                   </div>
@@ -194,7 +194,7 @@ export default function AdvancedPage() {
                   <span className="text-slate-500 dark:text-zinc-400 flex items-center gap-2"><RotateCcw className="w-4 h-4 animate-spin" /> Processing...</span>
                   <span className="font-medium text-brand-600">{batchProgress}%</span>
                 </div>
-                <div className="w-full bg-zinc-700 rounded-full h-2">
+                <div className="w-full bg-slate-200 dark:bg-zinc-700 rounded-full h-2">
                   <div className="bg-brand-600 h-2 rounded-full transition-all" style={{ width: `${batchProgress}%` }} />
                 </div>
               </div>
@@ -227,17 +227,17 @@ export default function AdvancedPage() {
               <div className="p-5 bg-slate-100 dark:bg-zinc-800 rounded-xl border border-slate-300 dark:border-zinc-700">
                 <p className="text-xs text-slate-500 dark:text-zinc-400 mb-1">Total Documents</p>
                 <p className="text-2xl font-semibold text-slate-900 dark:text-white">—</p>
-                <p className="text-xs text-slate-400 mt-1">Humanized this month</p>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Humanized this month</p>
               </div>
               <div className="p-5 bg-slate-100 dark:bg-zinc-800 rounded-xl border border-slate-300 dark:border-zinc-700">
                 <p className="text-xs text-slate-500 dark:text-zinc-400 mb-1">Avg AI Score After</p>
                 <p className="text-2xl font-semibold text-slate-900 dark:text-white">—</p>
-                <p className="text-xs text-slate-400 mt-1">Cross all detectors</p>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Cross all detectors</p>
               </div>
               <div className="p-5 bg-slate-100 dark:bg-zinc-800 rounded-xl border border-slate-300 dark:border-zinc-700">
                 <p className="text-xs text-slate-500 dark:text-zinc-400 mb-1">Most Used Engine</p>
                 <p className="text-2xl font-semibold text-slate-900 dark:text-white">—</p>
-                <p className="text-xs text-slate-400 mt-1">Based on usage patterns</p>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Based on usage patterns</p>
               </div>
             </div>
           </div>

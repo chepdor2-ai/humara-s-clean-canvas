@@ -2,7 +2,7 @@
 import Link from 'next/link';
 import Image from 'next/image';
 import { usePathname } from 'next/navigation';
-import { LayoutDashboard, Edit3, FileText, BrainCircuit, Settings, LogOut, Menu, X, ArrowRight, ShieldCheck, FlaskConical, BookOpen, Shield, Sun, Moon } from 'lucide-react';
+import { LayoutDashboard, Edit3, FileText, BrainCircuit, Settings, LogOut, Menu, X, ArrowRight, ShieldCheck, FlaskConical, BookOpen, Shield, Sun, Moon, PenTool } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useAuth } from './AuthProvider';
 import { useTheme } from './ThemeProvider';
@@ -46,6 +46,7 @@ export default function RootLayoutClient({ children }: { children: React.ReactNo
     { name: 'Documents', href: '/app/documents', icon: FileText },
     { name: 'AI Detector', href: '/app/detector', icon: ShieldCheck, badge: 'Soon' },
     { name: 'Style Profiles', href: '/app/style', icon: BrainCircuit },
+    { name: 'Grammar', href: '/app/grammar', icon: PenTool },
     { name: 'Advanced', href: '/app/advanced', icon: FlaskConical },
     { name: 'Docs', href: '/app/docs', icon: BookOpen },
     { name: 'Settings', href: '/app/settings', icon: Settings },

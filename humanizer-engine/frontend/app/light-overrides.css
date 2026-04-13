@@ -495,3 +495,132 @@
 [data-theme="light"] .force-dark [class~="border-white/5"] {
   border-color: rgba(255, 255, 255, 0.1) !important;
 }
+
+/* ═══════════════════════════════════════════════════════════════
+   GLOBAL TEXT COLOR FIXES FOR LIGHT MODE
+   ───────────────────────────────────────────────────────────────
+   Many components use faint text colors (gray-200 through gray-400,
+   slate-300/400, zinc-300/400) without a dark: prefix — meaning
+   they apply in BOTH modes. These are nearly invisible on
+   white/light backgrounds. The rules below darken them globally
+   in light mode. Force-dark rules above have higher specificity
+   (extra .force-dark class) and still win for product mockups.
+   ═══════════════════════════════════════════════════════════════ */
+
+/* text-gray-200 (#e5e7eb) → slate-700 — nearly invisible on white */
+[data-theme="light"] [class~="text-gray-200"] {
+  color: #334155 !important;
+}
+
+/* text-gray-300 (#d1d5db) → slate-600 — very faint on white */
+[data-theme="light"] [class~="text-gray-300"] {
+  color: #475569 !important;
+}
+
+/* text-gray-400 (#9ca3af) → slate-600 — faint on white */
+[data-theme="light"] [class~="text-gray-400"] {
+  color: #475569 !important;
+}
+
+/* text-gray-500 (#6b7280) → slate-600 — borderline, bump slightly */
+[data-theme="light"] [class~="text-gray-500"] {
+  color: #475569 !important;
+}
+
+/* text-slate-300 (#cbd5e1) → slate-600 — very faint on white */
+[data-theme="light"] [class~="text-slate-300"] {
+  color: #475569 !important;
+}
+
+/* text-slate-400 (#94a3b8) → slate-600 — faint on white */
+[data-theme="light"] [class~="text-slate-400"] {
+  color: #475569 !important;
+}
+
+/* text-zinc-300 (#d4d4d8) → slate-700 */
+[data-theme="light"] [class~="text-zinc-300"] {
+  color: #334155 !important;
+}
+
+/* text-zinc-400 (#a1a1aa) → slate-600 */
+[data-theme="light"] [class~="text-zinc-400"] {
+  color: #475569 !important;
+}
+
+/* text-zinc-500 (#71717a) → slate-600 */
+[data-theme="light"] [class~="text-zinc-500"] {
+  color: #475569 !important;
+}
+
+/* hover:text-gray-300 — prevent hover making text LIGHTER on white bg */
+[data-theme="light"] [class~="hover:text-gray-300"]:hover {
+  color: #334155 !important;
+}
+
+/* text-slate-500 (#64748b) → slate-600 — faint on white, needs bump */
+[data-theme="light"] [class~="text-slate-500"] {
+  color: #475569 !important;
+}
+
+/* text-slate-200 (#e2e8f0) → slate-700 — nearly invisible on white */
+[data-theme="light"] [class~="text-slate-200"] {
+  color: #334155 !important;
+}
+
+/* text-zinc-600 (#52525b) → slate-600 — slightly faint on white */
+[data-theme="light"] [class~="text-zinc-600"] {
+  color: #475569 !important;
+}
+
+/* text-zinc-200 (#e4e4e7) → slate-700 — invisible on white */
+[data-theme="light"] [class~="text-zinc-200"] {
+  color: #334155 !important;
+}
+
+/* hover states: prevent text going lighter on white bg */
+[data-theme="light"] [class~="hover:text-zinc-300"]:hover {
+  color: #334155 !important;
+}
+[data-theme="light"] [class~="hover:text-zinc-400"]:hover {
+  color: #475569 !important;
+}
+
+/* hover:text-white → slate-900 on light backgrounds (used in admin/docs/settings) */
+[data-theme="light"] [class~="hover:text-white"]:hover {
+  color: #0f172a !important;
+}
+
+/* hover:text-slate-600 / hover:text-zinc-300 → ensure readable on light bg */
+[data-theme="light"] [class~="hover:text-slate-600"]:hover {
+  color: #334155 !important;
+}
+[data-theme="light"] [class~="hover:text-gray-300"]:hover {
+  color: #334155 !important;
+}
+
+/* Keep white text on colored/gradient buttons (higher specificity) */
+[data-theme="light"] [class*="bg-brand"] [class~="text-gray-400"],
+[data-theme="light"] [class*="bg-purple"] [class~="text-gray-400"],
+[data-theme="light"] [class*="bg-emerald"] [class~="text-gray-400"] {
+  color: revert !important;
+}
+/* Keep hover:text-white on purple/brand/colored buttons */
+[data-theme="light"] [class*="bg-purple"][class~="hover:text-white"]:hover,
+[data-theme="light"] [class*="bg-brand"][class~="hover:text-white"]:hover,
+[data-theme="light"] [class*="bg-emerald"][class~="hover:text-white"]:hover {
+  color: #ffffff !important;
+}
+
+/* Restore correct colors inside force-dark containers (higher specificity) */
+[data-theme="light"] .force-dark [class~="text-slate-200"] {
+  color: #e2e8f0 !important;
+}
+[data-theme="light"] .force-dark [class~="text-zinc-200"] {
+  color: #e4e4e7 !important;
+}
+[data-theme="light"] .force-dark [class~="text-zinc-600"] {
+  color: #52525b !important;
+}
+[data-theme="light"] .force-dark [class~="text-slate-500"] {
+  color: #64748b !important;
+}

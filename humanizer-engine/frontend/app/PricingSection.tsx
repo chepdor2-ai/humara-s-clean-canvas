@@ -38,13 +38,13 @@ export default function PricingSection() {
     <div>
       {/* Toggle */}
       <div className="flex justify-center mb-12">
-        <div className="bg-white/5 p-1 rounded-full flex items-center">
+        <div className="bg-slate-100 dark:bg-white/5 p-1 rounded-full flex items-center">
           <button
             onClick={() => setIsYearly(false)}
             className={`px-5 py-2 rounded-full text-sm font-medium transition-all ${
               !isYearly
-                ? 'bg-white/10 text-slate-900 dark:text-white shadow-sm'
-                : 'text-gray-400 hover:text-gray-300'
+                ? 'bg-white dark:bg-white/10 text-slate-900 dark:text-white shadow-sm'
+                : 'text-slate-500 dark:text-gray-400 hover:text-slate-700 dark:hover:text-gray-300'
             }`}
           >
             Monthly
@@ -53,8 +53,8 @@ export default function PricingSection() {
             onClick={() => setIsYearly(true)}
             className={`px-5 py-2 rounded-full text-sm font-medium transition-all ${
               isYearly
-                ? 'bg-white/10 text-slate-900 dark:text-white shadow-sm'
-                : 'text-gray-400 hover:text-gray-300'
+                ? 'bg-white dark:bg-white/10 text-slate-900 dark:text-white shadow-sm'
+                : 'text-slate-500 dark:text-gray-400 hover:text-slate-700 dark:hover:text-gray-300'
             }`}
           >
             Yearly <span className="text-emerald-500 text-xs ml-1">-15%</span>

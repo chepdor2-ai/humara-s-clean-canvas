@@ -140,7 +140,7 @@ export default function DashboardHome() {
               <div className={`h-full rounded-full transition-all duration-700 ${wordsPct > 90 ? 'bg-red-500' : wordsPct > 70 ? 'bg-amber-500' : 'bg-purple-500'}`}
                 style={{ width: `${wordsPct}%` }} />
             </div>
-            <p className="text-[11px] text-slate-400 dark:text-zinc-600">{Math.max(0, wordsLimit - wordsUsed).toLocaleString()} words remaining today</p>
+            <p className="text-[11px] text-slate-500 dark:text-zinc-600">{Math.max(0, wordsLimit - wordsUsed).toLocaleString()} words remaining today</p>
           </div>
         </div>
 
@@ -153,7 +153,7 @@ export default function DashboardHome() {
           <div key={i} className={`dashboard-card bg-white dark:bg-[#0c0c14] border ${stat.border.replace('border-', 'dark:border-').replace('/10', '/10').replace('500', '500').concat(' border-slate-200')} rounded-xl p-4 sm:p-5`}>
             <div className="flex items-center justify-between mb-3">
               <stat.icon className={`w-4 h-4 sm:w-5 sm:h-5 ${stat.color}`} />
-              <Sparkles className="w-3 h-3 text-slate-500 dark:text-zinc-400 dark:text-zinc-700" />
+              <Sparkles className="w-3 h-3 text-slate-400 dark:text-zinc-700" />
             </div>
             <p className="text-xl sm:text-2xl font-semibold text-zinc-900 dark:text-white tabular-nums">{stat.value}</p>
             <p className="text-[11px] text-slate-500 dark:text-zinc-500 mt-1 font-medium">{stat.label}</p>
@@ -195,9 +195,9 @@ export default function DashboardHome() {
         </div>
         {docs.length === 0 ? (
           <div className="px-6 py-12 text-center">
-            <FileText className="w-7 h-7 text-slate-600 dark:text-zinc-300 dark:text-zinc-700 mx-auto mb-3" />
-            <p className="text-sm font-medium text-slate-500 dark:text-zinc-500 dark:text-zinc-400">No documents yet</p>
-            <p className="text-xs text-slate-500 dark:text-zinc-400 dark:text-zinc-600 mt-1">Start humanizing to see results here</p>
+            <FileText className="w-7 h-7 text-slate-400 dark:text-zinc-700 mx-auto mb-3" />
+            <p className="text-sm font-medium text-slate-600 dark:text-zinc-400">No documents yet</p>
+            <p className="text-xs text-slate-500 dark:text-zinc-600 mt-1">Start humanizing to see results here</p>
           </div>
         ) : (
           <div>
@@ -205,14 +205,14 @@ export default function DashboardHome() {
               <div key={doc.id} className={`flex items-center justify-between px-5 py-3 hover:bg-slate-50 dark:hover:bg-white/[0.02] transition-colors ${idx < docs.length - 1 ? 'border-b border-slate-100 dark:border-zinc-800/30' : ''}`}>
                 <div className="flex items-center gap-3 min-w-0 flex-1">
                   <div className="w-7 h-7 rounded-lg bg-slate-100 dark:bg-zinc-800/50 flex items-center justify-center shrink-0">
-                    <Activity className="w-3 h-3 text-slate-500 dark:text-zinc-400 dark:text-zinc-500" />
+                    <Activity className="w-3 h-3 text-slate-500 dark:text-zinc-500" />
                   </div>
                   <div className="min-w-0">
                     <h3 className="text-sm font-medium text-zinc-900 dark:text-zinc-200 truncate">{doc.title || 'Untitled'}</h3>
                     <div className="flex items-center gap-1.5 mt-0.5">
-                      <Clock className="w-2.5 h-2.5 text-slate-500 dark:text-zinc-400 dark:text-zinc-600" />
+                      <Clock className="w-2.5 h-2.5 text-slate-500 dark:text-zinc-600" />
                       <span className="text-[10px] text-slate-500 dark:text-zinc-500">{timeAgo(doc.created_at)}</span>
-                      <span className="text-slate-600 dark:text-zinc-300 dark:text-zinc-700">·</span>
+                      <span className="text-slate-300 dark:text-zinc-700">·</span>
                       <span className="text-[10px] text-slate-500 dark:text-zinc-500">{engineLabel(doc.engine_used)}</span>
                     </div>
                   </div>

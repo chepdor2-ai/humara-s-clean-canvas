@@ -22,7 +22,7 @@ export default function PricingPage() {
             Plans that scale with<br />
             <span className="text-brand-600">your needs</span>
           </h1>
-          <p className="text-lg text-slate-400 leading-relaxed max-w-2xl mx-auto">
+          <p className="text-lg text-slate-600 dark:text-slate-400 leading-relaxed max-w-2xl mx-auto">
             Daily word limits that reset every 24 hours. Upgrade or downgrade at any time. Save 15% with yearly billing.
           </p>
         </div>
@@ -34,7 +34,7 @@ export default function PricingPage() {
       {/* Trust bar */}
       <section className="w-full py-12 bg-slate-50 dark:bg-slate-900 border-y border-slate-200 dark:border-slate-800">
         <div className="max-w-4xl mx-auto px-6 text-center">
-          <p className="text-xs font-medium text-slate-400 uppercase tracking-wider mb-5">Trusted by students and researchers at</p>
+          <p className="text-xs font-medium text-slate-600 dark:text-slate-400 uppercase tracking-wider mb-5">Trusted by students and researchers at</p>
           <div className="flex flex-wrap justify-center gap-10 text-slate-600">
             {["Oxford", "Stanford", "MIT", "Cambridge", "Harvard"].map((uni) => (
               <span key={uni} className="text-lg font-semibold tracking-tight">{uni}</span>
@@ -47,7 +47,7 @@ export default function PricingPage() {
       <section className="w-full py-20 bg-white dark:bg-slate-950">
         <div className="max-w-2xl mx-auto px-6 text-center">
           <h2 className="text-3xl font-semibold text-slate-900 dark:text-white mb-4">Need a custom plan?</h2>
-          <p className="text-slate-400 mb-8">Enterprise volumes, custom integrations, or SLA requirements? Let&apos;s talk.</p>
+          <p className="text-slate-600 dark:text-slate-400 mb-8">Enterprise volumes, custom integrations, or SLA requirements? Let&apos;s talk.</p>
           <Link href="/contact" className="bg-brand-600 hover:bg-brand-700 text-white px-7 py-3 rounded-lg text-sm font-medium transition-colors">
             Contact Sales
           </Link>

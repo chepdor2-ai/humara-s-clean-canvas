@@ -25,12 +25,12 @@ export default function DocsPage() {
   const CodeBlock = ({ code, id, lang }: { code: string; id: string; lang: string }) => (
     <div className="relative bg-slate-950 rounded-lg overflow-hidden border border-slate-800">
       <div className="flex items-center justify-between px-4 py-2 bg-slate-900/50 border-b border-slate-800">
-        <span className="text-xs text-slate-400 font-mono">{lang}</span>
-        <button onClick={() => copyCode(code, id)} className="text-xs text-slate-400 hover:text-white flex items-center gap-1 transition-colors">
+        <span className="text-xs text-slate-500 dark:text-slate-400 font-mono">{lang}</span>
+        <button onClick={() => copyCode(code, id)} className="text-xs text-slate-500 dark:text-slate-400 hover:text-white flex items-center gap-1 transition-colors">
           {copied === id ? <><Check className="w-3 h-3" /> Copied</> : <><Copy className="w-3 h-3" /> Copy</>}
         </button>
       </div>
-      <pre className="p-4 text-sm text-slate-300 font-mono overflow-x-auto leading-relaxed"><code>{code}</code></pre>
+      <pre className="p-4 text-sm text-slate-600 dark:text-slate-300 font-mono overflow-x-auto leading-relaxed"><code>{code}</code></pre>
     </div>
   );
 
@@ -211,7 +211,7 @@ print(data['humanized'])`} id="py-sdk" lang="python" />
                   <div className="flex items-center gap-3 mb-3">
                     <h3 className="text-base font-semibold text-slate-900 dark:text-white">{e.name}</h3>
                     <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${e.tier === 'Premium' ? 'bg-brand-950 text-brand-300' : 'bg-slate-100 dark:bg-zinc-800 text-slate-500 dark:text-zinc-400'}`}>{e.tier}</span>
-                    <code className="text-xs text-slate-400 font-mono">{e.id}</code>
+                    <code className="text-xs text-slate-500 dark:text-slate-400 font-mono">{e.id}</code>
                   </div>
                   <p className="text-sm text-slate-500 dark:text-zinc-400 leading-relaxed mb-2">{e.desc}</p>
                   <p className="text-xs text-slate-500 dark:text-zinc-500"><strong>Best for:</strong> {e.best}</p>
