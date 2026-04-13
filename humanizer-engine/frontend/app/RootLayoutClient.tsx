@@ -164,7 +164,7 @@ export default function RootLayoutClient({ children }: { children: React.ReactNo
   }
 
   return (
-    <div className="flex h-screen bg-slate-100 dark:bg-zinc-950 overflow-hidden">
+    <div className="flex h-screen bg-white dark:bg-zinc-950 overflow-hidden">
       {/* Mobile top bar for app routes */}
       <div className="md:hidden fixed top-0 left-0 right-0 z-50 bg-white/90 dark:bg-zinc-900/90 backdrop-blur-xl border-b border-slate-200 dark:border-zinc-800/60 flex items-center justify-between px-4 h-14">
         <Logo />
@@ -243,7 +243,7 @@ export default function RootLayoutClient({ children }: { children: React.ReactNo
         </div>
       </aside>
 
-      <main className="flex-1 overflow-y-auto bg-slate-100 dark:bg-zinc-950 premium-bg pt-14 md:pt-0">
+      <main className="flex-1 overflow-y-auto bg-white dark:bg-zinc-950 pt-14 md:pt-0">
         <div className="max-w-7xl mx-auto p-4 sm:p-6 relative z-10">
           {children}
         </div>
