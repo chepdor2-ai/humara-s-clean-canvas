@@ -1,11 +1,11 @@
-'use client';
+﻿'use client';
 
 import { useState, useCallback, useMemo, useRef, useEffect } from 'react';
 import {
   CheckCircle2, AlertTriangle, Info, Sparkles, Copy, Check,
   ArrowRight, Eraser, ClipboardPaste, RefreshCw, Lightbulb, Zap,
-  Shield, BookOpen, Settings2, Brain, ChevronDown, ChevronUp,
-  FileText, AlignLeft, TrendingUp, Waves,
+  Shield, BookOpen, Brain, ChevronDown,
+  Eye, PenTool, X,
 } from 'lucide-react';
 import Link from 'next/link';
 import {
@@ -13,116 +13,154 @@ import {
   type Issue,
   type Severity,
   type CorrectionResult,
-  type SentenceAnalysis,
-  type ScoreBreakdown,
 } from '@/lib/engine/grammar-corrector';
 
-/* ── Severity config ──────────────────────────────────────────────────────── */
+/* â”€â”€ Severity config â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
-const SEV: Record<Severity, { label: string; color: string; bg: string; border: string; icon: typeof AlertTriangle; dot: string; underline: string }> = {
-  error:   { label: 'Error',   color: 'text-red-500',   bg: 'bg-red-50 dark:bg-red-950/30',    border: 'border-red-200 dark:border-red-800/40',    icon: AlertTriangle, dot: 'bg-red-500',   underline: 'decoration-red-500/80 bg-red-50/60 dark:bg-red-950/20' },
-  warning: { label: 'Warning', color: 'text-amber-500', bg: 'bg-amber-50 dark:bg-amber-950/30', border: 'border-amber-200 dark:border-amber-800/40', icon: Info,          dot: 'bg-amber-500', underline: 'decoration-amber-500/80 bg-amber-50/60 dark:bg-amber-950/20' },
-  style:   { label: 'Style',   color: 'text-blue-500',  bg: 'bg-blue-50 dark:bg-blue-950/30',   border: 'border-blue-200 dark:border-blue-800/40',   icon: Lightbulb,    dot: 'bg-blue-500',  underline: 'decoration-blue-500/60 bg-blue-50/60 dark:bg-blue-950/20' },
+const SEV: Record<Severity, { label: string; dot: string; underline: string; category: string; strip: string }> = {
+  error:   { label: 'Error',   dot: 'bg-red-500',   underline: 'decoration-red-500/80',   category: 'Correctness', strip: 'bg-red-50 dark:bg-red-950/20 text-red-600 dark:text-red-400' },
+  warning: { label: 'Warning', dot: 'bg-amber-500', underline: 'decoration-amber-500/70', category: 'Clarity',     strip: 'bg-amber-50 dark:bg-amber-950/20 text-amber-600 dark:text-amber-400' },
+  style:   { label: 'Style',   dot: 'bg-blue-500',  underline: 'decoration-blue-500/60',  category: 'Engagement',  strip: 'bg-blue-50 dark:bg-blue-950/20 text-blue-600 dark:text-blue-400' },
 };
 
-/* ── Score ring component ─────────────────────────────────────────────────── */
+type EngineMode = 'rules' | 'ai' | 'both';
 
-function ScoreRing({ score, label, size = 'lg', color }: { score: number; label: string; size?: 'lg' | 'sm'; color?: string }) {
-  const r = size === 'lg' ? 42 : 28;
-  const sv = size === 'lg' ? 100 : 70;
-  const sw = size === 'lg' ? 6 : 4;
+/* â”€â”€ Score circle (Grammarly-style single ring) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+
+function ScoreCircle({ score, size = 100 }: { score: number; size?: number }) {
+  const r = (size - 12) / 2;
   const circ = 2 * Math.PI * r;
   const off = circ - (score / 100) * circ;
-  const c = color || (score >= 80 ? '#22c55e' : score >= 50 ? '#f59e0b' : '#ef4444');
+  const c = score >= 80 ? '#22c55e' : score >= 50 ? '#f59e0b' : '#ef4444';
 
   return (
-    <div className={`flex flex-col items-center gap-1 ${size === 'lg' ? 'w-28' : 'w-16'}`}>
-      <div className={`relative ${size === 'lg' ? 'w-28 h-28' : 'w-16 h-16'}`}>
-        <svg className="w-full h-full -rotate-90" viewBox={`0 0 ${sv} ${sv}`}>
-          <circle cx={sv / 2} cy={sv / 2} r={r} fill="none" strokeWidth={sw}
-            className="stroke-slate-200 dark:stroke-zinc-800" />
-          <circle cx={sv / 2} cy={sv / 2} r={r} fill="none" stroke={c} strokeWidth={sw}
-            strokeLinecap="round" strokeDasharray={circ} strokeDashoffset={off}
-            className="transition-all duration-700 ease-out" />
-        </svg>
-        <div className="absolute inset-0 flex flex-col items-center justify-center">
-          <span className={`font-bold text-slate-900 dark:text-white ${size === 'lg' ? 'text-2xl' : 'text-sm'}`}>{score}</span>
-        </div>
+    <div className="relative" style={{ width: size, height: size }}>
+      <svg className="w-full h-full -rotate-90" viewBox={`0 0 ${size} ${size}`}>
+        <circle cx={size / 2} cy={size / 2} r={r} fill="none" strokeWidth={6}
+          className="stroke-slate-100 dark:stroke-zinc-800" />
+        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke={c} strokeWidth={6}
+          strokeLinecap="round" strokeDasharray={circ} strokeDashoffset={off}
+          className="transition-all duration-1000 ease-out" />
+      </svg>
+      <div className="absolute inset-0 flex flex-col items-center justify-center">
+        <span className="text-2xl font-bold text-slate-900 dark:text-white">{score}</span>
+        <span className="text-[9px] font-medium text-slate-400 dark:text-zinc-500 uppercase tracking-wider">Overall</span>
       </div>
-      <span className={`font-medium text-slate-500 dark:text-zinc-500 uppercase tracking-wider ${size === 'lg' ? 'text-[10px]' : 'text-[8px]'}`}>{label}</span>
     </div>
   );
 }
 
-/* ── Issue card ───────────────────────────────────────────────────────────── */
+/* â”€â”€ Mini score bar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
-function IssueCard({ issue, isActive, onSelect, onApplyFix }: {
-  issue: Issue; isActive: boolean; onSelect: () => void; onApplyFix: (r: string) => void;
-}) {
-  const cfg = SEV[issue.severity];
-  const Icon = cfg.icon;
-
+function ScoreBar({ label, score, color }: { label: string; score: number; color: string }) {
   return (
-    <button onClick={onSelect} className={`w-full text-left rounded-xl border p-3 transition-all duration-200 group
-      ${isActive ? `${cfg.bg} ${cfg.border} ring-2 ring-offset-1 ring-purple-400/50 dark:ring-offset-zinc-900`
-        : 'bg-white dark:bg-zinc-900/60 border-slate-200 dark:border-zinc-800 hover:border-purple-300 dark:hover:border-purple-700/50 hover:shadow-md'}`}
-    >
-      <div className="flex items-start gap-2.5">
-        <div className={`mt-0.5 p-1 rounded-lg ${cfg.bg}`}>
-          <Icon className={`w-3.5 h-3.5 ${cfg.color}`} />
-        </div>
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 mb-0.5">
-            <span className={`text-[10px] font-bold uppercase tracking-wider ${cfg.color}`}>{cfg.label}</span>
-            <span className="text-[10px] text-slate-400 dark:text-zinc-600">•</span>
-            <span className="text-[10px] text-slate-500 dark:text-zinc-500 font-medium">{issue.category}</span>
-            {issue.aiDetected && (
-              <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-purple-100 dark:bg-purple-950/40 text-purple-600 dark:text-purple-400 font-bold">AI</span>
-            )}
-          </div>
-          <p className="text-xs text-slate-700 dark:text-zinc-300 leading-relaxed">{issue.message}</p>
-          {issue.replacements.length > 0 && (
-            <div className="mt-1.5 flex flex-wrap gap-1">
-              {issue.replacements.slice(0, 3).map((rep, i) => (
-                <button key={i} onClick={(e) => { e.stopPropagation(); onApplyFix(rep); }}
-                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[11px] font-semibold
-                    bg-green-50 dark:bg-green-950/30 text-green-700 dark:text-green-400
-                    border border-green-200 dark:border-green-800/40 hover:bg-green-100 dark:hover:bg-green-900/40 transition-colors">
-                  <ArrowRight className="w-2.5 h-2.5" />
-                  {rep || '(remove)'}
-                </button>
-              ))}
-            </div>
-          )}
-          <div className="mt-1 flex items-center gap-2">
-            <div className="h-1 flex-1 rounded-full bg-slate-100 dark:bg-zinc-800 overflow-hidden">
-              <div className={`h-full rounded-full transition-all duration-500 ${
-                issue.confidence >= 0.9 ? 'bg-green-500' : issue.confidence >= 0.7 ? 'bg-amber-400' : 'bg-red-400'
-              }`} style={{ width: `${issue.confidence * 100}%` }} />
-            </div>
-            <span className="text-[9px] text-slate-400 dark:text-zinc-600 font-mono">{Math.round(issue.confidence * 100)}%</span>
-          </div>
-        </div>
+    <div className="flex items-center gap-3">
+      <span className="text-[11px] text-slate-500 dark:text-zinc-500 w-16 text-right">{label}</span>
+      <div className="flex-1 h-1.5 rounded-full bg-slate-100 dark:bg-zinc-800 overflow-hidden">
+        <div className="h-full rounded-full transition-all duration-700" style={{ width: `${score}%`, backgroundColor: color }} />
       </div>
-    </button>
+      <span className="text-[11px] font-semibold text-slate-600 dark:text-zinc-400 w-7">{score}</span>
+    </div>
   );
 }
 
-/* ── Highlighted text with wavy underlines ────────────────────────────────── */
+/* â”€â”€ Suggestion card (Grammarly-style) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
-function HighlightedText({ text, issues, activeIdx, onClick }: {
-  text: string; issues: Issue[]; activeIdx: number | null; onClick: (i: number) => void;
+function SuggestionCard({ issue, inputText, isActive, onHover, onAccept, onDismiss }: {
+  issue: Issue; inputText: string; isActive: boolean;
+  onHover: () => void; onAccept: (rep: string) => void; onDismiss: () => void;
+}) {
+  const cfg = SEV[issue.severity];
+  const originalText = inputText.slice(issue.start, issue.end);
+  const hasFix = issue.replacements.length > 0;
+
+  return (
+    <div onMouseEnter={onHover}
+      className={`rounded-lg border transition-all duration-200 overflow-hidden
+        ${isActive
+          ? 'border-emerald-300 dark:border-emerald-700 ring-2 ring-emerald-400/30 dark:ring-emerald-500/20 shadow-md'
+          : 'border-slate-200 dark:border-zinc-800 hover:border-slate-300 dark:hover:border-zinc-700 hover:shadow-sm'
+        } bg-white dark:bg-zinc-900/60`}>
+
+      {/* Category header */}
+      <div className={`px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider flex items-center gap-1.5 ${cfg.strip}`}>
+        <span className={`w-1.5 h-1.5 rounded-full ${cfg.dot}`} />
+        {cfg.category}
+        {issue.aiDetected && (
+          <span className="ml-auto text-[9px] px-1.5 py-0.5 rounded bg-purple-100 dark:bg-purple-950/40 text-purple-600 dark:text-purple-400 font-bold normal-case">AI</span>
+        )}
+      </div>
+
+      <div className="p-3">
+        {/* Original â†’ Corrected diff */}
+        {hasFix && (
+          <div className="mb-2 text-sm leading-relaxed">
+            <span className="bg-red-100 dark:bg-red-950/40 text-red-600 dark:text-red-400 line-through decoration-2 rounded-sm px-0.5">{originalText}</span>
+            <ArrowRight className="w-3.5 h-3.5 inline mx-1.5 text-slate-300 dark:text-zinc-600" />
+            <span className="bg-emerald-100 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 font-semibold rounded-sm px-0.5">{issue.replacements[0]}</span>
+          </div>
+        )}
+
+        {/* No fix â€” show original text only */}
+        {!hasFix && (
+          <div className="mb-2 text-sm leading-relaxed">
+            <span className="bg-amber-50 dark:bg-amber-950/30 text-amber-700 dark:text-amber-400 rounded-sm px-0.5 underline decoration-wavy decoration-1">{originalText}</span>
+          </div>
+        )}
+
+        {/* Message */}
+        <p className="text-xs text-slate-500 dark:text-zinc-400 leading-relaxed mb-3">{issue.message}</p>
+
+        {/* Buttons */}
+        <div className="flex items-center gap-2">
+          {hasFix && (
+            <button onClick={() => onAccept(issue.replacements[0])}
+              className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold
+                bg-emerald-500 hover:bg-emerald-600 text-white transition-all">
+              <CheckCircle2 className="w-3.5 h-3.5" /> Accept
+            </button>
+          )}
+          <button onClick={onDismiss}
+            className="inline-flex items-center justify-center px-3 py-1.5 rounded-lg text-xs font-medium
+              text-slate-400 dark:text-zinc-500 hover:bg-slate-100 dark:hover:bg-zinc-800 border border-slate-200 dark:border-zinc-700 transition-colors">
+            Dismiss
+          </button>
+          {issue.replacements.length > 1 && (
+            <div className="relative group">
+              <button className="inline-flex items-center gap-0.5 px-2 py-1.5 rounded-lg text-[11px] text-slate-400 hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors">
+                <ChevronDown className="w-3 h-3" /> +{issue.replacements.length - 1}
+              </button>
+              <div className="absolute bottom-full left-0 mb-1 hidden group-hover:block z-20
+                bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-700 rounded-lg shadow-xl p-1 min-w-[140px]">
+                {issue.replacements.slice(1, 5).map((rep, i) => (
+                  <button key={i} onClick={() => onAccept(rep)}
+                    className="w-full text-left px-2.5 py-1.5 rounded text-xs text-slate-700 dark:text-zinc-300 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 transition-colors">
+                    {rep || '(remove)'}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* â”€â”€ Editor text with underlines â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+
+function EditorHighlight({ text, issues, activeIdx, onClickIssue }: {
+  text: string; issues: Issue[]; activeIdx: number | null; onClickIssue: (i: number) => void;
 }) {
   const segments = useMemo(() => {
     if (!issues.length) return [{ text, isIssue: false, idx: -1, sev: 'error' as Severity, ai: false }];
-    const sorted = [...issues].sort((a, b) => a.start - b.start);
+    const sorted = [...issues].map((iss, idx) => ({ ...iss, _idx: idx })).sort((a, b) => a.start - b.start);
     const parts: { text: string; isIssue: boolean; idx: number; sev: Severity; ai: boolean }[] = [];
     let cursor = 0;
     for (const issue of sorted) {
-      const realIdx = issues.indexOf(issue);
       if (issue.start > cursor) parts.push({ text: text.slice(cursor, issue.start), isIssue: false, idx: -1, sev: 'error', ai: false });
       if (issue.end > cursor) {
-        parts.push({ text: text.slice(Math.max(cursor, issue.start), issue.end), isIssue: true, idx: realIdx, sev: issue.severity, ai: !!issue.aiDetected });
+        parts.push({ text: text.slice(Math.max(cursor, issue.start), issue.end), isIssue: true, idx: issue._idx, sev: issue.severity, ai: !!issue.aiDetected });
         cursor = issue.end;
       }
     }
@@ -131,13 +169,13 @@ function HighlightedText({ text, issues, activeIdx, onClick }: {
   }, [text, issues]);
 
   return (
-    <div className="text-[15px] leading-[1.9] text-slate-800 dark:text-zinc-200 whitespace-pre-wrap font-[inherit]">
+    <div className="text-[15px] leading-[1.85] text-slate-800 dark:text-zinc-200 whitespace-pre-wrap min-h-[300px]">
       {segments.map((s, i) =>
         s.isIssue ? (
-          <span key={i} onClick={() => onClick(s.idx)}
-            className={`underline decoration-wavy decoration-2 underline-offset-4 rounded-sm px-0.5 -mx-0.5 cursor-pointer transition-all duration-200
-              ${s.ai ? 'decoration-purple-500/80 bg-purple-50/60 dark:bg-purple-950/20' : SEV[s.sev].underline}
-              ${activeIdx === s.idx ? 'ring-2 ring-purple-400/60 ring-offset-1 dark:ring-offset-zinc-900' : ''} hover:opacity-80`}>
+          <span key={i} onClick={() => onClickIssue(s.idx)}
+            className={`underline decoration-wavy decoration-2 underline-offset-4 cursor-pointer transition-all duration-150
+              ${s.ai ? 'decoration-purple-500/80' : SEV[s.sev].underline}
+              ${activeIdx === s.idx ? 'bg-emerald-100/70 dark:bg-emerald-950/30 rounded-sm' : 'hover:bg-slate-50 dark:hover:bg-zinc-800/30 rounded-sm'}`}>
             {s.text}
           </span>
         ) : <span key={i}>{s.text}</span>
@@ -146,87 +184,103 @@ function HighlightedText({ text, issues, activeIdx, onClick }: {
   );
 }
 
-/* ── Sentence-by-sentence view ────────────────────────────────────────────── */
+/* â”€â”€ Correction diff view â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
-function SentenceView({ sentences, onSentenceClick, activeSentence }: {
-  sentences: SentenceAnalysis[]; onSentenceClick: (i: number) => void; activeSentence: number | null;
-}) {
+function CorrectionDiff({ input, issues }: { input: string; issues: Issue[] }) {
+  const fixable = issues.filter(i => i.replacements.length > 0).sort((a, b) => a.start - b.start);
+
+  if (fixable.length === 0) {
+    return <div className="text-[15px] leading-[1.85] text-slate-800 dark:text-zinc-200 whitespace-pre-wrap">{input}</div>;
+  }
+
+  const parts: React.ReactNode[] = [];
+  let cursor = 0;
+  for (const issue of fixable) {
+    if (issue.start > cursor) parts.push(<span key={`t-${cursor}`}>{input.slice(cursor, issue.start)}</span>);
+    const original = input.slice(Math.max(cursor, issue.start), issue.end);
+    parts.push(
+      <span key={`d-${issue.start}`}>
+        <span className="bg-red-100 dark:bg-red-950/40 text-red-500 line-through decoration-2 px-0.5 rounded-sm text-[14px]">{original}</span>
+        {issue.replacements[0] && (
+          <span className="bg-emerald-100 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 font-semibold px-0.5 rounded-sm ml-0.5">{issue.replacements[0]}</span>
+        )}
+      </span>
+    );
+    cursor = issue.end;
+  }
+  if (cursor < input.length) parts.push(<span key={`t-${cursor}`}>{input.slice(cursor)}</span>);
+
   return (
-    <div className="space-y-1.5">
-      {sentences.map((s, i) => {
-        const scoreColor = s.score >= 80 ? 'text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-950/30' :
-          s.score >= 50 ? 'text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30' :
-          'text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/30';
-        const borderColor = s.score >= 80 ? 'border-green-200 dark:border-green-900/40' :
-          s.score >= 50 ? 'border-amber-200 dark:border-amber-900/40' : 'border-red-200 dark:border-red-900/40';
-        const isActive = activeSentence === i;
+    <div>
+      <div className="text-[15px] leading-[1.85] text-slate-800 dark:text-zinc-200 whitespace-pre-wrap">{parts}</div>
+      <div className="mt-6 pt-4 border-t border-slate-100 dark:border-zinc-800/50 flex items-center gap-5 text-[11px] text-slate-400 dark:text-zinc-500">
+        <span className="flex items-center gap-1.5">
+          <span className="w-3 h-2 rounded-sm bg-red-100 dark:bg-red-950/40 border border-red-200 dark:border-red-800/40 inline-block" /> Removed
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className="w-3 h-2 rounded-sm bg-emerald-100 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/40 inline-block" /> Corrected
+        </span>
+      </div>
+    </div>
+  );
+}
 
-        return (
-          <button key={i} onClick={() => onSentenceClick(i)}
-            className={`w-full text-left p-3 rounded-xl border transition-all duration-200
-              ${isActive ? `${borderColor} ring-2 ring-purple-400/40 ring-offset-1 dark:ring-offset-zinc-900` :
-                `border-slate-100 dark:border-zinc-800/60 hover:border-slate-300 dark:hover:border-zinc-700`}
-              bg-white dark:bg-zinc-900/40`}>
-            <div className="flex items-start gap-3">
-              <div className={`flex-shrink-0 px-2 py-1 rounded-lg text-[11px] font-bold ${scoreColor}`}>
-                {s.score}
+/* â”€â”€ Engine selector â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+
+function EngineSelector({ mode, onChange }: { mode: EngineMode; onChange: (m: EngineMode) => void }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function close(e: MouseEvent) { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); }
+    document.addEventListener('mousedown', close);
+    return () => document.removeEventListener('mousedown', close);
+  }, []);
+
+  const items: Record<EngineMode, { label: string; icon: React.ReactNode; desc: string }> = {
+    rules: { label: 'Rules Engine', icon: <PenTool className="w-3.5 h-3.5" />, desc: 'Non-LLM grammar rules (17 rules)' },
+    ai:    { label: 'AI Engine',    icon: <Brain className="w-3.5 h-3.5" />,   desc: 'LLM-powered detection + correction' },
+    both:  { label: 'Rules + AI',   icon: <Zap className="w-3.5 h-3.5" />,     desc: 'Combined for maximum coverage' },
+  };
+
+  return (
+    <div ref={ref} className="relative">
+      <button onClick={() => setOpen(!open)}
+        className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold
+          bg-white dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700
+          text-slate-700 dark:text-zinc-300 hover:border-slate-300 dark:hover:border-zinc-600 transition-all shadow-sm">
+        {items[mode].icon} {items[mode].label}
+        <ChevronDown className={`w-3 h-3 transition-transform ${open ? 'rotate-180' : ''}`} />
+      </button>
+      {open && (
+        <div className="absolute top-full left-0 mt-1.5 z-30 bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-700 rounded-xl shadow-xl p-1 min-w-[230px]">
+          {(Object.keys(items) as EngineMode[]).map(m => (
+            <button key={m} onClick={() => { onChange(m); setOpen(false); }}
+              className={`w-full flex items-start gap-2.5 px-3 py-2.5 rounded-lg text-left transition-colors
+                ${mode === m ? 'bg-emerald-50 dark:bg-emerald-950/30' : 'hover:bg-slate-50 dark:hover:bg-zinc-800'}`}>
+              <div className={`mt-0.5 ${mode === m ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-400 dark:text-zinc-500'}`}>
+                {items[m].icon}
               </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-xs text-slate-700 dark:text-zinc-300 leading-relaxed line-clamp-2">{s.text}</p>
-                <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-                  {s.issues.length > 0 && (
-                    <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-red-50 dark:bg-red-950/30 text-red-600 dark:text-red-400 font-semibold">
-                      {s.issues.length} issue{s.issues.length !== 1 ? 's' : ''}
-                    </span>
-                  )}
-                  {s.tense !== 'unknown' && (
-                    <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-slate-100 dark:bg-zinc-800 text-slate-500 dark:text-zinc-500">
-                      {s.tense}
-                    </span>
-                  )}
-                  {s.isPassive && (
-                    <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-blue-50 dark:bg-blue-950/30 text-blue-600 dark:text-blue-400">
-                      passive
-                    </span>
-                  )}
-                  {s.isFragment && (
-                    <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-orange-50 dark:bg-orange-950/30 text-orange-600 dark:text-orange-400">
-                      fragment
-                    </span>
-                  )}
-                  {s.isRunOn && (
-                    <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-purple-50 dark:bg-purple-950/30 text-purple-600 dark:text-purple-400">
-                      run-on
-                    </span>
-                  )}
-                  <span className="text-[9px] text-slate-400 dark:text-zinc-600">{s.wordCount}w</span>
+              <div className="flex-1">
+                <div className={`text-xs font-semibold ${mode === m ? 'text-emerald-700 dark:text-emerald-400' : 'text-slate-700 dark:text-zinc-300'}`}>
+                  {items[m].label}
                 </div>
+                <div className="text-[10px] text-slate-500 dark:text-zinc-500">{items[m].desc}</div>
               </div>
-            </div>
-          </button>
-        );
-      })}
+              {mode === m && <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 mt-0.5" />}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
 
-/* ── Stat badge ───────────────────────────────────────────────────────────── */
-
-function StatBadge({ count, severity }: { count: number; severity: Severity }) {
-  const c = SEV[severity];
-  return (
-    <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold ${c.bg} ${c.color} border ${c.border}`}>
-      <span className={`w-1.5 h-1.5 rounded-full ${c.dot}`} />
-      {count} {c.label}{count !== 1 ? 's' : ''}
-    </div>
-  );
-}
-
-/* ── Main Page ────────────────────────────────────────────────────────────── */
+/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+   MAIN PAGE
+   â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
 
 const EXAMPLE = `She don't like apples. I have went to the store yesterday. Their going to a university soon. The the cat sat on a mat. He have many informations about the enviromment. Me and him went to the store , and buyed a apple. The results of the study is clear. I seen him at the park and he dont care about they're feelings. She recieve the package and then she go home. However the weather was nice outside. Dr. smith told me to come back tommorow but i cant make it. Between you and I the test was definately harder then expected.`;
-
-type RightTab = 'issues' | 'sentences';
 
 export default function GrammarPage() {
   const [inputText, setInputText] = useState('');
@@ -234,25 +288,22 @@ export default function GrammarPage() {
   const [activeIssue, setActiveIssue] = useState<number | null>(null);
   const [copied, setCopied] = useState(false);
   const [showCorrected, setShowCorrected] = useState(false);
-  const [filterSev, setFilterSev] = useState<Severity | 'all'>('all');
-  const [rightTab, setRightTab] = useState<RightTab>('issues');
-  const [activeSentence, setActiveSentence] = useState<number | null>(null);
-  const [showSettings, setShowSettings] = useState(false);
-  const [aiEnabled, setAiEnabled] = useState(false);
+  const [engineMode, setEngineMode] = useState<EngineMode>('rules');
   const [aiLoading, setAiLoading] = useState(false);
+  const [dismissed, setDismissed] = useState<Set<number>>(new Set());
   const issueListRef = useRef<HTMLDivElement>(null);
 
-  const checker = useMemo(() => new GrammarChecker(), []);
+  /* â”€â”€ Analysis â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
   const handleCheck = useCallback(async () => {
     if (!inputText.trim()) return;
-    const newChecker = new GrammarChecker();
-    const r = newChecker.check(inputText);
+    setDismissed(new Set());
+    const checker = new GrammarChecker();
+    const r = checker.check(inputText);
 
-    // If AI is enabled, fetch AI highlights and merge
-    if (aiEnabled) {
+    if (engineMode === 'ai' || engineMode === 'both') {
       setAiLoading(true);
-      setResult(r); // Show rule-based results immediately
+      if (engineMode === 'both') setResult(r);
       try {
         const res = await fetch('/api/grammar-ai', {
           method: 'POST',
@@ -262,41 +313,62 @@ export default function GrammarPage() {
         if (res.ok) {
           const data = await res.json();
           if (data.issues?.length > 0) {
-            newChecker.mergeAiIssues(data.issues);
-            const merged = newChecker.check(inputText);
-            // Keep AI issues from the merge
+            const base = engineMode === 'both' ? { ...r, issues: [...r.issues] } : { ...r, issues: [] as Issue[] };
             for (const ai of data.issues) {
-              const exists = merged.issues.some(
+              const overlap = base.issues.some(
                 (i: Issue) => Math.abs(i.start - ai.start) < 3 && Math.abs(i.end - ai.end) < 3
               );
-              if (!exists) {
-                merged.issues.push({
+              if (!overlap) {
+                base.issues.push({
                   ruleId: 'ai_detected', message: ai.message, severity: ai.severity as Severity,
-                  start: ai.start, end: ai.end, replacements: [], confidence: 0.8,
+                  start: ai.start, end: ai.end,
+                  replacements: ai.correction ? [ai.correction] : [],
+                  confidence: 0.8,
                   category: ai.category, sentenceIndex: 0, aiDetected: true,
                 });
+              } else if (ai.correction) {
+                const existing = base.issues.find(
+                  (i: Issue) => Math.abs(i.start - ai.start) < 3 && Math.abs(i.end - ai.end) < 3
+                );
+                if (existing && existing.replacements.length === 0) {
+                  existing.replacements = [ai.correction];
+                }
               }
             }
-            merged.issues.sort((a: Issue, b: Issue) => a.start - b.start);
-            setResult(merged);
+            base.issues.sort((a: Issue, b: Issue) => a.start - b.start);
+            base.stats = {
+              errors: base.issues.filter((i: Issue) => i.severity === 'error').length,
+              warnings: base.issues.filter((i: Issue) => i.severity === 'warning').length,
+              style: base.issues.filter((i: Issue) => i.severity === 'style').length,
+            };
+            setResult(base);
+          } else if (engineMode === 'ai') {
+            setResult({ ...r, issues: [], stats: { errors: 0, warnings: 0, style: 0 } });
+          } else {
+            setResult(r);
           }
+        } else {
+          setResult(r);
         }
-      } catch { /* AI failed, rule-based results still shown */ }
+      } catch {
+        setResult(r);
+      }
       setAiLoading(false);
     } else {
       setResult(r);
     }
     setActiveIssue(null);
     setShowCorrected(false);
-    setActiveSentence(null);
-  }, [inputText, aiEnabled, checker]);
+  }, [inputText, engineMode]);
+
+  /* â”€â”€ Actions â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
   const handlePaste = useCallback(async () => {
     try { setInputText(await navigator.clipboard.readText()); } catch { /* denied */ }
   }, []);
 
   const handleClear = useCallback(() => {
-    setInputText(''); setResult(null); setActiveIssue(null); setActiveSentence(null);
+    setInputText(''); setResult(null); setActiveIssue(null); setDismissed(new Set());
   }, []);
 
   const handleCopy = useCallback(() => {
@@ -305,333 +377,279 @@ export default function GrammarPage() {
     setCopied(true); setTimeout(() => setCopied(false), 2000);
   }, [result, showCorrected]);
 
-  const handleApplyFix = useCallback((idx: number, rep: string) => {
+  const handleAccept = useCallback((idx: number, rep: string) => {
     if (!result) return;
     const issue = result.issues[idx];
     if (!issue) return;
     const newText = inputText.slice(0, issue.start) + rep + inputText.slice(issue.end);
     setInputText(newText);
     const r = new GrammarChecker().check(newText);
-    setResult(r); setActiveIssue(null);
+    setResult(r); setActiveIssue(null); setDismissed(new Set());
   }, [result, inputText]);
 
-  const filteredIssues = useMemo(() => {
-    if (!result) return [];
-    let issues = result.issues;
-    if (activeSentence !== null) {
-      issues = issues.filter(i => i.sentenceIndex === activeSentence);
+  const handleDismiss = useCallback((idx: number) => {
+    setDismissed(prev => new Set(prev).add(idx));
+    if (activeIssue === idx) setActiveIssue(null);
+  }, [activeIssue]);
+
+  const handleAcceptAll = useCallback(() => {
+    if (!result) return;
+    const fixable = result.issues
+      .filter((issue, i) => issue.replacements.length > 0 && !dismissed.has(i))
+      .sort((a, b) => b.start - a.start);
+    if (fixable.length === 0) return;
+    let text = inputText;
+    for (const issue of fixable) {
+      text = text.slice(0, issue.start) + issue.replacements[0] + text.slice(issue.end);
     }
-    if (filterSev !== 'all') issues = issues.filter(i => i.severity === filterSev);
-    return issues;
-  }, [result, filterSev, activeSentence]);
+    setInputText(text);
+    const r = new GrammarChecker().check(text);
+    setResult(r); setActiveIssue(null); setDismissed(new Set());
+  }, [result, inputText, dismissed]);
+
+  /* â”€â”€ Derived data â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+
+  const visibleIssues = useMemo(() => {
+    if (!result) return [];
+    return result.issues.filter((_, i) => !dismissed.has(i));
+  }, [result, dismissed]);
+
+  const fixableCount = useMemo(() => visibleIssues.filter(i => i.replacements.length > 0).length, [visibleIssues]);
 
   const wordCount = useMemo(() => inputText.trim().split(/\s+/).filter(Boolean).length, [inputText]);
 
+  /* â”€â”€ Scroll sidebar to active card â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+
   useEffect(() => {
-    if (activeIssue !== null && issueListRef.current) {
-      const card = issueListRef.current.children[activeIssue] as HTMLElement | undefined;
+    if (activeIssue === null || !issueListRef.current || !result) return;
+    // Find the visible index of the active issue
+    let visIdx = -1;
+    let count = 0;
+    for (let j = 0; j < result.issues.length; j++) {
+      if (!dismissed.has(j)) {
+        if (j === activeIssue) { visIdx = count; break; }
+        count++;
+      }
+    }
+    if (visIdx >= 0) {
+      const card = issueListRef.current.children[visIdx] as HTMLElement | undefined;
       card?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     }
-  }, [activeIssue]);
+  }, [activeIssue, result, dismissed]);
+
+  /* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+     RENDER
+     â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-[#07070D]">
-      {/* ── Header ─────────────────────────────────────────────────────── */}
-      <div className="border-b border-slate-200 dark:border-zinc-800 bg-white/80 dark:bg-zinc-900/60 backdrop-blur-xl sticky top-0 z-30">
-        <div className="max-w-[1700px] mx-auto px-4 sm:px-6 lg:px-8">
+    <div className="min-h-screen bg-[#f8f9fa] dark:bg-[#0a0a0f]">
+
+      {/* â”€â”€ Top bar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+      <div className="border-b border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900/70 sticky top-0 z-30">
+        <div className="max-w-[1800px] mx-auto px-6">
           <div className="flex items-center justify-between h-14">
             <div className="flex items-center gap-3">
-              <Link href="/app" className="text-slate-400 dark:text-zinc-600 hover:text-purple-500 transition-colors">
+              <Link href="/app" className="text-slate-400 dark:text-zinc-600 hover:text-emerald-500 transition-colors">
                 <ArrowRight className="w-4 h-4 rotate-180" />
               </Link>
-              <div className="flex items-center gap-2">
-                <div className="p-1.5 rounded-lg bg-gradient-to-br from-emerald-500 to-teal-600 shadow-lg shadow-emerald-500/20">
-                  <BookOpen className="w-4 h-4 text-white" />
-                </div>
-                <h1 className="text-lg font-bold text-slate-900 dark:text-white">Grammar Checker</h1>
+              <div className="p-1.5 rounded-lg bg-gradient-to-br from-emerald-500 to-teal-600">
+                <BookOpen className="w-4 h-4 text-white" />
               </div>
-              <span className="hidden sm:inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/40">
-                Rule-Based Engine
-              </span>
-              {aiEnabled && (
-                <span className="hidden sm:inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold text-purple-600 dark:text-purple-400 bg-purple-50 dark:bg-purple-950/30 border border-purple-200 dark:border-purple-800/40">
-                  <Brain className="w-3 h-3" /> + AI Highlights
+              <h1 className="text-base font-bold text-slate-900 dark:text-white">Grammar</h1>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <EngineSelector mode={engineMode} onChange={setEngineMode} />
+              {aiLoading && (
+                <span className="text-[11px] text-purple-500 animate-pulse flex items-center gap-1">
+                  <Brain className="w-3 h-3" /> Analyzingâ€¦
                 </span>
               )}
             </div>
+
             <div className="flex items-center gap-2">
               {result && (
-                <div className="hidden sm:flex items-center gap-1.5 mr-2">
-                  <StatBadge count={result.stats.errors} severity="error" />
-                  <StatBadge count={result.stats.warnings} severity="warning" />
-                  <StatBadge count={result.stats.style} severity="style" />
+                <div className="hidden sm:flex items-center gap-3 mr-3 text-[11px]">
+                  <span className="flex items-center gap-1 text-red-500 font-semibold"><span className="w-1.5 h-1.5 rounded-full bg-red-500" />{result.stats.errors}</span>
+                  <span className="flex items-center gap-1 text-amber-500 font-semibold"><span className="w-1.5 h-1.5 rounded-full bg-amber-500" />{result.stats.warnings}</span>
+                  <span className="flex items-center gap-1 text-blue-500 font-semibold"><span className="w-1.5 h-1.5 rounded-full bg-blue-500" />{result.stats.style}</span>
                 </div>
               )}
-              <button onClick={() => setShowSettings(!showSettings)} title="Advanced settings"
-                className={`p-2 rounded-xl transition-all ${showSettings ? 'bg-purple-100 dark:bg-purple-950/40 text-purple-600' : 'text-slate-400 hover:bg-slate-100 dark:hover:bg-zinc-800'}`}>
-                <Settings2 className="w-4 h-4" />
-              </button>
               <button onClick={handleCheck} disabled={!inputText.trim()}
-                className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold
-                  bg-gradient-to-r from-emerald-500 to-teal-600 text-white shadow-lg shadow-emerald-500/25
-                  hover:shadow-xl disabled:opacity-40 disabled:cursor-not-allowed transition-all duration-200 hover:-translate-y-0.5">
-                <Zap className="w-4 h-4" />
-                {aiLoading ? 'Analyzing…' : 'Check Grammar'}
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold
+                  bg-emerald-500 hover:bg-emerald-600 text-white
+                  disabled:opacity-40 disabled:cursor-not-allowed transition-all">
+                <Zap className="w-4 h-4" /> Check
               </button>
             </div>
           </div>
-
-          {/* Settings panel */}
-          {showSettings && (
-            <div className="pb-3 pt-1 border-t border-slate-100 dark:border-zinc-800/60">
-              <div className="flex flex-wrap items-center gap-4">
-                <label className="flex items-center gap-2.5 cursor-pointer group">
-                  <div className={`relative w-10 h-5 rounded-full transition-colors ${aiEnabled ? 'bg-purple-500' : 'bg-slate-200 dark:bg-zinc-700'}`}
-                    onClick={() => setAiEnabled(!aiEnabled)}>
-                    <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow-sm transition-transform ${aiEnabled ? 'translate-x-5' : 'translate-x-0.5'}`} />
-                  </div>
-                  <div>
-                    <span className="text-xs font-semibold text-slate-700 dark:text-zinc-300 flex items-center gap-1.5">
-                      <Brain className="w-3.5 h-3.5 text-purple-500" /> AI Grammar Highlights
-                    </span>
-                    <p className="text-[10px] text-slate-500 dark:text-zinc-500">AI detects additional errors • Corrections remain rule-based (no rewriting)</p>
-                  </div>
-                </label>
-              </div>
-            </div>
-          )}
         </div>
       </div>
 
-      {/* ── Main ───────────────────────────────────────────────────────── */}
-      <div className="max-w-[1700px] mx-auto px-4 sm:px-6 lg:px-8 py-5">
-        <div className="flex flex-col lg:flex-row gap-5 min-h-[calc(100vh-140px)]">
+      {/* â”€â”€ Two-column layout â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+      <div className="max-w-[1800px] mx-auto flex min-h-[calc(100vh-57px)]">
 
-          {/* ── Left: Editor ───────────────────────────────────────────── */}
-          <div className="flex-1 flex flex-col min-w-0">
-            <div className="flex-1 rounded-2xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900/50 shadow-sm overflow-hidden flex flex-col">
-              {/* Toolbar */}
-              <div className="flex items-center justify-between px-4 py-2 border-b border-slate-100 dark:border-zinc-800/80 bg-slate-50/50 dark:bg-zinc-900/30">
-                <div className="flex items-center gap-1.5">
-                  <button onClick={handlePaste} className="inline-flex items-center gap-1 px-2 py-1.5 rounded-lg text-xs font-medium text-slate-600 dark:text-zinc-400 hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors">
-                    <ClipboardPaste className="w-3.5 h-3.5" /> Paste
-                  </button>
-                  <button onClick={handleClear} className="inline-flex items-center gap-1 px-2 py-1.5 rounded-lg text-xs font-medium text-slate-600 dark:text-zinc-400 hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors">
-                    <Eraser className="w-3.5 h-3.5" /> Clear
-                  </button>
-                  <button onClick={() => { setInputText(EXAMPLE); setResult(null); }}
-                    className="inline-flex items-center gap-1 px-2 py-1.5 rounded-lg text-xs font-medium text-purple-600 dark:text-purple-400 hover:bg-purple-50 dark:hover:bg-purple-950/20 transition-colors">
-                    <Sparkles className="w-3.5 h-3.5" /> Example
-                  </button>
-                </div>
-                <div className="flex items-center gap-3 text-[11px] text-slate-400 dark:text-zinc-600">
-                  <span>{wordCount} words</span>
-                  <span>{inputText.length} chars</span>
-                  {result && <span>{result.sentences.length} sentences</span>}
-                </div>
-              </div>
+        {/* â•â•â• LEFT: Editor â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */}
+        <div className="flex-1 flex flex-col border-r border-slate-200 dark:border-zinc-800">
 
-              {/* Editor / highlighted display */}
-              {!result ? (
-                <textarea value={inputText} onChange={(e) => setInputText(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) handleCheck(); }}
-                  placeholder="Paste or type your text here to check grammar, spelling, punctuation, sentence structure, and style…"
-                  className="flex-1 w-full p-6 text-[15px] leading-[1.9] resize-none outline-none bg-transparent text-slate-800 dark:text-zinc-200 placeholder:text-slate-400 dark:placeholder:text-zinc-600 font-[inherit]" />
-              ) : (
-                <div className="flex-1 overflow-y-auto">
-                  <div className="sticky top-0 z-10 px-4 py-2 bg-white/80 dark:bg-zinc-900/80 backdrop-blur-md border-b border-slate-100 dark:border-zinc-800/50">
-                    <div className="flex items-center gap-2">
-                      <button onClick={() => setShowCorrected(false)}
-                        className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${!showCorrected ? 'bg-slate-900 dark:bg-white text-white dark:text-zinc-900 shadow-md' : 'text-slate-500 dark:text-zinc-500 hover:bg-slate-100 dark:hover:bg-zinc-800'}`}>
-                        Original + Issues
-                      </button>
-                      <button onClick={() => setShowCorrected(true)}
-                        className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${showCorrected ? 'bg-emerald-600 text-white shadow-md shadow-emerald-500/20' : 'text-slate-500 dark:text-zinc-500 hover:bg-slate-100 dark:hover:bg-zinc-800'}`}>
-                        <CheckCircle2 className="w-3 h-3" /> Corrected
-                      </button>
-                      <div className="flex-1" />
-                      <button onClick={handleCopy}
-                        className="inline-flex items-center gap-1 px-2 py-1.5 rounded-lg text-xs font-medium text-slate-500 dark:text-zinc-500 hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors">
-                        {copied ? <Check className="w-3.5 h-3.5 text-green-500" /> : <Copy className="w-3.5 h-3.5" />}
-                        {copied ? 'Copied' : 'Copy'}
-                      </button>
-                      <button onClick={() => setResult(null)}
-                        className="inline-flex items-center gap-1 px-2 py-1.5 rounded-lg text-xs font-medium text-slate-500 dark:text-zinc-500 hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors">
-                        <RefreshCw className="w-3.5 h-3.5" /> Edit
-                      </button>
-                    </div>
-                  </div>
-                  <div className="p-6">
-                    {showCorrected ? (
-                      <div className="text-[15px] leading-[1.9] text-slate-800 dark:text-zinc-200 whitespace-pre-wrap font-[inherit]">{result.output}</div>
-                    ) : (
-                      <HighlightedText text={result.input} issues={result.issues} activeIdx={activeIssue} onClick={setActiveIssue} />
-                    )}
-                  </div>
-                </div>
+          {/* Toolbar */}
+          <div className="flex items-center justify-between px-6 py-2 border-b border-slate-100 dark:border-zinc-800/60 bg-white/50 dark:bg-zinc-900/30">
+            <div className="flex items-center gap-1">
+              <button onClick={handlePaste} className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-md text-xs font-medium text-slate-500 dark:text-zinc-400 hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors">
+                <ClipboardPaste className="w-3.5 h-3.5" /> Paste
+              </button>
+              <button onClick={handleClear} className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-md text-xs font-medium text-slate-500 dark:text-zinc-400 hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors">
+                <Eraser className="w-3.5 h-3.5" /> Clear
+              </button>
+              <button onClick={() => { setInputText(EXAMPLE); setResult(null); }}
+                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-md text-xs font-medium text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/20 transition-colors">
+                <Sparkles className="w-3.5 h-3.5" /> Try example
+              </button>
+              {result && (
+                <>
+                  <div className="w-px h-4 bg-slate-200 dark:bg-zinc-700 mx-1" />
+                  <button onClick={() => setShowCorrected(false)}
+                    className={`inline-flex items-center gap-1 px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors
+                      ${!showCorrected ? 'bg-slate-900 dark:bg-white text-white dark:text-zinc-900' : 'text-slate-500 hover:bg-slate-100 dark:hover:bg-zinc-800'}`}>
+                    <Eye className="w-3.5 h-3.5" /> Original
+                  </button>
+                  <button onClick={() => setShowCorrected(true)}
+                    className={`inline-flex items-center gap-1 px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors
+                      ${showCorrected ? 'bg-emerald-500 text-white' : 'text-slate-500 hover:bg-slate-100 dark:hover:bg-zinc-800'}`}>
+                    <CheckCircle2 className="w-3.5 h-3.5" /> Corrected
+                  </button>
+                </>
               )}
             </div>
-            {!result && inputText.trim() && (
-              <p className="mt-2 text-center text-[11px] text-slate-400 dark:text-zinc-600">
-                Press <kbd className="px-1 py-0.5 rounded border border-slate-200 dark:border-zinc-700 text-[10px] font-mono bg-slate-100 dark:bg-zinc-800">Ctrl</kbd>+<kbd className="px-1 py-0.5 rounded border border-slate-200 dark:border-zinc-700 text-[10px] font-mono bg-slate-100 dark:bg-zinc-800">Enter</kbd> to check
-              </p>
+            <div className="flex items-center gap-3 text-[11px] text-slate-400 dark:text-zinc-600">
+              <span>{wordCount} words</span>
+              <span>{inputText.length} chars</span>
+              {result && (
+                <>
+                  <button onClick={handleCopy}
+                    className="inline-flex items-center gap-1 text-slate-500 hover:text-slate-700 dark:hover:text-zinc-300 transition-colors">
+                    {copied ? <Check className="w-3 h-3 text-green-500" /> : <Copy className="w-3 h-3" />}
+                    {copied ? 'Copied' : 'Copy'}
+                  </button>
+                  <button onClick={() => { setResult(null); setDismissed(new Set()); }}
+                    className="inline-flex items-center gap-1 text-slate-500 hover:text-slate-700 dark:hover:text-zinc-300 transition-colors">
+                    <RefreshCw className="w-3 h-3" /> Edit
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
+
+          {/* Editor area */}
+          <div className="flex-1 overflow-y-auto bg-white dark:bg-zinc-900/20">
+            {!result ? (
+              <textarea value={inputText} onChange={(e) => setInputText(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) handleCheck(); }}
+                placeholder="Start typing or paste your text hereâ€¦"
+                className="w-full h-full p-8 text-[15px] leading-[1.85] resize-none outline-none bg-transparent text-slate-800 dark:text-zinc-200 placeholder:text-slate-300 dark:placeholder:text-zinc-700" />
+            ) : (
+              <div className="p-8">
+                {showCorrected ? (
+                  <CorrectionDiff input={result.input} issues={visibleIssues} />
+                ) : (
+                  <EditorHighlight text={result.input} issues={result.issues} activeIdx={activeIssue}
+                    onClickIssue={(i) => setActiveIssue(activeIssue === i ? null : i)} />
+                )}
+              </div>
             )}
           </div>
 
-          {/* ── Right: Scores + Issues/Sentences ───────────────────────── */}
-          <div className="w-full lg:w-[400px] xl:w-[440px] flex-shrink-0 flex flex-col gap-4">
-
-            {/* Score dashboard */}
-            <div className="rounded-2xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900/50 shadow-sm p-5">
-              {result ? (
-                <div>
-                  <div className="flex items-center justify-center gap-4 mb-4">
-                    <ScoreRing score={result.scores.overall} label="Overall" size="lg" />
-                  </div>
-                  <div className="flex items-center justify-center gap-3">
-                    <ScoreRing score={result.scores.grammar} label="Grammar" size="sm" color="#ef4444" />
-                    <ScoreRing score={result.scores.naturalness} label="Natural" size="sm" color="#8b5cf6" />
-                    <ScoreRing score={result.scores.clarity} label="Clarity" size="sm" color="#3b82f6" />
-                    <ScoreRing score={result.scores.flow} label="Flow" size="sm" color="#06b6d4" />
-                  </div>
-                  <div className="mt-3 flex flex-wrap justify-center gap-1.5">
-                    <StatBadge count={result.stats.errors} severity="error" />
-                    <StatBadge count={result.stats.warnings} severity="warning" />
-                    <StatBadge count={result.stats.style} severity="style" />
-                  </div>
-                  {aiLoading && (
-                    <div className="mt-2 text-center text-[11px] text-purple-500 animate-pulse flex items-center justify-center gap-1.5">
-                      <Brain className="w-3.5 h-3.5" /> AI analyzing…
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <div className="flex flex-col items-center justify-center py-6 text-center">
-                  <div className="p-3 rounded-2xl bg-gradient-to-br from-emerald-100 to-teal-100 dark:from-emerald-950/40 dark:to-teal-950/40 mb-3">
-                    <Shield className="w-8 h-8 text-emerald-600 dark:text-emerald-400" />
-                  </div>
-                  <h3 className="text-sm font-bold text-slate-900 dark:text-white mb-1">Grammar Analysis</h3>
-                  <p className="text-[11px] text-slate-500 dark:text-zinc-500 max-w-[260px]">
-                    Paste text and click &quot;Check Grammar&quot; to analyze grammar, naturalness, clarity, and flow.
-                  </p>
-                </div>
-              )}
+          {!result && inputText.trim() && (
+            <div className="px-6 py-2 border-t border-slate-100 dark:border-zinc-800/60 text-[11px] text-slate-400 dark:text-zinc-600 text-center">
+              <kbd className="px-1.5 py-0.5 rounded border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800 text-[10px] font-mono">Ctrl+Enter</kbd> to check
             </div>
+          )}
+        </div>
 
-            {/* Tab selector: Issues / Sentences */}
-            {result && (
-              <>
-                <div className="flex items-center gap-1 bg-white dark:bg-zinc-900/50 rounded-xl border border-slate-200 dark:border-zinc-800 p-1">
-                  <button onClick={() => { setRightTab('issues'); setActiveSentence(null); }}
-                    className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold transition-all
-                      ${rightTab === 'issues' ? 'bg-slate-900 dark:bg-white text-white dark:text-zinc-900 shadow-sm' : 'text-slate-500 dark:text-zinc-500 hover:bg-slate-50 dark:hover:bg-zinc-800'}`}>
-                    <FileText className="w-3.5 h-3.5" /> Issues ({result.issues.length})
-                  </button>
-                  <button onClick={() => setRightTab('sentences')}
-                    className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold transition-all
-                      ${rightTab === 'sentences' ? 'bg-slate-900 dark:bg-white text-white dark:text-zinc-900 shadow-sm' : 'text-slate-500 dark:text-zinc-500 hover:bg-slate-50 dark:hover:bg-zinc-800'}`}>
-                    <AlignLeft className="w-3.5 h-3.5" /> Sentences ({result.sentences.length})
-                  </button>
+        {/* â•â•â• RIGHT: Sidebar â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */}
+        <div className="w-[360px] xl:w-[400px] flex-shrink-0 flex flex-col bg-white dark:bg-zinc-900/40 overflow-hidden">
+
+          {result ? (
+            <>
+              {/* Score */}
+              <div className="px-5 py-4 border-b border-slate-100 dark:border-zinc-800/60">
+                <div className="flex items-center gap-5">
+                  <ScoreCircle score={result.scores.overall} size={90} />
+                  <div className="flex-1 space-y-1.5">
+                    <ScoreBar label="Grammar" score={result.scores.grammar} color="#ef4444" />
+                    <ScoreBar label="Natural" score={result.scores.naturalness} color="#8b5cf6" />
+                    <ScoreBar label="Clarity" score={result.scores.clarity} color="#3b82f6" />
+                    <ScoreBar label="Flow" score={result.scores.flow} color="#06b6d4" />
+                  </div>
                 </div>
+              </div>
 
-                {/* Issues panel */}
-                {rightTab === 'issues' && result.issues.length > 0 && (
-                  <div className="flex-1 rounded-2xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900/50 shadow-sm overflow-hidden flex flex-col">
-                    {/* Filters */}
-                    <div className="flex items-center gap-1 px-3 py-2 border-b border-slate-100 dark:border-zinc-800/80 bg-slate-50/50 dark:bg-zinc-900/30">
-                      {(['all', 'error', 'warning', 'style'] as const).map(sev => {
-                        const cnt = sev === 'all'
-                          ? (activeSentence !== null ? result.issues.filter(i => i.sentenceIndex === activeSentence).length : result.issues.length)
-                          : (activeSentence !== null ? result.issues.filter(i => i.sentenceIndex === activeSentence && i.severity === sev).length : result.issues.filter(i => i.severity === sev).length);
-                        return (
-                          <button key={sev} onClick={() => setFilterSev(sev)}
-                            className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-all
-                              ${filterSev === sev ? 'bg-slate-900 dark:bg-white text-white dark:text-zinc-900 shadow-sm' : 'text-slate-500 dark:text-zinc-500 hover:bg-slate-100 dark:hover:bg-zinc-800'}`}>
-                            {sev === 'all' ? 'All' : SEV[sev].label} ({cnt})
-                          </button>
-                        );
-                      })}
-                      {activeSentence !== null && (
-                        <button onClick={() => setActiveSentence(null)}
-                          className="ml-auto text-[10px] text-purple-500 hover:text-purple-600 font-medium">
-                          Clear filter
-                        </button>
-                      )}
-                    </div>
-                    <div ref={issueListRef} className="flex-1 overflow-y-auto p-2.5 space-y-1.5 max-h-[calc(100vh-480px)]">
-                      {filteredIssues.map((issue, i) => {
-                        const realIdx = result.issues.indexOf(issue);
-                        return (
-                          <IssueCard key={`${issue.ruleId}-${issue.start}-${i}`} issue={issue}
-                            isActive={activeIssue === realIdx}
-                            onSelect={() => setActiveIssue(activeIssue === realIdx ? null : realIdx)}
-                            onApplyFix={(rep) => handleApplyFix(realIdx, rep)} />
-                        );
-                      })}
-                    </div>
-                  </div>
+              {/* Suggestions header */}
+              <div className="px-5 py-3 border-b border-slate-100 dark:border-zinc-800/60 flex items-center justify-between">
+                <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+                  Suggestions <span className="text-xs font-normal text-slate-400">({visibleIssues.length})</span>
+                </h3>
+                {fixableCount > 0 && (
+                  <button onClick={handleAcceptAll}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-bold
+                      bg-emerald-500 hover:bg-emerald-600 text-white transition-all">
+                    <CheckCircle2 className="w-3.5 h-3.5" /> Accept All ({fixableCount})
+                  </button>
                 )}
+              </div>
 
-                {/* Sentences panel */}
-                {rightTab === 'sentences' && (
-                  <div className="flex-1 rounded-2xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900/50 shadow-sm overflow-hidden flex flex-col">
-                    <div className="px-3 py-2 border-b border-slate-100 dark:border-zinc-800/80 bg-slate-50/50 dark:bg-zinc-900/30">
-                      <span className="text-[11px] font-semibold text-slate-700 dark:text-zinc-300">Sentence-by-Sentence Analysis</span>
-                    </div>
-                    <div className="flex-1 overflow-y-auto p-2.5 max-h-[calc(100vh-480px)]">
-                      <SentenceView sentences={result.sentences}
-                        activeSentence={activeSentence}
-                        onSentenceClick={(i) => {
-                          setActiveSentence(activeSentence === i ? null : i);
-                          setRightTab('issues');
-                        }} />
-                    </div>
-                  </div>
-                )}
-
-                {/* No issues state */}
-                {rightTab === 'issues' && filteredIssues.length === 0 && (
-                  <div className="flex-1 rounded-2xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900/50 shadow-sm flex flex-col items-center justify-center p-8 text-center">
+              {/* Cards */}
+              <div ref={issueListRef} className="flex-1 overflow-y-auto p-3 space-y-2">
+                {visibleIssues.length > 0 ? (
+                  visibleIssues.map((issue) => {
+                    const realIdx = result.issues.indexOf(issue);
+                    return (
+                      <SuggestionCard key={`${issue.ruleId}-${issue.start}-${realIdx}`}
+                        issue={issue} inputText={result.input} isActive={activeIssue === realIdx}
+                        onHover={() => setActiveIssue(realIdx)}
+                        onAccept={(rep) => handleAccept(realIdx, rep)}
+                        onDismiss={() => handleDismiss(realIdx)} />
+                    );
+                  })
+                ) : (
+                  <div className="flex flex-col items-center justify-center py-16 text-center">
                     <div className="p-3 rounded-2xl bg-green-50 dark:bg-green-950/30 mb-3">
                       <CheckCircle2 className="w-10 h-10 text-green-500" />
                     </div>
-                    <h3 className="text-sm font-bold text-slate-900 dark:text-white mb-1">
-                      {activeSentence !== null ? 'No issues in this sentence' : 'No issues found'}
-                    </h3>
-                    <p className="text-[11px] text-slate-500 dark:text-zinc-500">
-                      {activeSentence !== null ? 'This sentence looks correct!' : 'Your text looks grammatically correct!'}
-                    </p>
+                    <h3 className="text-sm font-bold text-slate-900 dark:text-white mb-1">Looking good!</h3>
+                    <p className="text-xs text-slate-500 dark:text-zinc-500">No more suggestions.</p>
                   </div>
                 )}
-              </>
-            )}
-
-            {/* How it works panel (no result) */}
-            {!result && (
-              <div className="rounded-2xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900/50 shadow-sm p-5">
-                <h3 className="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider mb-3">What we analyze</h3>
-                <div className="space-y-2">
-                  {[
-                    { icon: '🔤', label: 'Spelling & Abbreviations', desc: 'Dr., U.S., confusion pairs, 50+ misspellings' },
-                    { icon: '📐', label: 'Deep Grammar', desc: 'Subject-verb agreement through prepositional phrases' },
-                    { icon: '✏️', label: 'Punctuation', desc: 'Spacing, commas, abbreviation-aware sentence splitting' },
-                    { icon: '🧱', label: 'Sentence Structure', desc: 'Fragments, run-ons, comma splices, passive voice' },
-                    { icon: '🔄', label: 'Consistency', desc: 'Tense consistency, pronoun case, word order' },
-                    { icon: '🌊', label: 'Naturalness & Flow', desc: 'Vocabulary diversity, sentence variety, transitions' },
-                    { icon: '🧠', label: 'AI Highlights', desc: 'Optional AI detection (no rewriting, errors only)' },
-                  ].map(({ icon, label, desc }) => (
-                    <div key={label} className="flex items-start gap-2.5">
-                      <span className="text-sm mt-0.5">{icon}</span>
-                      <div>
-                        <p className="text-xs font-semibold text-slate-700 dark:text-zinc-300">{label}</p>
-                        <p className="text-[10px] text-slate-500 dark:text-zinc-500">{desc}</p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
               </div>
-            )}
-          </div>
+            </>
+          ) : (
+            /* â”€â”€ Empty state â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+            <div className="flex-1 flex flex-col items-center justify-center p-8 text-center">
+              <div className="p-4 rounded-2xl bg-gradient-to-br from-emerald-50 to-teal-50 dark:from-emerald-950/40 dark:to-teal-950/40 mb-4">
+                <Shield className="w-10 h-10 text-emerald-500" />
+              </div>
+              <h3 className="text-base font-bold text-slate-900 dark:text-white mb-2">Grammar Checker</h3>
+              <p className="text-xs text-slate-500 dark:text-zinc-500 max-w-[280px] leading-relaxed mb-6">
+                Paste your text and click &ldquo;Check&rdquo; to get grammar, spelling, and style suggestions.
+              </p>
+              <div className="w-full space-y-1.5 text-left">
+                {[
+                  { icon: 'ðŸ”¤', label: 'Correctness', desc: 'Spelling, grammar, subject-verb agreement' },
+                  { icon: 'ðŸ’¡', label: 'Clarity', desc: 'Sentence structure, fragments, run-ons' },
+                  { icon: 'âœ¨', label: 'Engagement', desc: 'Passive voice, word choice, flow' },
+                  { icon: 'ðŸ§ ', label: 'AI Detection', desc: 'Optional LLM-powered error detection' },
+                ].map(({ icon, label, desc }) => (
+                  <div key={label} className="flex items-start gap-2.5 p-2.5 rounded-lg">
+                    <span className="text-base">{icon}</span>
+                    <div>
+                      <p className="text-xs font-semibold text-slate-700 dark:text-zinc-300">{label}</p>
+                      <p className="text-[10px] text-slate-500 dark:text-zinc-500">{desc}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>

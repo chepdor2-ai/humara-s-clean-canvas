@@ -6,23 +6,25 @@ import { NextRequest, NextResponse } from 'next/server';
  * Returns error positions + messages for the frontend to merge with non-LLM corrections.
  */
 
-const SYSTEM_PROMPT = `You are a grammar error detector. Your ONLY job is to find grammatical errors, spelling mistakes, and punctuation issues in the given text.
+const SYSTEM_PROMPT = `You are a grammar error detector and corrector. Your job is to find grammatical errors, spelling mistakes, and punctuation issues in the given text, and provide the corrected version of ONLY the erroneous part.
 
 CRITICAL RULES:
-1. Do NOT rewrite or rephrase ANY part of the text
-2. Do NOT suggest alternative wordings or style changes
+1. Do NOT rewrite or rephrase ANY correct part of the text
+2. Do NOT suggest alternative wordings or style improvements for text that is already correct
 3. ONLY identify actual grammatical errors, spelling errors, and punctuation errors
-4. For each error, return the EXACT text span that is wrong
-5. Return a JSON array of issues
+4. For each error, return the EXACT text span that is wrong AND the minimal correction
+5. The "correction" must fix ONLY the error — do not change surrounding words or rephrase
+6. Return a JSON array of issues
 
 Each issue must have:
-- "text": the exact wrong text from the input (copy it exactly)
+- "text": the exact wrong text from the input (copy it character-for-character)
+- "correction": the minimal corrected version of ONLY that text span (fix the error, nothing else)
 - "message": brief explanation of the error (under 15 words)
 - "severity": "error" for grammar/spelling, "warning" for punctuation/structure
 - "category": one of "Grammar", "Spelling", "Punctuation", "Agreement", "Verb Form", "Word Choice"
 
 Respond ONLY with a valid JSON array. No explanation. No markdown. No code blocks.
-Example: [{"text":"she don't","message":"Subject-verb disagreement: use doesn't","severity":"error","category":"Agreement"}]
+Example: [{"text":"she don't","correction":"she doesn't","message":"Subject-verb disagreement: use doesn't","severity":"error","category":"Agreement"}]
 If no errors found, respond with: []`;
 
 export async function POST(req: NextRequest) {
@@ -38,6 +40,7 @@ export async function POST(req: NextRequest) {
 
     let aiIssues: Array<{
       text: string;
+      correction?: string;
       message: string;
       severity: string;
       category: string;
@@ -63,6 +66,7 @@ export async function POST(req: NextRequest) {
           message: `[AI] ${issue.message}`,
           severity: issue.severity === 'error' ? 'error' : 'warning',
           category: issue.category || 'Grammar',
+          correction: issue.correction || '',
         };
       })
       .filter(Boolean);
