@@ -5,7 +5,7 @@ import {
   CheckCircle2, AlertTriangle, Info, Sparkles, Copy, Check,
   ArrowRight, Eraser, ClipboardPaste, RefreshCw, Lightbulb, Zap,
   Shield, BookOpen, Brain, ChevronDown,
-  Eye, PenTool, X,
+  Eye, PenTool, X, Type, WandSparkles,
 } from 'lucide-react';
 import Link from 'next/link';
 import {
@@ -26,11 +26,19 @@ const SEV: Record<Severity, { label: string; dot: string; underline: string; cat
 type EngineMode = 'rules' | 'ai' | 'both';
 type CategoryFilter = 'all' | 'correctness' | 'clarity' | 'engagement' | 'ai';
 
-const CATEGORIES: { key: CategoryFilter; icon: string; label: string; desc: string; match: (i: Issue) => boolean }[] = [
-  { key: 'correctness', icon: '📤', label: 'Correctness', desc: 'Spelling, grammar, agreement', match: i => i.severity === 'error' && !i.aiDetected },
-  { key: 'clarity',     icon: '💡', label: 'Clarity',     desc: 'Fragments, run-ons, commas', match: i => i.severity === 'warning' && !i.aiDetected },
-  { key: 'engagement',  icon: '✨', label: 'Engagement',  desc: 'Passive voice, word choice',  match: i => i.severity === 'style' && !i.aiDetected },
-  { key: 'ai',          icon: '🧠', label: 'AI Detection', desc: 'LLM-powered detection',       match: i => !!i.aiDetected },
+const CATEGORY_ICONS: Record<CategoryFilter, React.ReactNode> = {
+  all:          <CheckCircle2 className="w-4 h-4" />,
+  correctness:  <Type className="w-4 h-4" />,
+  clarity:      <Lightbulb className="w-4 h-4" />,
+  engagement:   <Sparkles className="w-4 h-4" />,
+  ai:           <Brain className="w-4 h-4" />,
+};
+
+const CATEGORIES: { key: CategoryFilter; label: string; desc: string; match: (i: Issue) => boolean }[] = [
+  { key: 'correctness', label: 'Correctness', desc: 'Spelling, grammar, agreement', match: i => i.severity === 'error' && !i.aiDetected },
+  { key: 'clarity',     label: 'Clarity',     desc: 'Fragments, run-ons, commas', match: i => i.severity === 'warning' && !i.aiDetected },
+  { key: 'engagement',  label: 'Engagement',  desc: 'Passive voice, word choice',  match: i => i.severity === 'style' && !i.aiDetected },
+  { key: 'ai',          label: 'AI Detection', desc: 'LLM-powered detection',       match: i => !!i.aiDetected },
 ];
 
 /* â”€â”€ Score circle (Grammarly-style single ring) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
@@ -414,8 +422,34 @@ export default function GrammarPage() {
     }
     setInputText(text);
     const r = new GrammarChecker().check(text);
-    setResult(r); setActiveIssue(null); setDismissed(new Set());
+    setResult(r); setActiveIssue(null); setDismissed(new Set()); setCategoryFilter('all');
   }, [result, inputText, dismissed]);
+
+  const handleCorrectAll = useCallback(() => {
+    if (!result) return;
+    // Iteratively fix all auto-fixable issues until none remain
+    let text = inputText;
+    let iterations = 0;
+    const maxIterations = 10;
+    while (iterations < maxIterations) {
+      const r = new GrammarChecker().check(text);
+      const fixable = r.issues
+        .filter(issue => issue.replacements.length > 0 && issue.confidence >= 0.7)
+        .sort((a, b) => b.start - a.start);
+      if (fixable.length === 0) {
+        setInputText(text);
+        setResult(r); setActiveIssue(null); setDismissed(new Set()); setCategoryFilter('all');
+        return;
+      }
+      for (const issue of fixable) {
+        text = text.slice(0, issue.start) + issue.replacements[0] + text.slice(issue.end);
+      }
+      iterations++;
+    }
+    const finalResult = new GrammarChecker().check(text);
+    setInputText(text);
+    setResult(finalResult); setActiveIssue(null); setDismissed(new Set()); setCategoryFilter('all');
+  }, [result, inputText]);
 
   /* â”€â”€ Derived data â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
@@ -514,10 +548,10 @@ export default function GrammarPage() {
       <div className="max-w-[1800px] mx-auto flex min-h-[calc(100vh-57px)]">
 
         {/* â•â•â• LEFT: Editor â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */}
-        <div className="flex-1 flex flex-col border-r border-slate-200 dark:border-zinc-800">
+        <div className="flex-1 flex flex-col border-b lg:border-b-0 lg:border-r border-slate-200 dark:border-zinc-800">
 
           {/* Toolbar */}
-          <div className="flex items-center justify-between px-6 py-2 border-b border-slate-100 dark:border-zinc-800/60 bg-white/50 dark:bg-zinc-900/30">
+          <div className="flex flex-wrap items-center justify-between gap-2 px-4 sm:px-6 py-2 border-b border-slate-100 dark:border-zinc-800/60 bg-white/50 dark:bg-zinc-900/30">
             <div className="flex items-center gap-1">
               <button onClick={handlePaste} className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-md text-xs font-medium text-slate-500 dark:text-zinc-400 hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors">
                 <ClipboardPaste className="w-3.5 h-3.5" /> Paste
@@ -591,7 +625,7 @@ export default function GrammarPage() {
         </div>
 
         {/* â•â•â• RIGHT: Sidebar â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */}
-        <div className="w-[360px] xl:w-[400px] flex-shrink-0 flex flex-col bg-white dark:bg-zinc-900/40 overflow-hidden">
+        <div className="w-full lg:w-[360px] xl:w-[400px] flex-shrink-0 flex flex-col bg-white dark:bg-zinc-900/40 overflow-hidden">
 
           {result ? (
             <>
@@ -625,7 +659,7 @@ export default function GrammarPage() {
                               : 'opacity-40 cursor-default'
                           }`}
                         disabled={count === 0 && !active}>
-                        <span className="text-base leading-none">{cat.icon}</span>
+                        <span className={`leading-none ${active ? 'text-emerald-600 dark:text-emerald-400' : count > 0 ? 'text-slate-500 dark:text-zinc-400' : 'text-slate-300 dark:text-zinc-600'}`}>{CATEGORY_ICONS[cat.key]}</span>
                         <span className={`text-[10px] font-bold leading-tight ${
                           active ? 'text-emerald-700 dark:text-emerald-400' : 'text-slate-600 dark:text-zinc-400'
                         }`}>{count}</span>
@@ -650,11 +684,18 @@ export default function GrammarPage() {
                     </button>
                   )}
                   {fixableCount > 0 && (
-                    <button onClick={handleAcceptAll}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-bold
-                        bg-emerald-500 hover:bg-emerald-600 text-white transition-all">
-                      <CheckCircle2 className="w-3.5 h-3.5" /> Accept All ({fixableCount})
-                    </button>
+                    <>
+                      <button onClick={handleCorrectAll}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-bold
+                          bg-slate-800 hover:bg-slate-900 dark:bg-white dark:hover:bg-zinc-200 text-white dark:text-zinc-900 transition-all">
+                        <WandSparkles className="w-3.5 h-3.5" /> Correct All
+                      </button>
+                      <button onClick={handleAcceptAll}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-bold
+                          bg-emerald-500 hover:bg-emerald-600 text-white transition-all">
+                        <CheckCircle2 className="w-3.5 h-3.5" /> Accept All ({fixableCount})
+                      </button>
+                    </>
                   )}
                 </div>
               </div>
@@ -698,17 +739,12 @@ export default function GrammarPage() {
                 Paste your text and click &ldquo;Check&rdquo; to get grammar, spelling, and style suggestions.
               </p>
               <div className="w-full space-y-1.5 text-left">
-                {[
-                  { icon: 'ðŸ”¤', label: 'Correctness', desc: 'Spelling, grammar, subject-verb agreement' },
-                  { icon: 'ðŸ’¡', label: 'Clarity', desc: 'Sentence structure, fragments, run-ons' },
-                  { icon: 'âœ¨', label: 'Engagement', desc: 'Passive voice, word choice, flow' },
-                  { icon: 'ðŸ§ ', label: 'AI Detection', desc: 'Optional LLM-powered error detection' },
-                ].map(({ icon, label, desc }) => (
-                  <div key={label} className="flex items-start gap-2.5 p-2.5 rounded-lg">
-                    <span className="text-base">{icon}</span>
+{CATEGORIES.map(cat => (
+                  <div key={cat.key} className="flex items-start gap-2.5 p-2.5 rounded-lg">
+                    <span className="text-emerald-500 mt-0.5">{CATEGORY_ICONS[cat.key]}</span>
                     <div>
-                      <p className="text-xs font-semibold text-slate-700 dark:text-zinc-300">{label}</p>
-                      <p className="text-[10px] text-slate-500 dark:text-zinc-500">{desc}</p>
+                      <p className="text-xs font-semibold text-slate-700 dark:text-zinc-300">{cat.label}</p>
+                      <p className="text-[10px] text-slate-500 dark:text-zinc-500">{cat.desc}</p>
                     </div>
                   </div>
                 ))}

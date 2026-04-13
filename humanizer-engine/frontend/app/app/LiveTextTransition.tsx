@@ -25,16 +25,16 @@ export interface Props {
 const STAGE_ORDER = ['original', 'Engine', 'Sentence Processing', 'Restructuring', 'Polishing', 'done'];
 const CYCLE_STAGE_RE = /^Cycle\s+(\d+)\/(\d+)$/i;
 const CYCLE_TEXT_COLORS = [
-  'text-rose-400',
-  'text-orange-400',
-  'text-amber-400',
-  'text-yellow-300',
-  'text-lime-300',
-  'text-green-300',
-  'text-emerald-300',
-  'text-teal-300',
-  'text-cyan-300',
-  'text-emerald-400',
+  'text-rose-600 dark:text-rose-400',
+  'text-orange-600 dark:text-orange-400',
+  'text-amber-600 dark:text-amber-400',
+  'text-yellow-600 dark:text-yellow-300',
+  'text-lime-600 dark:text-lime-300',
+  'text-green-600 dark:text-green-300',
+  'text-emerald-600 dark:text-emerald-300',
+  'text-teal-600 dark:text-teal-300',
+  'text-cyan-600 dark:text-cyan-300',
+  'text-emerald-700 dark:text-emerald-400',
 ];
 
 function stageProgress(stage: string): number {
@@ -49,19 +49,19 @@ function stageProgress(stage: string): number {
 }
 
 function stageColorClass(stage: string, isDone: boolean): string {
-  if (isDone || stage === 'done') return 'text-emerald-400';
-  if (stage === 'original') return 'text-red-500/60';
+  if (isDone || stage === 'done') return 'text-emerald-700 dark:text-emerald-400';
+  if (stage === 'original') return 'text-red-500/60 dark:text-red-500/60';
 
   const cycleMatch = stage.match(CYCLE_STAGE_RE);
   if (cycleMatch) {
     const idx = Math.max(1, Number(cycleMatch[1])) - 1;
-    return CYCLE_TEXT_COLORS[Math.min(idx, CYCLE_TEXT_COLORS.length - 1)] ?? 'text-amber-400';
+    return CYCLE_TEXT_COLORS[Math.min(idx, CYCLE_TEXT_COLORS.length - 1)] ?? 'text-amber-600 dark:text-amber-400';
   }
 
   const progress = stageProgress(stage);
-  if (progress < 0.5) return 'text-red-400';
-  if (progress < 0.8) return 'text-amber-400';
-  return 'text-emerald-400/70';
+  if (progress < 0.5) return 'text-red-600 dark:text-red-400';
+  if (progress < 0.8) return 'text-amber-600 dark:text-amber-400';
+  return 'text-emerald-600/70 dark:text-emerald-400/70';
 }
 
 /* ── Component ─────────────────────────────────────────────────────────── */
@@ -166,7 +166,7 @@ export default function LiveTextTransition({
 
         // Flash highlight when text changes
         const flashCls = isFlashing
-          ? 'bg-amber-900/30 rounded px-0.5 -mx-0.5'
+          ? 'bg-amber-100/50 dark:bg-amber-900/30 rounded px-0.5 -mx-0.5'
           : 'bg-transparent';
 
         return (
@@ -232,7 +232,7 @@ export default function LiveTextTransition({
         {isDone ? (
           <div className="flex items-center gap-2">
             <Check className="w-3.5 h-3.5 text-emerald-500" />
-            <span className="text-xs font-semibold text-emerald-400">
+            <span className="text-xs font-semibold text-emerald-600 dark:text-emerald-400">
               Humanization complete
             </span>
           </div>

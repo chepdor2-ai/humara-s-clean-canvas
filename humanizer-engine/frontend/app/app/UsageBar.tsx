@@ -121,18 +121,18 @@ export default function UsageBar() {
   const barColor = pct > 90 ? 'bg-red-500' : pct > 70 ? 'bg-amber-500' : 'bg-brand-500';
 
   return (
-    <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
       <div className="flex items-center gap-2">
-        <span className="text-sm font-extrabold text-brand-400 bg-brand-950/30 px-2.5 py-1 rounded-lg border border-brand-800/40">{usage.planName}</span>
-        {usage.daysRemaining > 0 && <span className="text-[10px] text-zinc-500">{usage.daysRemaining}d left</span>}
+        <span className="text-xs sm:text-sm font-extrabold text-emerald-600 dark:text-brand-400 bg-emerald-50 dark:bg-brand-950/30 px-2 sm:px-2.5 py-0.5 sm:py-1 rounded-lg border border-emerald-200 dark:border-brand-800/40">{usage.planName}</span>
+        {usage.daysRemaining > 0 && <span className="text-[10px] text-slate-500 dark:text-zinc-500">{usage.daysRemaining}d left</span>}
       </div>
-      <div className="flex items-center gap-1.5 min-w-[200px]">
-        <span className="text-[9px] font-semibold text-zinc-500 uppercase">Words</span>
+      <div className="flex items-center gap-1.5 min-w-[140px] sm:min-w-[200px]">
+        <span className="text-[9px] font-semibold text-slate-500 dark:text-zinc-500 uppercase">Words</span>
         <div className="flex-1 h-1.5 bg-slate-100 dark:bg-zinc-800/50 rounded-full overflow-hidden">
           <div className={`h-full rounded-full transition-all duration-700 ${barColor}`}
             style={{ width: `${pct}%` }} />
         </div>
-        <span className="text-[9px] text-zinc-500 tabular-nums">{wordsCount.toLocaleString()}/{usage.wordsLimit.toLocaleString()}</span>
+        <span className="text-[9px] text-slate-500 dark:text-zinc-500 tabular-nums">{wordsCount.toLocaleString()}/{usage.wordsLimit.toLocaleString()}</span>
       </div>
     </div>
   );

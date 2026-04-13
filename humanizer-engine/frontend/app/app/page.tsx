@@ -836,10 +836,10 @@ export default function EditorPage() {
       >
         <div className="stealth-top-glow pointer-events-none absolute inset-0 opacity-0 dark:opacity-70" />
         {/* Row 1: Brand + Usage + Nav */}
-        <div className="relative flex items-center justify-between px-4 sm:px-5 py-3 border-b border-slate-200 dark:border-cyan-900/30">
-          <div className="flex items-center gap-4">
-            <h1 className="text-lg font-black text-cyan-600 dark:text-cyan-100 tracking-tight">Humara Stealth</h1>
-            <div className="w-px h-4 bg-slate-300 dark:bg-cyan-900/50" />
+        <div className="relative flex flex-wrap items-center justify-between gap-2 px-4 sm:px-5 py-3 border-b border-slate-200 dark:border-cyan-900/30">
+          <div className="flex flex-wrap items-center gap-3 sm:gap-4 min-w-0">
+            <h1 className="text-base sm:text-lg font-black text-cyan-600 dark:text-cyan-100 tracking-tight whitespace-nowrap">Humara Stealth</h1>
+            <div className="w-px h-4 bg-slate-300 dark:bg-cyan-900/50 hidden sm:block" />
             <UsageBar />
           </div>
           <div className="flex items-center gap-1.5">
