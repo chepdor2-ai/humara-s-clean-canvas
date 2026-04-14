@@ -34,14 +34,23 @@ export async function GET(request: Request) {
       if (email && plan) {
         const supabase = createServiceClient();
 
-        // Find user by email
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('id')
-          .eq('email', email)
-          .single();
+        // Find user by email via auth admin API (profiles table has no email column)
+        let userId: string | null = null;
 
-        if (profile) {
+        // Method 1: RPC function (works if migration has been applied)
+        const { data: rpcUser } = await supabase.rpc('get_user_id_by_email', { p_email: email });
+        if (rpcUser) {
+          userId = rpcUser;
+        }
+
+        // Method 2: Fallback to auth admin API
+        if (!userId) {
+          const { data: userList } = await supabase.auth.admin.listUsers({ page: 1, perPage: 1000 });
+          const targetUser = userList?.users?.find((u: { email?: string }) => u.email?.toLowerCase() === email.toLowerCase());
+          if (targetUser) userId = targetUser.id;
+        }
+
+        if (userId) {
           // Find the plan
           const { data: planRow } = await supabase
             .from('plans')
@@ -54,25 +63,35 @@ export async function GET(request: Request) {
             const periodEnd = new Date(paid_at || new Date());
             periodEnd.setMonth(periodEnd.getMonth() + periodMonths);
 
-            // Upsert subscription
+            // Deactivate existing active subscriptions
             await supabase
               .from('subscriptions')
-              .upsert({
-                user_id: profile.id,
+              .update({ status: 'expired', updated_at: new Date().toISOString() })
+              .eq('user_id', userId)
+              .eq('status', 'active');
+
+            // Insert new active subscription
+            const { error: subError } = await supabase
+              .from('subscriptions')
+              .insert({
+                user_id: userId,
                 plan_id: planRow.id,
-                plan_name: planRow.name,
                 status: 'active',
                 current_period_start: paid_at || new Date().toISOString(),
                 current_period_end: periodEnd.toISOString(),
                 stripe_subscription_id: `paystack_${reference}`,
-              }, { onConflict: 'user_id' });
+              });
+
+            if (subError) console.error('Subscription insert failed:', subError.message);
 
             // Update profile plan_id
             await supabase
               .from('profiles')
               .update({ plan_id: planRow.id })
-              .eq('id', profile.id);
+              .eq('id', userId);
           }
+        } else {
+          console.error('No user found for email:', email);
         }
       }
 

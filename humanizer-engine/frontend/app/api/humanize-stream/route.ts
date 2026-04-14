@@ -10,7 +10,7 @@ import { expandContractions } from '@/lib/humanize-transforms';
 import { removeEmDashes, fixOutOfContextSynonyms, validateCollocations, replaceCollocations, compressPhrases } from '@/lib/engine/v13-shared-techniques';
 import { humanize } from '@/lib/engine/humanizer';
 import { ghostProHumanize } from '@/lib/engine/ghost-pro';
-import { llmHumanize, deepAICleanOneSentence } from '@/lib/engine/llm-humanizer';
+import { llmHumanize, deepAICleanOneSentence, restructureSentence } from '@/lib/engine/llm-humanizer';
 import { premiumHumanize } from '@/lib/engine/premium-humanizer';
 import { humanizeV11 } from '@/lib/engine/v11';
 import { humaraHumanize } from '@/lib/humara';
@@ -758,7 +758,7 @@ export async function POST(req: Request) {
             switch (eng) {
               case 'ghost_pro_wiki':
                 phases = [
-                  { name: 'Wikipedia', type: 'emit' },
+                  { name: 'Restructuring', type: 'async', fn: (s) => restructureSentence(s) },
                   { name: 'Humara 2.0', type: 'sync', fn: (s) => runHumara20(s) },
                   { name: 'Nuru 2.0', type: 'nuru', passes: 10 },
                   { name: 'Deep Non-LLM Clean', type: 'sync', fn: (s) => deepNonLLMClean(s) },
@@ -767,7 +767,7 @@ export async function POST(req: Request) {
                 break;
               case 'ninja_1':
                 phases = [
-                  { name: 'Ninja', type: 'emit' },                                         // Phase 1: LLM student-persona rewrite
+                  { name: 'Restructuring', type: 'async', fn: (s) => restructureSentence(s) },     // Phase 1: LLM deep sentence restructuring
                   { name: 'Deep AI Clean', type: 'async', fn: (s) => deepAICleanOneSentence(s) }, // Phase 2: LLM residual AI signal strip
                   { name: 'Deep Non-LLM Clean', type: 'sync', fn: (s) => deepNonLLMClean(s) },    // Phase 3: Rule-based AI vocabulary/phrase kill
                   { name: 'Humara 2.0', type: 'sync', fn: (s) => runHumara20(s) },                // Phase 4: Heavy rule-based 6-phase engine
@@ -778,7 +778,7 @@ export async function POST(req: Request) {
                 break;
               case 'oxygen':
                 phases = [
-                  { name: 'Humara 2.0', type: 'emit' },
+                  { name: 'Restructuring', type: 'async', fn: (s) => restructureSentence(s) },
                   { name: 'Nuru 2.0', type: 'nuru', passes: 10 },
                   { name: 'Deep Non-LLM Clean', type: 'sync', fn: (s) => deepNonLLMClean(s) },
                   { name: 'Final Smooth & Grammar', type: 'sync', fn: (s) => finalSmoothGrammar(s) },
@@ -786,7 +786,7 @@ export async function POST(req: Request) {
                 break;
               case 'nuru_v2':
                 phases = [
-                  { name: 'Nuru 2.0', type: 'emit' },
+                  { name: 'Restructuring', type: 'async', fn: (s) => restructureSentence(s) },
                   { name: 'Deep Clean', type: 'nuru', passes: 9 },
                   { name: 'Deep Non-LLM Clean', type: 'sync', fn: (s) => deepNonLLMClean(s) },
                   { name: 'Final Smooth & Grammar', type: 'sync', fn: (s) => finalSmoothGrammar(s) },
@@ -794,7 +794,7 @@ export async function POST(req: Request) {
                 break;
               case 'humara_v3_3':
                 phases = [
-                  { name: 'Humara 2.4', type: 'emit' },
+                  { name: 'Restructuring', type: 'async', fn: (s) => restructureSentence(s) },
                   { name: 'Nuru 2.0', type: 'nuru', passes: 10 },
                   { name: 'Deep Non-LLM Clean', type: 'sync', fn: (s) => deepNonLLMClean(s) },
                   { name: 'Final Smooth & Grammar', type: 'sync', fn: (s) => finalSmoothGrammar(s) },

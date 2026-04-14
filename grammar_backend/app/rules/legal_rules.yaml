@@ -1,0 +1,80 @@
+rules:
+  - id: legal-001
+    name: section_symbol_spacing
+    pattern: '§(\d)'
+    replacement: '§ \1'
+    category: spacing
+    description: "Add space after section symbol"
+    priority: 70
+    confidence: 0.95
+    domain: [legal]
+
+  - id: legal-002
+    name: supra_note_format
+    pattern: '\bsupra,\s*note\b'
+    replacement: 'supra note'
+    category: abbreviation
+    description: "Correct 'supra, note' to 'supra note'"
+    priority: 65
+    confidence: 0.90
+    domain: [legal]
+
+  - id: legal-003
+    name: id_italicize_hint
+    pattern: '\bId\.'
+    replacement: 'Id.'
+    category: abbreviation
+    description: "Flag Id. for italicization (advisory)"
+    priority: 40
+    confidence: 0.70
+    domain: [legal]
+
+  - id: legal-004
+    name: herein_after
+    pattern: '\bherein\s+after\b'
+    replacement: 'hereinafter'
+    category: grammar
+    description: "Merge 'herein after' into 'hereinafter'"
+    priority: 65
+    confidence: 0.92
+    domain: [legal]
+
+  - id: legal-005
+    name: there_of
+    pattern: '\bthere\s+of\b'
+    replacement: 'thereof'
+    category: grammar
+    description: "Merge 'there of' into 'thereof'"
+    priority: 65
+    confidence: 0.90
+    domain: [legal]
+
+  - id: legal-006
+    name: where_as
+    pattern: '\bwhere\s+as\b'
+    replacement: 'whereas'
+    category: grammar
+    description: "Merge 'where as' into 'whereas'"
+    priority: 65
+    confidence: 0.90
+    domain: [legal]
+
+  - id: legal-007
+    name: article_capitalization
+    pattern: '\barticle (\d)'
+    replacement: 'Article \1'
+    category: capitalization
+    description: "Capitalize 'article' before a number"
+    priority: 55
+    confidence: 0.85
+    domain: [legal]
+
+  - id: legal-008
+    name: clause_capitalization
+    pattern: '\bclause (\d)'
+    replacement: 'Clause \1'
+    category: capitalization
+    description: "Capitalize 'clause' before a number"
+    priority: 55
+    confidence: 0.85
+    domain: [legal]

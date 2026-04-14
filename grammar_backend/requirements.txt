@@ -1,0 +1,21 @@
+# ── Core ──
+fastapi>=0.115,<1.0
+uvicorn[standard]>=0.30
+pydantic>=2.5
+pydantic-settings>=2.1
+
+# ── Rules ──
+pyyaml>=6.0
+
+# ── ML (optional — install for Phase 2) ──
+# torch>=2.1
+# transformers>=4.38
+# onnxruntime>=1.17
+
+# ── Cache (optional) ──
+# redis>=5.0
+
+# ── Testing ──
+pytest>=8.0
+pytest-asyncio>=0.23
+httpx>=0.27

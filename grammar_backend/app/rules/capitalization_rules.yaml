@@ -1,0 +1,52 @@
+rules:
+  - id: cap-001
+    name: capitalize_after_period
+    pattern: '(?<=\. )([a-z])'
+    replacement: '\U\1'
+    category: capitalization
+    description: "Capitalize first letter after a period"
+    priority: 70
+    confidence: 0.92
+    block_if_protected_span: true
+    domain: [general]
+
+  - id: cap-002
+    name: capitalize_after_question
+    pattern: '(?<=\? )([a-z])'
+    replacement: '\U\1'
+    category: capitalization
+    description: "Capitalize first letter after a question mark"
+    priority: 70
+    confidence: 0.92
+    domain: [general]
+
+  - id: cap-003
+    name: capitalize_after_exclamation
+    pattern: '(?<=! )([a-z])'
+    replacement: '\U\1'
+    category: capitalization
+    description: "Capitalize first letter after an exclamation mark"
+    priority: 70
+    confidence: 0.92
+    domain: [general]
+
+  - id: cap-004
+    name: capitalize_sentence_start
+    pattern: '(?:^|\n)([a-z])'
+    replacement: '\U\1'
+    category: capitalization
+    description: "Capitalize the first letter of a line/paragraph"
+    priority: 65
+    confidence: 0.88
+    block_if_protected_span: true
+    domain: [general]
+
+  - id: cap-005
+    name: lowercase_i
+    pattern: '\b(?<![A-Z])i\b(?!\.)'
+    replacement: 'I'
+    category: capitalization
+    description: "Capitalize standalone pronoun 'i'"
+    priority: 80
+    confidence: 0.97
+    domain: [general]

@@ -12,6 +12,7 @@ let OXYGEN3_API_URL = process.env.OXYGEN3_API_URL || 'http://localhost:7860';
 if (OXYGEN3_API_URL && !OXYGEN3_API_URL.startsWith('http')) {
   OXYGEN3_API_URL = `https://${OXYGEN3_API_URL}`;
 }
+console.log(`[oxygen3] API URL resolved to: ${OXYGEN3_API_URL}`);
 
 export interface Oxygen3Result {
   humanized: string;
@@ -34,6 +35,18 @@ async function oxygen3Call(
   mode: string,
   tone: string = 'neutral',
 ): Promise<{ humanized: string; stats: Record<string, unknown> }> {
+  // Health check — ensure the Space is awake
+  try {
+    const healthRes = await fetch(`${OXYGEN3_API_URL}/health`, { signal: AbortSignal.timeout(15_000) });
+    if (!healthRes.ok) throw new Error(`Health check failed: ${healthRes.status}`);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error(`[oxygen3] Space unavailable at ${OXYGEN3_API_URL}: ${msg}`);
+    throw new Error(`Oxygen 3.0 Space unavailable (health check failed): ${msg}`);
+  }
+
+  console.log(`[oxygen3] Calling ${OXYGEN3_API_URL}/humanize — mode=${mode}, tone=${tone}, len=${text.length}`);
+
   const response = await fetch(`${OXYGEN3_API_URL}/humanize`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

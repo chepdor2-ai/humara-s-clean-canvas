@@ -1,0 +1,81 @@
+rules:
+  - id: punct-001
+    name: double_period
+    pattern: '\.{2}(?!\.)'
+    replacement: '.'
+    category: punctuation
+    description: "Remove accidental double period (not ellipsis)"
+    priority: 90
+    confidence: 0.99
+    domain: [general]
+
+  - id: punct-002
+    name: double_comma
+    pattern: ',{2,}'
+    replacement: ','
+    category: punctuation
+    description: "Remove repeated commas"
+    priority: 90
+    confidence: 0.99
+    domain: [general]
+
+  - id: punct-003
+    name: double_exclamation
+    pattern: '!{2,}'
+    replacement: '!'
+    category: punctuation
+    description: "Reduce multiple exclamation marks to one"
+    priority: 80
+    confidence: 0.95
+    domain: [general, academic, legal]
+
+  - id: punct-004
+    name: double_question
+    pattern: '\?{2,}'
+    replacement: '?'
+    category: punctuation
+    description: "Reduce multiple question marks to one"
+    priority: 80
+    confidence: 0.95
+    domain: [general, academic, legal]
+
+  - id: punct-005
+    name: comma_before_period
+    pattern: ',\.'
+    replacement: '.'
+    category: punctuation
+    description: "Remove comma immediately before a period"
+    priority: 85
+    confidence: 0.98
+    domain: [general]
+
+  - id: punct-006
+    name: semicolon_comma
+    pattern: ';,'
+    replacement: ';'
+    category: punctuation
+    description: "Remove comma after semicolon"
+    priority: 85
+    confidence: 0.98
+    domain: [general]
+
+  - id: punct-007
+    name: missing_space_after_period
+    pattern: '\.([A-Z])'
+    replacement: '. \1'
+    category: punctuation
+    description: "Insert space after period before uppercase letter"
+    priority: 75
+    confidence: 0.90
+    block_if_protected_span: true
+    domain: [general]
+
+  - id: punct-008
+    name: missing_space_after_comma
+    pattern: ',([a-zA-Z])'
+    replacement: ', \1'
+    category: punctuation
+    description: "Insert space after comma"
+    priority: 75
+    confidence: 0.90
+    domain: [general]

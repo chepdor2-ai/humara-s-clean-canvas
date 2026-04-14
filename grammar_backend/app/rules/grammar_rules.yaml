@@ -1,0 +1,152 @@
+rules:
+  # ── Repeated words ──
+
+  - id: gram-001
+    name: repeated_word
+    pattern: '\b(\w{2,})\s+\1\b'
+    replacement: '\1'
+    category: grammar
+    description: "Remove accidentally repeated word (e.g., 'the the' → 'the')"
+    priority: 85
+    confidence: 0.92
+    block_if_protected_span: true
+    domain: [general]
+
+  - id: gram-002
+    name: repeated_the
+    pattern: '\b[Tt]he [Tt]he\b'
+    replacement: 'the'
+    category: grammar
+    description: "Remove repeated 'the' (case-insensitive)"
+    priority: 88
+    confidence: 0.95
+    block_if_protected_span: true
+    domain: [general]
+
+  - id: gram-002b
+    name: repeated_common_words
+    pattern: '\b([Aa]nd|[Ii]n|[Oo]f|[Ff]or|[Ii]s|[Tt]hat|[Tt]his|[Ww]ith) \1\b'
+    replacement: '\1'
+    category: grammar
+    description: "Remove repeated common function words"
+    priority: 88
+    confidence: 0.95
+    block_if_protected_span: true
+    domain: [general]
+
+  # ── Common word confusions ──
+
+  - id: gram-003
+    name: its_its
+    pattern: '\bit''s (\w+(?:s|ing|ed|tion|ment|ness))\b'
+    replacement: "its \\1"
+    category: grammar
+    description: "Flag possible 'it's' (it is) vs 'its' (possessive) before noun-like words"
+    priority: 50
+    confidence: 0.60
+    block_if_protected_span: true
+    enabled: false
+    domain: [general]
+
+  - id: gram-004
+    name: could_of
+    pattern: '\b(could|would|should|must|might) of\b'
+    replacement: '\1 have'
+    category: grammar
+    description: "Correct 'could of' to 'could have'"
+    priority: 80
+    confidence: 0.95
+    block_if_protected_span: true
+    domain: [general]
+
+  - id: gram-005
+    name: then_than_comparative
+    pattern: '\b(more|less|better|worse|greater|fewer|higher|lower|larger|smaller|faster|slower|bigger|older|younger|stronger|weaker) then\b'
+    replacement: '\1 than'
+    category: grammar
+    description: "Use 'than' not 'then' in comparisons"
+    priority: 78
+    confidence: 0.92
+    block_if_protected_span: true
+    domain: [general]
+
+  - id: gram-006
+    name: alot_to_a_lot
+    pattern: '\balot\b'
+    replacement: 'a lot'
+    category: grammar
+    description: "Correct 'alot' to 'a lot'"
+    priority: 85
+    confidence: 0.98
+    block_if_protected_span: true
+    domain: [general]
+
+  - id: gram-007
+    name: irregardless
+    pattern: '\b[Ii]rregardless\b'
+    replacement: 'regardless'
+    category: grammar
+    description: "Replace 'irregardless' with 'regardless'"
+    priority: 70
+    confidence: 0.90
+    block_if_protected_span: true
+    domain: [general, academic]
+
+  # ── Abbreviation formatting ──
+
+  - id: gram-008
+    name: etc_period
+    pattern: '\betc(?!\.)\b'
+    replacement: 'etc.'
+    category: abbreviation
+    description: "Add period after 'etc'"
+    priority: 75
+    confidence: 0.93
+    block_if_protected_span: true
+    domain: [general]
+
+  - id: gram-009
+    name: vs_period
+    pattern: '\bvs(?!\.)\b'
+    replacement: 'vs.'
+    category: abbreviation
+    description: "Add period after 'vs'"
+    priority: 70
+    confidence: 0.88
+    block_if_protected_span: true
+    domain: [general]
+
+  - id: gram-010
+    name: approx_format
+    pattern: '\bapprox(?!\.|\w)'
+    replacement: 'approx.'
+    category: abbreviation
+    description: "Add period after 'approx'"
+    priority: 65
+    confidence: 0.85
+    block_if_protected_span: true
+    domain: [general, academic]
+
+  # ── Missing words / structure ──
+
+  - id: gram-011
+    name: comma_splice_and
+    pattern: ', (and|but|or|so|yet) ,'
+    replacement: ', \1'
+    category: punctuation
+    description: "Remove extra comma after conjunction in comma splice"
+    priority: 72
+    confidence: 0.88
+    block_if_protected_span: true
+    domain: [general]
+
+  - id: gram-012
+    name: double_conjunction
+    pattern: '\b(and|but|or) (and|but|or)\b'
+    replacement: '\2'
+    category: grammar
+    description: "Remove duplicate conjunctions"
+    priority: 82
+    confidence: 0.90
+    block_if_protected_span: true
+    domain: [general]

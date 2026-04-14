@@ -1,0 +1,91 @@
+rules:
+  # ── Subject-verb agreement (common patterns) ──
+
+  - id: agree-001
+    name: there_is_plural
+    pattern: '\b[Tt]here is (\w+(?:s|es|ies))\b'
+    replacement: 'there are \1'
+    category: agreement
+    description: "Use 'there are' with plural nouns"
+    priority: 70
+    confidence: 0.82
+    block_if_protected_span: true
+    domain: [general]
+
+  - id: agree-002
+    name: he_have
+    pattern: '\b([Hh]e|[Ss]he|[Ii]t) have\b'
+    replacement: '\1 has'
+    category: agreement
+    description: "Third-person singular requires 'has' not 'have'"
+    priority: 75
+    confidence: 0.90
+    block_if_protected_span: true
+    domain: [general]
+
+  - id: agree-003
+    name: they_has
+    pattern: '\b([Tt]hey|[Ww]e|[Yy]ou|[Ii]) has\b'
+    replacement: '\1 have'
+    category: agreement
+    description: "Plural/first/second person requires 'have' not 'has'"
+    priority: 75
+    confidence: 0.90
+    block_if_protected_span: true
+    domain: [general]
+
+  - id: agree-004
+    name: singular_dont
+    pattern: '\b([Hh]e|[Ss]he|[Ii]t) don''t\b'
+    replacement: '\1 doesn''t'
+    category: agreement
+    description: "Third-person singular requires 'doesn't' not 'don't'"
+    priority: 73
+    confidence: 0.88
+    block_if_protected_span: true
+    domain: [general]
+
+  - id: agree-005
+    name: plural_doesnt
+    pattern: '\b([Tt]hey|[Ww]e|[Yy]ou|[Ii]) doesn''t\b'
+    replacement: '\1 don''t'
+    category: agreement
+    description: "Plural/first/second person requires 'don't' not 'doesn't'"
+    priority: 73
+    confidence: 0.88
+    block_if_protected_span: true
+    domain: [general]
+
+  - id: agree-006
+    name: singular_were
+    pattern: '\b([Hh]e|[Ss]he|[Ii]t) were\b(?! to\b)'
+    replacement: '\1 was'
+    category: agreement
+    description: "Third-person singular past tense requires 'was' not 'were' (except subjunctive)"
+    priority: 65
+    confidence: 0.78
+    block_if_protected_span: true
+    domain: [general]
+
+  - id: agree-007
+    name: each_every_plural_verb
+    pattern: '\b([Ee]ach|[Ee]very) \w+ (are|have|were)\b'
+    replacement: '\1 \2'
+    category: agreement
+    description: "Flag: 'each/every' takes singular verb (advisory only — complex fix)"
+    priority: 40
+    confidence: 0.65
+    enabled: false
+    block_if_protected_span: true
+    domain: [general]
+
+  - id: agree-008
+    name: number_disagree_is_are
+    pattern: '\b(\d{2,}|[Tt]wo|[Tt]hree|[Ff]our|[Ff]ive|[Ss]ix|[Ss]even|[Ee]ight|[Nn]ine|[Tt]en) (\w+(?:s|es)) is\b'
+    replacement: '\1 \2 are'
+    category: agreement
+    description: "Plural count + plural noun should use 'are'"
+    priority: 68
+    confidence: 0.80
+    block_if_protected_span: true
+    domain: [general]

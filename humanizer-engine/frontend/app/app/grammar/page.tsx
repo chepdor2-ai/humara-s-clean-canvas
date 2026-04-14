@@ -4,8 +4,8 @@ import { useState, useCallback, useMemo, useRef, useEffect } from 'react';
 import {
   CheckCircle2, AlertTriangle, Info, Sparkles, Copy, Check,
   ArrowRight, Eraser, ClipboardPaste, RefreshCw, Lightbulb, Zap,
-  Shield, BookOpen, Brain, ChevronDown,
-  Eye, PenTool, X, Type, WandSparkles,
+  Shield, BookOpen, Brain, ChevronDown, Server, Activity,
+  Eye, PenTool, X, Type, WandSparkles, Clock, Cpu, Globe,
 } from 'lucide-react';
 import Link from 'next/link';
 import {
@@ -23,8 +23,57 @@ const SEV: Record<Severity, { label: string; dot: string; underline: string; cat
   style:   { label: 'Style',   dot: 'bg-blue-500',  underline: 'decoration-blue-500/60',  category: 'Engagement',  strip: 'bg-blue-50 dark:bg-blue-950/20 text-blue-600 dark:text-blue-400' },
 };
 
-type EngineMode = 'rules' | 'ai' | 'both';
+type EngineMode = 'rules' | 'ai' | 'both' | 'python' | 'full';
 type CategoryFilter = 'all' | 'correctness' | 'clarity' | 'engagement' | 'ai';
+type DomainMode = 'general' | 'academic' | 'legal' | 'medical' | 'technical';
+
+/* ── Backend response types ──────────────────────────────── */
+
+interface BackendMeta {
+  request_id: string;
+  engine_version: string;
+  ml_used: boolean;
+  ml_available: boolean;
+  processing_time_ms: number;
+  rules_version: string;
+  domain: string;
+  timings: Record<string, number>;
+}
+
+interface BackendSentence {
+  index: number;
+  original: string;
+  corrected: string;
+  verdict: string;
+  confidence: number;
+  scoring_signals?: Record<string, unknown> | null;
+}
+
+interface BackendResult {
+  issues: Array<{
+    ruleId: string;
+    message: string;
+    severity: string;
+    start: number;
+    end: number;
+    replacements: string[];
+    confidence: number;
+    category: string;
+    sentenceIndex: number;
+    source: string;
+    verdict: string;
+  }>;
+  corrected_text: string;
+  stats: { total_edits: number; applied_edits: number; rejected: number; sentences: number };
+  meta: BackendMeta;
+  sentences: BackendSentence[];
+}
+
+const VERDICT_COLORS: Record<string, string> = {
+  safe: 'bg-emerald-100 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-400',
+  review: 'bg-amber-100 dark:bg-amber-950/30 text-amber-700 dark:text-amber-400',
+  rejected: 'bg-red-100 dark:bg-red-950/30 text-red-700 dark:text-red-400',
+};
 
 const CATEGORY_ICONS: Record<CategoryFilter, React.ReactNode> = {
   all:          <CheckCircle2 className="w-4 h-4" />,
@@ -254,9 +303,11 @@ function EngineSelector({ mode, onChange }: { mode: EngineMode; onChange: (m: En
   }, []);
 
   const items: Record<EngineMode, { label: string; icon: React.ReactNode; desc: string }> = {
-    rules: { label: 'Rules Engine', icon: <PenTool className="w-3.5 h-3.5" />, desc: 'Non-LLM grammar rules (17 rules)' },
-    ai:    { label: 'AI Engine',    icon: <Brain className="w-3.5 h-3.5" />,   desc: 'LLM-powered detection + correction' },
-    both:  { label: 'Rules + AI',   icon: <Zap className="w-3.5 h-3.5" />,     desc: 'Combined for maximum coverage' },
+    rules:  { label: 'Rules Engine', icon: <PenTool className="w-3.5 h-3.5" />, desc: 'Non-LLM grammar rules (17 rules)' },
+    python: { label: 'Python Engine', icon: <Server className="w-3.5 h-3.5" />, desc: '75-rule pipeline + ML + scoring' },
+    ai:     { label: 'AI Engine',    icon: <Brain className="w-3.5 h-3.5" />,   desc: 'LLM-powered detection + correction' },
+    both:   { label: 'Rules + AI',   icon: <Zap className="w-3.5 h-3.5" />,     desc: 'Combined for maximum coverage' },
+    full:   { label: 'Full Stack',   icon: <Cpu className="w-3.5 h-3.5" />,     desc: 'All engines: Rules + Python + AI' },
   };
 
   return (
@@ -308,7 +359,19 @@ export default function GrammarPage() {
   const [aiLoading, setAiLoading] = useState(false);
   const [dismissed, setDismissed] = useState<Set<number>>(new Set());
   const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>('all');
+  const [domain, setDomain] = useState<DomainMode>('general');
+  const [backendMeta, setBackendMeta] = useState<BackendMeta | null>(null);
+  const [backendSentences, setBackendSentences] = useState<BackendSentence[]>([]);
+  const [backendStatus, setBackendStatus] = useState<'unknown' | 'online' | 'offline'>('unknown');
   const issueListRef = useRef<HTMLDivElement>(null);
+
+  /* ── Check backend health on mount ────── */
+  useEffect(() => {
+    fetch('/api/grammar-check', { method: 'GET' })
+      .then(r => r.json())
+      .then(d => setBackendStatus(d.status === 'ok' ? 'online' : 'offline'))
+      .catch(() => setBackendStatus('offline'));
+  }, []);
 
   /* â”€â”€ Analysis â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
@@ -316,12 +379,67 @@ export default function GrammarPage() {
     if (!inputText.trim()) return;
     setDismissed(new Set());
     setCategoryFilter('all');
+    setBackendMeta(null);
+    setBackendSentences([]);
+
     const checker = new GrammarChecker();
     const r = checker.check(inputText);
+    const usesPython = engineMode === 'python' || engineMode === 'full';
+    const usesAI = engineMode === 'ai' || engineMode === 'both' || engineMode === 'full';
+    const usesRules = engineMode === 'rules' || engineMode === 'both' || engineMode === 'full';
 
-    if (engineMode === 'ai' || engineMode === 'both') {
-      setAiLoading(true);
-      if (engineMode === 'both') setResult(r);
+    // Start with rules-based result as the base (or empty if not using rules)
+    let base: CorrectionResult = usesRules ? { ...r, issues: [...r.issues] } : { ...r, issues: [] as Issue[] };
+
+    if (usesPython || usesAI) setAiLoading(true);
+    if (usesRules && !usesPython && !usesAI) {
+      setResult(r);
+      setActiveIssue(null);
+      setShowCorrected(false);
+      return;
+    }
+    // Show rules immediately if we'll also run python/ai
+    if (usesRules) setResult(r);
+
+    // ── Python backend ──
+    if (usesPython) {
+      try {
+        const res = await fetch('/api/grammar-check', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text: inputText, domain }),
+        });
+        if (res.ok) {
+          const data: BackendResult = await res.json();
+          setBackendMeta(data.meta);
+          setBackendSentences(data.sentences);
+          setBackendStatus('online');
+          for (const issue of data.issues) {
+            const overlap = base.issues.some(
+              (i: Issue) => Math.abs(i.start - issue.start) < 3 && Math.abs(i.end - issue.end) < 3
+            );
+            if (!overlap) {
+              base.issues.push({
+                ruleId: issue.ruleId,
+                message: issue.message,
+                severity: issue.severity as Severity,
+                start: issue.start,
+                end: issue.end,
+                replacements: issue.replacements,
+                confidence: issue.confidence,
+                category: issue.category,
+                sentenceIndex: issue.sentenceIndex,
+              });
+            }
+          }
+        }
+      } catch {
+        setBackendStatus('offline');
+      }
+    }
+
+    // ── AI engine ──
+    if (usesAI) {
       try {
         const res = await fetch('/api/grammar-ai', {
           method: 'POST',
@@ -331,7 +449,6 @@ export default function GrammarPage() {
         if (res.ok) {
           const data = await res.json();
           if (data.issues?.length > 0) {
-            const base = engineMode === 'both' ? { ...r, issues: [...r.issues] } : { ...r, issues: [] as Issue[] };
             for (const ai of data.issues) {
               const overlap = base.issues.some(
                 (i: Issue) => Math.abs(i.start - ai.start) < 3 && Math.abs(i.end - ai.end) < 3
@@ -353,31 +470,23 @@ export default function GrammarPage() {
                 }
               }
             }
-            base.issues.sort((a: Issue, b: Issue) => a.start - b.start);
-            base.stats = {
-              errors: base.issues.filter((i: Issue) => i.severity === 'error').length,
-              warnings: base.issues.filter((i: Issue) => i.severity === 'warning').length,
-              style: base.issues.filter((i: Issue) => i.severity === 'style').length,
-            };
-            setResult(base);
-          } else if (engineMode === 'ai') {
-            setResult({ ...r, issues: [], stats: { errors: 0, warnings: 0, style: 0 } });
-          } else {
-            setResult(r);
           }
-        } else {
-          setResult(r);
         }
-      } catch {
-        setResult(r);
-      }
-      setAiLoading(false);
-    } else {
-      setResult(r);
+      } catch { /* AI unavailable */ }
     }
+
+    // Finalize
+    base.issues.sort((a: Issue, b: Issue) => a.start - b.start);
+    base.stats = {
+      errors: base.issues.filter((i: Issue) => i.severity === 'error').length,
+      warnings: base.issues.filter((i: Issue) => i.severity === 'warning').length,
+      style: base.issues.filter((i: Issue) => i.severity === 'style').length,
+    };
+    setResult(base);
+    setAiLoading(false);
     setActiveIssue(null);
     setShowCorrected(false);
-  }, [inputText, engineMode]);
+  }, [inputText, engineMode, domain]);
 
   /* â”€â”€ Actions â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
@@ -387,6 +496,7 @@ export default function GrammarPage() {
 
   const handleClear = useCallback(() => {
     setInputText(''); setResult(null); setActiveIssue(null); setDismissed(new Set());
+    setBackendMeta(null); setBackendSentences([]);
   }, []);
 
   const handleCopy = useCallback(() => {
@@ -518,6 +628,22 @@ export default function GrammarPage() {
 
             <div className="flex items-center gap-3">
               <EngineSelector mode={engineMode} onChange={setEngineMode} />
+              {/* Domain selector */}
+              <select value={domain} onChange={e => setDomain(e.target.value as DomainMode)}
+                title="Select grammar domain"
+                className="px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-white dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 text-slate-700 dark:text-zinc-300 hover:border-slate-300 dark:hover:border-zinc-600 transition-all shadow-sm cursor-pointer outline-none">
+                <option value="general">General</option>
+                <option value="academic">Academic</option>
+                <option value="legal">Legal</option>
+                <option value="medical">Medical</option>
+                <option value="technical">Technical</option>
+              </select>
+
+              {/* Backend status dot */}
+              <div className="flex items-center gap-1.5" title={`Python backend: ${backendStatus}`}>
+                <span className={`w-2 h-2 rounded-full ${backendStatus === 'online' ? 'bg-emerald-500' : backendStatus === 'offline' ? 'bg-red-400' : 'bg-slate-300 dark:bg-zinc-600'}`} />
+                <span className="text-[10px] text-slate-400 dark:text-zinc-500 hidden sm:inline">{backendStatus === 'online' ? 'API' : backendStatus === 'offline' ? 'Offline' : ''}</span>
+              </div>
               {aiLoading && (
                 <span className="text-[11px] text-purple-500 animate-pulse flex items-center gap-1">
                   <Brain className="w-3 h-3" /> Analyzingâ€¦
@@ -642,6 +768,75 @@ export default function GrammarPage() {
                 </div>
               </div>
 
+              {/* Backend performance & verdict panel */}
+              {backendMeta && (
+                <div className="px-4 py-3 border-b border-slate-100 dark:border-zinc-800/60 space-y-2">
+                  <div className="flex items-center gap-2 text-[10px] font-bold text-slate-400 dark:text-zinc-500 uppercase tracking-wider">
+                    <Activity className="w-3 h-3" /> Pipeline Performance
+                  </div>
+                  <div className="grid grid-cols-3 gap-2">
+                    <div className="text-center p-2 rounded-lg bg-slate-50 dark:bg-zinc-800/50">
+                      <div className="text-sm font-bold text-slate-800 dark:text-zinc-200">
+                        {backendMeta.processing_time_ms ? `${Math.round(backendMeta.processing_time_ms)}` : '—'}
+                      </div>
+                      <div className="text-[9px] text-slate-400 dark:text-zinc-500">ms</div>
+                    </div>
+                    <div className="text-center p-2 rounded-lg bg-slate-50 dark:bg-zinc-800/50">
+                      <div className="text-sm font-bold text-slate-800 dark:text-zinc-200">{backendSentences.length}</div>
+                      <div className="text-[9px] text-slate-400 dark:text-zinc-500">sentences</div>
+                    </div>
+                    <div className="text-center p-2 rounded-lg bg-slate-50 dark:bg-zinc-800/50">
+                      <div className="text-sm font-bold text-slate-800 dark:text-zinc-200">
+                        {backendMeta.ml_used ? <Cpu className="w-3.5 h-3.5 inline text-purple-500" /> : '—'}
+                      </div>
+                      <div className="text-[9px] text-slate-400 dark:text-zinc-500">{backendMeta.ml_used ? 'ML' : 'rules'}</div>
+                    </div>
+                  </div>
+
+                  {/* Per-stage timing bars */}
+                  {backendMeta.timings && Object.keys(backendMeta.timings).length > 0 && (
+                    <div className="space-y-1 pt-1">
+                      {Object.entries(backendMeta.timings)
+                        .sort(([, a], [, b]) => b - a)
+                        .slice(0, 5)
+                        .map(([stage, ms]) => {
+                          const maxMs = Math.max(...Object.values(backendMeta.timings));
+                          const pct = maxMs > 0 ? Math.round((ms / maxMs) * 100) : 0;
+                          return (
+                            <div key={stage} className="flex items-center gap-2">
+                              <span className="text-[9px] text-slate-400 dark:text-zinc-500 w-14 text-right truncate">{stage}</span>
+                              <div className="flex-1 h-1 rounded-full bg-slate-100 dark:bg-zinc-800 overflow-hidden">
+                                <div className="h-full rounded-full bg-indigo-400 dark:bg-indigo-500 transition-all" style={{ width: `${pct}%` }} />
+                              </div>
+                              <span className="text-[9px] text-slate-400 dark:text-zinc-500 w-10 text-right">{ms.toFixed(1)}ms</span>
+                            </div>
+                          );
+                        })}
+                    </div>
+                  )}
+
+                  {/* Sentence verdicts */}
+                  {backendSentences.length > 0 && (
+                    <div className="flex flex-wrap gap-1 pt-1">
+                      {backendSentences.map((s) => (
+                        <span key={s.index}
+                          className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold ${VERDICT_COLORS[s.verdict] || VERDICT_COLORS.safe}`}
+                          title={`Sentence ${s.index + 1}: ${s.verdict} (${(s.confidence * 100).toFixed(0)}%)`}>
+                          S{s.index + 1}: {s.verdict}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Version/domain info */}
+                  <div className="flex items-center gap-3 pt-1 text-[9px] text-slate-300 dark:text-zinc-600">
+                    <span>v{backendMeta.engine_version}</span>
+                    <span>rules:{backendMeta.rules_version}</span>
+                    <span>{backendMeta.domain}</span>
+                  </div>
+                </div>
+              )}
+
               {/* Category filter bar */}
               <div className="px-4 py-3 border-b border-slate-100 dark:border-zinc-800/60">
                 <div className="grid grid-cols-4 gap-1.5">
@@ -735,9 +930,31 @@ export default function GrammarPage() {
                 <Shield className="w-10 h-10 text-emerald-500" />
               </div>
               <h3 className="text-base font-bold text-slate-900 dark:text-white mb-2">Grammar Checker</h3>
-              <p className="text-xs text-slate-500 dark:text-zinc-500 max-w-[280px] leading-relaxed mb-6">
+              <p className="text-xs text-slate-500 dark:text-zinc-500 max-w-[280px] leading-relaxed mb-4">
                 Paste your text and click &ldquo;Check&rdquo; to get grammar, spelling, and style suggestions.
               </p>
+
+              {/* Engine status */}
+              <div className="w-full mb-5 p-3 rounded-xl bg-slate-50 dark:bg-zinc-800/40 border border-slate-100 dark:border-zinc-800">
+                <div className="text-[10px] font-bold text-slate-400 dark:text-zinc-500 uppercase tracking-wider mb-2">Engines</div>
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="flex items-center gap-1.5 text-slate-600 dark:text-zinc-400"><PenTool className="w-3 h-3" /> Rules (17)</span>
+                    <span className="text-emerald-500 text-[10px] font-bold">Ready</span>
+                  </div>
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="flex items-center gap-1.5 text-slate-600 dark:text-zinc-400"><Server className="w-3 h-3" /> Python (75 rules + ML)</span>
+                    <span className={`text-[10px] font-bold ${backendStatus === 'online' ? 'text-emerald-500' : backendStatus === 'offline' ? 'text-red-400' : 'text-slate-400'}`}>
+                      {backendStatus === 'online' ? 'Online' : backendStatus === 'offline' ? 'Offline' : 'Checking…'}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="flex items-center gap-1.5 text-slate-600 dark:text-zinc-400"><Brain className="w-3 h-3" /> AI (LLM)</span>
+                    <span className="text-slate-400 dark:text-zinc-500 text-[10px] font-bold">On demand</span>
+                  </div>
+                </div>
+              </div>
+
               <div className="w-full space-y-1.5 text-left">
 {CATEGORIES.map(cat => (
                   <div key={cat.key} className="flex items-start gap-2.5 p-2.5 rounded-lg">

@@ -1,0 +1,100 @@
+rules:
+  - id: acad-001
+    name: et_al_period
+    pattern: '\bet al(?!\.)'
+    replacement: 'et al.'
+    category: abbreviation
+    description: "Add period after 'et al'"
+    priority: 80
+    confidence: 0.95
+    domain: [academic]
+
+  - id: acad-002
+    name: eg_format
+    pattern: '\beg\b(?=[\s,])'
+    replacement: 'e.g.'
+    category: abbreviation
+    description: "Format 'eg' as 'e.g.'"
+    priority: 75
+    confidence: 0.90
+    domain: [academic, general]
+
+  - id: acad-003
+    name: ie_format
+    pattern: '\bie\b(?=[\s,])'
+    replacement: 'i.e.'
+    category: abbreviation
+    description: "Format 'ie' as 'i.e.'"
+    priority: 75
+    confidence: 0.90
+    domain: [academic, general]
+
+  - id: acad-004
+    name: fig_abbreviation
+    pattern: '\bfigure (\d)'
+    replacement: 'Fig. \1'
+    category: abbreviation
+    description: "Abbreviate 'figure' to 'Fig.' before a number"
+    priority: 55
+    confidence: 0.80
+    domain: [academic]
+
+  - id: acad-005
+    name: table_abbreviation
+    pattern: '\btable (\d)'
+    replacement: 'Table \1'
+    category: capitalization
+    description: "Capitalize 'table' before a number"
+    priority: 55
+    confidence: 0.80
+    domain: [academic]
+
+  - id: acad-006
+    name: cf_format
+    pattern: '\bcf\b(?=[\s.])'
+    replacement: 'cf.'
+    category: abbreviation
+    description: "Format 'cf' as 'cf.'"
+    priority: 70
+    confidence: 0.88
+    domain: [academic]
+
+  - id: acad-007
+    name: viz_format
+    pattern: '\bviz\b(?=[\s,])'
+    replacement: 'viz.'
+    category: abbreviation
+    description: "Format 'viz' as 'viz.'"
+    priority: 70
+    confidence: 0.88
+    domain: [academic]
+
+  - id: acad-008
+    name: section_abbreviation
+    pattern: '\bsection (\d)'
+    replacement: 'Section \1'
+    category: capitalization
+    description: "Capitalize 'section' before a number"
+    priority: 55
+    confidence: 0.80
+    domain: [academic]
+
+  - id: acad-009
+    name: chapter_abbreviation
+    pattern: '\bchapter (\d)'
+    replacement: 'Chapter \1'
+    category: capitalization
+    description: "Capitalize 'chapter' before a number"
+    priority: 55
+    confidence: 0.80
+    domain: [academic]
+
+  - id: acad-010
+    name: appendix_abbreviation
+    pattern: '\bappendix ([A-Z\d])'
+    replacement: 'Appendix \1'
+    category: capitalization
+    description: "Capitalize 'appendix' before a letter or number"
+    priority: 55
+    confidence: 0.80
+    domain: [academic]

@@ -616,6 +616,64 @@ export async function deepAICleanOneSentence(sentence: string): Promise<string> 
 }
 
 // ══════════════════════════════════════════════════════════════════════════
+// RESTRUCTURING PHASE — Deep sentence-level structural transformation
+// Every sentence gets its clause order, voice, and presentation rewritten.
+// ══════════════════════════════════════════════════════════════════════════
+
+const RESTRUCTURE_SYSTEM = `You are an expert academic editor specialising in sentence restructuring. Your SOLE job is to deeply restructure the presentation of a single sentence — change its clause order, voice, and syntactic frame — while keeping every fact, citation, and technical term intact.
+
+RESTRUCTURING TECHNIQUES (apply one or more):
+1. CLAUSE REORDERING — Move subordinate clauses to the front or end, swap subject-complement positions
+2. VOICE CHANGE — Switch active ↔ passive, or use impersonal constructions ("It is..." / "There is...")
+3. NOMINALISATION SWAP — Convert verb phrases to noun phrases or vice-versa (e.g. "measures X" → "measurement of X")
+4. RELATIVE CLAUSE TRANSFORMATION — Convert participial phrases to which-/that- clauses or vice-versa
+5. ADVERBIAL FRONTING — Move time/place/manner adverbs to sentence start
+6. SENTENCE TYPE CHANGE — Convert simple → complex or complex → compound sentence structures
+7. NATURAL SYNONYM REPLACEMENT — Replace 30-60% of non-technical words with natural academic alternatives
+
+STRICT RULES:
+- Output EXACTLY one sentence (no splitting into multiple sentences)
+- Preserve ALL citations [1], [2], (Author, Year), etc. — copy verbatim
+- Preserve ALL technical terms, proper nouns, measurements, and formulas
+- Preserve ALL placeholder tokens like [[PROT_0]], [[TRM_0]], etc. — copy exactly
+- The restructured sentence MUST convey the same meaning
+- Do NOT add new information or opinions
+- Do NOT use AI-typical words: utilize, facilitate, leverage, comprehensive, multifaceted, paradigm, trajectory, discourse, robust, nuanced, pivotal, delve, foster, harness, underscore, bolster, streamline, furthermore, moreover, additionally, consequently, subsequently, nevertheless
+- Return ONLY the restructured sentence, nothing else`;
+
+function buildRestructurePrompt(sentence: string): string {
+  return `Restructure the following sentence by changing its clause order, voice, and presentation. Keep all facts, citations, and technical terms. Output only the restructured sentence.
+
+SENTENCE:
+${sentence}`;
+}
+
+/**
+ * Restructure a single sentence via LLM — changes clause order, voice, and
+ * syntactic frame while preserving meaning, citations, and technical terms.
+ */
+export async function restructureSentence(sentence: string): Promise<string> {
+  const trimmed = sentence.trim();
+  if (!trimmed || trimmed.split(/\s+/).length < 5) return trimmed;
+  if (isTitleOrHeading(trimmed)) return trimmed;
+
+  const userPrompt = buildRestructurePrompt(trimmed);
+  const temp = 0.7 + (Math.random() * 0.15);
+  const maxTokens = Math.max(200, Math.ceil(trimmed.split(/\s+/).length * 3));
+
+  try {
+    let result = await llmCall(RESTRUCTURE_SYSTEM, userPrompt, temp, maxTokens);
+    if (!result || result.trim().length < trimmed.length * 0.3) return trimmed;
+    result = result.replace(/^["']|["']$/g, '').trim();
+    result = enforceSingleSentence(result);
+    result = enforceCapitalization(trimmed, result);
+    return result;
+  } catch {
+    return trimmed;
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════
 // LAYER 2: RULE-BASED / DETERMINISTIC PROCESSING
 // ══════════════════════════════════════════════════════════════════════════
 

@@ -1,0 +1,90 @@
+rules:
+  # ── Article corrections (a/an) ──
+
+  - id: art-001
+    name: a_before_vowel_sound
+    pattern: '\b[Aa] (?!uni(?:versity|on|fied|que|t\b|verse|corn|form|lateral|versal)|useful|used|user|usual|one\b|once\b|European|ewe\b|UFO|URL|USB|UNESCO)([aeiouAEIOU]\w+)'
+    replacement: 'an \1'
+    category: article
+    description: "Use 'an' before vowel sounds (excluding consonant-sound exceptions)"
+    priority: 72
+    confidence: 0.85
+    block_if_protected_span: true
+    domain: [general]
+
+  - id: art-002
+    name: an_before_consonant_sound
+    pattern: '\b[Aa]n (?!honest|honour|honor|hour|heir|MBA|MRI|FBI|HTML|HTTP|SQL|SMS|MP3|MP4|LCD|LED|NGO)([bcdfgjklmnpqrstvwxyzBCDFGJKLMNPQRSTVWXYZ]\w+)'
+    replacement: 'a \1'
+    category: article
+    description: "Use 'a' before consonant sounds (excluding silent-h and vowel-sound acronyms)"
+    priority: 72
+    confidence: 0.85
+    block_if_protected_span: true
+    domain: [general]
+
+  - id: art-003
+    name: an_before_honest
+    pattern: '\ba (honest|honour|honor|hour|heir)\b'
+    replacement: 'an \1'
+    category: article
+    description: "Use 'an' before silent-h words"
+    priority: 74
+    confidence: 0.92
+    block_if_protected_span: true
+    domain: [general]
+
+  - id: art-004
+    name: a_before_university
+    pattern: '\ban (university|union|unified|unique|unit|universe|unicorn|uniform|unilateral|universal|useful|used|user|usual)'
+    replacement: 'a \1'
+    category: article
+    description: "Use 'a' before 'uni-/u-' words with consonant 'yoo' sound"
+    priority: 76
+    confidence: 0.93
+    block_if_protected_span: true
+    domain: [general]
+
+  - id: art-005
+    name: a_before_one
+    pattern: '\ban (one|once)\b'
+    replacement: 'a \1'
+    category: article
+    description: "Use 'a' before 'one'/'once' (pronounced 'wun')"
+    priority: 76
+    confidence: 0.95
+    block_if_protected_span: true
+    domain: [general]
+
+  - id: art-006
+    name: a_before_european
+    pattern: '\ban (European|ewe)\b'
+    replacement: 'a \1'
+    category: article
+    description: "Use 'a' before 'European' (consonant 'yoo' sound)"
+    priority: 74
+    confidence: 0.93
+    block_if_protected_span: true
+    domain: [general]
+
+  - id: art-007
+    name: an_before_mba
+    pattern: '\ba (MBA|MRI|FBI|HTML|HTTP|SQL|SMS|MP3|MP4|LCD|LED|NGO)\b'
+    replacement: 'an \1'
+    category: article
+    description: "Use 'an' before acronyms pronounced with initial vowel sound"
+    priority: 74
+    confidence: 0.90
+    block_if_protected_span: true
+    domain: [general]
+
+  - id: art-008
+    name: a_before_UFO
+    pattern: '\ban (UFO|URL|USB|UNESCO)\b'
+    replacement: 'a \1'
+    category: article
+    description: "Use 'a' before acronyms pronounced with initial 'yoo' sound"
+    priority: 74
+    confidence: 0.90
+    block_if_protected_span: true
+    domain: [general]

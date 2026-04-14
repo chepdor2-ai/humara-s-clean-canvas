@@ -1,0 +1,30 @@
+rules:
+  - id: space-001
+    name: double_space
+    pattern: '(?<!\n) {2,}(?!\n)'
+    replacement: ' '
+    category: spacing
+    description: "Collapse multiple spaces into one"
+    priority: 95
+    confidence: 0.99
+    domain: [general]
+
+  - id: space-002
+    name: trailing_space_before_newline
+    pattern: ' +\n'
+    replacement: '\n'
+    category: spacing
+    description: "Remove trailing spaces before newline"
+    priority: 85
+    confidence: 0.99
+    domain: [general]
+
+  - id: space-003
+    name: tab_to_space
+    pattern: '\t'
+    replacement: '    '
+    category: spacing
+    description: "Normalize tab to 4 spaces"
+    priority: 60
+    confidence: 0.90
+    domain: [general]

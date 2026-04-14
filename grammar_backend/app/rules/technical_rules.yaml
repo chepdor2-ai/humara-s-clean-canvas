@@ -1,0 +1,61 @@
+rules:
+  - id: tech-001
+    name: percent_spacing
+    pattern: '(\d)%(?!\s)'
+    replacement: '\1% '
+    category: spacing
+    description: "Add space after percent sign when followed by text"
+    priority: 50
+    confidence: 0.85
+    domain: [technical]
+    block_if_protected_span: true
+
+  - id: tech-002
+    name: api_capitalization
+    pattern: '\bapi\b'
+    replacement: 'API'
+    category: capitalization
+    description: "Capitalize API"
+    priority: 60
+    confidence: 0.90
+    domain: [technical]
+
+  - id: tech-003
+    name: url_capitalization
+    pattern: '\burl\b'
+    replacement: 'URL'
+    category: capitalization
+    description: "Capitalize URL"
+    priority: 60
+    confidence: 0.90
+    domain: [technical]
+
+  - id: tech-004
+    name: html_capitalization
+    pattern: '\bhtml\b'
+    replacement: 'HTML'
+    category: capitalization
+    description: "Capitalize HTML"
+    priority: 60
+    confidence: 0.90
+    domain: [technical]
+
+  - id: tech-005
+    name: css_capitalization
+    pattern: '\bcss\b'
+    replacement: 'CSS'
+    category: capitalization
+    description: "Capitalize CSS"
+    priority: 60
+    confidence: 0.90
+    domain: [technical]
+
+  - id: tech-006
+    name: login_vs_log_in
+    pattern: '\blog in\b(?=\s+(?:page|screen|form|button|credentials))'
+    replacement: 'login'
+    category: grammar
+    description: "Use 'login' as adjective before nouns"
+    priority: 55
+    confidence: 0.85
+    domain: [technical]
