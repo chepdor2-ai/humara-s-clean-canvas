@@ -507,36 +507,60 @@ export async function POST(req: Request) {
             }
           };
 
-          // Process all sentences sequentially so each one streams to the client
-          console.log(`[SentenceSeq] Processing ${inputSentences.length} sentences via '${eng}'`);
-          const sentenceResults: string[] = [];
-          for (let i = 0; i < inputSentences.length; i++) {
-            const sentence = inputSentences[i];
-            if (isHeadingSentCheck(sentence)) {
-              sentenceResults.push(sentence);
-              continue;
+          // ── Full-text engines (Ozone / Humara 2.1, Easy / Humara 2.2) ──
+          // These LLM APIs work best on the entire text, not sentence-by-sentence.
+          const FULL_TEXT_ENGINES = new Set(['easy', 'ozone']);
+          let sentenceResults: string[];
+
+          if (FULL_TEXT_ENGINES.has(eng)) {
+            console.log(`[FullText] Processing entire text via '${eng}'`);
+            let fullResult: string;
+            if (eng === 'easy') {
+              fullResult = (await runHumara22(normalizedText));
+            } else {
+              fullResult = (await runHumara21(normalizedText));
             }
-            try {
-              let result = await runEngineOnSentence(sentence);
-              let final = result && result.trim().length > 0 ? result : sentence;
-              // Enforce 40% minimum change — retry engine up to 2 more times
-              let change = measureSentenceChange(sentence, final);
-              let retry = 0;
-              while (change < 0.40 && retry < 2) {
-                const retried = await runEngineOnSentence(final);
-                if (retried && retried.trim().length > 0) final = retried;
-                change = measureSentenceChange(sentence, final);
-                retry++;
+            if (!fullResult || fullResult.trim().length === 0) fullResult = normalizedText;
+            const { sentences: resultSents, paragraphBoundaries: resultBounds } = splitIntoIndexedSentences(fullResult);
+            sentenceResults = resultSents;
+            // Stream each sentence to the client
+            for (let i = 0; i < sentenceResults.length; i++) {
+              sendSSE(controller, { type: 'sentence', index: i, text: sentenceResults[i], stage: 'Engine' });
+            }
+            humanized = fullResult;
+            console.log(`[FullText] Engine complete: ${humanized.split(/\s+/).length} words`);
+          } else {
+            // Process all sentences sequentially so each one streams to the client
+            console.log(`[SentenceSeq] Processing ${inputSentences.length} sentences via '${eng}'`);
+            sentenceResults = [];
+            for (let i = 0; i < inputSentences.length; i++) {
+              const sentence = inputSentences[i];
+              if (isHeadingSentCheck(sentence)) {
+                sentenceResults.push(sentence);
+                continue;
               }
-              sentenceResults.push(final);
-              sendSSE(controller, { type: 'sentence', index: i, text: final, stage: 'Engine' });
-            } catch (err) {
-              console.warn(`[SentenceSeq] Sentence ${i} failed:`, err);
-              sentenceResults.push(sentence);
+              try {
+                let result = await runEngineOnSentence(sentence);
+                let final = result && result.trim().length > 0 ? result : sentence;
+                // Enforce 40% minimum change — retry engine up to 2 more times
+                let change = measureSentenceChange(sentence, final);
+                let retry = 0;
+                while (change < 0.40 && retry < 2) {
+                  const retried = await runEngineOnSentence(final);
+                  if (retried && retried.trim().length > 0) final = retried;
+                  change = measureSentenceChange(sentence, final);
+                  retry++;
+                }
+                sentenceResults.push(final);
+                sendSSE(controller, { type: 'sentence', index: i, text: final, stage: 'Engine' });
+              } catch (err) {
+                console.warn(`[SentenceSeq] Sentence ${i} failed:`, err);
+                sentenceResults.push(sentence);
+              }
             }
+            humanized = reassembleText(sentenceResults, inputParaBounds.length ? inputParaBounds : [0]);
+            console.log(`[SentenceSeq] Engine complete: ${humanized.split(/\s+/).length} words`);
           }
-          humanized = reassembleText(sentenceResults, inputParaBounds.length ? inputParaBounds : [0]);
-          console.log(`[SentenceSeq] Engine complete: ${humanized.split(/\s+/).length} words`);
 
           // ═══════════════════════════════════════════════════════════════
           // PHASE-BASED PIPELINE
