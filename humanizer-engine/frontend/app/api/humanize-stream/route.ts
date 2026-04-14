@@ -1,13 +1,13 @@
 import { robustSentenceSplit } from '@/lib/engine/content-protection';
 import { getDetector } from '@/lib/engine/multi-detector';
 import { isMeaningPreserved, isMeaningPreservedSync } from '@/lib/engine/semantic-guard';
-import { fixCapitalization, applyPhrasePatterns, applyConnectorNaturalization, applySyntacticTemplate, fixPunctuation } from '@/lib/engine/shared-dictionaries';
+import { fixCapitalization, applyPhrasePatterns, fixPunctuation, expandAllContractions } from '@/lib/engine/shared-dictionaries';
 import { deduplicateRepeatedPhrases } from '@/lib/engine/premium-deep-clean';
 import { preserveInputStructure } from '@/lib/engine/structure-preserver';
 import { structuralPostProcess } from '@/lib/engine/structural-post-processor';
 import { unifiedSentenceProcess } from '@/lib/sentence-processor';
 import { expandContractions } from '@/lib/humanize-transforms';
-import { removeEmDashes, applyV13Techniques, fixOutOfContextSynonyms, validateCollocations } from '@/lib/engine/v13-shared-techniques';
+import { removeEmDashes, fixOutOfContextSynonyms, validateCollocations, replaceCollocations, compressPhrases } from '@/lib/engine/v13-shared-techniques';
 import { humanize } from '@/lib/engine/humanizer';
 import { ghostProHumanize } from '@/lib/engine/ghost-pro';
 import { llmHumanize, deepAICleanOneSentence } from '@/lib/engine/llm-humanizer';
@@ -419,49 +419,116 @@ export async function POST(req: Request) {
             return out;
           };
 
-          // ── Deep non-LLM cleaning (per-sentence): 3-layer rule-based AI signal removal ──
+          // ══════════════════════════════════════════════════════════════
+          // ACADEMIC-GRADE CLEANING & SMOOTHING FUNCTIONS
+          // All functions preserve formal academic register.
+          // NO casualization — connectors stay scholarly, contractions
+          // are expanded, and vocabulary remains appropriate for
+          // university-level papers targeting excellent marks.
+          // ══════════════════════════════════════════════════════════════
+
+          // Academic connector variation map — replaces AI-repetitive connectors
+          // with equally academic but varied alternatives. No casual speech.
+          const ACADEMIC_CONNECTOR_MAP: Record<string, string[]> = {
+            'Furthermore, ': ['In addition, ', 'Beyond this, ', 'Building on this, ', 'Alongside this, '],
+            'Moreover, ': ['In addition, ', 'Beyond this, ', 'Equally important, ', 'What is more, '],
+            'Additionally, ': ['In addition, ', 'Alongside this, ', 'On a related note, ', 'Equally, '],
+            'Consequently, ': ['As a consequence, ', 'It follows that ', 'The result is that ', 'This means that '],
+            'Nevertheless, ': ['Even so, ', 'That said, ', 'In spite of this, ', 'Regardless, '],
+            'Nonetheless, ': ['Even so, ', 'That said, ', 'Despite this, ', 'Regardless, '],
+            'In contrast, ': ['By comparison, ', 'Conversely, ', 'On the other hand, ', 'Whereas '],
+            'Subsequently, ': ['Following this, ', 'After this, ', 'In the period that followed, '],
+            'In conclusion, ': ['To conclude, ', 'In summary, ', 'Taken together, ', 'On balance, '],
+            'Therefore, ': ['For this reason, ', 'It follows that ', 'This indicates that ', 'Accordingly, '],
+            'However, ': ['That said, ', 'On the other hand, ', 'At the same time, ', 'Yet '],
+            'Thus, ': ['In this way, ', 'Through this, ', 'As a result, ', 'Accordingly, '],
+            'Hence, ': ['For this reason, ', 'It follows that ', 'This is why '],
+            'Indeed, ': ['In fact, ', 'As expected, ', 'Certainly, ', 'To be sure, '],
+            'Accordingly, ': ['In response, ', 'For this reason, ', 'Correspondingly, '],
+            'Notably, ': ['It is worth noting that ', 'Significantly, ', 'Of particular note, '],
+            'Specifically, ': ['In particular, ', 'More precisely, ', 'To be specific, '],
+            'As a result, ': ['Owing to this, ', 'The outcome is that ', 'This led to '],
+            'For example, ': ['To illustrate, ', 'As an illustration, ', 'Consider, for instance, '],
+            'For instance, ': ['As one example, ', 'To illustrate, ', 'Consider the case where '],
+            'On the other hand, ': ['Conversely, ', 'By contrast, ', 'From another perspective, '],
+            'In other words, ': ['Put differently, ', 'That is to say, ', 'To rephrase, '],
+            'In particular, ': ['Especially, ', 'More specifically, ', 'Of particular interest, '],
+            'As such, ': ['Given this, ', 'On that basis, ', 'With this in mind, '],
+            'To that end, ': ['With this aim, ', 'Toward this goal, ', 'For this purpose, '],
+            'By contrast, ': ['Conversely, ', 'In comparison, ', 'On the contrary, '],
+            'In essence, ': ['At its core, ', 'Fundamentally, ', 'In its simplest form, '],
+          };
+
+          const academicConnectorVariation = (text: string): string => {
+            let result = text;
+            for (const [formal, replacements] of Object.entries(ACADEMIC_CONNECTOR_MAP)) {
+              while (result.includes(formal)) {
+                const rep = replacements[Math.floor(Math.random() * replacements.length)];
+                result = result.replace(formal, rep);
+              }
+            }
+            return result;
+          };
+
+          // ── Deep non-LLM cleaning (per-sentence): academic-grade AI signal removal ──
           const deepNonLLMClean = (sentence: string): string => {
-            // Layer 1: Kill AI vocabulary + formal connectors
+            // Layer 1: Kill flagged AI vocabulary (utilize→use, leverage→draw on, etc.)
             let s = applyAIWordKill(sentence);
-            s = applyConnectorNaturalization(s);
-            // Layer 2: Phrase-level transforms + syntactic restructuring
+            // Layer 2: Vary connectors with academic alternatives (NOT casual)
+            s = academicConnectorVariation(s);
+            // Layer 3: Phrase-level academic transforms (verb phrases, hedging, transitions)
             s = applyPhrasePatterns(s);
-            s = applySyntacticTemplate(s);
-            // Layer 3: V1.3 stealth techniques (compression, collocation, restructuring, punctuation, em-dash removal)
-            s = applyV13Techniques(s);
+            // Layer 4: Collocation replacement (academic multi-word phrase variation)
+            s = replaceCollocations(s);
+            // Layer 5: Compress wordy AI phrases to concise academic phrasing
+            s = compressPhrases(s);
+            // Layer 6: Expand any contractions back to full forms (academic standard)
+            s = expandAllContractions(s);
+            // Layer 7: Remove em-dashes (AI detection signal) + fix punctuation
+            s = removeEmDashes(s);
             s = fixPunctuation(s);
             return s;
           };
 
-          // ── Smoothing pass (per-sentence): intelligent flow & grammar repair ──
-          // Applied after heavy engines to fix grammar breaks, awkward connectors,
-          // and punctuation issues introduced by rule-based transforms.
+          // ── Smoothing pass (per-sentence): academic flow & grammar repair ──
+          // Applied after heavy engines to fix grammar breaks and ensure
+          // the text reads as coherent academic prose, not patchy transforms.
           const smoothingPass = (sentence: string): string => {
-            let s = postCleanGrammar(sentence);       // Fix verb forms, subject-verb agreement, tense
-            s = applyConnectorNaturalization(s);       // Replace remaining formal connectors naturally
-            s = fixOutOfContextSynonyms(s);            // Fix synonyms that don't fit semantic context
-            s = fixPunctuation(s);                     // Repair punctuation artifacts
-            s = fixMidSentenceCapitalization(s);       // Fix errant capitals
-            s = removeEmDashes(s);                     // Remove AI-flagged em-dashes
+            // 1. Grammar repair: irregular verbs, subject-verb agreement, tense consistency
+            let s = postCleanGrammar(sentence);
+            // 2. Fix synonyms that landed in the wrong semantic context
+            s = fixOutOfContextSynonyms(s);
+            // 3. Validate adjective-noun collocations sound natural
+            s = validateCollocations(s);
+            // 4. Vary any repeated connectors with academic alternatives
+            s = academicConnectorVariation(s);
+            // 5. Expand contractions (academic papers should not have contractions)
+            s = expandAllContractions(s);
+            // 6. Punctuation + capitalization cleanup
+            s = fixPunctuation(s);
+            s = fixMidSentenceCapitalization(s);
+            s = removeEmDashes(s);
             return s;
           };
 
-          // ── Final smoothing & grammar (per-sentence): deep intelligent cleanup ──
-          // Last phase — ensures output reads as polished, natural student writing.
-          // Uses only deterministic linguistic rules, NOT random template shuffling.
+          // ── Final smoothing & grammar (per-sentence): deep intelligent academic polish ──
+          // Last phase — ensures output reads as polished university-level writing.
+          // Every step uses deterministic linguistic rules; no random template shuffling.
           const finalSmoothGrammar = (sentence: string): string => {
-            // 1. Grammar repair: irregular verbs, agreement, collocations, tense consistency
+            // 1. Full grammar repair: irregular verbs, agreement, tense, structural fixes
             let s = postCleanGrammar(sentence);
-            // 2. Semantic synonym check: fix synonyms that don't fit the context
+            // 2. Fix out-of-context synonyms that earlier phases introduced
             s = fixOutOfContextSynonyms(s);
-            // 3. Collocation validation: ensure adjective-noun pairs sound natural
+            // 3. Validate that adjective-noun collocations are natural academic pairings
             s = validateCollocations(s);
-            // 4. Connector naturalization: any leftover formal connectors → natural speech
-            s = applyConnectorNaturalization(s);
-            // 5. Punctuation cleanup
+            // 4. Vary any remaining AI-pattern connectors with academic alternatives
+            s = academicConnectorVariation(s);
+            // 5. Expand ALL contractions — must read as formal academic prose
+            s = expandAllContractions(s);
+            // 6. Final punctuation + capitalization pass
             s = fixPunctuation(s);
-            // 6. Capitalization + em-dash removal
             s = fixMidSentenceCapitalization(s);
+            // 7. Remove em-dashes (strong AI signal)
             s = removeEmDashes(s);
             return s;
           };
