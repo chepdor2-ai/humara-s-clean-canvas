@@ -237,11 +237,39 @@ export async function POST(req: Request) {
           );
 
           // 3. Engine stage — the main humanization
-          sendSSE(controller, { type: 'stage', stage: 'Engine Processing' });
-          await flushDelay(20);
-
           let humanized: string;
           const eng = engine ?? 'oxygen';
+
+          // Engine display names for phase labels
+          const ENGINE_DISPLAY: Record<string, string> = {
+            ghost_pro_wiki: 'Wikipedia', ninja_1: 'Ninja', ninja: 'Ninja', undetectable: 'Ninja',
+            oxygen: 'Humara 2.0', nuru_v2: 'Nuru 2.0', humara_v3_3: 'Humara 2.4',
+            easy: 'Humara 2.2', ozone: 'Humara 2.1', ghost_pro: 'Ghost Pro',
+            humara: 'Humara', nuru: 'Nuru', omega: 'Omega',
+            ninja_2: 'Ninja 2', ninja_3: 'Ninja 3', ninja_4: 'Ninja 4', ninja_5: 'Ninja 5',
+            ghost_trial_2: 'Ghost Trial', ghost_trial_2_alt: 'Ghost Trial',
+            conscusion_1: 'Conscusion', conscusion_12: 'Conscusion',
+            dipper: 'Dipper', humarin: 'Humarin', oxygen3: 'Oxygen 3', oxygen_t5: 'Oxygen T5',
+            fast_v11: 'Fast V11', humara_v1_3: 'Humara 1.3', ghost_mini_v1_2: 'Ghost Mini',
+          };
+          const engineDisplayName = ENGINE_DISPLAY[eng] || eng;
+
+          // Fast-loop engine detection (used for phase labeling + pipeline selection)
+          const FAST_REHUMANIZE_ENGINES = new Set(['nuru_v2', 'ghost_pro_wiki', 'oxygen', 'humara_v3_3', 'ninja_1']);
+
+          // Engines that use the phase pipeline (fast-loop + deep-kill)
+          const PHASED_ENGINES = new Set([
+            ...FAST_REHUMANIZE_ENGINES,
+            'ninja_2', 'ninja_3', 'ninja_4', 'ninja_5',
+            'ghost_trial_2', 'ghost_trial_2_alt',
+            'conscusion_1', 'conscusion_12',
+          ]);
+          const usePhasePipeline = PHASED_ENGINES.has(eng);
+
+          // Emit initial stage for non-phased engines only
+          // (phased engines emit their own Phase labels inside the pipeline below)
+          sendSSE(controller, { type: 'stage', stage: 'Engine Processing' });
+          await flushDelay(20);
 
           const runGuarded = async (
             label: string,
@@ -379,36 +407,29 @@ export async function POST(req: Request) {
             } else if (eng === 'ghost_pro_wiki') {
               return await runWikipedia(sentence);
             } else if (eng === 'ninja_3') {
-              const s1 = runHumara20(sentence);
-              const s2 = await runGuarded('ninja_3_s2', () => runWikipediaClean(s1), s1);
-              return chainSync(runNuru, s2, CHAIN_TS);
+              // Phase 1 only: Humara 2.0 — remaining phases handled in pipeline
+              return runHumara20(sentence);
             } else if (eng === 'ninja_2') {
-              const s1 = runHumara20(sentence);
-              return chainSync(runNuru, s1, CHAIN_TS);
+              // Phase 1 only: Humara 2.0 — remaining phases handled in pipeline
+              return runHumara20(sentence);
             } else if (eng === 'ninja_4') {
-              const s1 = await runGuarded('ninja_4_s1', () => runHumara24(sentence), sentence);
-              const s2 = await runGuarded('ninja_4_s2', () => runWikipediaClean(s1), s1);
-              return chainSync(runNuru, s2, CHAIN_TS);
+              // Phase 1 only: Humara 2.4 — remaining phases handled in pipeline
+              return await runGuarded('ninja_4_s1', () => runHumara24(sentence), sentence);
             } else if (eng === 'ninja_5') {
-              const s1 = await runGuarded('ninja_5_s1', () => runHumara24(sentence), sentence);
-              return chainSync(runNuru, s1, CHAIN_TS);
+              // Phase 1 only: Humara 2.4 — remaining phases handled in pipeline
+              return await runGuarded('ninja_5_s1', () => runHumara24(sentence), sentence);
             } else if (eng === 'ghost_trial_2') {
-              const s1 = await runGuarded('gt2_s1', () => runWikipediaClean(sentence), sentence);
-              const s2 = await runGuarded('gt2_s2', () => runHumara24(s1), s1);
-              return chainSync(runNuru, s2, CHAIN_TS);
+              // Phase 1 only: Wikipedia — remaining phases handled in pipeline
+              return await runGuarded('gt2_s1', () => runWikipediaClean(sentence), sentence);
             } else if (eng === 'ghost_trial_2_alt') {
-              const s1 = await runGuarded('gt2a_s1', () => runWikipediaClean(sentence), sentence);
-              const s2 = runHumara20(s1);
-              return chainSync(runNuru, s2, CHAIN_TS);
+              // Phase 1 only: Wikipedia — remaining phases handled in pipeline
+              return await runGuarded('gt2a_s1', () => runWikipediaClean(sentence), sentence);
             } else if (eng === 'conscusion_1') {
-              const s1 = await runGuarded('con1_s1', () => runHumara22Clean(sentence), sentence, 35_000);
-              const s2 = await runGuarded('con1_s2', () => runWikipediaClean(s1), s1);
-              return chainSync(runNuru, s2, CHAIN_TS);
+              // Phase 1 only: Humara 2.2 — remaining phases handled in pipeline
+              return await runGuarded('con1_s1', () => runHumara22Clean(sentence), sentence, 35_000);
             } else if (eng === 'conscusion_12') {
-              const s1 = await runGuarded('con12_s1', () => runHumara21(sentence), sentence, 35_000);
-              const s2 = await runGuarded('con12_s2', () => runHumara24(s1), s1);
-              const s3 = await runGuarded('con12_s3', () => runWikipediaClean(s2), s2);
-              return chainSync(runNuru, s3, CHAIN_TS);
+              // Phase 1 only: Humara 2.1 — remaining phases handled in pipeline
+              return await runGuarded('con12_s1', () => runHumara21(sentence), sentence, 35_000);
             } else if (eng === 'humara_v1_3') {
               const { pipeline } = await import('@/lib/engine/humara-v1-3');
               return await pipeline(sentence, (tone ?? 'academic') as string, strength === 'strong' ? 10 : strength === 'light' ? 4 : 7);
@@ -425,12 +446,8 @@ export async function POST(req: Request) {
             } else if (premium) {
               return await premiumHumanize(sentence, eng, (strength ?? 'medium') as 'light' | 'medium' | 'strong', tone ?? 'neutral', strict_meaning ?? true);
             } else if (eng === 'ninja_1') {
-              // Ninja 1: Ninja LLM → Humara 2.0 (oxygen) → Nuru 2.0 (single pass) → [10× Nuru 2.0 via outer loop]
-              const s1 = await runGuarded('ninja1_s1', () => llmHumanize(sentence, strength ?? 'medium', true, strict_meaning ?? true, tone ?? 'academic', no_contractions !== false, enable_post_processing !== false), sentence);
-              const s2 = runHumara20(s1);
-              const s3 = runNuruSinglePass(s2);
-              // 10 outer Nuru passes
-              return chainSync(runNuru, s3, CHAIN_TS);
+              // Ninja 1 Phase 1: LLM only — Humara 2.0 and Nuru 2.0 handled in pipeline phases
+              return await runGuarded('ninja1_s1', () => llmHumanize(sentence, strength ?? 'medium', true, strict_meaning ?? true, tone ?? 'academic', no_contractions !== false, enable_post_processing !== false), sentence);
             } else if (eng === 'undetectable' || eng === 'ninja') {
               return await llmHumanize(sentence, strength ?? 'medium', true, strict_meaning ?? true, tone ?? 'academic', no_contractions !== false, enable_post_processing !== false);
             } else if (eng === 'fast_v11') {
@@ -464,48 +481,174 @@ export async function POST(req: Request) {
           console.log(`[SentenceParallel] Engine complete: ${humanized.split(/\s+/).length} words`);
 
           // ═══════════════════════════════════════════════════════════════
-          // 11-PHASE PIPELINE (per-sentence Nuru loop)
+          // PHASE-BASED PIPELINE
+          // Every engine defines named phases; the water fills 0→100% per phase.
+          // Phase 1 = runEngineOnSentence output (already computed above).
+          // Subsequent phases process currentSentences through additional engines.
           // ═══════════════════════════════════════════════════════════════
-          const FAST_REHUMANIZE_ENGINES = new Set(['nuru_v2', 'ghost_pro_wiki', 'oxygen', 'humara_v3_3', 'ninja_1']);
-          const fastLoopEnabled = FAST_REHUMANIZE_ENGINES.has(eng);
-          if (fastLoopEnabled) {
-            const TOTAL_PHASES = 11;
-            const INTER_CYCLE_PAUSE_MS = 600;
-            const cycleStart = Date.now();
+          if (usePhasePipeline) {
+            const phaseStart = Date.now();
             let currentSentences = [...sentenceResults];
 
-            // Cycle 1: engine output already computed — emit as-is
-            const cycleStage1 = `Cycle 1/${TOTAL_PHASES}`;
-            sendSSE(controller, { type: 'stage', stage: cycleStage1 });
-            await flushDelay(10);
-            for (let i = 0; i < currentSentences.length; i++) {
-              sendSSE(controller, { type: 'sentence', index: i, text: currentSentences[i], stage: cycleStage1 });
+            // Phase definitions per engine
+            type PhaseSpec =
+              | { name: string; type: 'emit' }
+              | { name: string; type: 'sync'; fn: (s: string) => string }
+              | { name: string; type: 'async'; fn: (s: string) => Promise<string> }
+              | { name: string; type: 'nuru'; passes: number };
+
+            let phases: PhaseSpec[];
+            switch (eng) {
+              case 'ghost_pro_wiki':
+                phases = [
+                  { name: 'Wikipedia', type: 'emit' },
+                  { name: 'Humara 2.0', type: 'sync', fn: (s) => runHumara20(s) },
+                  { name: 'Nuru 2.0', type: 'nuru', passes: 10 },
+                ];
+                break;
+              case 'ninja_1':
+                phases = [
+                  { name: 'Ninja', type: 'emit' },
+                  { name: 'Humara 2.0', type: 'sync', fn: (s) => runHumara20(s) },
+                  { name: 'Nuru 2.0', type: 'nuru', passes: 10 },
+                ];
+                break;
+              case 'oxygen':
+                phases = [
+                  { name: 'Humara 2.0', type: 'emit' },
+                  { name: 'Nuru 2.0', type: 'nuru', passes: 10 },
+                ];
+                break;
+              case 'nuru_v2':
+                phases = [
+                  { name: 'Nuru 2.0', type: 'emit' },
+                  { name: 'Deep Clean', type: 'nuru', passes: 10 },
+                ];
+                break;
+              case 'humara_v3_3':
+                phases = [
+                  { name: 'Humara 2.4', type: 'emit' },
+                  { name: 'Nuru 2.0', type: 'nuru', passes: 10 },
+                ];
+                break;
+              // Deep Kill engines — multi-step pipelines with visible phases
+              case 'ninja_2':
+                // Humara 2.0 → Nuru 2.0
+                phases = [
+                  { name: 'Humara 2.0', type: 'emit' },
+                  { name: 'Nuru 2.0', type: 'nuru', passes: CHAIN_TS },
+                ];
+                break;
+              case 'ninja_3':
+                // Humara 2.0 → Wikipedia → Nuru 2.0
+                phases = [
+                  { name: 'Humara 2.0', type: 'emit' },
+                  { name: 'Wikipedia', type: 'async', fn: (s) => runWikipediaClean(s) },
+                  { name: 'Nuru 2.0', type: 'nuru', passes: CHAIN_TS },
+                ];
+                break;
+              case 'ninja_4':
+                // Humara 2.4 → Wikipedia → Nuru 2.0
+                phases = [
+                  { name: 'Humara 2.4', type: 'emit' },
+                  { name: 'Wikipedia', type: 'async', fn: (s) => runWikipediaClean(s) },
+                  { name: 'Nuru 2.0', type: 'nuru', passes: CHAIN_TS },
+                ];
+                break;
+              case 'ninja_5':
+                // Humara 2.4 → Nuru 2.0
+                phases = [
+                  { name: 'Humara 2.4', type: 'emit' },
+                  { name: 'Nuru 2.0', type: 'nuru', passes: CHAIN_TS },
+                ];
+                break;
+              case 'ghost_trial_2':
+                // Wikipedia → Humara 2.4 → Nuru 2.0
+                phases = [
+                  { name: 'Wikipedia', type: 'emit' },
+                  { name: 'Humara 2.4', type: 'async', fn: (s) => runHumara24(s) },
+                  { name: 'Nuru 2.0', type: 'nuru', passes: CHAIN_TS },
+                ];
+                break;
+              case 'ghost_trial_2_alt':
+                // Wikipedia → Humara 2.0 → Nuru 2.0
+                phases = [
+                  { name: 'Wikipedia', type: 'emit' },
+                  { name: 'Humara 2.0', type: 'sync', fn: (s) => runHumara20(s) },
+                  { name: 'Nuru 2.0', type: 'nuru', passes: CHAIN_TS },
+                ];
+                break;
+              case 'conscusion_1':
+                // Humara 2.2 → Wikipedia → Nuru 2.0
+                phases = [
+                  { name: 'Humara 2.2', type: 'emit' },
+                  { name: 'Wikipedia', type: 'async', fn: (s) => runWikipediaClean(s) },
+                  { name: 'Nuru 2.0', type: 'nuru', passes: CHAIN_TS },
+                ];
+                break;
+              case 'conscusion_12':
+                // Humara 2.1 → Humara 2.4 → Wikipedia → Nuru 2.0
+                phases = [
+                  { name: 'Humara 2.1', type: 'emit' },
+                  { name: 'Humara 2.4', type: 'async', fn: (s) => runHumara24(s) },
+                  { name: 'Wikipedia', type: 'async', fn: (s) => runWikipediaClean(s) },
+                  { name: 'Nuru 2.0', type: 'nuru', passes: CHAIN_TS },
+                ];
+                break;
+              default:
+                phases = [{ name: engineDisplayName, type: 'emit' }];
             }
-            await flushDelay(10);
-            console.log(`[Pipeline-11] Cycle 1/${TOTAL_PHASES} (${eng}): ${humanized.split(/\s+/).length} words (${Date.now() - cycleStart}ms)`);
 
-            // Cycles 2–11: per-sentence single-pass Nuru (10 total iterations)
-            for (let cycle = 2; cycle <= TOTAL_PHASES; cycle++) {
-              currentSentences = currentSentences.map((s) =>
-                isHeadingSentCheck(s) ? s : runNuruSinglePass(s)
-              );
-              humanized = reassembleText(currentSentences, inputParaBounds.length ? inputParaBounds : [0]);
+            const totalPhases = phases.length;
 
-              const cycleStage = `Cycle ${cycle}/${TOTAL_PHASES}`;
-              sendSSE(controller, { type: 'stage', stage: cycleStage });
+            for (let pi = 0; pi < phases.length; pi++) {
+              const phase = phases[pi];
+              const phaseLabel = `Phase ${pi + 1}/${totalPhases} – ${phase.name}`;
+              const phaseOps = phase.type === 'nuru'
+                ? phase.passes * currentSentences.length
+                : currentSentences.length;
+              sendSSE(controller, { type: 'stage', stage: phaseLabel, phaseOps });
               await flushDelay(10);
-              for (let i = 0; i < currentSentences.length; i++) {
-                sendSSE(controller, { type: 'sentence', index: i, text: currentSentences[i], stage: cycleStage });
+
+              if (phase.type === 'emit') {
+                for (let i = 0; i < currentSentences.length; i++) {
+                  sendSSE(controller, { type: 'sentence', index: i, text: currentSentences[i], stage: phaseLabel });
+                }
+              } else if (phase.type === 'sync') {
+                for (let i = 0; i < currentSentences.length; i++) {
+                  if (!isHeadingSentCheck(currentSentences[i])) {
+                    currentSentences[i] = phase.fn(currentSentences[i]);
+                  }
+                  sendSSE(controller, { type: 'sentence', index: i, text: currentSentences[i], stage: phaseLabel });
+                }
+              } else if (phase.type === 'async') {
+                for (let i = 0; i < currentSentences.length; i++) {
+                  if (!isHeadingSentCheck(currentSentences[i])) {
+                    currentSentences[i] = await phase.fn(currentSentences[i]);
+                  }
+                  sendSSE(controller, { type: 'sentence', index: i, text: currentSentences[i], stage: phaseLabel });
+                }
+              } else if (phase.type === 'nuru') {
+                for (let pass = 0; pass < phase.passes; pass++) {
+                  for (let i = 0; i < currentSentences.length; i++) {
+                    if (!isHeadingSentCheck(currentSentences[i])) {
+                      currentSentences[i] = runNuruSinglePass(currentSentences[i]);
+                    }
+                    sendSSE(controller, { type: 'sentence', index: i, text: currentSentences[i], stage: phaseLabel });
+                  }
+                  await flushDelay(10);
+                }
               }
+
+              humanized = reassembleText(currentSentences, inputParaBounds.length ? inputParaBounds : [0]);
               await flushDelay(10);
-              if (cycle < TOTAL_PHASES) await flushDelay(INTER_CYCLE_PAUSE_MS);
-              console.log(`[Pipeline-11] Cycle ${cycle}/${TOTAL_PHASES} (nuru): ${humanized.split(/\s+/).length} words (${Date.now() - cycleStart}ms)`);
+              console.log(`[Pipeline] ${phaseLabel}: ${humanized.split(/\s+/).length} words (${Date.now() - phaseStart}ms)`);
             }
-            console.log(`[Pipeline-11] Complete: ${humanized.split(/\s+/).length} words in ${Date.now() - cycleStart}ms`);
+            console.log(`[Pipeline] Complete: ${humanized.split(/\s+/).length} words in ${Date.now() - phaseStart}ms`);
           }
 
-          // Emit final engine sentences for non-fast-loop engines
-          if (!fastLoopEnabled) {
+          // Emit final engine sentences for non-phased engines
+          if (!usePhasePipeline) {
             const { sentences: engineSentences } = splitIntoIndexedSentences(humanized);
             await emitSentencesStaggered(controller, engineSentences, 'Engine', 20);
             await flushDelay(30);
@@ -525,7 +668,7 @@ export async function POST(req: Request) {
 
           if (eng !== 'humara' && eng !== 'humara_v1_3' && eng !== 'nuru' && eng !== 'omega' && eng !== 'oxygen' && eng !== 'ozone' && !isDeepKill) {
             humanized = unifiedSentenceProcess(humanized, earlyFirstPerson, inputAiScore);
-            if (!fastLoopEnabled) {
+            if (!usePhasePipeline) {
               sendSSE(controller, { type: 'stage', stage: 'Sentence Processing' });
               await flushDelay(20);
               const { sentences: uspSentences } = splitIntoIndexedSentences(humanized);
@@ -536,7 +679,7 @@ export async function POST(req: Request) {
 
           // 5. 40% Restructuring enforcement
           if (!isDeepKill) {
-          if (!fastLoopEnabled) {
+          if (!usePhasePipeline) {
             sendSSE(controller, { type: 'stage', stage: 'Restructuring' });
             await flushDelay(20);
           }
@@ -571,7 +714,7 @@ export async function POST(req: Request) {
             }
             if (changed) {
               humanized = reassembleText(humanizedSents, humanParaBounds.length ? humanParaBounds : [0]);
-              if (!fastLoopEnabled) {
+              if (!usePhasePipeline) {
                 const { sentences: restructuredSents } = splitIntoIndexedSentences(humanized);
                 await emitSentencesStaggered(controller, restructuredSents, 'Restructuring', 20);
               }
@@ -836,8 +979,8 @@ export async function POST(req: Request) {
             await flushDelay(30);
           }
 
-          // Emit polished sentences (skip visible stage for fast-loop engines)
-          if (!fastLoopEnabled) {
+          // Emit polished sentences (skip for phased engines)
+          if (!usePhasePipeline) {
             sendSSE(controller, { type: 'stage', stage: 'Polishing' });
             await flushDelay(20);
             const { sentences: polishedSents } = splitIntoIndexedSentences(humanized);
@@ -848,7 +991,7 @@ export async function POST(req: Request) {
           // 14. Meaning check (detection disabled — coming soon)
           // Final cleanup: collapse double spaces
           humanized = humanized.replace(/ {2,}/g, ' ');
-          if (!fastLoopEnabled) {
+          if (!usePhasePipeline) {
             sendSSE(controller, { type: 'stage', stage: 'Analyzing' });
             await flushDelay(10);
           }

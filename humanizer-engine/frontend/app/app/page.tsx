@@ -1,16 +1,14 @@
 'use client';
 import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
-import dynamic from 'next/dynamic';
+
 import { Copy, Check, Zap, Eraser, RotateCcw, Type, AlignLeft, RefreshCw, AlertTriangle, Clock, ChevronDown, ChevronUp, Shield, Settings, ClipboardPaste } from 'lucide-react';
 import UsageBar, { useUsage } from './UsageBar';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../AuthProvider';
 import Link from 'next/link';
+import WaterJugProgress from '../components/WaterJugProgress';
 
 const ADMIN_EMAILS = ['maguna956@gmail.com', 'maxwellotieno11@gmail.com'];
-
-const ProcessingAnimation = dynamic(() => import('../ProcessingAnimation'), { ssr: false });
-const LiveTextTransition = dynamic(() => import('./LiveTextTransition'), { ssr: false });
 
 /* ── Types ──────────────────────────────────────────────────────────────── */
 interface DetectorScore { detector: string; ai_score: number; human_score: number; }
@@ -318,12 +316,20 @@ export default function EditorPage() {
   const [iterationCount, setIterationCount] = useState(0);
   const [preGeneratedAlts, setPreGeneratedAlts] = useState<Record<string, SentenceAlternative[]>>({});
 
-  // Live streaming text transition animation
+  // Live streaming progress animation
   const [isAnimating, setIsAnimating] = useState(false);
   const [streamSentences, setStreamSentences] = useState<{ text: string; stage: string }[]>([]);
   const [streamParagraphBoundaries, setStreamParagraphBoundaries] = useState<number[]>([]);
   const [streamGlobalStage, setStreamGlobalStage] = useState('Initializing…');
   const [streamDone, setStreamDone] = useState(false);
+  const [streamProgress, setStreamProgress] = useState(0); // 0-100 within current phase
+  const [streamProgressTarget, setStreamProgressTarget] = useState(0); // 0-100
+  const [streamPhaseName, setStreamPhaseName] = useState('');
+  const [streamPhaseIndex, setStreamPhaseIndex] = useState(0);
+  const [streamTotalPhases, setStreamTotalPhases] = useState(1);
+  const streamSentenceTotalRef = useRef(1);
+  const streamPhaseSentenceRef = useRef(0);
+  const streamPhaseOpsRef = useRef(1);
   const abortRef = useRef<AbortController | null>(null);
 
   // Temporary history (auto-expires)
@@ -375,6 +381,26 @@ export default function EditorPage() {
     return () => clearInterval(interval);
   }, [history.length]);
 
+  // Smoothly ease visible progress toward target for a natural water-fill motion.
+  // When target drops to 0 (new phase), drain quickly then allow fill.
+  useEffect(() => {
+    if (!isAnimating) return;
+    const tick = window.setInterval(() => {
+      setStreamProgress(prev => {
+        const delta = streamProgressTarget - prev;
+        if (Math.abs(delta) < 0.3) return streamProgressTarget;
+        // Draining (new phase reset): fast drain
+        if (streamProgressTarget < prev && streamProgressTarget <= 2) {
+          return Math.max(0, prev - 4);
+        }
+        // Filling: smooth ease
+        const step = Math.max(0.3, Math.min(1.5, Math.abs(delta) * 0.09));
+        return prev + Math.sign(delta) * Math.min(step, Math.abs(delta));
+      });
+    }, 16);
+    return () => window.clearInterval(tick);
+  }, [isAnimating, streamProgressTarget]);
+
   const addToHistory = useCallback((input: string, output: string, eng: string, aiBefore: number, aiAfter: number, wc: number) => {
     const entry: HistoryEntry = {
       id: crypto.randomUUID(),
@@ -400,14 +426,6 @@ export default function EditorPage() {
   }, [text]);
 
   /* ── Handlers ───────────────────────────────────────────────────────── */
-  const handleTransitionComplete = useCallback(() => {
-    setIsAnimating(false);
-    setStreamSentences([]);
-    setStreamParagraphBoundaries([]);
-    setStreamDone(false);
-    setStreamGlobalStage('Initializing…');
-  }, []);
-
   /** Clean input text — strip emoji, bullets, line artifacts, numbering */
   const cleanInputText = (raw: string): string => {
     let cleaned = raw;
@@ -495,11 +513,44 @@ export default function EditorPage() {
         if (event.type === 'error') throw new Error(event.error as string);
 
         if (event.type === 'init') {
-          const sents = (event.sentences as string[]).map(t => ({ text: t, stage: 'original' }));
+          const rawSents = event.sentences as string[];
+          const sents = rawSents.map(t => ({ text: t, stage: 'original' }));
           setStreamSentences(sents);
           setStreamParagraphBoundaries(event.paragraphBoundaries as number[]);
+          streamSentenceTotalRef.current = Math.max(1, rawSents.length);
+          streamPhaseSentenceRef.current = 0;
+          streamPhaseOpsRef.current = rawSents.length;
+          setStreamProgress(0);
+          setStreamProgressTarget(0);
+          setStreamPhaseName('');
+          setStreamPhaseIndex(0);
+          setStreamTotalPhases(1);
         } else if (event.type === 'stage') {
-          setStreamGlobalStage(event.stage as string);
+          const stageLabel = event.stage as string;
+          setStreamGlobalStage(stageLabel);
+          // Parse "Phase N/M – Name" format
+          const phaseMatch = stageLabel.match(/^Phase\s+(\d+)\/(\d+)\s*[–-]\s*(.+)/i);
+          if (phaseMatch) {
+            const pi = Number(phaseMatch[1]) || 1;
+            const total = Number(phaseMatch[2]) || 1;
+            const name = phaseMatch[3].trim();
+            setStreamPhaseIndex(pi);
+            setStreamTotalPhases(total);
+            setStreamPhaseName(name);
+            streamPhaseSentenceRef.current = 0;
+            // Use phaseOps from backend if provided, otherwise fall back to totalSentences
+            streamPhaseOpsRef.current = (typeof event.phaseOps === 'number' && event.phaseOps > 0)
+              ? event.phaseOps
+              : streamSentenceTotalRef.current;
+            // Drain water to 0 for the new phase (except the first)
+            if (pi > 1) {
+              setStreamProgressTarget(0);
+            } else {
+              setStreamProgressTarget(2);
+            }
+          } else if (/engine processing/i.test(stageLabel)) {
+            setStreamProgressTarget(2);
+          }
         } else if (event.type === 'sentence') {
           const idx = event.index as number;
           const txt = event.text as string;
@@ -511,12 +562,18 @@ export default function EditorPage() {
             }
             return next;
           });
+          streamPhaseSentenceRef.current += 1;
+          const opsTotal = Math.max(1, streamPhaseOpsRef.current);
+          // Progress within current phase: 0→99% based on ops count
+          const phaseProgress = (Math.min(streamPhaseSentenceRef.current, opsTotal) / opsTotal) * 99;
+          setStreamProgressTarget(Math.max(2, Math.min(99, phaseProgress)));
         } else if (event.type === 'done') {
           finalData = event as Record<string, unknown>;
-          // Mark all sentences as done
           setStreamSentences(prev => prev.map(s => ({ ...s, stage: 'done' })));
           setStreamGlobalStage('Complete');
           setStreamDone(true);
+          setStreamProgressTarget(100);
+          setStreamPhaseName('Complete');
           doneEventReceived = true;
         }
       }
@@ -536,6 +593,7 @@ export default function EditorPage() {
           setStreamSentences(prev => prev.map(s => ({ ...s, stage: 'done' })));
           setStreamGlobalStage('Complete');
           setStreamDone(true);
+          setStreamProgressTarget(100);
         }
       } catch {}
     }
@@ -567,6 +625,11 @@ export default function EditorPage() {
     setStreamParagraphBoundaries([]);
     setStreamGlobalStage('Initializing…');
     setStreamDone(false);
+    setStreamProgress(0);
+    setStreamProgressTarget(0);
+    setStreamPhaseName('');
+    setStreamPhaseIndex(0);
+    setStreamTotalPhases(1);
     setIsAnimating(true);
 
     // Abort any previous stream
@@ -589,6 +652,12 @@ export default function EditorPage() {
         // Detection disabled — scores set to 0
         addToHistory(text, currentResult, (finalData.engine_used as string) || engine, 0, 0, (finalData.word_count as number) || outputWords);
         refreshUsage();
+
+        setStreamProgressTarget(100);
+        await new Promise(resolve => setTimeout(resolve, 280));
+        setStreamProgress(100);
+        await new Promise(resolve => setTimeout(resolve, 80));
+        setIsAnimating(false);
       }
     } catch (err) {
       if ((err as Error).name !== 'AbortError') {
@@ -608,6 +677,11 @@ export default function EditorPage() {
     setStreamParagraphBoundaries([]);
     setStreamGlobalStage('Initializing…');
     setStreamDone(false);
+    setStreamProgress(0);
+    setStreamProgressTarget(0);
+    setStreamPhaseName('');
+    setStreamPhaseIndex(0);
+    setStreamTotalPhases(1);
     setIsAnimating(true);
 
     if (abortRef.current) abortRef.current.abort();
@@ -622,6 +696,12 @@ export default function EditorPage() {
         setMeaningScore(finalData.meaning_similarity as number);
         // Detection disabled — coming soon
         refreshUsage();
+
+        setStreamProgressTarget(100);
+        await new Promise(resolve => setTimeout(resolve, 280));
+        setStreamProgress(100);
+        await new Promise(resolve => setTimeout(resolve, 80));
+        setIsAnimating(false);
       }
     } catch (err) {
       if ((err as Error).name !== 'AbortError') {
@@ -645,7 +725,7 @@ export default function EditorPage() {
     setSentenceScores([]); setMeaningScore(null);
     setPreGeneratedAlts({});
     setIsAnimating(false);
-    setStreamSentences([]); setStreamParagraphBoundaries([]); setStreamDone(false); setStreamGlobalStage('Initializing…');
+    setStreamSentences([]); setStreamParagraphBoundaries([]); setStreamDone(false); setStreamGlobalStage('Initializing…'); setStreamProgress(0); setStreamProgressTarget(0);
     if (abortRef.current) { abortRef.current.abort(); abortRef.current = null; }
     setError(''); closePopup();
   };
@@ -1172,13 +1252,12 @@ export default function EditorPage() {
           </div>
 
           {isAnimating ? (
-            <div className={`${EDITOR_HEIGHT_CLASS} overflow-hidden`}>
-              <LiveTextTransition
-                sentences={streamSentences}
-                paragraphBoundaries={streamParagraphBoundaries}
-                globalStage={streamGlobalStage}
-                isDone={streamDone}
-                onComplete={handleTransitionComplete}
+            <div className={`flex flex-col items-center justify-center ${EDITOR_HEIGHT_CLASS} overflow-hidden`}>
+              <WaterJugProgress
+                percent={streamProgress}
+                phaseName={streamPhaseName || undefined}
+                phaseIndex={streamPhaseIndex}
+                totalPhases={streamTotalPhases}
               />
             </div>
           ) : result ? (

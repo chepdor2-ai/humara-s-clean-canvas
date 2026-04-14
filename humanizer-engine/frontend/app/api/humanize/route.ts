@@ -1,20 +1,3 @@
-    const runNuruSinglePass = (input: string): string => {
-      const output = stealthHumanize(input, strength ?? 'medium', tone ?? 'academic', 1);
-      return output && output.trim().length > 0 ? output : input;
-    };
-
-    const CHAIN_TS = 10;
-    const chainSync = (fn: (s: string) => string, input: string, n: number): string => {
-      let out = input;
-      for (let i = 0; i < n; i++) out = fn(out);
-      return out;
-    };
-    } else if (engine === 'ninja_1') {
-      // Ninja 1: Ninja LLM → Humara 2.0 (oxygen) → Nuru 2.0 (single pass) → [10× Nuru 2.0 via outer loop]
-      const stage1 = await runGuarded('ninja1_stage_1', () => llmHumanize(normalizedText, strength ?? 'medium', true, strict_meaning ?? true, tone ?? 'academic', no_contractions !== false, enable_post_processing !== false), normalizedText);
-      const stage2 = runHumara20(stage1);
-      const stage3 = runNuruSinglePass(stage2);
-      humanized = chainSync(runNuru, stage3, CHAIN_TS);
 import { NextResponse } from 'next/server';
 import { humanize } from '@/lib/engine/humanizer';
 import { ghostProHumanize } from '@/lib/engine/ghost-pro';
@@ -576,8 +559,8 @@ function lastMileMeaningValidator(
     } else if (coveredOriginals.has(origIdx)) {
       // Original already covered — check if there's a different uncovered original
       // that this sentence might actually correspond to (positional fallback)
-      let positionalOrig = origSentences[Math.min(i, origSentences.length - 1)];
-      let positionalOverlap = contentWordOverlap(positionalOrig, humanizedSentences[i]);
+      const positionalOrig = origSentences[Math.min(i, origSentences.length - 1)];
+      const positionalOverlap = contentWordOverlap(positionalOrig, humanizedSentences[i]);
       if (positionalOverlap >= minOverlap) {
         fixedSentences.push(humanizedSentences[i]);
       } else {
@@ -652,13 +635,23 @@ function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: string): 
 
 export async function POST(req: Request) {
   try {
-    let body: any;
+    let body: {
+      text?: string;
+      engine?: string;
+      strength?: string;
+      tone?: string;
+      strict_meaning?: boolean;
+      no_contractions?: boolean;
+      enable_post_processing?: boolean;
+      premium?: boolean;
+      [key: string]: unknown;
+    };
     try {
       body = await req.json();
     } catch {
       return NextResponse.json({ error: 'Invalid or empty request body' }, { status: 400 });
     }
-    const { text, engine, strength, tone, strict_meaning, no_contractions, enable_post_processing, premium } = body;
+    const { text, engine = 'oxygen', strength, tone, strict_meaning, no_contractions, enable_post_processing, premium } = body;
 
     // 30% aggressiveness boost: when "Keep Meaning" is unchecked, bump strength one level
     const effectiveStrength = (!strict_meaning && strength === 'light') ? 'medium'
@@ -834,6 +827,18 @@ export async function POST(req: Request) {
       return output && output.trim().length > 0 ? output : input;
     };
 
+    const runNuruSinglePass = (input: string): string => {
+      const output = stealthHumanize(input, strength ?? 'medium', tone ?? 'academic', 1);
+      return output && output.trim().length > 0 ? output : input;
+    };
+
+    const CHAIN_TS = 10;
+    const chainSync = (fn: (s: string) => string, input: string, n: number): string => {
+      let out = input;
+      for (let i = 0; i < n; i++) out = fn(out);
+      return out;
+    };
+
     // Deep Kill engine set — used to skip destructive post-processors
     const DEEP_KILL_ENGINES = new Set([
       'ninja_2', 'ninja_3', 'ninja_4', 'ninja_5',
@@ -930,9 +935,15 @@ export async function POST(req: Request) {
       );
     } else if (engine === 'humara') {
       // Humara: Independent humanizer engine — phrase-level, strategy-diverse
+      const humaraStrength: 'light' | 'medium' | 'heavy' =
+        strength === 'high' || strength === 'strong' ? 'heavy'
+          : strength === 'low' || strength === 'light' ? 'light'
+            : 'medium';
+      const humaraTone: 'neutral' | 'academic' | 'professional' | 'casual' =
+        tone === 'academic' || tone === 'professional' || tone === 'casual' ? tone : 'neutral';
       humanized = humaraHumanize(normalizedText, {
-        strength: strength === 'high' ? 'heavy' : strength === 'low' ? 'light' : (strength ?? 'medium'),
-        tone: tone ?? 'neutral',
+        strength: humaraStrength,
+        tone: humaraTone,
         strictMeaning: strict_meaning ?? false,
       });
     } else if (premium) {
@@ -944,6 +955,12 @@ export async function POST(req: Request) {
         tone ?? 'neutral',
         strict_meaning ?? true,
       );
+    } else if (engine === 'ninja_1') {
+      // Ninja 1: Ninja LLM → Humara 2.0 (oxygen) → Nuru 2.0 (single pass) → [10× Nuru 2.0 via outer loop]
+      const stage1 = await runGuarded('ninja1_stage_1', () => llmHumanize(normalizedText, strength ?? 'medium', true, strict_meaning ?? true, tone ?? 'academic', no_contractions !== false, enable_post_processing !== false), normalizedText);
+      const stage2 = runHumara20(stage1);
+      const stage3 = runNuruSinglePass(stage2);
+      humanized = chainSync(runNuru, stage3, CHAIN_TS);
     } else if (engine === 'undetectable') {
       // Undetectable: Ninja (Stealth) only — second Ghost Mini pass removed
       // The double pass was over-processing and creating unnaturally uniform text
@@ -970,7 +987,7 @@ export async function POST(req: Request) {
     } else if (engine === 'fast_v11') {
       // Fast V1.1: 7-phase pipeline (non-LLM primary, LLM optional for chunk rewrite)
       const v11Result = await humanizeV11(normalizedText, {
-        strength: strength ?? 'medium',
+        strength: (strength ?? 'medium') as 'light' | 'medium' | 'strong',
         tone: tone ?? 'neutral',
         strictMeaning: strict_meaning ?? false,
       });
