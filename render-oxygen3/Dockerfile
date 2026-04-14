@@ -12,7 +12,9 @@ RUN pip install --no-cache-dir \
     "uvicorn[standard]" \
     safetensors \
     pydantic \
-    huggingface_hub
+    huggingface_hub \
+    sentencepiece \
+    protobuf
 
 # Download the model at build time (cached in Docker layer — fast cold starts)
 # Render auto-injects env vars as Docker build args
@@ -25,20 +27,36 @@ from huggingface_hub import snapshot_download
 repo_id = (os.environ.get('HF_MODEL_REPO') or 'maguna956/oxygen3-humanizer').strip()
 token = (os.environ.get('HF_TOKEN') or '').strip()
 
+kwargs = dict(repo_id=repo_id, local_dir='/app/oxygen3-model')
+if token:
+  kwargs['token'] = token
+
 try:
-  if token:
-    snapshot_download(repo_id, local_dir='/app/oxygen3-model', token=token)
-  else:
-    # Allows public model repos to build without a token.
-    snapshot_download(repo_id, local_dir='/app/oxygen3-model')
+  snapshot_download(**kwargs)
 except Exception as e:
   if not token:
     raise RuntimeError(
-      f'HF_TOKEN is empty and anonymous download failed for {repo_id}. '
-      'Set HF_TOKEN in Render service environment variables, or set HF_MODEL_REPO to a public model. '
-      'For existing Blueprint services, add/update env vars manually in Render Dashboard -> Environment.'
+      f'Anonymous download failed for {repo_id}. '
+      'Set HF_TOKEN in Render env vars, or use a public model repo.'
     ) from e
   raise
+
+# Handle case where files are in a subfolder (e.g. oxygen3-model/)
+import glob, shutil
+nested = glob.glob('/app/oxygen3-model/oxygen3-model/*.json') + \
+         glob.glob('/app/oxygen3-model/oxygen3-model/*.safetensors')
+if nested:
+  for f in glob.glob('/app/oxygen3-model/oxygen3-model/*'):
+    shutil.move(f, '/app/oxygen3-model/')
+  shutil.rmtree('/app/oxygen3-model/oxygen3-model', ignore_errors=True)
+  print('Flattened nested oxygen3-model/ subfolder')
+
+# Verify critical files exist
+import pathlib
+model_dir = pathlib.Path('/app/oxygen3-model')
+for req in ['config.json', 'tokenizer_config.json']:
+  assert (model_dir / req).exists(), f'Missing {req} in downloaded model!'
+print('Model download OK:', [p.name for p in model_dir.iterdir()])
 PY
 
 # Copy server files
