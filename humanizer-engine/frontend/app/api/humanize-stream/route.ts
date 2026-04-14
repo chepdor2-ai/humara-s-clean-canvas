@@ -7,7 +7,7 @@ import { preserveInputStructure } from '@/lib/engine/structure-preserver';
 import { structuralPostProcess } from '@/lib/engine/structural-post-processor';
 import { unifiedSentenceProcess } from '@/lib/sentence-processor';
 import { expandContractions } from '@/lib/humanize-transforms';
-import { removeEmDashes, applyV13Techniques } from '@/lib/engine/v13-shared-techniques';
+import { removeEmDashes, applyV13Techniques, fixOutOfContextSynonyms, validateCollocations } from '@/lib/engine/v13-shared-techniques';
 import { humanize } from '@/lib/engine/humanizer';
 import { ghostProHumanize } from '@/lib/engine/ghost-pro';
 import { llmHumanize, deepAICleanOneSentence } from '@/lib/engine/llm-humanizer';
@@ -433,9 +433,34 @@ export async function POST(req: Request) {
             return s;
           };
 
-          // ── Deep grammar cleaning (per-sentence): grammar repair + capitalization fix ──
-          const deepGrammarClean = (sentence: string): string => {
+          // ── Smoothing pass (per-sentence): intelligent flow & grammar repair ──
+          // Applied after heavy engines to fix grammar breaks, awkward connectors,
+          // and punctuation issues introduced by rule-based transforms.
+          const smoothingPass = (sentence: string): string => {
+            let s = postCleanGrammar(sentence);       // Fix verb forms, subject-verb agreement, tense
+            s = applyConnectorNaturalization(s);       // Replace remaining formal connectors naturally
+            s = fixOutOfContextSynonyms(s);            // Fix synonyms that don't fit semantic context
+            s = fixPunctuation(s);                     // Repair punctuation artifacts
+            s = fixMidSentenceCapitalization(s);       // Fix errant capitals
+            s = removeEmDashes(s);                     // Remove AI-flagged em-dashes
+            return s;
+          };
+
+          // ── Final smoothing & grammar (per-sentence): deep intelligent cleanup ──
+          // Last phase — ensures output reads as polished, natural student writing.
+          // Uses only deterministic linguistic rules, NOT random template shuffling.
+          const finalSmoothGrammar = (sentence: string): string => {
+            // 1. Grammar repair: irregular verbs, agreement, collocations, tense consistency
             let s = postCleanGrammar(sentence);
+            // 2. Semantic synonym check: fix synonyms that don't fit the context
+            s = fixOutOfContextSynonyms(s);
+            // 3. Collocation validation: ensure adjective-noun pairs sound natural
+            s = validateCollocations(s);
+            // 4. Connector naturalization: any leftover formal connectors → natural speech
+            s = applyConnectorNaturalization(s);
+            // 5. Punctuation cleanup
+            s = fixPunctuation(s);
+            // 6. Capitalization + em-dash removal
             s = fixMidSentenceCapitalization(s);
             s = removeEmDashes(s);
             return s;
@@ -673,14 +698,17 @@ export async function POST(req: Request) {
                 break;
               case 'ninja_1':
                 phases = [
-                  { name: 'Ninja', type: 'emit' },
-                  { name: 'Deep AI Clean', type: 'async', fn: (s) => deepAICleanOneSentence(s) },
-                  { name: 'Deep Non-LLM Clean', type: 'sync', fn: (s) => deepNonLLMClean(s) },
-                  { name: 'Humara 2.0', type: 'sync', fn: (s) => runHumara20(s) },
-                  { name: 'Nuru 2.0', type: 'nuru', passes: CHAIN_TS },
-                  { name: 'Humara 2.4', type: 'async', fn: (s) => runHumara24(s) },
-                  { name: 'Wikipedia', type: 'async', fn: (s) => runWikipediaClean(s) },
-                  { name: 'Grammar Deep Clean', type: 'sync', fn: (s) => deepGrammarClean(s) },
+                  { name: 'Ninja', type: 'emit' },                                         // Phase 1:  LLM student-persona rewrite
+                  { name: 'Deep AI Clean', type: 'async', fn: (s) => deepAICleanOneSentence(s) }, // Phase 2:  LLM residual AI signal strip
+                  { name: 'Deep Non-LLM Clean', type: 'sync', fn: (s) => deepNonLLMClean(s) },    // Phase 3:  Rule-based AI vocabulary/phrase kill
+                  { name: 'Humara 2.0', type: 'sync', fn: (s) => runHumara20(s) },                // Phase 4:  Heavy rule-based 6-phase engine
+                  { name: 'Smoothing', type: 'sync', fn: (s) => smoothingPass(s) },               // Phase 5:  Grammar + flow repair after Humara 2.0
+                  { name: 'Nuru 2.0', type: 'nuru', passes: CHAIN_TS },                           // Phase 6:  10-pass stealth humanization
+                  { name: 'Humara 2.4', type: 'async', fn: (s) => runHumara24(s) },               // Phase 7:  External Humarin API + oxygen chain
+                  { name: 'Nuru 2.0 Post-2.4', type: 'nuru', passes: CHAIN_TS },                  // Phase 8:  10-pass Nuru after Humara 2.4
+                  { name: 'Wikipedia', type: 'async', fn: (s) => runWikipediaClean(s) },          // Phase 9:  Ghost Pro LLM with Wikipedia tone
+                  { name: 'Nuru 2.0 Post-Wiki', type: 'nuru', passes: CHAIN_TS },                 // Phase 10: 10-pass Nuru after Wikipedia
+                  { name: 'Final Smooth & Grammar', type: 'sync', fn: (s) => finalSmoothGrammar(s) }, // Phase 11: Intelligent grammar + flow polish
                 ];
                 break;
               case 'oxygen':
