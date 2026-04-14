@@ -1,13 +1,13 @@
 import { robustSentenceSplit } from '@/lib/engine/content-protection';
 import { getDetector } from '@/lib/engine/multi-detector';
 import { isMeaningPreserved, isMeaningPreservedSync } from '@/lib/engine/semantic-guard';
-import { fixCapitalization } from '@/lib/engine/shared-dictionaries';
+import { fixCapitalization, applyPhrasePatterns, applyConnectorNaturalization, applySyntacticTemplate, fixPunctuation } from '@/lib/engine/shared-dictionaries';
 import { deduplicateRepeatedPhrases } from '@/lib/engine/premium-deep-clean';
 import { preserveInputStructure } from '@/lib/engine/structure-preserver';
 import { structuralPostProcess } from '@/lib/engine/structural-post-processor';
 import { unifiedSentenceProcess } from '@/lib/sentence-processor';
 import { expandContractions } from '@/lib/humanize-transforms';
-import { removeEmDashes } from '@/lib/engine/v13-shared-techniques';
+import { removeEmDashes, applyV13Techniques } from '@/lib/engine/v13-shared-techniques';
 import { humanize } from '@/lib/engine/humanizer';
 import { ghostProHumanize } from '@/lib/engine/ghost-pro';
 import { llmHumanize, deepAICleanOneSentence } from '@/lib/engine/llm-humanizer';
@@ -419,6 +419,28 @@ export async function POST(req: Request) {
             return out;
           };
 
+          // ── Deep non-LLM cleaning (per-sentence): 3-layer rule-based AI signal removal ──
+          const deepNonLLMClean = (sentence: string): string => {
+            // Layer 1: Kill AI vocabulary + formal connectors
+            let s = applyAIWordKill(sentence);
+            s = applyConnectorNaturalization(s);
+            // Layer 2: Phrase-level transforms + syntactic restructuring
+            s = applyPhrasePatterns(s);
+            s = applySyntacticTemplate(s);
+            // Layer 3: V1.3 stealth techniques (compression, collocation, restructuring, punctuation, em-dash removal)
+            s = applyV13Techniques(s);
+            s = fixPunctuation(s);
+            return s;
+          };
+
+          // ── Deep grammar cleaning (per-sentence): grammar repair + capitalization fix ──
+          const deepGrammarClean = (sentence: string): string => {
+            let s = postCleanGrammar(sentence);
+            s = fixMidSentenceCapitalization(s);
+            s = removeEmDashes(s);
+            return s;
+          };
+
           // Deep Kill engine set — used to skip destructive post-processors
           const DEEP_KILL_ENGINES = new Set([
             'ninja_2', 'ninja_3', 'ninja_4', 'ninja_5',
@@ -653,8 +675,12 @@ export async function POST(req: Request) {
                 phases = [
                   { name: 'Ninja', type: 'emit' },
                   { name: 'Deep AI Clean', type: 'async', fn: (s) => deepAICleanOneSentence(s) },
+                  { name: 'Deep Non-LLM Clean', type: 'sync', fn: (s) => deepNonLLMClean(s) },
                   { name: 'Humara 2.0', type: 'sync', fn: (s) => runHumara20(s) },
-                  { name: 'Nuru 2.0', type: 'nuru', passes: 10 },
+                  { name: 'Nuru 2.0', type: 'nuru', passes: CHAIN_TS },
+                  { name: 'Humara 2.4', type: 'async', fn: (s) => runHumara24(s) },
+                  { name: 'Wikipedia', type: 'async', fn: (s) => runWikipediaClean(s) },
+                  { name: 'Grammar Deep Clean', type: 'sync', fn: (s) => deepGrammarClean(s) },
                 ];
                 break;
               case 'oxygen':
