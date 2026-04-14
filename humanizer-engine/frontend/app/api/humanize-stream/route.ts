@@ -317,6 +317,13 @@ export async function POST(req: Request) {
             return output && output.trim().length > 0 ? output : input;
           };
 
+          // Single-pass Nuru for the outer iteration loop (1 internal iteration).
+          // The 10-cycle outer loop provides the 10 total Nuru iterations.
+          const runNuruSinglePass = (input: string): string => {
+            const output = stealthHumanize(input, strength ?? 'medium', tone ?? 'academic', 1);
+            return output && output.trim().length > 0 ? output : input;
+          };
+
           // Nuru 2.0 post-processing depth applied at the tail of every pipeline.
           const CHAIN_TS = 10;
           const chainSync = (fn: (s: string) => string, input: string, n: number): string => {
@@ -333,163 +340,175 @@ export async function POST(req: Request) {
           ]);
           const isDeepKill = DEEP_KILL_ENGINES.has(eng);
 
-          if (eng === 'easy') {
-            humanized = await runHumara22(normalizedText);
-          } else if (eng === 'ozone') {
-            humanized = await runHumara21(normalizedText);
-          } else if (eng === 'oxygen') {
-            humanized = runHumara20(normalizedText);
-          } else if (eng === 'oxygen3') {
-            // Oxygen 3.0: Fine-tuned T5 model (strict sentence-by-sentence, first-person guard)
-            const o3Mode = effectiveStrength === 'strong' ? 'fast' : 'turbo';
-            const o3Result = await oxygen3Humanize(normalizedText, o3Mode);
-            humanized = o3Result.humanized;
-          } else if (eng === 'oxygen_t5') {
-            // Oxygen T5: Remote T5 model server (HF Space or self-hosted)
-            const t5Mode = effectiveStrength === 'light' ? 'turbo' : effectiveStrength === 'strong' ? 'aggressive' : 'fast';
-            const t5Result = await t5Humanize(normalizedText, t5Mode, true);
-            humanized = t5Result.humanized;
-          } else if (eng === 'dipper') {
-            // DIPPER: 1B T5 paraphraser trained to evade AI detectors (HF Space)
-            const dipperSBS = (body as Record<string, unknown>).dipper_sentence_by_sentence !== undefined
-              ? Boolean((body as Record<string, unknown>).dipper_sentence_by_sentence)
-              : false;
-            const dipperResult = await dipperHumanize(normalizedText, effectiveStrength, dipperSBS);
-            humanized = dipperResult.humanized;
-          } else if (eng === 'humarin') {
-            // Humarin: ChatGPT-trained T5-base paraphraser (222M, HF Space)
-            const humarinMode = strength === 'strong' ? 'aggressive' : strength === 'light' ? 'fast' : 'quality';
-            const humarinResult = await humarinHumanize(normalizedText, humarinMode, true);
-            humanized = humarinResult.humanized;
-          } else if (eng === 'humara_v3_3') {
-            humanized = await runHumara24(normalizedText);
-          } else if (eng === 'nuru_v2') {
-            humanized = runNuru(normalizedText);
-          } else if (eng === 'ghost_pro_wiki') {
-            humanized = await runWikipedia(normalizedText);
-          } else if (eng === 'ninja_3') {
-            // Ninja 3: Oxygen×1 → Wikipedia×1 → Nuru×10
-            const stage1 = runHumara20(normalizedText);
-            const stage2 = await runGuarded('ninja_3_stage_2', () => runWikipediaClean(stage1), stage1);
-            humanized = chainSync(runNuru, stage2, CHAIN_TS);
-          } else if (eng === 'ninja_2') {
-            // Ninja 2: Oxygen×1 → Nuru×10
-            const stage1 = runHumara20(normalizedText);
-            humanized = chainSync(runNuru, stage1, CHAIN_TS);
-          } else if (eng === 'ninja_4') {
-            // Ninja 4: Humara 2.4×1 → Wikipedia×1 → Nuru×10
-            const stage1 = await runGuarded('ninja_4_stage_1', () => runHumara24(normalizedText), normalizedText);
-            const stage2 = await runGuarded('ninja_4_stage_2', () => runWikipediaClean(stage1), stage1);
-            humanized = chainSync(runNuru, stage2, CHAIN_TS);
-          } else if (eng === 'ninja_5') {
-            // Ninja 5: Humara 2.4×1 → Nuru×10
-            const stage1 = await runGuarded('ninja_5_stage_1', () => runHumara24(normalizedText), normalizedText);
-            humanized = chainSync(runNuru, stage1, CHAIN_TS);
-          } else if (eng === 'ghost_trial_2') {
-            // Ghost Trial 2: Wikipedia×1 → Humara 2.4×1 → Nuru×10
-            const stage1 = await runGuarded('ghost_trial_2_stage_1', () => runWikipediaClean(normalizedText), normalizedText);
-            const stage2 = await runGuarded('ghost_trial_2_stage_2', () => runHumara24(stage1), stage1);
-            humanized = chainSync(runNuru, stage2, CHAIN_TS);
-          } else if (eng === 'ghost_trial_2_alt') {
-            // Ghost Trial 2 Alt: Wikipedia×1 → Oxygen×1 → Nuru×10
-            const stage1 = await runGuarded('ghost_trial_2_alt_stage_1', () => runWikipediaClean(normalizedText), normalizedText);
-            const stage2 = runHumara20(stage1);
-            humanized = chainSync(runNuru, stage2, CHAIN_TS);
-          } else if (eng === 'conscusion_1') {
-            // Conscusion 1: Easy×1 → Wikipedia×1 → Nuru×10
-            const stage1 = await runGuarded('conscusion_1_stage_1', () => runHumara22Clean(normalizedText), normalizedText, 35_000);
-            const stage2 = await runGuarded('conscusion_1_stage_2', () => runWikipediaClean(stage1), stage1);
-            humanized = chainSync(runNuru, stage2, CHAIN_TS);
-          } else if (eng === 'conscusion_12') {
-            // Conscusion 12: Ozone×1 → Humara 2.4×1 → Wikipedia×1 → Nuru×10
-            const stage1 = await runGuarded('conscusion_12_stage_1', () => runHumara21(normalizedText), normalizedText, 35_000);
-            const stage2 = await runGuarded('conscusion_12_stage_2', () => runHumara24(stage1), stage1);
-            const stage3 = await runGuarded('conscusion_12_stage_3', () => runWikipediaClean(stage2), stage2);
-            humanized = chainSync(runNuru, stage3, CHAIN_TS);
-          } else if (eng === 'humara_v1_3') {
-            const { pipeline } = await import('@/lib/engine/humara-v1-3');
-            humanized = await pipeline(normalizedText, (tone ?? 'academic') as string, strength === 'strong' ? 10 : strength === 'light' ? 4 : 7);
-          } else if (eng === 'omega') {
-            humanized = await omegaHumanize(normalizedText, strength ?? 'medium', tone ?? 'academic');
-          } else if (eng === 'nuru') {
-            humanized = nuruHumanize(normalizedText, strength ?? 'medium', tone ?? 'academic');
-          } else if (eng === 'humara') {
-            humanized = humaraHumanize(normalizedText, {
-              strength: strength === 'high' ? 'heavy' : strength === 'low' ? 'light' : (strength ?? 'medium') as 'light' | 'medium' | 'heavy',
-              tone: (tone ?? 'neutral') as 'neutral' | 'academic' | 'professional' | 'casual',
-              strictMeaning: (strict_meaning ?? false) as boolean,
-            });
-          } else if (premium) {
-            humanized = await premiumHumanize(normalizedText, eng, (strength ?? 'medium') as 'light' | 'medium' | 'strong', tone ?? 'neutral', strict_meaning ?? true);
-          } else if (eng === 'undetectable' || eng === 'ninja') {
-            humanized = await llmHumanize(normalizedText, strength ?? 'medium', true, strict_meaning ?? true, tone ?? 'academic', no_contractions !== false, enable_post_processing !== false);
-          } else if (eng === 'fast_v11') {
-            const v11Result = await humanizeV11(normalizedText, { strength: (strength ?? 'medium') as 'light' | 'medium' | 'strong', tone: tone ?? 'neutral', strictMeaning: strict_meaning ?? false });
-            humanized = v11Result.humanized;
-          } else if (eng === 'ghost_mini_v1_2') {
-            const { ghostMiniV1_2 } = await import('@/lib/engine/ghost-mini-v1-2');
-            humanized = ghostMiniV1_2(normalizedText);
-          } else if (eng === 'ghost_pro') {
-            humanized = await ghostProHumanize(normalizedText, { strength: strength ?? 'medium', tone: tone ?? 'neutral', strictMeaning: strict_meaning ?? false, enablePostProcessing: enable_post_processing !== false });
-          } else {
-            humanized = humanize(normalizedText, { mode: 'ghost_mini', strength: strength ?? 'medium', tone: tone ?? 'neutral', strictMeaning: strict_meaning ?? false, enablePostProcessing: enable_post_processing !== false, stealth: true });
-          }
+          // ═══════════════════════════════════════════════════════════════
+          // SENTENCE-PARALLEL PROCESSING
+          // Each sentence goes through the engine independently in parallel,
+          // then results are reassembled preserving paragraph structure.
+          // ═══════════════════════════════════════════════════════════════
+          const { sentences: inputSentences, paragraphBoundaries: inputParaBounds } = splitIntoIndexedSentences(normalizedText);
+          const isHeadingSentCheck = (s: string) => {
+            const t = s.trim();
+            if (t.length < 120 && !/[.!?]$/.test(t) && t.split(/\s+/).length <= 15) return true;
+            // Standalone citation references: "Author, A. B. (2012)." or "Author & Author (2012)."
+            if (/^[A-Z][a-zA-Z]+[,.].*\(\d{4}\)\s*\.?\s*$/.test(t) && t.split(/\s+/).length <= 20) return true;
+            return false;
+          };
+
+          const runEngineOnSentence = async (sentence: string): Promise<string> => {
+            if (eng === 'easy') {
+              return await runHumara22(sentence);
+            } else if (eng === 'ozone') {
+              return await runHumara21(sentence);
+            } else if (eng === 'oxygen') {
+              return runHumara20(sentence);
+            } else if (eng === 'oxygen3') {
+              const o3Mode = effectiveStrength === 'strong' ? 'fast' : 'turbo';
+              return (await oxygen3Humanize(sentence, o3Mode)).humanized;
+            } else if (eng === 'oxygen_t5') {
+              const t5Mode = effectiveStrength === 'light' ? 'turbo' : effectiveStrength === 'strong' ? 'aggressive' : 'fast';
+              return (await t5Humanize(sentence, t5Mode, true)).humanized;
+            } else if (eng === 'dipper') {
+              return (await dipperHumanize(sentence, effectiveStrength, false)).humanized;
+            } else if (eng === 'humarin') {
+              const humarinMode = strength === 'strong' ? 'aggressive' : strength === 'light' ? 'fast' : 'quality';
+              return (await humarinHumanize(sentence, humarinMode, true)).humanized;
+            } else if (eng === 'humara_v3_3') {
+              return await runHumara24(sentence);
+            } else if (eng === 'nuru_v2') {
+              return runNuruSinglePass(sentence);
+            } else if (eng === 'ghost_pro_wiki') {
+              return await runWikipedia(sentence);
+            } else if (eng === 'ninja_3') {
+              const s1 = runHumara20(sentence);
+              const s2 = await runGuarded('ninja_3_s2', () => runWikipediaClean(s1), s1);
+              return chainSync(runNuru, s2, CHAIN_TS);
+            } else if (eng === 'ninja_2') {
+              const s1 = runHumara20(sentence);
+              return chainSync(runNuru, s1, CHAIN_TS);
+            } else if (eng === 'ninja_4') {
+              const s1 = await runGuarded('ninja_4_s1', () => runHumara24(sentence), sentence);
+              const s2 = await runGuarded('ninja_4_s2', () => runWikipediaClean(s1), s1);
+              return chainSync(runNuru, s2, CHAIN_TS);
+            } else if (eng === 'ninja_5') {
+              const s1 = await runGuarded('ninja_5_s1', () => runHumara24(sentence), sentence);
+              return chainSync(runNuru, s1, CHAIN_TS);
+            } else if (eng === 'ghost_trial_2') {
+              const s1 = await runGuarded('gt2_s1', () => runWikipediaClean(sentence), sentence);
+              const s2 = await runGuarded('gt2_s2', () => runHumara24(s1), s1);
+              return chainSync(runNuru, s2, CHAIN_TS);
+            } else if (eng === 'ghost_trial_2_alt') {
+              const s1 = await runGuarded('gt2a_s1', () => runWikipediaClean(sentence), sentence);
+              const s2 = runHumara20(s1);
+              return chainSync(runNuru, s2, CHAIN_TS);
+            } else if (eng === 'conscusion_1') {
+              const s1 = await runGuarded('con1_s1', () => runHumara22Clean(sentence), sentence, 35_000);
+              const s2 = await runGuarded('con1_s2', () => runWikipediaClean(s1), s1);
+              return chainSync(runNuru, s2, CHAIN_TS);
+            } else if (eng === 'conscusion_12') {
+              const s1 = await runGuarded('con12_s1', () => runHumara21(sentence), sentence, 35_000);
+              const s2 = await runGuarded('con12_s2', () => runHumara24(s1), s1);
+              const s3 = await runGuarded('con12_s3', () => runWikipediaClean(s2), s2);
+              return chainSync(runNuru, s3, CHAIN_TS);
+            } else if (eng === 'humara_v1_3') {
+              const { pipeline } = await import('@/lib/engine/humara-v1-3');
+              return await pipeline(sentence, (tone ?? 'academic') as string, strength === 'strong' ? 10 : strength === 'light' ? 4 : 7);
+            } else if (eng === 'omega') {
+              return await omegaHumanize(sentence, strength ?? 'medium', tone ?? 'academic');
+            } else if (eng === 'nuru') {
+              return nuruHumanize(sentence, strength ?? 'medium', tone ?? 'academic');
+            } else if (eng === 'humara') {
+              return humaraHumanize(sentence, {
+                strength: strength === 'high' ? 'heavy' : strength === 'low' ? 'light' : (strength ?? 'medium') as 'light' | 'medium' | 'heavy',
+                tone: (tone ?? 'neutral') as 'neutral' | 'academic' | 'professional' | 'casual',
+                strictMeaning: (strict_meaning ?? false) as boolean,
+              });
+            } else if (premium) {
+              return await premiumHumanize(sentence, eng, (strength ?? 'medium') as 'light' | 'medium' | 'strong', tone ?? 'neutral', strict_meaning ?? true);
+            } else if (eng === 'ninja_1') {
+              // Ninja 1: Ninja LLM → Humara 2.0 (oxygen) → Nuru 2.0 (single pass) → [10× Nuru 2.0 via outer loop]
+              const s1 = await runGuarded('ninja1_s1', () => llmHumanize(sentence, strength ?? 'medium', true, strict_meaning ?? true, tone ?? 'academic', no_contractions !== false, enable_post_processing !== false), sentence);
+              const s2 = runHumara20(s1);
+              const s3 = runNuruSinglePass(s2);
+              // 10 outer Nuru passes
+              return chainSync(runNuru, s3, CHAIN_TS);
+            } else if (eng === 'undetectable' || eng === 'ninja') {
+              return await llmHumanize(sentence, strength ?? 'medium', true, strict_meaning ?? true, tone ?? 'academic', no_contractions !== false, enable_post_processing !== false);
+            } else if (eng === 'fast_v11') {
+              return (await humanizeV11(sentence, { strength: (strength ?? 'medium') as 'light' | 'medium' | 'strong', tone: tone ?? 'neutral', strictMeaning: strict_meaning ?? false })).humanized;
+            } else if (eng === 'ghost_mini_v1_2') {
+              const { ghostMiniV1_2 } = await import('@/lib/engine/ghost-mini-v1-2');
+              return ghostMiniV1_2(sentence);
+            } else if (eng === 'ghost_pro') {
+              return await ghostProHumanize(sentence, { strength: strength ?? 'medium', tone: tone ?? 'neutral', strictMeaning: strict_meaning ?? false, enablePostProcessing: enable_post_processing !== false });
+            } else {
+              return humanize(sentence, { mode: 'ghost_mini', strength: strength ?? 'medium', tone: tone ?? 'neutral', strictMeaning: strict_meaning ?? false, enablePostProcessing: enable_post_processing !== false, stealth: true });
+            }
+          };
+
+          // Process all sentences independently in parallel
+          console.log(`[SentenceParallel] Processing ${inputSentences.length} sentences independently via '${eng}'`);
+          const sentenceResults = await Promise.all(
+            inputSentences.map(async (sentence, i) => {
+              if (isHeadingSentCheck(sentence)) return sentence;
+              try {
+                const result = await runEngineOnSentence(sentence);
+                sendSSE(controller, { type: 'sentence', index: i, text: result || sentence, stage: 'Engine' });
+                return result && result.trim().length > 0 ? result : sentence;
+              } catch (err) {
+                console.warn(`[SentenceParallel] Sentence ${i} failed:`, err);
+                return sentence;
+              }
+            })
+          );
+          humanized = reassembleText(sentenceResults, inputParaBounds.length ? inputParaBounds : [0]);
+          console.log(`[SentenceParallel] Engine complete: ${humanized.split(/\s+/).length} words`);
 
           // ═══════════════════════════════════════════════════════════════
-          // 11-PHASE PIPELINE: Main engine × 1 → Nuru 2.0 × 10
-          //
-          // For Oxygen, Humara 2.4, and Wikipedia: the engine runs once to
-          // produce a strong first-pass rewrite (Cycle 1/11), then Nuru 2.0
-          // acts as a post-processing stealth engine for 10 further passes
-          // (Cycles 2/11 – 11/11), each feeding the previous output as input.
-          //
-          // For Nuru 2.0 directly: Cycle 1 uses the already-computed Nuru
-          // output, then 10 more Nuru passes follow (11 total).
-          //
-          // Total visible phases = 11. Total Nuru depth = 10.
+          // 11-PHASE PIPELINE (per-sentence Nuru loop)
           // ═══════════════════════════════════════════════════════════════
-          const FAST_REHUMANIZE_ENGINES = new Set(['nuru_v2', 'ghost_pro_wiki', 'oxygen', 'humara_v3_3']);
+          const FAST_REHUMANIZE_ENGINES = new Set(['nuru_v2', 'ghost_pro_wiki', 'oxygen', 'humara_v3_3', 'ninja_1']);
           const fastLoopEnabled = FAST_REHUMANIZE_ENGINES.has(eng);
           if (fastLoopEnabled) {
-            const TOTAL_PHASES = 11;      // 1 main engine pass + 10 Nuru passes
+            const TOTAL_PHASES = 11;
             const INTER_CYCLE_PAUSE_MS = 600;
             const cycleStart = Date.now();
-            let cycleInput = humanized;
+            let currentSentences = [...sentenceResults];
 
-            for (let cycle = 1; cycle <= TOTAL_PHASES; cycle++) {
-              // Cycle 1: already-computed main engine output — emit as-is.
-              // Cycles 2–11: Nuru 2.0 post-processing pass on previous output.
-              const cycleOutput = cycle === 1
-                ? cycleInput
-                : runNuru(cycleInput);
-              humanized = cycleOutput;
-              cycleInput = cycleOutput;
+            // Cycle 1: engine output already computed — emit as-is
+            const cycleStage1 = `Cycle 1/${TOTAL_PHASES}`;
+            sendSSE(controller, { type: 'stage', stage: cycleStage1 });
+            await flushDelay(10);
+            for (let i = 0; i < currentSentences.length; i++) {
+              sendSSE(controller, { type: 'sentence', index: i, text: currentSentences[i], stage: cycleStage1 });
+            }
+            await flushDelay(10);
+            console.log(`[Pipeline-11] Cycle 1/${TOTAL_PHASES} (${eng}): ${humanized.split(/\s+/).length} words (${Date.now() - cycleStart}ms)`);
+
+            // Cycles 2–11: per-sentence single-pass Nuru (10 total iterations)
+            for (let cycle = 2; cycle <= TOTAL_PHASES; cycle++) {
+              currentSentences = currentSentences.map((s) =>
+                isHeadingSentCheck(s) ? s : runNuruSinglePass(s)
+              );
+              humanized = reassembleText(currentSentences, inputParaBounds.length ? inputParaBounds : [0]);
 
               const cycleStage = `Cycle ${cycle}/${TOTAL_PHASES}`;
               sendSSE(controller, { type: 'stage', stage: cycleStage });
               await flushDelay(10);
-
-              // Emit the full cycle output at once — no per-sentence stagger
-              const { sentences: cycleSentences } = splitIntoIndexedSentences(cycleOutput);
-              for (let i = 0; i < cycleSentences.length; i++) {
-                sendSSE(controller, { type: 'sentence', index: i, text: cycleSentences[i], stage: cycleStage });
+              for (let i = 0; i < currentSentences.length; i++) {
+                sendSSE(controller, { type: 'sentence', index: i, text: currentSentences[i], stage: cycleStage });
               }
               await flushDelay(10);
-
-              if (cycle < TOTAL_PHASES) {
-                await flushDelay(INTER_CYCLE_PAUSE_MS);
-              }
-              console.log(`[Pipeline-11] Cycle ${cycle}/${TOTAL_PHASES} (${cycle === 1 ? eng : 'nuru'}): ${cycleOutput.split(/\s+/).length} words (${Date.now() - cycleStart}ms)`);
+              if (cycle < TOTAL_PHASES) await flushDelay(INTER_CYCLE_PAUSE_MS);
+              console.log(`[Pipeline-11] Cycle ${cycle}/${TOTAL_PHASES} (nuru): ${humanized.split(/\s+/).length} words (${Date.now() - cycleStart}ms)`);
             }
-
             console.log(`[Pipeline-11] Complete: ${humanized.split(/\s+/).length} words in ${Date.now() - cycleStart}ms`);
           }
 
-          // For fast-loop engines the cycles ARE the output stages — skip Engine re-emit
+          // Emit final engine sentences for non-fast-loop engines
           if (!fastLoopEnabled) {
             const { sentences: engineSentences } = splitIntoIndexedSentences(humanized);
             await emitSentencesStaggered(controller, engineSentences, 'Engine', 20);
-            await flushDelay(30); // small stage pause
+            await flushDelay(30);
           }
 
           // Detector + input analysis — needed for both post-processing and final detection

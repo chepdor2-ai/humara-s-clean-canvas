@@ -1,3 +1,20 @@
+    const runNuruSinglePass = (input: string): string => {
+      const output = stealthHumanize(input, strength ?? 'medium', tone ?? 'academic', 1);
+      return output && output.trim().length > 0 ? output : input;
+    };
+
+    const CHAIN_TS = 10;
+    const chainSync = (fn: (s: string) => string, input: string, n: number): string => {
+      let out = input;
+      for (let i = 0; i < n; i++) out = fn(out);
+      return out;
+    };
+    } else if (engine === 'ninja_1') {
+      // Ninja 1: Ninja LLM → Humara 2.0 (oxygen) → Nuru 2.0 (single pass) → [10× Nuru 2.0 via outer loop]
+      const stage1 = await runGuarded('ninja1_stage_1', () => llmHumanize(normalizedText, strength ?? 'medium', true, strict_meaning ?? true, tone ?? 'academic', no_contractions !== false, enable_post_processing !== false), normalizedText);
+      const stage2 = runHumara20(stage1);
+      const stage3 = runNuruSinglePass(stage2);
+      humanized = chainSync(runNuru, stage3, CHAIN_TS);
 import { NextResponse } from 'next/server';
 import { humanize } from '@/lib/engine/humanizer';
 import { ghostProHumanize } from '@/lib/engine/ghost-pro';
@@ -349,6 +366,8 @@ function isHeadingParagraph(para: string): boolean {
   const words = trimmed.split(/\s+/);
   if (words.length <= 10 && !/[.!?]$/.test(trimmed)) return true;
   if (words.length <= 12 && trimmed === trimmed.toUpperCase() && /[A-Z]/.test(trimmed)) return true;
+  // Standalone citation references: "Author, A. B. (2012)." or "Author & Author (2012)."
+  if (/^[A-Z][a-zA-Z]+[,.].*\(\d{4}\)\s*\.?\s*$/.test(trimmed) && words.length <= 20) return true;
   return false;
 }
 
@@ -717,31 +736,90 @@ export async function POST(req: Request) {
       return output;
     };
 
+    // Detect standalone citation-reference paragraphs (e.g. "Htun, M., & Weldon, S. L. (2012).")
+    // These must pass through unchanged — LLMs mangle them.
+    const CITATION_PARA_RE = /^[A-Z][a-zA-Z]+[,.].*\(\d{4}\)\s*\.?\s*$/;
+    const splitProtectedParas = (input: string): { paragraphs: string[]; protectedIdx: Set<number> } => {
+      const paragraphs = input.split(/\n\s*\n/);
+      const protectedIdx = new Set<number>();
+      for (let i = 0; i < paragraphs.length; i++) {
+        const t = paragraphs[i].trim();
+        if (CITATION_PARA_RE.test(t) && t.split(/\s+/).length <= 20) protectedIdx.add(i);
+      }
+      return { paragraphs, protectedIdx };
+    };
+
     const runWikipedia = async (input: string): Promise<string> => {
-      let output = await ghostProHumanize(input, {
-        strength: strength ?? 'medium',
-        tone: 'wikipedia',
-        strictMeaning: strict_meaning ?? false,
-        enablePostProcessing: enable_post_processing !== false,
-      });
+      // Wikipedia: Wikipedia (ghostProHumanize) → Humara 2.0 (oxygen) → Nuru 2.0 (single pass) → [10× Nuru 2.0 via outer loop]
+      const { paragraphs, protectedIdx } = splitProtectedParas(input);
+      const processableParas = paragraphs.filter((_, i) => !protectedIdx.has(i)).join('\n\n');
+      let output = processableParas.trim()
+        ? await ghostProHumanize(processableParas, {
+            strength: strength ?? 'medium',
+            tone: 'wikipedia',
+            strictMeaning: strict_meaning ?? false,
+            enablePostProcessing: enable_post_processing !== false,
+          })
+        : '';
       output = breakRepetitiveTemplates(output);
       output = fixHyphenSpacing(output);
-      output = adaptiveOxygenChain(output, input);
-      const nuruCleaned = stealthHumanize(output, strength ?? 'medium', tone ?? 'wikipedia');
-      if (nuruCleaned && nuruCleaned.trim().length > 0) output = nuruCleaned;
+      output = adaptiveOxygenChain(output, processableParas);
+      // Humara 2.0
+      output = runHumara20(output);
+      // Nuru 2.0 (single pass)
+      const nuruSingle = stealthHumanize(output, strength ?? 'medium', tone ?? 'wikipedia', 1);
+      output = nuruSingle && nuruSingle.trim().length > 0 ? nuruSingle : output;
+      // 10 outer Nuru passes
+      for (let i = 0; i < 10; i++) {
+        const nuru = stealthHumanize(output, strength ?? 'medium', tone ?? 'wikipedia');
+        output = nuru && nuru.trim().length > 0 ? nuru : output;
+      }
+      // Re-insert protected citation paragraphs in original positions
+      if (protectedIdx.size > 0) {
+        const outParas = output.split(/\n\s*\n/);
+        const merged: string[] = [];
+        let outIdx = 0;
+        for (let i = 0; i < paragraphs.length; i++) {
+          if (protectedIdx.has(i)) {
+            merged.push(paragraphs[i].trim());
+          } else if (outIdx < outParas.length) {
+            merged.push(outParas[outIdx++].trim());
+          }
+        }
+        while (outIdx < outParas.length) merged.push(outParas[outIdx++].trim());
+        output = merged.filter(p => p).join('\n\n');
+      }
       return output;
     };
 
     // Clean helpers for Deep Kill — NO Nuru tail (Nuru runs once at the very end)
     const runWikipediaClean = async (input: string): Promise<string> => {
-      let output = await ghostProHumanize(input, {
-        strength: strength ?? 'medium',
-        tone: 'wikipedia',
-        strictMeaning: strict_meaning ?? false,
-        enablePostProcessing: enable_post_processing !== false,
-      });
+      const { paragraphs, protectedIdx } = splitProtectedParas(input);
+      const processableParas = paragraphs.filter((_, i) => !protectedIdx.has(i)).join('\n\n');
+      let output = processableParas.trim()
+        ? await ghostProHumanize(processableParas, {
+            strength: strength ?? 'medium',
+            tone: 'wikipedia',
+            strictMeaning: strict_meaning ?? false,
+            enablePostProcessing: enable_post_processing !== false,
+          })
+        : '';
       output = breakRepetitiveTemplates(output);
       output = fixHyphenSpacing(output);
+      if (protectedIdx.size > 0) {
+        const outParas = output.split(/\n\s*\n/);
+        const merged: string[] = [];
+        let outIdx = 0;
+        for (let i = 0; i < paragraphs.length; i++) {
+          if (protectedIdx.has(i)) {
+            merged.push(paragraphs[i].trim());
+          } else if (outIdx < outParas.length) {
+            merged.push(outParas[outIdx++].trim());
+          }
+        }
+        while (outIdx < outParas.length) merged.push(outParas[outIdx++].trim());
+        output = merged.filter(p => p).join('\n\n');
+      }
       return output;
     };
 

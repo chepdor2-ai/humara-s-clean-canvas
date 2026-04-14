@@ -54,7 +54,7 @@ const PHRASE_REPLACEMENTS: Array<{ pattern: RegExp; replacements: string[] }> = 
   { pattern: /\bit is worth mentioning that\s*/gi, replacements: [''] },
   { pattern: /\bin the context of\b/gi, replacements: ['within', 'in'] },
   { pattern: /\bon the basis of\b/gi, replacements: ['based on', 'from'] },
-  { pattern: /\bat the same time\b/gi, replacements: ['meanwhile', 'yet'] },
+  { pattern: /\bat the same time\b/gi, replacements: ['simultaneously', 'concurrently'] },
   { pattern: /\bwith respect to\b/gi, replacements: ['about', 'regarding'] },
   { pattern: /\bin spite of\b/gi, replacements: ['despite', 'even with'] },
   { pattern: /\bby means of\b/gi, replacements: ['through', 'using'] },
@@ -293,7 +293,7 @@ const EXTRA_REPLACEMENTS: Record<string, string[]> = {
   information: ['data', 'details', 'facts', 'intelligence'],
   opportunity: ['prospect', 'opening', 'possibility', 'occasion'],
   community: ['group', 'network', 'collective', 'population'],
-  individual: ['person', 'participant', 'actor', 'agent'],
+  individual: ['person', 'single', 'distinct', 'separate'],
   organization: ['structure', 'arrangement', 'framework', 'body'],
   program: ['initiative', 'scheme', 'project', 'effort'],
   activity: ['task', 'endeavor', 'undertaking', 'pursuit'],
@@ -474,9 +474,9 @@ const EXTRA_REPLACEMENTS: Record<string, string[]> = {
   prompt: ['motivate', 'spur', 'encourage', 'push'],
   raise: ['pose', 'introduce', 'spark', 'bring'],
   serve: ['function', 'act', 'operate', 'work'],
-  remain: ['stay', 'persist', 'continue', 'endure'],
+  remain: ['stay', 'continue', 'last', 'linger'],
   range: ['span', 'extend', 'stretch', 'vary'],
-  limit: ['restrict', 'constrain', 'bound', 'curb'],
+  limit: ['cap', 'ceiling', 'boundary', 'threshold'],
   exceed: ['surpass', 'outstrip', 'outpace', 'eclipse'],
   match: ['rival', 'equal', 'parallel', 'mirror'],
   emerge: ['arise', 'surface', 'appear', 'develop'],
@@ -650,7 +650,7 @@ function transferMorphology(original: string, replacement: string): string {
   if (UNINFLECTABLE.test(rep)) return replacement;
 
   // Known longer words that need final consonant doubling 
-  const DOUBLE_FINAL = new Set(['outstrip', 'admit', 'commit', 'submit', 'permit', 'omit', 'emit', 'refer', 'occur', 'deter', 'prefer', 'regret', 'begin', 'control', 'equip', 'transfer', 'spur', 'spot']);
+  const DOUBLE_FINAL = new Set(['outstrip', 'admit', 'commit', 'submit', 'permit', 'omit', 'emit', 'refer', 'occur', 'deter', 'prefer', 'regret', 'begin', 'control', 'equip', 'transfer', 'spur', 'spot', 'infer', 'confer', 'defer', 'incur', 'recur', 'compel', 'expel', 'propel']);
 
   // CVC doubling check: short words ending consonant-vowel-consonant
   const needsDoubling = (w: string) => {
@@ -668,7 +668,9 @@ function transferMorphology(original: string, replacement: string): string {
   // Past tense: -ed
   if (orig.endsWith('ed') && !rep.endsWith('ed') && orig.length > 4) {
     if (rep.endsWith('e')) return replacement + 'd';
-    if (rep.endsWith('y')) return replacement.slice(0, -1) + 'ied';
+    // consonant+y → -ied (apply→applied), vowel+y → -ed (employ→employed)
+    if (rep.endsWith('y') && !'aeiou'.includes(rep[rep.length - 2] || '')) return replacement.slice(0, -1) + 'ied';
+    if (rep.endsWith('y')) return replacement + 'ed';
     if (needsDoubling(rep)) return replacement + rep[rep.length - 1] + 'ed';
     return replacement + 'ed';
   }
@@ -676,6 +678,8 @@ function transferMorphology(original: string, replacement: string): string {
   // Gerund / present participle: -ing
   if (orig.endsWith('ing') && !rep.endsWith('ing') && orig.length > 5) {
     if (rep.endsWith('ie')) return replacement.slice(0, -2) + 'ying';
+    // Double-e words: guarantee→guaranteeing, agree→agreeing (keep both e's)
+    if (rep.endsWith('ee')) return replacement + 'ing';
     if (rep.endsWith('e')) return replacement.slice(0, -1) + 'ing';
     if (needsDoubling(rep)) return replacement + rep[rep.length - 1] + 'ing';
     return replacement + 'ing';
@@ -1095,6 +1099,7 @@ export function stealthHumanize(
   text: string,
   strength: string = 'medium',
   _tone: string = 'academic',
+  maxIterations: number = 10,
 ): string {
   console.log('[NURU_V2] === NEW ENGINE ACTIVE === Input length:', text.length);
   if (!text || text.trim().length === 0) return text;
@@ -1133,7 +1138,7 @@ export function stealthHumanize(
       // compounding garble. We keep the best result (highest change ratio).
       // Subsequent passes use sentenceIndex=0 to prevent duplicate starter injection.
       let iter = 1;
-        while (iter <= 10) {
+        while (iter <= maxIterations) {
           const iterStrength = iter > 5 ? 'strong' : strength;
           const next = processSentence(
             originalSent, hasFirstPerson, iter === 1 ? globalSentenceIdx : 0,

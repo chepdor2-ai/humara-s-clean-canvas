@@ -73,7 +73,7 @@ const AI_PHRASE_PATTERNS: Array<{ pattern: RegExp; replacements: string[] }> = [
   { pattern: /\bit should be noted that\b/gi, replacements: ['notably', 'worth noting:'] },
   { pattern: /\bin the context of\b/gi, replacements: ['within', 'in', 'regarding'] },
   { pattern: /\bon the basis of\b/gi, replacements: ['based on', 'from', 'drawing on'] },
-  { pattern: /\bat the same time\b/gi, replacements: ['meanwhile', 'simultaneously', 'yet'] },
+  { pattern: /\bat the same time\b/gi, replacements: ['simultaneously', 'concurrently'] },
   { pattern: /\bwith respect to\b/gi, replacements: ['about', 'regarding', 'on'] },
   { pattern: /\bin spite of\b/gi, replacements: ['despite', 'even with', 'regardless of'] },
   { pattern: /\bby means of\b/gi, replacements: ['through', 'using', 'via'] },

@@ -195,7 +195,7 @@ const PHRASE_PARAPHRASES: Record<string, string[]> = {
   'as a consequence': ['as a result', 'in turn', 'because of this', 'consequently'],
   'in the context of': ['within', 'in', 'regarding', 'concerning'],
   'on the basis of': ['based on', 'from', 'drawing on', 'using'],
-  'at the same time': ['meanwhile', 'simultaneously', 'yet', 'still'],
+  'at the same time': ['simultaneously', 'concurrently'],
   'with respect to': ['about', 'regarding', 'concerning', 'on'],
   'in spite of': ['despite', 'even with', 'regardless of', 'notwithstanding'],
   'by means of': ['through', 'using', 'via', 'with the help of'],

@@ -401,6 +401,17 @@ export function postCleanGrammar(text: string): string {
   // 5. Tense consistency (conservative — only fixes clear single-verb outliers)
   result = fixTenseInconsistency(result);
 
+  // 5b. Fix broken conjunctions/clause endings from multi-pass processing
+  // "stable and." → "stable." (dangling conjunction before period)
+  result = result.replace(/\b(and|or|but|nor)\s*\.\s*/g, '. ');
+  // "such. In class" → "such as this. In class" — fix dangling "such" at end of sentence  
+  result = result.replace(/\bsuch\.\s+/g, 'such cases. ');
+  // "In Control, total," → "Overall," (garbled from "Overall, in control")
+  result = result.replace(/\bIn Control,\s*total,/gi, 'Overall,');
+  // "x - Chart" → "X-chart" (preserve statistical term format)
+  result = result.replace(/\bx\s*-\s*Chart\b/g, 'X-chart');
+  result = result.replace(/\bx\s*-\s*chart\b/gi, 'X-chart');
+
   // 6. Fix sentence-initial lowercase (safety)
   // Avoid capitalizing after abbreviation periods (X. where X is uppercase)
   result = result.replace(/([.!?])\s+([a-z])/g, (m, punct, _ch, offset) => {

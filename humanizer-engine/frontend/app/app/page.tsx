@@ -156,12 +156,13 @@ const ALL_ENGINES: EngineConfig[] = [
   { id: 'conscusion_1', label: 'Conscusion 1' },
   { id: 'conscusion_12', label: 'Conscusion 12' },
   { id: 'nuru_v2', label: 'Nuru 2.0' },
+  { id: 'ninja_1', label: 'Ninja 1' },
   { id: 'ghost_pro_wiki', label: 'Wikipedia' },
 ];
 
 type ModeId = 'stealth_mode' | 'anti_gptzero' | 'deep_signal_kill';
 const MODE_ENGINES: Record<ModeId, Set<string>> = {
-  stealth_mode: new Set(['ozone', 'easy']),
+  stealth_mode: new Set(['ozone', 'easy', 'ninja_1']),
   anti_gptzero: new Set(['oxygen', 'humara_v3_3', 'nuru_v2', 'ghost_pro_wiki']),
   deep_signal_kill: new Set([
     'ninja_3',
@@ -183,6 +184,8 @@ const MODE_LABELS: Record<ModeId, string> = {
 const ENGINE_GUIDES: Record<string, string> = {
   ozone: 'Stealth Mode base engine for detector cleaning. Best for ZeroGPT and Surfer cleanup.',
   easy: 'Stealth Mode wide-coverage engine for balanced, natural sounding rewrites.',
+  nuru_v2: 'Purely non-LLM stealth engine. Runs 10 iterative passes for deep transformation without any AI calls.',
+  ninja_1: 'LLM-powered Ninja rewrite followed by 10 Nuru stealth passes for maximum detector evasion.',
   oxygen: 'Anti GPTZero engine tuned for GPTZero signal suppression.',
   humara_v3_3: 'Anti GPTZero high-power engine (2.4) for stubborn GPTZero flags.',
   ninja_3: 'Deep Signal Kill profile for aggressive suppression.',
@@ -199,7 +202,7 @@ const MAX_WORDS_PER_REQUEST = 2000;
 const RECOMMENDED_MIN_WORDS = 500;
 const RECOMMENDED_MAX_WORDS = 1500;
 const FREE_DAILY_WORD_LIMIT = 2000;
-const EDITOR_HEIGHT_CLASS = 'min-h-[320px] md:min-h-[380px] lg:min-h-[420px] max-h-[420px] md:max-h-[500px] lg:max-h-[560px]';
+const EDITOR_HEIGHT_CLASS = 'min-h-[240px] sm:min-h-[320px] md:min-h-[380px] lg:min-h-[420px] max-h-[320px] sm:max-h-[420px] md:max-h-[500px] lg:max-h-[560px]';
 
 interface EngineConfig {
   id: string;
@@ -942,7 +945,7 @@ export default function EditorPage() {
             </button>
           </label>
           <button onClick={handleHumanize} disabled={!text.trim() || loading || rephrasing}
-            className="ml-auto bg-gradient-to-r from-cyan-600 to-teal-500 dark:from-cyan-700 dark:to-teal-600 hover:from-cyan-500 hover:to-teal-400 dark:hover:from-cyan-600 dark:hover:to-teal-500 text-white text-[11px] font-bold rounded-lg px-4 py-2 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center gap-1.5 shadow-md hover:shadow-lg active:scale-[0.97]">
+            className="w-full sm:w-auto sm:ml-auto bg-gradient-to-r from-cyan-600 to-teal-500 dark:from-cyan-700 dark:to-teal-600 hover:from-cyan-500 hover:to-teal-400 dark:hover:from-cyan-600 dark:hover:to-teal-500 text-white text-[11px] font-bold rounded-lg px-4 py-2 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-1.5 shadow-md hover:shadow-lg active:scale-[0.97]">
             {loading ? <RotateCcw className="w-3 h-3 animate-spin" /> : <Zap className="w-3 h-3" />}
             {loading ? 'Humanizing…' : 'Humanize'}
           </button>
@@ -952,7 +955,7 @@ export default function EditorPage() {
       {/* Stealth Hint Bar */}
       <div className="stealth-hint-bar flex flex-wrap items-center gap-2.5 px-3 py-2 rounded-xl border border-slate-200 dark:border-cyan-950/60 bg-white dark:bg-[#0a1018] shadow-sm dark:shadow-none">
         <span className="text-[10px] font-semibold uppercase tracking-wide text-cyan-600 dark:text-cyan-300">Profile</span>
-        <span className="text-[11px] text-slate-600 dark:text-zinc-300">Simple controls, stealth output, editable result.</span>
+        <span className="text-[11px] text-slate-600 dark:text-zinc-300 hidden sm:inline">Simple controls, stealth output, editable result.</span>
         <div className="ml-auto flex flex-wrap items-center gap-1.5">
           <span className="text-[10px] px-2 py-0.5 rounded-full bg-cyan-50 dark:bg-cyan-950/50 border border-cyan-200 dark:border-cyan-900/60 text-cyan-700 dark:text-cyan-200">{MODE_LABELS[mode]}</span>
           <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-100 dark:bg-zinc-900/70 border border-slate-200 dark:border-zinc-800 text-slate-700 dark:text-zinc-300">{ENGINES.find(e => e.id === engine)?.label}</span>
@@ -1017,7 +1020,7 @@ export default function EditorPage() {
         <div className="flex items-start gap-2 px-3 py-2 bg-teal-50 dark:bg-teal-950/30 border border-teal-200 dark:border-teal-800/40 rounded-lg mx-1">
           <span className="text-teal-500 dark:text-teal-400 text-xs mt-0.5">🛡️</span>
           <div>
-            <p className="text-[10px] font-bold text-teal-700 dark:text-teal-300">Stealth Mode — 2.1 and 2.2</p>
+            <p className="text-[10px] font-bold text-teal-700 dark:text-teal-300">Stealth Mode — 2.1, 2.2 & Stealth</p>
             <p className="text-[9px] text-teal-600/80 dark:text-teal-200/70 leading-relaxed mt-0.5">General detector cleaning for natural output. Use <span className="font-semibold text-teal-600 dark:text-teal-200">2.1</span> for stronger external rewrite or <span className="font-semibold text-teal-600 dark:text-teal-200">2.2</span> for balanced broad coverage.</p>
           </div>
         </div>

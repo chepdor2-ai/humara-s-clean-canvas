@@ -2795,8 +2795,8 @@ export async function ghostProHumanize(
   result = enforceParagraphCount(result, inputParagraphCount);
   console.log(`  [GhostPro] Paragraph enforcement: target=${inputParagraphCount}, actual=${result.split(/\n\s*\n/).filter(p => p.trim()).length}`);
 
-  // ── Final repetition cleanup — DISABLED: would alter sentence count ──
-  // result = cleanOutputRepetitions(result);
+  // ── Final repetition cleanup — remove duplicate/near-duplicate sentences ──
+  result = cleanOutputRepetitions(result);
 
   // ── STRICT 1:1 per-paragraph sentence count enforcement ──
   result = enforcePerParagraphSentenceCounts(result, inputSentenceCountsPerPara, "GhostPro");
