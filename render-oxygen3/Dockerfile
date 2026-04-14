@@ -15,8 +15,9 @@ RUN pip install --no-cache-dir \
     huggingface_hub
 
 # Download the model at build time (cached in Docker layer — fast cold starts)
+# Render auto-injects env vars as Docker build args
 ARG HF_TOKEN
-RUN python -c "\
+RUN HF_TOKEN=${HF_TOKEN} python -c "\
 import os; \
 from huggingface_hub import snapshot_download; \
 snapshot_download('maguna956/oxygen3-humanizer', local_dir='/app/oxygen3-model', token=os.environ.get('HF_TOKEN'))"
