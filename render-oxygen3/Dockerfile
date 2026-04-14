@@ -17,10 +17,19 @@ RUN pip install --no-cache-dir \
 # Download the model at build time (cached in Docker layer — fast cold starts)
 # Render auto-injects env vars as Docker build args
 ARG HF_TOKEN
-RUN HF_TOKEN=${HF_TOKEN} python -c "\
-import os; \
-from huggingface_hub import snapshot_download; \
-snapshot_download('maguna956/oxygen3-humanizer', local_dir='/app/oxygen3-model', token=os.environ.get('HF_TOKEN'))"
+RUN HF_TOKEN=${HF_TOKEN} python - <<'PY'
+import os
+from huggingface_hub import snapshot_download
+
+token = (os.environ.get('HF_TOKEN') or '').strip()
+if not token:
+  raise RuntimeError(
+    'HF_TOKEN is empty during Docker build. Set HF_TOKEN in Render service environment variables. '
+    'For existing Blueprint services, add/update it manually in Render Dashboard -> Environment.'
+  )
+
+snapshot_download('maguna956/oxygen3-humanizer', local_dir='/app/oxygen3-model', token=token)
+PY
 
 # Copy server files
 COPY oxygen3_server.py .
