@@ -133,11 +133,16 @@ export async function POST(req: Request) {
       });
     }
 
-    const { text, engine, strength, tone, strict_meaning, no_contractions, enable_post_processing, premium } = body as {
+    const { text, engine, strength, tone, strict_meaning, no_contractions, enable_post_processing, premium, humanization_rate } = body as {
       text: string; engine?: string; strength?: string; tone?: string;
       strict_meaning?: boolean; no_contractions?: boolean;
       enable_post_processing?: boolean; premium?: boolean;
+      humanization_rate?: number;
     };
+
+    // Humanization rate: 1-10 scale → minimum word-change threshold
+    const hRate = Math.max(1, Math.min(10, Math.round(humanization_rate ?? 8)));
+    const minChangeThreshold = hRate / 10; // rate 8 → 0.80 = 80% min change
 
     // 30% aggressiveness boost: when "Keep Meaning" is unchecked, bump strength one level
     const effectiveStrength = (!strict_meaning && strength === 'light') ? 'medium'
@@ -318,10 +323,10 @@ export async function POST(req: Request) {
           };
 
           // ── Adaptive Oxygen Chain (inline) ──
-          // Iterates oxygenHumanize until 40% word-change per sentence or max 6 passes
+          // Iterates oxygenHumanize until target word-change per sentence or max 6 passes
           const adaptiveOxygenChain = (phaseOneOutput: string): string => {
             const MAX_ITER = 6;
-            const TARGET_CHANGE = 0.40;
+            const TARGET_CHANGE = minChangeThreshold;
             const SENT_PASS_RATE = 0.70;
             let current = phaseOneOutput;
             const p1Sents = robustSentenceSplit(phaseOneOutput);
@@ -551,7 +556,8 @@ export async function POST(req: Request) {
                     let final = result && result.trim().length > 0 ? result : sentence;
                     let change = measureSentenceChange(sentence, final);
                     let retry = 0;
-                    while (change < 0.40 && retry < 2) {
+                    const maxRetries = Math.max(3, hRate - 3);
+                    while (change < minChangeThreshold && retry < maxRetries) {
                       const retried = await runEngineOnSentence(final);
                       if (retried && retried.trim().length > 0) final = retried;
                       change = measureSentenceChange(sentence, final);
@@ -580,7 +586,8 @@ export async function POST(req: Request) {
                   let final = result && result.trim().length > 0 ? result : sentence;
                   let change = measureSentenceChange(sentence, final);
                   let retry = 0;
-                  while (change < 0.40 && retry < 2) {
+                  const maxRetries = Math.max(3, hRate - 3);
+                  while (change < minChangeThreshold && retry < maxRetries) {
                     const retried = await runEngineOnSentence(final);
                     if (retried && retried.trim().length > 0) final = retried;
                     change = measureSentenceChange(sentence, final);
@@ -728,11 +735,11 @@ export async function POST(req: Request) {
               sendSSE(controller, { type: 'stage', stage: phaseLabel, phaseOps });
               await flushDelay(10);
 
-              // ── 40% minimum change enforcement ──
-              // For sync/async/nuru phases, each sentence must achieve ≥40% word change
-              // from its state BEFORE this phase started. Retry up to 3 times if not met.
-              const MIN_CHANGE = 0.40;
-              const MAX_RETRIES = 3;
+              // ── Minimum change enforcement (driven by humanization rate) ──
+              // For sync/async/nuru phases, each sentence must achieve ≥minChangeThreshold
+              // word change from its state BEFORE this phase started.
+              const MIN_CHANGE = minChangeThreshold;
+              const MAX_RETRIES = Math.max(3, hRate - 3);
               const phaseInputSentences = [...currentSentences]; // snapshot before this phase
 
               if (phase.type === 'emit') {

@@ -234,6 +234,7 @@ export default function EditorPage() {
   const [strength, setStrength] = useState('medium');
   const [tone, setTone] = useState('academic');
   const [strictMeaning, setStrictMeaning] = useState(true);
+  const [humanizationRate, setHumanizationRate] = useState(8);
   const [mode, setMode] = useState<ModeId>('anti_gptzero');
 
   // Admin-controlled engine visibility
@@ -459,6 +460,7 @@ export default function EditorPage() {
       tone,
       strict_meaning: strictMeaning,
       enable_post_processing: true,
+      humanization_rate: humanizationRate,
     };
 
     // Add Easy controls if Easy engine is selected
@@ -1024,6 +1026,13 @@ export default function EditorPage() {
               <div className={`w-2.5 h-2.5 bg-white rounded-full absolute top-[3px] transition-all shadow-sm ${strictMeaning ? 'left-[13px]' : 'left-[3px]'}`} />
             </button>
           </label>
+          <div className="w-px h-4 bg-slate-200 dark:bg-cyan-950/70 hidden sm:block" />
+          <div className="flex items-center gap-1.5">
+            <span className="text-[10px] font-semibold text-slate-500 dark:text-zinc-500 uppercase">Rate</span>
+            <input type="range" min={1} max={10} value={humanizationRate} onChange={(e) => setHumanizationRate(Number(e.target.value))}
+              className="w-16 h-1.5 accent-cyan-500 cursor-pointer" title={`Humanization rate: ${humanizationRate} (${humanizationRate * 10}% min change)`} />
+            <span className="text-[10px] font-bold text-cyan-600 dark:text-cyan-400 min-w-[14px] text-center">{humanizationRate}</span>
+          </div>
           <button onClick={handleHumanize} disabled={!text.trim() || loading || rephrasing}
             className="w-full sm:w-auto sm:ml-auto bg-gradient-to-r from-cyan-600 to-teal-500 dark:from-cyan-700 dark:to-teal-600 hover:from-cyan-500 hover:to-teal-400 dark:hover:from-cyan-600 dark:hover:to-teal-500 text-white text-[11px] font-bold rounded-lg px-4 py-2 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-1.5 shadow-md hover:shadow-lg active:scale-[0.97]">
             {loading ? <RotateCcw className="w-3 h-3 animate-spin" /> : <Zap className="w-3 h-3" />}
