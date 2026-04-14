@@ -10,7 +10,7 @@ import { expandContractions } from '@/lib/humanize-transforms';
 import { removeEmDashes } from '@/lib/engine/v13-shared-techniques';
 import { humanize } from '@/lib/engine/humanizer';
 import { ghostProHumanize } from '@/lib/engine/ghost-pro';
-import { llmHumanize } from '@/lib/engine/llm-humanizer';
+import { llmHumanize, deepAICleanOneSentence } from '@/lib/engine/llm-humanizer';
 import { premiumHumanize } from '@/lib/engine/premium-humanizer';
 import { humanizeV11 } from '@/lib/engine/v11';
 import { humaraHumanize } from '@/lib/humara';
@@ -172,12 +172,17 @@ export async function POST(req: Request) {
     if (authHeader) {
       try {
         const supa = createServiceClient();
-        const { data: { user: authUser } } = await supa.auth.getUser(authHeader.replace('Bearer ', ''));
+        const { data: { user: authUser }, error: authError } = await supa.auth.getUser(authHeader.replace('Bearer ', ''));
+        if (authError) {
+          console.error('Auth getUser failed:', authError.message);
+        }
         if (authUser) {
           userId = authUser.id;
           userEmail = authUser.email ?? null;
         }
-      } catch { /* auth optional */ }
+      } catch (e) {
+        console.error('Auth extraction error:', e);
+      }
     }
 
     // Admin emails get unlimited access
@@ -189,6 +194,10 @@ export async function POST(req: Request) {
         const supa = createServiceClient();
         const inputWordCount = text.trim().split(/\s+/).length;
         const { data: stats, error: statsError } = await supa.rpc('get_usage_stats', { p_user_id: userId });
+
+        if (statsError) {
+          console.error('get_usage_stats RPC failed:', statsError.message, statsError.details);
+        }
 
         // Default free-tier limits when RPC fails or missing
         let totalUsed = 0;
@@ -643,6 +652,7 @@ export async function POST(req: Request) {
               case 'ninja_1':
                 phases = [
                   { name: 'Ninja', type: 'emit' },
+                  { name: 'Deep AI Clean', type: 'async', fn: (s) => deepAICleanOneSentence(s) },
                   { name: 'Humara 2.0', type: 'sync', fn: (s) => runHumara20(s) },
                   { name: 'Nuru 2.0', type: 'nuru', passes: 10 },
                 ];
@@ -1191,33 +1201,31 @@ export async function POST(req: Request) {
             meaning_similarity: Math.round(meaningCheck.similarity * 100) / 100,
           });
 
-          // Track usage + save document
+          // Track usage + save document (awaited before stream close so serverless doesn't kill it)
           if (userId) {
-            void (async () => {
-              try {
-                const supa = createServiceClient();
-                const engineType = 'fast'; // unified — all engines deduct from one pool
-                const toneDb = ({ neutral: 'natural', academic: 'academic', professional: 'business', simple: 'direct' } as Record<string, string>)[tone ?? 'neutral'] ?? 'natural';
-                await withTimeout(
-                  Promise.all([
-                    supa.rpc('increment_usage', { p_user_id: userId, p_words: outputWords, p_engine_type: engineType }),
-                    supa.from('documents').insert({
-                      user_id: userId, title: text.slice(0, 60).replace(/\n/g, ' ').trim() + (text.length > 60 ? '…' : ''),
-                      input_text: text, output_text: humanized,
-                      input_word_count: inputWords, output_word_count: outputWords,
-                      engine_used: eng, strength: effectiveStrength, tone: toneDb,
-                      meaning_preserved: meaningCheck.isSafe, meaning_similarity: meaningCheck.similarity,
-                      input_ai_score: 0,
-                      output_ai_score: 0,
-                    }),
-                  ]),
-                  10_000,
-                  'usage_tracking',
-                );
-              } catch (e) {
-                console.error('Usage tracking error:', e);
-              }
-            })();
+            try {
+              const supa = createServiceClient();
+              const engineType = 'fast'; // unified — all engines deduct from one pool
+              const toneDb = ({ neutral: 'natural', academic: 'academic', professional: 'business', simple: 'direct' } as Record<string, string>)[tone ?? 'neutral'] ?? 'natural';
+
+              const [usageResult, docResult] = await Promise.all([
+                supa.rpc('increment_usage', { p_user_id: userId, p_words: outputWords, p_engine_type: engineType }),
+                supa.from('documents').insert({
+                  user_id: userId, title: text.slice(0, 60).replace(/\n/g, ' ').trim() + (text.length > 60 ? '…' : ''),
+                  input_text: text, output_text: humanized,
+                  input_word_count: inputWords, output_word_count: outputWords,
+                  engine_used: eng, strength: effectiveStrength, tone: toneDb,
+                  meaning_preserved: meaningCheck.isSafe, meaning_similarity: meaningCheck.similarity,
+                  input_ai_score: 0,
+                  output_ai_score: 0,
+                }),
+              ]);
+
+              if (usageResult.error) console.error('increment_usage RPC failed:', usageResult.error.message, usageResult.error.details);
+              if (docResult.error) console.error('Document insert failed:', docResult.error.message, docResult.error.details);
+            } catch (e) {
+              console.error('Usage tracking error:', e);
+            }
           }
 
           controller.close();
