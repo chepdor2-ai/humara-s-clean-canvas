@@ -566,7 +566,12 @@ export async function POST(req: Request) {
                     sendSSE(controller, { type: 'sentence', index: i, text: final, stage: 'Engine' });
                     return final;
                   } catch (err) {
-                    console.warn(`[SentencePar] Sentence ${i} failed:`, err);
+                    const errMsg = err instanceof Error ? err.message : String(err);
+                    console.warn(`[SentencePar] Sentence ${i} failed:`, errMsg);
+                    // For connection/unavailable errors, send an error event so the user sees the failure
+                    if (i === 0) {
+                      sendSSE(controller, { type: 'error', message: `Engine '${eng}' failed: ${errMsg}` });
+                    }
                     return sentence;
                   }
                 })
@@ -596,7 +601,11 @@ export async function POST(req: Request) {
                   sentenceResults.push(final);
                   sendSSE(controller, { type: 'sentence', index: i, text: final, stage: 'Engine' });
                 } catch (err) {
-                  console.warn(`[SentenceSeq] Sentence ${i} failed:`, err);
+                  const errMsg = err instanceof Error ? err.message : String(err);
+                  console.warn(`[SentenceSeq] Sentence ${i} failed:`, errMsg);
+                  if (i === 0) {
+                    sendSSE(controller, { type: 'error', message: `Engine '${eng}' failed: ${errMsg}` });
+                  }
                   sentenceResults.push(sentence);
                 }
               }
