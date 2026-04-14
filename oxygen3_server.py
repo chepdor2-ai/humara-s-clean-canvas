@@ -102,7 +102,7 @@ _PROTECT_PATTERNS: list[tuple[str, str]] = [
     # Large numbers with commas: 1,000,000
     (r'\b\d{1,3}(?:,\d{3})+\b', 'BIGNUM'),
     # Years in context: in 2024, since 1990
-    (r'(?<=\b(?:in|since|from|by|after|before|during|until|around|circa|year)\s)\d{4}\b', 'YEAR'),
+    (r'\b(?:in|since|from|by|after|before|during|until|around|circa|year)\s(\d{4})\b', 'YEAR'),
     # Standalone 4-digit years
     (r'\b(?:19|20)\d{2}\b', 'YR'),
     # Dates: Jan 15, 2024 / 2024-01-15 / 01/15/2024
@@ -136,7 +136,8 @@ def protect_tokens(text: str) -> tuple[str, dict[str, str]]:
 
     for pattern, tag in _PROTECT_PATTERNS:
         for m in list(re.finditer(pattern, protected)):
-            token = m.group()
+            # Use capture group 1 if present, otherwise full match
+            token = m.group(1) if m.lastindex and m.lastindex >= 1 else m.group()
             placeholder = f"__{tag}{counter}__"
             # Only replace first occurrence of this exact token to avoid double-replacing
             protected = protected.replace(token, placeholder, 1)
