@@ -1,19 +1,5 @@
 services:
   - type: web
-    name: humara
-    runtime: node
-    buildCommand: cd humanizer-engine/frontend && npm install && npm run build
-    startCommand: cd humanizer-engine/frontend && npx next start --hostname 0.0.0.0 --port $PORT
-    envVars:
-      - key: NODE_ENV
-        value: production
-      - key: OXYGEN3_API_URL
-        fromService:
-          name: oxygen3
-          type: web
-          property: host
-
-  - type: web
     name: oxygen3
     runtime: docker
     dockerfilePath: render-oxygen3/Dockerfile
@@ -22,3 +8,4 @@ services:
       - key: OXYGEN3_MODEL_DIR
         value: /app/oxygen3-model
     plan: standard
+    healthCheckPath: /health
