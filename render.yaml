@@ -4,8 +4,13 @@ services:
     runtime: docker
     dockerfilePath: render-oxygen3/Dockerfile
     dockerContext: .
+    buildArgs:
+      HF_TOKEN:
+        sync: false
     envVars:
       - key: OXYGEN3_MODEL_DIR
         value: /app/oxygen3-model
+      - key: HF_TOKEN
+        sync: false
     plan: standard
     healthCheckPath: /health

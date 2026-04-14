@@ -15,9 +15,11 @@ RUN pip install --no-cache-dir \
     huggingface_hub
 
 # Download the model at build time (cached in Docker layer — fast cold starts)
+ARG HF_TOKEN
 RUN python -c "\
+import os; \
 from huggingface_hub import snapshot_download; \
-snapshot_download('maguna956/oxygen3-humanizer', local_dir='/app/oxygen3-model')"
+snapshot_download('maguna956/oxygen3-humanizer', local_dir='/app/oxygen3-model', token=os.environ.get('HF_TOKEN'))"
 
 # Copy server files
 COPY oxygen3_server.py .
