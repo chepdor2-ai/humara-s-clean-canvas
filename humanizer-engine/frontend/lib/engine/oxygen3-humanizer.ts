@@ -8,7 +8,10 @@
  *  - Parallel chunk processing for large texts
  */
 
-const OXYGEN3_API_URL = process.env.OXYGEN3_API_URL || 'http://localhost:7860';
+let OXYGEN3_API_URL = process.env.OXYGEN3_API_URL || 'http://localhost:7860';
+if (OXYGEN3_API_URL && !OXYGEN3_API_URL.startsWith('http')) {
+  OXYGEN3_API_URL = `https://${OXYGEN3_API_URL}`;
+}
 
 export interface Oxygen3Result {
   humanized: string;
@@ -29,6 +32,7 @@ export interface Oxygen3Result {
 async function oxygen3Call(
   text: string,
   mode: string,
+  tone: string = 'neutral',
 ): Promise<{ humanized: string; stats: Record<string, unknown> }> {
   const response = await fetch(`${OXYGEN3_API_URL}/humanize`, {
     method: 'POST',
@@ -36,6 +40,7 @@ async function oxygen3Call(
     body: JSON.stringify({
       text,
       mode,
+      tone,
       sentence_by_sentence: true,
     }),
     signal: AbortSignal.timeout(300_000),
@@ -79,11 +84,12 @@ function splitIntoChunks(text: string, maxChunks: number = 3): string[] {
 export async function oxygen3Humanize(
   text: string,
   mode: string = 'fast',
+  tone: string = 'neutral',
 ): Promise<Oxygen3Result> {
   const chunks = splitIntoChunks(text, 3);
 
   if (chunks.length === 1) {
-    const result = await oxygen3Call(text, mode);
+    const result = await oxygen3Call(text, mode, tone);
     return {
       humanized: result.humanized,
       stats: result.stats as Oxygen3Result['stats'],
@@ -93,7 +99,7 @@ export async function oxygen3Humanize(
   // Process chunks sequentially (single-worker server)
   const results: { humanized: string; stats: Record<string, unknown> }[] = [];
   for (const chunk of chunks) {
-    results.push(await oxygen3Call(chunk, mode));
+    results.push(await oxygen3Call(chunk, mode, tone));
   }
 
   const humanized = results.map((r) => r.humanized).join('\n\n');

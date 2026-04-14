@@ -82,6 +82,359 @@ def load_model():
 
 
 # ══════════════════════════════════════════════════════════════════
+# Protected Tokens — shield numbers, dates, citations, formulas,
+# technical terms, and names from T5 rewriting
+# ══════════════════════════════════════════════════════════════════
+
+_PROTECT_PATTERNS: list[tuple[str, str]] = [
+    # Parenthetical citations: (Author, 2024) / (Author & Author, 2024)
+    (r'\([A-Z][a-zA-Z&\s,\.]+\d{4}[a-z]?\)', 'CITE'),
+    # Inline citations: Author (2024) / Author et al. (2024)
+    (r'[A-Z][a-zA-Z]+(?:\s+et\s+al\.?)?\s*\(\d{4}[a-z]?\)', 'REFCITE'),
+    # Percentages: 15%, 3.5%
+    (r'\d+\.?\d*\s*%', 'PCT'),
+    # Dollar amounts: $1,234.56
+    (r'\$[\d,]+\.?\d*', 'DOLLAR'),
+    # Decimal numbers: 3.14, 0.001
+    (r'\b\d+\.\d+\b', 'DEC'),
+    # Ranges: 10-20, 2024–2025
+    (r'\b\d+[\-\u2013\u2014]\d+\b', 'RANGE'),
+    # Large numbers with commas: 1,000,000
+    (r'\b\d{1,3}(?:,\d{3})+\b', 'BIGNUM'),
+    # Years in context: in 2024, since 1990
+    (r'(?<=\b(?:in|since|from|by|after|before|during|until|around|circa|year)\s)\d{4}\b', 'YEAR'),
+    # Standalone 4-digit years
+    (r'\b(?:19|20)\d{2}\b', 'YR'),
+    # Dates: Jan 15, 2024 / 2024-01-15 / 01/15/2024
+    (r'\b(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\s+\d{1,2},?\s*\d{4}', 'DATE'),
+    (r'\b\d{4}[-/]\d{2}[-/]\d{2}\b', 'DATE'),
+    (r'\b\d{1,2}/\d{1,2}/\d{2,4}\b', 'DATE'),
+    # Email addresses
+    (r'[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+', 'EMAIL'),
+    # URLs
+    (r'https?://[^\s<>"{}|\\^`\[\]]+', 'URL'),
+    # Scientific notation: 2.5e-3, 1E6
+    (r'\b\d+\.?\d*[eE][+-]?\d+\b', 'SCI'),
+    # Chemical formulas: H2O, CO2, NaCl
+    (r'\b[A-Z][a-z]?\d+(?:[A-Z][a-z]?\d*)*\b', 'CHEM'),
+    # Mathematical expressions with operators
+    (r'[a-zA-Z]\s*[=<>≤≥±]\s*\d+', 'MATH'),
+    # Abbreviations with periods: U.S., e.g., i.e., Ph.D.
+    (r'\b(?:[A-Z]\.){2,}', 'ABBR'),
+    (r'\b(?:e\.g\.|i\.e\.|etc\.|vs\.|Dr\.|Mr\.|Mrs\.|Ms\.|Prof\.|Ph\.D\.|M\.D\.)', 'ABBR'),
+    # Plain integers (catch-all for remaining numbers)
+    (r'\b\d{2,}\b', 'NUM'),
+]
+
+
+def protect_tokens(text: str) -> tuple[str, dict[str, str]]:
+    """Replace protected entities with numbered placeholders.
+    Returns (modified_text, mapping_dict)."""
+    mapping: dict[str, str] = {}
+    counter = 0
+    protected = text
+
+    for pattern, tag in _PROTECT_PATTERNS:
+        for m in list(re.finditer(pattern, protected)):
+            token = m.group()
+            placeholder = f"__{tag}{counter}__"
+            # Only replace first occurrence of this exact token to avoid double-replacing
+            protected = protected.replace(token, placeholder, 1)
+            mapping[placeholder] = token
+            counter += 1
+    return protected, mapping
+
+
+def restore_tokens(text: str, mapping: dict[str, str]) -> str:
+    """Restore placeholders back to original tokens."""
+    restored = text
+    # Sort by longest placeholder first to avoid partial matches
+    for placeholder in sorted(mapping.keys(), key=len, reverse=True):
+        restored = restored.replace(placeholder, mapping[placeholder])
+    return restored
+
+
+# ══════════════════════════════════════════════════════════════════
+# Smart Routing — detect text type and adjust settings
+# ══════════════════════════════════════════════════════════════════
+
+def detect_text_type(text: str) -> str:
+    """Classify text as: technical, academic, casual, repetitive, citation_heavy."""
+    words = text.split()
+    wc = len(words)
+
+    # Citation-heavy: lots of parenthetical refs
+    citation_count = len(re.findall(r'\([^)]*\d{4}[^)]*\)', text))
+    if citation_count >= 3 or (wc > 0 and citation_count / max(wc, 1) > 0.01):
+        return "citation_heavy"
+
+    # Technical: jargon density
+    tech_words = {'algorithm', 'parameter', 'function', 'variable', 'coefficient',
+                  'regression', 'hypothesis', 'correlation', 'deviation', 'variance',
+                  'equation', 'matrix', 'vector', 'tensor', 'gradient', 'optimization',
+                  'neural', 'dataset', 'preprocessing', 'throughput', 'latency',
+                  'api', 'endpoint', 'deployment', 'infrastructure', 'protocol'}
+    lower_words = {w.lower().strip(".,;:!?\"'()[]") for w in words}
+    tech_ratio = len(lower_words & tech_words) / max(wc, 1)
+    if tech_ratio > 0.03:
+        return "technical"
+
+    # Repetitive: high word repetition
+    if wc > 30:
+        word_freq: dict[str, int] = {}
+        for w in lower_words:
+            if len(w) >= 4:
+                word_freq[w] = word_freq.get(w, 0) + 1
+        repeated = sum(1 for v in word_freq.values() if v >= 3)
+        if repeated >= 5:
+            return "repetitive"
+
+    # Academic: formal markers
+    academic_markers = {'furthermore', 'moreover', 'consequently', 'therefore',
+                        'nevertheless', 'whereas', 'hypothesis', 'methodology',
+                        'findings', 'literature', 'empirical', 'theoretical',
+                        'paradigm', 'framework', 'analysis', 'implications'}
+    if len(lower_words & academic_markers) >= 3:
+        return "academic"
+
+    # Casual: informal markers
+    casual_markers = {"i'm", "you're", "don't", "gonna", "wanna", "kinda",
+                      "lol", "btw", "imo", "tbh", "hey", "yeah", "cool",
+                      "awesome", "stuff", "thing", "pretty"}
+    if len(lower_words & casual_markers) >= 2:
+        return "casual"
+
+    return "general"
+
+
+def route_settings(text_type: str, base_preset: dict) -> dict:
+    """Adjust generation settings based on detected text type."""
+    preset = {**base_preset}
+    if text_type == "technical":
+        # Light rewrite: preserve technical terms
+        preset["num_beams"] = min(preset["num_beams"], 4)
+        preset["repetition_penalty"] = min(preset["repetition_penalty"], 1.5)
+        preset["_min_change_override"] = 0.30
+        preset["_synonym_intensity"] = 0.40
+    elif text_type == "citation_heavy":
+        # Preserve more: citations must survive
+        preset["num_beams"] = min(preset["num_beams"], 4)
+        preset["_min_change_override"] = 0.25
+        preset["_synonym_intensity"] = 0.45
+    elif text_type == "repetitive":
+        # Stronger rewrite to break repetition
+        preset["num_beams"] = max(preset["num_beams"], 6)
+        preset["repetition_penalty"] = max(preset["repetition_penalty"], 2.0)
+        preset["no_repeat_ngram"] = max(preset["no_repeat_ngram"], 4)
+        preset["_synonym_intensity"] = 0.85
+    elif text_type == "casual":
+        # Allow more flexibility
+        preset["_synonym_intensity"] = 0.65
+        preset["_allow_contractions"] = True
+    elif text_type == "academic":
+        preset["_synonym_intensity"] = 0.65
+    else:
+        preset["_synonym_intensity"] = 0.65
+    return preset
+
+
+# ══════════════════════════════════════════════════════════════════
+# Tone Modes — adjust post-processing per tone
+# ══════════════════════════════════════════════════════════════════
+
+TONE_SETTINGS: dict[str, dict] = {
+    "academic": {
+        "expand_contractions": True,
+        "allow_contractions": False,
+        "formality": "high",
+        "sentence_openers": ["Furthermore,", "Moreover,", "In addition,", "Notably,",
+                             "It is worth noting that", "This suggests that",
+                             "As demonstrated,", "The evidence indicates that"],
+    },
+    "neutral": {
+        "expand_contractions": False,
+        "allow_contractions": False,
+        "formality": "medium",
+        "sentence_openers": ["Also,", "In addition,", "On top of that,",
+                             "Beyond this,", "Another point is that"],
+    },
+    "conversational": {
+        "expand_contractions": False,
+        "allow_contractions": True,
+        "formality": "low",
+        "sentence_openers": ["So,", "Now,", "Here's the thing —",
+                             "What's interesting is", "Basically,",
+                             "The point is,", "Look,"],
+    },
+    "concise": {
+        "expand_contractions": False,
+        "allow_contractions": False,
+        "formality": "medium",
+        "sentence_openers": [],
+        "_trim_fillers": True,
+    },
+}
+
+
+def apply_tone(text: str, tone: str) -> str:
+    """Apply tone-specific post-processing."""
+    settings = TONE_SETTINGS.get(tone, TONE_SETTINGS["neutral"])
+
+    if settings.get("allow_contractions"):
+        # Add natural contractions for conversational tone
+        contractions_map = [
+            (r'\bdo not\b', "don't"), (r'\bdoes not\b', "doesn't"),
+            (r'\bis not\b', "isn't"), (r'\bare not\b', "aren't"),
+            (r'\bwill not\b', "won't"), (r'\bcannot\b', "can't"),
+            (r'\bwould not\b', "wouldn't"), (r'\bcould not\b', "couldn't"),
+            (r'\bit is\b', "it's"), (r'\bthat is\b', "that's"),
+            (r'\bthey are\b', "they're"), (r'\bwe are\b', "we're"),
+        ]
+        for pattern, replacement in contractions_map:
+            if random.random() < 0.6:  # Don't contract everything
+                text = re.sub(pattern, replacement, text, count=1, flags=re.IGNORECASE)
+
+    if settings.get("_trim_fillers"):
+        # Concise mode: remove filler phrases
+        fillers = [
+            r'\bIt is important to note that\s+',
+            r'\bIt should be noted that\s+',
+            r'\bAs a matter of fact,?\s*',
+            r'\bIn point of fact,?\s*',
+            r'\bFor all intents and purposes,?\s*',
+            r'\bAt the end of the day,?\s*',
+        ]
+        for filler in fillers:
+            text = re.sub(filler, '', text, flags=re.IGNORECASE)
+
+    return text
+
+
+# ══════════════════════════════════════════════════════════════════
+# Special-Case Detection — bullet points, quotations, tables,
+# references, headings
+# ══════════════════════════════════════════════════════════════════
+
+def is_bullet_point(line: str) -> bool:
+    """Detect bullet points and list items."""
+    stripped = line.strip()
+    return bool(re.match(r'^[\-\*\u2022\u25CF\u25CB\u2023]\s+', stripped) or
+                re.match(r'^\d+[\.\)]\s+', stripped) or
+                re.match(r'^[a-zA-Z][\.\)]\s+', stripped) or
+                re.match(r'^[ivxlcdm]+[\.\)]\s+', stripped, re.IGNORECASE))
+
+
+def is_quotation(text: str) -> bool:
+    """Detect direct quotations that should not be rewritten."""
+    return bool(
+        re.match(r'^["\u201C\u201D\u2018\u2019].{10,}["\u201C\u201D\u2018\u2019]$', text.strip()) or
+        re.match(r'^"[^"]{10,}"', text.strip())
+    )
+
+
+def is_reference_entry(text: str) -> bool:
+    """Detect reference/bibliography entries."""
+    return bool(
+        re.match(r'^[A-Z][a-zA-Z]+,\s+[A-Z]\.', text.strip()) and
+        re.search(r'\(\d{4}\)', text)
+    )
+
+
+def is_table_row(text: str) -> bool:
+    """Detect table-like rows (pipe-delimited or tab-delimited)."""
+    return bool(
+        text.count('|') >= 2 or
+        text.count('\t') >= 2
+    )
+
+
+def classify_line(line: str) -> str:
+    """Classify a line for special handling: 'normal', 'bullet', 'quote', 'reference', 'table', 'heading'."""
+    stripped = line.strip()
+    if not stripped:
+        return 'empty'
+    if is_table_row(stripped):
+        return 'table'
+    if is_reference_entry(stripped):
+        return 'reference'
+    if is_quotation(stripped):
+        return 'quote'
+    if is_bullet_point(stripped):
+        return 'bullet'
+    if is_title_line(stripped):
+        return 'heading'
+    return 'normal'
+
+
+# ══════════════════════════════════════════════════════════════════
+# Paragraph Smoothing — cross-sentence repeated word cleanup
+# and transition improvement
+# ══════════════════════════════════════════════════════════════════
+
+def smooth_paragraph(sentences: list[str]) -> list[str]:
+    """Clean up repeated words, phrases, and transition issues across adjacent sentences."""
+    if len(sentences) < 2:
+        return sentences
+
+    result = list(sentences)
+
+    # 1. Fix repeated sentence openers (3+ sentences starting the same way)
+    for i in range(2, len(result)):
+        w0 = result[i - 2].split()[:2]
+        w1 = result[i - 1].split()[:2]
+        w2 = result[i].split()[:2]
+        if w0 == w1 == w2 and len(w2) >= 2:
+            # Vary the opener of the 3rd sentence
+            alternatives = ["Additionally, ", "In turn, ", "At the same time, ",
+                            "Alongside this, ", "Here, ", "What stands out is that "]
+            chosen = random.choice(alternatives)
+            old_opener = " ".join(w2) + " "
+            if result[i].startswith(old_opener):
+                rest = result[i][len(old_opener):]
+                result[i] = f"{chosen}{rest[0].lower() if rest else ''}{rest[1:]}"
+
+    # 2. Fix consecutive sentences ending the same content word
+    for i in range(1, len(result)):
+        prev_words = result[i - 1].rstrip('.!?').split()
+        curr_words = result[i].rstrip('.!?').split()
+        if (prev_words and curr_words and
+            len(prev_words[-1]) >= 4 and
+            prev_words[-1].lower() == curr_words[-1].lower() and
+            prev_words[-1].lower() not in STOPWORDS):
+            # Try synonym swap for the last word of current sentence
+            last_lower = curr_words[-1].lower().rstrip('.,;')
+            for pattern, replacements in DEEP_SYNONYMS:
+                if re.search(pattern, last_lower, re.IGNORECASE):
+                    chosen = random.choice(replacements)
+                    # Preserve original capitalization
+                    if curr_words[-1][0].isupper():
+                        chosen = chosen[0].upper() + chosen[1:]
+                    curr_words[-1] = chosen
+                    punct = result[i].rstrip()[-1] if result[i].rstrip()[-1:] in '.!?' else '.'
+                    result[i] = ' '.join(curr_words) + punct
+                    break
+
+    # 3. Reduce repeated transition words across adjacent sentences
+    transition_map = {
+        'however': ['that said', 'yet', 'still', 'even so'],
+        'therefore': ['so', 'because of this', 'as a result', 'for this reason'],
+        'moreover': ['also', 'besides', 'on top of that', 'in addition'],
+        'furthermore': ['also', 'besides', 'what is more', 'added to this'],
+        'additionally': ['also', 'plus', 'on top of that', 'beyond this'],
+    }
+    for i in range(1, len(result)):
+        for transition, alternatives in transition_map.items():
+            pattern = re.compile(rf'\b{transition}\b', re.IGNORECASE)
+            if pattern.search(result[i - 1]) and pattern.search(result[i]):
+                # Replace in the second sentence
+                chosen = random.choice(alternatives)
+                result[i] = pattern.sub(chosen, result[i], count=1)
+                break
+
+    return result
+
+
+# ══════════════════════════════════════════════════════════════════
 # Tense-aware replacement helpers
 # ══════════════════════════════════════════════════════════════════
 
@@ -880,11 +1233,15 @@ def split_paragraphs(text: str) -> list[dict]:
 def t5_generate_sentence(sentence: str, num_beams: int = 4,
                          no_repeat_ngram: int = 3,
                          length_penalty: float = 1.0,
-                         repetition_penalty: float = 1.2) -> str:
-    """Generate a paraphrase using T5. NEVER uses sampling — beam search only."""
+                         repetition_penalty: float = 1.2,
+                         num_candidates: int = 3) -> str:
+    """Generate multiple paraphrase candidates using T5, score them, pick best.
+    NEVER uses sampling — beam search only.
+    Generates up to num_candidates variants with different beam configs."""
     word_count = len(sentence.split())
     if word_count < 6:
         num_beams = 1
+        num_candidates = 1
 
     inputs = tokenizer(
         sentence,
@@ -897,54 +1254,80 @@ def t5_generate_sentence(sentence: str, num_beams: int = 4,
     # Tight output budget: ~1.3x input length
     max_new = min(128, max(int(word_count * 1.5), 30))
 
-    candidates = []
+    candidates: list[str] = []
 
-    # Run 1: Standard beam search
-    outputs = model.generate(
-        **inputs,
-        max_new_tokens=max_new,
-        num_beams=num_beams,
-        do_sample=False,
-        no_repeat_ngram_size=no_repeat_ngram,
-        length_penalty=length_penalty,
-        repetition_penalty=repetition_penalty,
-        early_stopping=True,
-    )
-    decoded = tokenizer.decode(outputs[0], skip_special_tokens=True).strip()
-    if decoded:
-        candidates.append(decoded)
+    # Candidate generation configs: (beams, ngram, len_pen, rep_pen)
+    configs = [
+        (num_beams, no_repeat_ngram, length_penalty, repetition_penalty),
+    ]
+    if num_candidates >= 2 and num_beams >= 4:
+        configs.append((
+            max(num_beams - 2, 2),
+            min(no_repeat_ngram + 1, 5),
+            length_penalty * 1.2,
+            min(repetition_penalty + 0.4, 2.5),
+        ))
+    if num_candidates >= 3 and num_beams >= 4:
+        configs.append((
+            min(num_beams + 2, 10),
+            no_repeat_ngram,
+            length_penalty * 0.9,
+            min(repetition_penalty + 0.2, 2.2),
+        ))
+    if num_candidates >= 4 and num_beams >= 6:
+        configs.append((
+            num_beams,
+            max(no_repeat_ngram - 1, 2),
+            length_penalty * 1.4,
+            min(repetition_penalty + 0.6, 2.8),
+        ))
 
-    # Run 2: Higher diversity (only for quality/aggressive modes)
-    if num_beams >= 6:
-        outputs2 = model.generate(
-            **inputs,
-            max_new_tokens=max_new,
-            num_beams=num_beams,
-            do_sample=False,
-            no_repeat_ngram_size=min(no_repeat_ngram + 1, 5),
-            length_penalty=length_penalty * 1.2,
-            repetition_penalty=min(repetition_penalty + 0.5, 2.5),
-            early_stopping=True,
-        )
-        decoded2 = tokenizer.decode(outputs2[0], skip_special_tokens=True).strip()
-        if decoded2 and decoded2 != decoded:
-            candidates.append(decoded2)
+    seen: set[str] = set()
+    for beams, ngram, lpen, rpen in configs:
+        try:
+            outputs = model.generate(
+                **inputs,
+                max_new_tokens=max_new,
+                num_beams=beams,
+                do_sample=False,
+                no_repeat_ngram_size=ngram,
+                length_penalty=lpen,
+                repetition_penalty=rpen,
+                early_stopping=True,
+            )
+            decoded = tokenizer.decode(outputs[0], skip_special_tokens=True).strip()
+            if decoded and decoded not in seen:
+                candidates.append(decoded)
+                seen.add(decoded)
+        except Exception as e:
+            logger.warning(f"Candidate generation failed: {e}")
 
     if not candidates:
         return sentence
 
-    # Pick candidate with highest change that preserves meaning
+    # Score each candidate: balance change, meaning preservation, and length fidelity
     best = candidates[0]
     best_score = -1.0
     for cand in candidates:
         change = measure_change(sentence, cand)
         meaning = measure_meaning_overlap(sentence, cand)
-        if meaning < 0.40:
+        # Length fidelity: penalize outputs that are very different in length
+        len_ratio = len(cand.split()) / max(len(sentence.split()), 1)
+        len_score = 1.0 - abs(1.0 - len_ratio) * 0.5  # Penalty for deviation from 1.0
+        len_score = max(len_score, 0.0)
+
+        # Hard filters
+        if meaning < 0.35:
             continue
-        score = change * 0.7 + min(meaning, 0.8) * 0.3
+        if len_ratio < 0.5 or len_ratio > 2.0:
+            continue
+
+        # Composite score: change 50%, meaning 30%, length fidelity 20%
+        score = change * 0.50 + min(meaning, 0.85) * 0.30 + len_score * 0.20
         if score > best_score:
             best_score = score
             best = cand
+
     return best
 
 
@@ -990,26 +1373,34 @@ MODE_PRESETS = {
 
 def humanize_sentence(original: str, preset: dict, min_change: float,
                       max_retries: int) -> tuple[str, dict]:
-    """Full multi-phase humanization of a single sentence."""
+    """Full multi-phase humanization of a single sentence with protected tokens."""
     if len(original.split()) < 3:
         return original, {"skipped": True, "reason": "too_short"}
+
+    # ── Protect tokens: shield numbers, dates, citations, etc. ──
+    protected_input, token_map = protect_tokens(original)
 
     best_result = original
     best_ratio = 0.0
     attempts = 0
     t5_retries = min(max_retries, 2)
+    syn_intensity_base = preset.get("_synonym_intensity", 0.65)
 
     for attempt in range(t5_retries):
         attempts = attempt + 1
 
-        # ── Phase 1: T5 paraphrase ──
+        # ── Phase 1: T5 paraphrase (with protected tokens) ──
         t5_out = t5_generate_sentence(
-            original,
+            protected_input,
             num_beams=preset["num_beams"],
             no_repeat_ngram=preset["no_repeat_ngram"],
             length_penalty=preset["length_penalty"],
             repetition_penalty=preset["repetition_penalty"],
+            num_candidates=3 if preset["num_beams"] >= 4 else 1,
         )
+
+        # ── Restore protected tokens ──
+        t5_out = restore_tokens(t5_out, token_map)
 
         # LENGTH GUARD: reject if T5 output lost >25% of words
         if len(t5_out.split()) < max(3, len(original.split()) * 0.75):
@@ -1073,8 +1464,8 @@ def humanize_sentence(original: str, preset: dict, min_change: float,
         processed = clause_front(processed)
         processed = split_long_sentence(processed)
 
-        # ── Phase 4: Deep synonym replacement (always runs) ──
-        syn_intensity = 0.70 + (attempt * 0.10)
+        # ── Phase 4: Deep synonym replacement (intensity from smart routing) ──
+        syn_intensity = syn_intensity_base + (attempt * 0.10)
         processed = deep_synonym_replace(processed, min(syn_intensity, 0.95))
         # Second pass catches words that might have been introduced by the first pass
         if measure_change(original, processed) < min_change:
@@ -1161,11 +1552,19 @@ def humanize_text(text: str, mode: str = "quality",
                   min_change_ratio: float = 0.40,
                   max_retries: int = 5,
                   sentence_by_sentence: bool = True,
-                  input_has_first_person: bool = False) -> tuple[str, dict]:
-    """Full pipeline: split text -> 6-phase per sentence -> reassemble."""
+                  input_has_first_person: bool = False,
+                  tone: str = "neutral") -> tuple[str, dict]:
+    """Full pipeline: split text -> smart route -> 6-phase per sentence
+    -> paragraph smoothing -> tone adjustment -> reassemble."""
     t0 = time.time()
     preset = MODE_PRESETS.get(mode, MODE_PRESETS["quality"])
     preset = {**preset}
+
+    # ── Smart routing: detect text type and adjust settings ──
+    text_type = detect_text_type(text)
+    preset = route_settings(text_type, preset)
+    effective_min_change = preset.pop("_min_change_override", min_change_ratio)
+    logger.info(f"Text type: {text_type}, effective min_change: {effective_min_change}")
 
     paragraphs = split_paragraphs(text)
     all_results: list[dict] = []
@@ -1182,13 +1581,66 @@ def humanize_text(text: str, mode: str = "quality",
             all_results.append({'text': para, 'is_title': True})
             continue
 
+        # ── Special-case handling ──
+        # Check each line for bullet points, quotations, references, tables
+        lines = para.split('\n')
+        if any(classify_line(line) in ('bullet', 'quote', 'reference', 'table') for line in lines):
+            # Process line-by-line with special handling
+            processed_lines = []
+            for line in lines:
+                line_type = classify_line(line)
+                if line_type in ('quote', 'reference', 'table'):
+                    # Preserve exactly — do not rewrite
+                    processed_lines.append(line)
+                elif line_type == 'bullet':
+                    # Rewrite only the content after the bullet marker
+                    m = re.match(r'^([\-\*\u2022\u25CF\u25CB\u2023\d]+[\.\)]*\s+)', line)
+                    if m:
+                        marker = m.group(1)
+                        content = line[len(marker):]
+                        if len(content.split()) >= 3:
+                            result, stats = humanize_sentence(content, {**preset}, effective_min_change, max_retries)
+                            if not input_has_first_person and has_first_person(result):
+                                result = remove_first_person(result)
+                            all_stats.append(stats)
+                            total_sentences += 1
+                            if stats.get("met_threshold") or stats.get("skipped"):
+                                met_threshold_count += 1
+                            processed_lines.append(marker + result)
+                        else:
+                            processed_lines.append(line)
+                    else:
+                        processed_lines.append(line)
+                else:
+                    # Normal line — sentence-split and process
+                    sents = split_sentences(line)
+                    total_sentences += len(sents)
+                    futures = [
+                        _sentence_pool.submit(
+                            humanize_sentence, sent, {**preset}, effective_min_change, max_retries
+                        )
+                        for sent in sents
+                    ]
+                    proc = []
+                    for fut in futures:
+                        result, stats = fut.result()
+                        if not input_has_first_person and has_first_person(result):
+                            result = remove_first_person(result)
+                        proc.append(result)
+                        all_stats.append(stats)
+                        if stats.get("met_threshold") or stats.get("skipped"):
+                            met_threshold_count += 1
+                    processed_lines.append(" ".join(proc))
+            all_results.append({'text': '\n'.join(processed_lines), 'is_title': False})
+            continue
+
         sentences = split_sentences(para)
         total_sentences += len(sentences)
 
         # Parallel sentence processing
         futures = [
             _sentence_pool.submit(
-                humanize_sentence, sent, {**preset}, min_change_ratio, max_retries
+                humanize_sentence, sent, {**preset}, effective_min_change, max_retries
             )
             for sent in sentences
         ]
@@ -1204,6 +1656,9 @@ def humanize_text(text: str, mode: str = "quality",
             all_stats.append(stats)
             if stats.get("met_threshold", False) or stats.get("skipped", False):
                 met_threshold_count += 1
+
+        # ── Paragraph smoothing: fix repeated openers, transitions, endings ──
+        processed_sentences = smooth_paragraph(processed_sentences)
 
         # Cross-sentence variance
         processed_sentences = vary_sentence_length(processed_sentences)
@@ -1240,25 +1695,46 @@ def humanize_text(text: str, mode: str = "quality",
     humanized = re.sub(r'(^|\n\n)([a-z])', lambda m: m.group(1) + m.group(2).upper(), humanized)
     humanized = fix_t5_grammar(humanized)
 
-    # Expand contractions (academic register)
-    contractions = {
-        "don't": "do not", "doesn't": "does not", "didn't": "did not",
-        "won't": "will not", "wouldn't": "would not", "couldn't": "could not",
-        "shouldn't": "should not", "can't": "cannot", "isn't": "is not",
-        "aren't": "are not", "wasn't": "was not", "weren't": "were not",
-        "hasn't": "has not", "haven't": "have not", "hadn't": "had not",
-        "it's": "it is", "that's": "that is", "there's": "there is",
-        "what's": "what is", "who's": "who is", "let's": "let us",
-        "I'm": "I am", "you're": "you are", "they're": "they are",
-        "we're": "we are", "he's": "he is", "she's": "she is",
-        "I've": "I have", "you've": "you have", "they've": "they have",
-        "we've": "we have", "I'll": "I will", "you'll": "you will",
-        "they'll": "they will", "we'll": "we will", "he'll": "he will",
-        "she'll": "she will", "it'll": "it will",
-    }
-    for contraction, expansion in contractions.items():
-        humanized = humanized.replace(contraction, expansion)
-        humanized = humanized.replace(contraction.capitalize(), expansion.capitalize())
+    # ── Tone-aware processing ──
+    tone_settings = TONE_SETTINGS.get(tone, TONE_SETTINGS["neutral"])
+    if tone_settings.get("expand_contractions", False):
+        # Expand contractions (academic register)
+        contractions = {
+            "don't": "do not", "doesn't": "does not", "didn't": "did not",
+            "won't": "will not", "wouldn't": "would not", "couldn't": "could not",
+            "shouldn't": "should not", "can't": "cannot", "isn't": "is not",
+            "aren't": "are not", "wasn't": "was not", "weren't": "were not",
+            "hasn't": "has not", "haven't": "have not", "hadn't": "had not",
+            "it's": "it is", "that's": "that is", "there's": "there is",
+            "what's": "what is", "who's": "who is", "let's": "let us",
+            "I'm": "I am", "you're": "you are", "they're": "they are",
+            "we're": "we are", "he's": "he is", "she's": "she is",
+            "I've": "I have", "you've": "you have", "they've": "they have",
+            "we've": "we have", "I'll": "I will", "you'll": "you will",
+            "they'll": "they will", "we'll": "we will", "he'll": "he will",
+            "she'll": "she will", "it'll": "it will",
+        }
+        for contraction, expansion in contractions.items():
+            humanized = humanized.replace(contraction, expansion)
+            humanized = humanized.replace(contraction.capitalize(), expansion.capitalize())
+    else:
+        # Default: still expand contractions unless conversational tone
+        if not tone_settings.get("allow_contractions", False):
+            contractions = {
+                "don't": "do not", "doesn't": "does not", "didn't": "did not",
+                "won't": "will not", "wouldn't": "would not", "couldn't": "could not",
+                "shouldn't": "should not", "can't": "cannot", "isn't": "is not",
+                "aren't": "are not", "wasn't": "was not", "weren't": "were not",
+                "hasn't": "has not", "haven't": "have not", "hadn't": "had not",
+                "it's": "it is", "that's": "that is", "there's": "there is",
+                "what's": "what is", "who's": "who is", "let's": "let us",
+            }
+            for contraction, expansion in contractions.items():
+                humanized = humanized.replace(contraction, expansion)
+                humanized = humanized.replace(contraction.capitalize(), expansion.capitalize())
+
+    # Apply tone-specific adjustments (contractions for casual, filler cuts for concise, etc.)
+    humanized = apply_tone(humanized, tone)
 
     # Remove em-dashes (AI detector signal)
     humanized = humanized.replace("\u2014", " -- ")
@@ -1319,6 +1795,8 @@ def humanize_text(text: str, mode: str = "quality",
 
     stats = {
         "mode": mode,
+        "tone": tone,
+        "text_type": text_type,
         "total_sentences": total_sentences,
         "met_threshold": met_threshold_count,
         "threshold_ratio": round(met_threshold_count / max(total_sentences, 1), 3),
@@ -1330,7 +1808,7 @@ def humanize_text(text: str, mode: str = "quality",
     }
 
     logger.info(f"Oxygen 3.0: {word_count}w, {total_sentences}s, {elapsed:.1f}s, "
-                f"avg_change={avg_change:.3f}, mode={mode}")
+                f"avg_change={avg_change:.3f}, mode={mode}, tone={tone}, type={text_type}")
 
     return humanized, stats
 
@@ -1353,6 +1831,7 @@ class HumanizeRequest(BaseModel):
     text: str = Field(..., min_length=1, max_length=100_000)
     strength: str = Field(default="medium")
     mode: str = Field(default="quality")
+    tone: str = Field(default="neutral")  # academic | neutral | conversational | concise
     min_change_ratio: float = Field(default=0.40, ge=0.1, le=0.9)
     max_retries: int = Field(default=5, ge=1, le=15)
     sentence_by_sentence: bool = Field(default=True)
@@ -1399,12 +1878,14 @@ async def humanize_endpoint(req: HumanizeRequest):
             max_retries=req.max_retries,
             sentence_by_sentence=req.sentence_by_sentence,
             input_has_first_person=input_has_fp,
+            tone=req.tone,
         )
         return HumanizeResponse(
             humanized=humanized,
             success=True,
             params_used={
                 "mode": req.mode,
+                "tone": req.tone,
                 "min_change_ratio": req.min_change_ratio,
                 "max_retries": req.max_retries,
                 "sentence_by_sentence": req.sentence_by_sentence,

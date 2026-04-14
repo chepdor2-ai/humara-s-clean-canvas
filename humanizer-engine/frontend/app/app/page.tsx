@@ -145,6 +145,7 @@ const ALL_ENGINES: EngineConfig[] = [
   { id: 'easy', label: 'Humara 2.2' },
   { id: 'oxygen', label: 'Humara 2.0' },
   { id: 'humara_v3_3', label: 'Humara 2.4' },
+  { id: 'oxygen3', label: 'Humara 3.0' },
   { id: 'ninja_3', label: 'Ninja 3' },
   { id: 'ninja_2', label: 'Ninja 2' },
   { id: 'ninja_4', label: 'Ninja 4' },
@@ -160,7 +161,7 @@ const ALL_ENGINES: EngineConfig[] = [
 
 type ModeId = 'stealth_mode' | 'anti_gptzero' | 'deep_signal_kill';
 const MODE_ENGINES: Record<ModeId, Set<string>> = {
-  stealth_mode: new Set(['ozone', 'easy', 'ninja_1']),
+  stealth_mode: new Set(['ozone', 'easy', 'ninja_1', 'oxygen3']),
   anti_gptzero: new Set(['oxygen', 'humara_v3_3', 'nuru_v2', 'ghost_pro_wiki']),
   deep_signal_kill: new Set([
     'ninja_3',
@@ -184,6 +185,7 @@ const ENGINE_GUIDES: Record<string, string> = {
   easy: 'Stealth Mode wide-coverage engine for balanced, natural sounding rewrites.',
   nuru_v2: 'Purely non-LLM stealth engine. Runs 10 iterative passes for deep transformation without any AI calls.',
   ninja_1: 'LLM-powered Ninja rewrite followed by 10 Nuru stealth passes for maximum detector evasion.',
+  oxygen3: 'Humara 3.0 — Fine-tuned T5 model with 6-phase sentence-by-sentence humanization. Deep restructuring via Render API.',
   oxygen: 'Anti GPTZero engine tuned for GPTZero signal suppression.',
   humara_v3_3: 'Anti GPTZero high-power engine (2.4) for stubborn GPTZero flags.',
   ninja_3: 'Deep Signal Kill profile for aggressive suppression.',
