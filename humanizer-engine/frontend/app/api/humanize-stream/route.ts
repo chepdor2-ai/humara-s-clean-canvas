@@ -462,23 +462,27 @@ export async function POST(req: Request) {
             }
           };
 
-          // Process all sentences independently in parallel
-          console.log(`[SentenceParallel] Processing ${inputSentences.length} sentences independently via '${eng}'`);
-          const sentenceResults = await Promise.all(
-            inputSentences.map(async (sentence, i) => {
-              if (isHeadingSentCheck(sentence)) return sentence;
-              try {
-                const result = await runEngineOnSentence(sentence);
-                sendSSE(controller, { type: 'sentence', index: i, text: result || sentence, stage: 'Engine' });
-                return result && result.trim().length > 0 ? result : sentence;
-              } catch (err) {
-                console.warn(`[SentenceParallel] Sentence ${i} failed:`, err);
-                return sentence;
-              }
-            })
-          );
+          // Process all sentences sequentially so each one streams to the client
+          console.log(`[SentenceSeq] Processing ${inputSentences.length} sentences via '${eng}'`);
+          const sentenceResults: string[] = [];
+          for (let i = 0; i < inputSentences.length; i++) {
+            const sentence = inputSentences[i];
+            if (isHeadingSentCheck(sentence)) {
+              sentenceResults.push(sentence);
+              continue;
+            }
+            try {
+              const result = await runEngineOnSentence(sentence);
+              const final = result && result.trim().length > 0 ? result : sentence;
+              sentenceResults.push(final);
+              sendSSE(controller, { type: 'sentence', index: i, text: final, stage: 'Engine' });
+            } catch (err) {
+              console.warn(`[SentenceSeq] Sentence ${i} failed:`, err);
+              sentenceResults.push(sentence);
+            }
+          }
           humanized = reassembleText(sentenceResults, inputParaBounds.length ? inputParaBounds : [0]);
-          console.log(`[SentenceParallel] Engine complete: ${humanized.split(/\s+/).length} words`);
+          console.log(`[SentenceSeq] Engine complete: ${humanized.split(/\s+/).length} words`);
 
           // ═══════════════════════════════════════════════════════════════
           // PHASE-BASED PIPELINE
@@ -522,7 +526,7 @@ export async function POST(req: Request) {
               case 'nuru_v2':
                 phases = [
                   { name: 'Nuru 2.0', type: 'emit' },
-                  { name: 'Deep Clean', type: 'nuru', passes: 10 },
+                  { name: 'Deep Clean', type: 'nuru', passes: 9 },
                 ];
                 break;
               case 'humara_v3_3':
