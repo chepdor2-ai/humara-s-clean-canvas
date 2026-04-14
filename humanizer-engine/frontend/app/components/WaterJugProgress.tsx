@@ -95,9 +95,9 @@ const WaterJugProgress: React.FC<WaterJugProgressProps> = ({ percent, size = 224
         <span className="text-[44px] font-black leading-none tracking-tight text-white drop-shadow-[0_3px_10px_rgba(0,0,0,0.45)]">
           {Math.round(safePercent)}%
         </span>
-        {phaseName ? (
+        {phaseName === 'Complete' ? (
           <span className="mt-1 max-w-[180px] truncate text-center text-[11px] font-bold uppercase tracking-[0.18em] text-white/95 drop-shadow-[0_2px_8px_rgba(0,0,0,0.42)]">
-            {phaseName}
+            Complete
           </span>
         ) : (
           <span className="mt-1 text-[10px] font-semibold uppercase tracking-[0.24em] text-white/90 drop-shadow-[0_2px_8px_rgba(0,0,0,0.42)]">

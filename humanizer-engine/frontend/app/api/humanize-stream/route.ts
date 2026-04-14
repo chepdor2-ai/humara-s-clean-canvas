@@ -530,36 +530,72 @@ export async function POST(req: Request) {
             humanized = fullResult;
             console.log(`[FullText] Engine complete: ${humanized.split(/\s+/).length} words`);
           } else {
-            // Process all sentences sequentially so each one streams to the client
-            console.log(`[SentenceSeq] Processing ${inputSentences.length} sentences via '${eng}'`);
-            sentenceResults = [];
-            for (let i = 0; i < inputSentences.length; i++) {
-              const sentence = inputSentences[i];
-              if (isHeadingSentCheck(sentence)) {
-                sentenceResults.push(sentence);
-                continue;
-              }
-              try {
-                let result = await runEngineOnSentence(sentence);
-                let final = result && result.trim().length > 0 ? result : sentence;
-                // Enforce 40% minimum change — retry engine up to 2 more times
-                let change = measureSentenceChange(sentence, final);
-                let retry = 0;
-                while (change < 0.40 && retry < 2) {
-                  const retried = await runEngineOnSentence(final);
-                  if (retried && retried.trim().length > 0) final = retried;
-                  change = measureSentenceChange(sentence, final);
-                  retry++;
+            // Determine if this engine uses async/LLM calls (can parallelize)
+            const LLM_ENGINES = new Set([
+              'oxygen3', 'oxygen_t5', 'dipper', 'humarin', 'humara_v3_3',
+              'ghost_pro_wiki', 'ninja_1', 'ninja_4', 'ninja_5',
+              'ghost_trial_2', 'ghost_trial_2_alt', 'conscusion_1', 'conscusion_12',
+              'undetectable', 'ninja', 'fast_v11', 'ghost_pro',
+              'humara_v1_3', 'omega',
+            ]);
+            const useParallel = LLM_ENGINES.has(eng);
+
+            if (useParallel) {
+              // Parallel sentence processing for LLM/async engines
+              console.log(`[SentencePar] Processing ${inputSentences.length} sentences in parallel via '${eng}'`);
+              sentenceResults = await Promise.all(
+                inputSentences.map(async (sentence, i) => {
+                  if (isHeadingSentCheck(sentence)) return sentence;
+                  try {
+                    let result = await runEngineOnSentence(sentence);
+                    let final = result && result.trim().length > 0 ? result : sentence;
+                    let change = measureSentenceChange(sentence, final);
+                    let retry = 0;
+                    while (change < 0.40 && retry < 2) {
+                      const retried = await runEngineOnSentence(final);
+                      if (retried && retried.trim().length > 0) final = retried;
+                      change = measureSentenceChange(sentence, final);
+                      retry++;
+                    }
+                    sendSSE(controller, { type: 'sentence', index: i, text: final, stage: 'Engine' });
+                    return final;
+                  } catch (err) {
+                    console.warn(`[SentencePar] Sentence ${i} failed:`, err);
+                    return sentence;
+                  }
+                })
+              );
+            } else {
+              // Sequential sentence processing for sync/local engines
+              console.log(`[SentenceSeq] Processing ${inputSentences.length} sentences via '${eng}'`);
+              sentenceResults = [];
+              for (let i = 0; i < inputSentences.length; i++) {
+                const sentence = inputSentences[i];
+                if (isHeadingSentCheck(sentence)) {
+                  sentenceResults.push(sentence);
+                  continue;
                 }
-                sentenceResults.push(final);
-                sendSSE(controller, { type: 'sentence', index: i, text: final, stage: 'Engine' });
-              } catch (err) {
-                console.warn(`[SentenceSeq] Sentence ${i} failed:`, err);
-                sentenceResults.push(sentence);
+                try {
+                  let result = await runEngineOnSentence(sentence);
+                  let final = result && result.trim().length > 0 ? result : sentence;
+                  let change = measureSentenceChange(sentence, final);
+                  let retry = 0;
+                  while (change < 0.40 && retry < 2) {
+                    const retried = await runEngineOnSentence(final);
+                    if (retried && retried.trim().length > 0) final = retried;
+                    change = measureSentenceChange(sentence, final);
+                    retry++;
+                  }
+                  sentenceResults.push(final);
+                  sendSSE(controller, { type: 'sentence', index: i, text: final, stage: 'Engine' });
+                } catch (err) {
+                  console.warn(`[SentenceSeq] Sentence ${i} failed:`, err);
+                  sentenceResults.push(sentence);
+                }
               }
             }
             humanized = reassembleText(sentenceResults, inputParaBounds.length ? inputParaBounds : [0]);
-            console.log(`[SentenceSeq] Engine complete: ${humanized.split(/\s+/).length} words`);
+            console.log(`[Sentence${useParallel ? 'Par' : 'Seq'}] Engine complete: ${humanized.split(/\s+/).length} words`);
           }
 
           // ═══════════════════════════════════════════════════════════════
@@ -720,10 +756,12 @@ export async function POST(req: Request) {
                   sendSSE(controller, { type: 'sentence', index: i, text: currentSentences[i], stage: phaseLabel });
                 }
               } else if (phase.type === 'async') {
-                for (let i = 0; i < currentSentences.length; i++) {
-                  if (!isHeadingSentCheck(currentSentences[i])) {
+                // Parallel processing for async/LLM phases
+                const asyncResults = await Promise.all(
+                  currentSentences.map(async (sent, i) => {
+                    if (isHeadingSentCheck(sent)) return sent;
                     const original = phaseInputSentences[i];
-                    let result = await phase.fn(currentSentences[i]);
+                    let result = await phase.fn(sent);
                     let change = measureSentenceChange(original, result);
                     let retry = 0;
                     while (change < MIN_CHANGE && retry < MAX_RETRIES) {
@@ -731,8 +769,11 @@ export async function POST(req: Request) {
                       change = measureSentenceChange(original, result);
                       retry++;
                     }
-                    currentSentences[i] = result;
-                  }
+                    return result;
+                  })
+                );
+                for (let i = 0; i < asyncResults.length; i++) {
+                  currentSentences[i] = asyncResults[i];
                   sendSSE(controller, { type: 'sentence', index: i, text: currentSentences[i], stage: phaseLabel });
                 }
               } else if (phase.type === 'nuru') {

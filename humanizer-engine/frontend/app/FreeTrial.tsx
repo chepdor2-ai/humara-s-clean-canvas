@@ -40,7 +40,7 @@ export default function FreeTrial() {
       const res = await fetch('/api/humanize', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: input, engine: 'ninja_5', strength: 'medium', tone: 'academic', strict_meaning: true, enable_post_processing: true }),
+        body: JSON.stringify({ text: input, engine: 'ninja_1', strength: 'medium', tone: 'academic', strict_meaning: true, enable_post_processing: true }),
       });
       const data = await res.json();
       if (!res.ok || data.error) throw new Error(data.error || 'Humanization failed');
