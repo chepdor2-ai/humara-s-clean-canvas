@@ -304,9 +304,50 @@ export async function POST(req: Request) {
             return output;
           };
 
+          // ── Sentence-level change measurement ──
+          const measureSentenceChange = (original: string, modified: string): number => {
+            const origWords = original.toLowerCase().split(/\s+/).filter(Boolean);
+            const modWords = modified.toLowerCase().split(/\s+/).filter(Boolean);
+            const len = Math.max(origWords.length, modWords.length);
+            if (len === 0) return 1;
+            let changed = 0;
+            for (let i = 0; i < len; i++) {
+              if (!origWords[i] || !modWords[i] || origWords[i] !== modWords[i]) changed++;
+            }
+            return changed / len;
+          };
+
+          // ── Adaptive Oxygen Chain (inline) ──
+          // Iterates oxygenHumanize until 40% word-change per sentence or max 6 passes
+          const adaptiveOxygenChain = (phaseOneOutput: string): string => {
+            const MAX_ITER = 6;
+            const TARGET_CHANGE = 0.40;
+            const SENT_PASS_RATE = 0.70;
+            let current = phaseOneOutput;
+            const p1Sents = robustSentenceSplit(phaseOneOutput);
+            for (let iter = 0; iter < MAX_ITER; iter++) {
+              const totalPasses = iter + 2;
+              const passMode = totalPasses <= 5 ? 'fast' : totalPasses <= 7 ? 'quality' : 'aggressive';
+              const passStrength = totalPasses <= 5 ? 'light' : totalPasses <= 7 ? 'medium' : 'strong';
+              const r = oxygenHumanize(current, passStrength, passMode, false);
+              if (r && r.trim().length > 0) current = r;
+              if (totalPasses >= 4) {
+                const curSents = robustSentenceSplit(current);
+                let met = 0;
+                for (const cs of curSents) {
+                  let best = 0;
+                  for (const p1 of p1Sents) { const c = measureSentenceChange(p1, cs); if (c > best) best = c; }
+                  if (best >= TARGET_CHANGE) met++;
+                }
+                if (curSents.length > 0 && met / curSents.length >= SENT_PASS_RATE) break;
+              }
+            }
+            return current;
+          };
+
           const runHumara20 = (input: string): string => {
             const oxygenMode = (body as Record<string, unknown>).oxygen_mode as string || (effectiveStrength === 'light' ? 'fast' : effectiveStrength === 'strong' ? 'aggressive' : 'quality');
-            return oxygenHumanize(
+            let output = oxygenHumanize(
               input,
               effectiveStrength,
               oxygenMode,
@@ -314,12 +355,16 @@ export async function POST(req: Request) {
                 ? Boolean((body as Record<string, unknown>).oxygen_sentence_by_sentence)
                 : true,
             );
+            output = adaptiveOxygenChain(output);
+            return output;
           };
 
           const runHumara24 = async (input: string): Promise<string> => {
             const humarinMode = strength === 'strong' ? 'aggressive' : strength === 'light' ? 'fast' : 'quality';
             const humarinResult = await humarinHumanize(input, humarinMode, true);
-            return humarinResult.humanized;
+            let output = humarinResult.humanized;
+            output = adaptiveOxygenChain(output);
+            return output;
           };
 
           const runWikipedia = async (input: string): Promise<string> => {
@@ -472,8 +517,17 @@ export async function POST(req: Request) {
               continue;
             }
             try {
-              const result = await runEngineOnSentence(sentence);
-              const final = result && result.trim().length > 0 ? result : sentence;
+              let result = await runEngineOnSentence(sentence);
+              let final = result && result.trim().length > 0 ? result : sentence;
+              // Enforce 40% minimum change — retry engine up to 2 more times
+              let change = measureSentenceChange(sentence, final);
+              let retry = 0;
+              while (change < 0.40 && retry < 2) {
+                const retried = await runEngineOnSentence(final);
+                if (retried && retried.trim().length > 0) final = retried;
+                change = measureSentenceChange(sentence, final);
+                retry++;
+              }
               sentenceResults.push(final);
               sendSSE(controller, { type: 'sentence', index: i, text: final, stage: 'Engine' });
             } catch (err) {
@@ -614,6 +668,13 @@ export async function POST(req: Request) {
               sendSSE(controller, { type: 'stage', stage: phaseLabel, phaseOps });
               await flushDelay(10);
 
+              // ── 40% minimum change enforcement ──
+              // For sync/async/nuru phases, each sentence must achieve ≥40% word change
+              // from its state BEFORE this phase started. Retry up to 3 times if not met.
+              const MIN_CHANGE = 0.40;
+              const MAX_RETRIES = 3;
+              const phaseInputSentences = [...currentSentences]; // snapshot before this phase
+
               if (phase.type === 'emit') {
                 for (let i = 0; i < currentSentences.length; i++) {
                   sendSSE(controller, { type: 'sentence', index: i, text: currentSentences[i], stage: phaseLabel });
@@ -621,14 +682,32 @@ export async function POST(req: Request) {
               } else if (phase.type === 'sync') {
                 for (let i = 0; i < currentSentences.length; i++) {
                   if (!isHeadingSentCheck(currentSentences[i])) {
-                    currentSentences[i] = phase.fn(currentSentences[i]);
+                    const original = phaseInputSentences[i];
+                    let result = phase.fn(currentSentences[i]);
+                    let change = measureSentenceChange(original, result);
+                    let retry = 0;
+                    while (change < MIN_CHANGE && retry < MAX_RETRIES) {
+                      result = phase.fn(result);
+                      change = measureSentenceChange(original, result);
+                      retry++;
+                    }
+                    currentSentences[i] = result;
                   }
                   sendSSE(controller, { type: 'sentence', index: i, text: currentSentences[i], stage: phaseLabel });
                 }
               } else if (phase.type === 'async') {
                 for (let i = 0; i < currentSentences.length; i++) {
                   if (!isHeadingSentCheck(currentSentences[i])) {
-                    currentSentences[i] = await phase.fn(currentSentences[i]);
+                    const original = phaseInputSentences[i];
+                    let result = await phase.fn(currentSentences[i]);
+                    let change = measureSentenceChange(original, result);
+                    let retry = 0;
+                    while (change < MIN_CHANGE && retry < MAX_RETRIES) {
+                      result = await phase.fn(result);
+                      change = measureSentenceChange(original, result);
+                      retry++;
+                    }
+                    currentSentences[i] = result;
                   }
                   sendSSE(controller, { type: 'sentence', index: i, text: currentSentences[i], stage: phaseLabel });
                 }
@@ -641,6 +720,19 @@ export async function POST(req: Request) {
                     sendSSE(controller, { type: 'sentence', index: i, text: currentSentences[i], stage: phaseLabel });
                   }
                   await flushDelay(10);
+                }
+                // After all nuru passes, enforce 40% on any sentences that still fall short
+                for (let i = 0; i < currentSentences.length; i++) {
+                  if (isHeadingSentCheck(currentSentences[i])) continue;
+                  const original = phaseInputSentences[i];
+                  let change = measureSentenceChange(original, currentSentences[i]);
+                  let retry = 0;
+                  while (change < MIN_CHANGE && retry < MAX_RETRIES) {
+                    currentSentences[i] = runNuruSinglePass(currentSentences[i]);
+                    change = measureSentenceChange(original, currentSentences[i]);
+                    sendSSE(controller, { type: 'sentence', index: i, text: currentSentences[i], stage: phaseLabel });
+                    retry++;
+                  }
                 }
               }
 
