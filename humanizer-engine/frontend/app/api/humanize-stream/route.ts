@@ -694,39 +694,43 @@ export async function POST(req: Request) {
                   { name: 'Wikipedia', type: 'emit' },
                   { name: 'Humara 2.0', type: 'sync', fn: (s) => runHumara20(s) },
                   { name: 'Nuru 2.0', type: 'nuru', passes: 10 },
+                  { name: 'Deep Non-LLM Clean', type: 'sync', fn: (s) => deepNonLLMClean(s) },
+                  { name: 'Final Smooth & Grammar', type: 'sync', fn: (s) => finalSmoothGrammar(s) },
                 ];
                 break;
               case 'ninja_1':
                 phases = [
-                  { name: 'Ninja', type: 'emit' },                                         // Phase 1:  LLM student-persona rewrite
-                  { name: 'Deep AI Clean', type: 'async', fn: (s) => deepAICleanOneSentence(s) }, // Phase 2:  LLM residual AI signal strip
-                  { name: 'Deep Non-LLM Clean', type: 'sync', fn: (s) => deepNonLLMClean(s) },    // Phase 3:  Rule-based AI vocabulary/phrase kill
-                  { name: 'Humara 2.0', type: 'sync', fn: (s) => runHumara20(s) },                // Phase 4:  Heavy rule-based 6-phase engine
-                  { name: 'Smoothing', type: 'sync', fn: (s) => smoothingPass(s) },               // Phase 5:  Grammar + flow repair after Humara 2.0
-                  { name: 'Nuru 2.0', type: 'nuru', passes: CHAIN_TS },                           // Phase 6:  10-pass stealth humanization
-                  { name: 'Humara 2.4', type: 'async', fn: (s) => runHumara24(s) },               // Phase 7:  External Humarin API + oxygen chain
-                  { name: 'Nuru 2.0 Post-2.4', type: 'nuru', passes: CHAIN_TS },                  // Phase 8:  10-pass Nuru after Humara 2.4
-                  { name: 'Wikipedia', type: 'async', fn: (s) => runWikipediaClean(s) },          // Phase 9:  Ghost Pro LLM with Wikipedia tone
-                  { name: 'Nuru 2.0 Post-Wiki', type: 'nuru', passes: CHAIN_TS },                 // Phase 10: 10-pass Nuru after Wikipedia
-                  { name: 'Final Smooth & Grammar', type: 'sync', fn: (s) => finalSmoothGrammar(s) }, // Phase 11: Intelligent grammar + flow polish
+                  { name: 'Ninja', type: 'emit' },                                         // Phase 1: LLM student-persona rewrite
+                  { name: 'Deep AI Clean', type: 'async', fn: (s) => deepAICleanOneSentence(s) }, // Phase 2: LLM residual AI signal strip
+                  { name: 'Deep Non-LLM Clean', type: 'sync', fn: (s) => deepNonLLMClean(s) },    // Phase 3: Rule-based AI vocabulary/phrase kill
+                  { name: 'Humara 2.0', type: 'sync', fn: (s) => runHumara20(s) },                // Phase 4: Heavy rule-based 6-phase engine
+                  { name: 'Smoothing', type: 'sync', fn: (s) => smoothingPass(s) },               // Phase 5: Grammar + flow repair after Humara 2.0
+                  { name: 'Nuru 2.0', type: 'nuru', passes: CHAIN_TS },                           // Phase 6: 10-pass stealth humanization
+                  { name: 'Final Smooth & Grammar', type: 'sync', fn: (s) => finalSmoothGrammar(s) }, // Phase 7: Intelligent grammar + flow polish
                 ];
                 break;
               case 'oxygen':
                 phases = [
                   { name: 'Humara 2.0', type: 'emit' },
                   { name: 'Nuru 2.0', type: 'nuru', passes: 10 },
+                  { name: 'Deep Non-LLM Clean', type: 'sync', fn: (s) => deepNonLLMClean(s) },
+                  { name: 'Final Smooth & Grammar', type: 'sync', fn: (s) => finalSmoothGrammar(s) },
                 ];
                 break;
               case 'nuru_v2':
                 phases = [
                   { name: 'Nuru 2.0', type: 'emit' },
                   { name: 'Deep Clean', type: 'nuru', passes: 9 },
+                  { name: 'Deep Non-LLM Clean', type: 'sync', fn: (s) => deepNonLLMClean(s) },
+                  { name: 'Final Smooth & Grammar', type: 'sync', fn: (s) => finalSmoothGrammar(s) },
                 ];
                 break;
               case 'humara_v3_3':
                 phases = [
                   { name: 'Humara 2.4', type: 'emit' },
                   { name: 'Nuru 2.0', type: 'nuru', passes: 10 },
+                  { name: 'Deep Non-LLM Clean', type: 'sync', fn: (s) => deepNonLLMClean(s) },
+                  { name: 'Final Smooth & Grammar', type: 'sync', fn: (s) => finalSmoothGrammar(s) },
                 ];
                 break;
               // Deep Kill engines — multi-step pipelines with visible phases
