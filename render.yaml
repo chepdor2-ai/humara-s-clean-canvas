@@ -7,6 +7,8 @@ services:
     envVars:
       - key: OXYGEN3_MODEL_DIR
         value: /app/oxygen3-model
+      - key: HF_MODEL_REPO
+        value: maguna956/oxygen3-humanizer
       - key: HF_TOKEN
         sync: false
     plan: standard

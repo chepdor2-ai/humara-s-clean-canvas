@@ -17,18 +17,28 @@ RUN pip install --no-cache-dir \
 # Download the model at build time (cached in Docker layer — fast cold starts)
 # Render auto-injects env vars as Docker build args
 ARG HF_TOKEN
-RUN HF_TOKEN=${HF_TOKEN} python - <<'PY'
+ARG HF_MODEL_REPO=maguna956/oxygen3-humanizer
+RUN HF_TOKEN=${HF_TOKEN} HF_MODEL_REPO=${HF_MODEL_REPO} python - <<'PY'
 import os
 from huggingface_hub import snapshot_download
 
+repo_id = (os.environ.get('HF_MODEL_REPO') or 'maguna956/oxygen3-humanizer').strip()
 token = (os.environ.get('HF_TOKEN') or '').strip()
-if not token:
-  raise RuntimeError(
-    'HF_TOKEN is empty during Docker build. Set HF_TOKEN in Render service environment variables. '
-    'For existing Blueprint services, add/update it manually in Render Dashboard -> Environment.'
-  )
 
-snapshot_download('maguna956/oxygen3-humanizer', local_dir='/app/oxygen3-model', token=token)
+try:
+  if token:
+    snapshot_download(repo_id, local_dir='/app/oxygen3-model', token=token)
+  else:
+    # Allows public model repos to build without a token.
+    snapshot_download(repo_id, local_dir='/app/oxygen3-model')
+except Exception as e:
+  if not token:
+    raise RuntimeError(
+      f'HF_TOKEN is empty and anonymous download failed for {repo_id}. '
+      'Set HF_TOKEN in Render service environment variables, or set HF_MODEL_REPO to a public model. '
+      'For existing Blueprint services, add/update env vars manually in Render Dashboard -> Environment.'
+    ) from e
+  raise
 PY
 
 # Copy server files
