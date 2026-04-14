@@ -533,6 +533,50 @@ export async function POST(req: Request) {
             return s;
           };
 
+          // ══════════════════════════════════════════════════════════════
+          // FULL-PIPELINE RUNNERS — called when one engine invokes another
+          // within a phase. These include ALL sub-engine processing stages
+          // so the output is fully processed, not raw engine output.
+          // ══════════════════════════════════════════════════════════════
+
+          /** Humara 2.0 Full: restructure → oxygen → adaptiveChain → nuru × 10 → deepClean → smooth */
+          const runHumara20Full = async (input: string): Promise<string> => {
+            let s = await restructureSentence(input);
+            s = runHumara20(s);
+            for (let i = 0; i < CHAIN_TS; i++) {
+              const n = stealthHumanize(s, strength ?? 'medium', tone ?? 'academic', 1);
+              if (n && n.trim().length > 0) s = n;
+            }
+            s = deepNonLLMClean(s);
+            s = finalSmoothGrammar(s);
+            return s;
+          };
+
+          /** Humara 2.4 Full: restructure → humarin → adaptiveChain → nuru × 10 → deepClean → smooth */
+          const runHumara24Full = async (input: string): Promise<string> => {
+            let s = await restructureSentence(input);
+            s = await runHumara24(s);
+            for (let i = 0; i < CHAIN_TS; i++) {
+              const n = stealthHumanize(s, strength ?? 'medium', tone ?? 'academic', 1);
+              if (n && n.trim().length > 0) s = n;
+            }
+            s = deepNonLLMClean(s);
+            s = finalSmoothGrammar(s);
+            return s;
+          };
+
+          /** Nuru 2.0 Full: restructure → nuru × 9 → deepClean → smooth */
+          const runNuru20Full = async (input: string): Promise<string> => {
+            let s = await restructureSentence(input);
+            for (let i = 0; i < 9; i++) {
+              const n = stealthHumanize(s, strength ?? 'medium', tone ?? 'academic', 1);
+              if (n && n.trim().length > 0) s = n;
+            }
+            s = deepNonLLMClean(s);
+            s = finalSmoothGrammar(s);
+            return s;
+          };
+
           // Deep Kill engine set — used to skip destructive post-processors
           const DEEP_KILL_ENGINES = new Set([
             'ninja_2', 'ninja_3', 'ninja_4', 'ninja_5',
@@ -759,7 +803,7 @@ export async function POST(req: Request) {
               case 'ghost_pro_wiki':
                 phases = [
                   { name: 'Restructuring', type: 'async', fn: (s) => restructureSentence(s) },
-                  { name: 'Humara 2.0', type: 'sync', fn: (s) => runHumara20(s) },
+                  { name: 'Humara 2.0 (Full)', type: 'async', fn: (s) => runHumara20Full(s) },
                   { name: 'Nuru 2.0', type: 'nuru', passes: 10 },
                   { name: 'Deep Non-LLM Clean', type: 'sync', fn: (s) => deepNonLLMClean(s) },
                   { name: 'Final Smooth & Grammar', type: 'sync', fn: (s) => finalSmoothGrammar(s) },
@@ -770,10 +814,10 @@ export async function POST(req: Request) {
                   { name: 'Restructuring', type: 'async', fn: (s) => restructureSentence(s) },     // Phase 1: LLM deep sentence restructuring
                   { name: 'Deep AI Clean', type: 'async', fn: (s) => deepAICleanOneSentence(s) }, // Phase 2: LLM residual AI signal strip
                   { name: 'Deep Non-LLM Clean', type: 'sync', fn: (s) => deepNonLLMClean(s) },    // Phase 3: Rule-based AI vocabulary/phrase kill
-                  { name: 'Humara 2.0', type: 'sync', fn: (s) => runHumara20(s) },                // Phase 4: Heavy rule-based 6-phase engine
-                  { name: 'Smoothing', type: 'sync', fn: (s) => smoothingPass(s) },               // Phase 5: Grammar + flow repair after Humara 2.0
+                  { name: 'Humara 2.0 (Full)', type: 'async', fn: (s) => runHumara20Full(s) },    // Phase 4: Full Humara 2.0 pipeline
+                  { name: 'Smoothing', type: 'sync', fn: (s) => smoothingPass(s) },               // Phase 5: Grammar + flow repair
                   { name: 'Nuru 2.0', type: 'nuru', passes: CHAIN_TS },                           // Phase 6: 10-pass stealth humanization
-                  { name: 'Final Smooth & Grammar', type: 'sync', fn: (s) => finalSmoothGrammar(s) }, // Phase 7: Intelligent grammar + flow polish
+                  { name: 'Final Smooth & Grammar', type: 'sync', fn: (s) => finalSmoothGrammar(s) }, // Phase 7: Final polish
                 ];
                 break;
               case 'oxygen':
@@ -832,18 +876,18 @@ export async function POST(req: Request) {
                 ];
                 break;
               case 'ghost_trial_2':
-                // Wikipedia → Humara 2.4 → Nuru 2.0
+                // Wikipedia → Humara 2.4 (Full) → Nuru 2.0
                 phases = [
                   { name: 'Wikipedia', type: 'emit' },
-                  { name: 'Humara 2.4', type: 'async', fn: (s) => runHumara24(s) },
+                  { name: 'Humara 2.4 (Full)', type: 'async', fn: (s) => runHumara24Full(s) },
                   { name: 'Nuru 2.0', type: 'nuru', passes: CHAIN_TS },
                 ];
                 break;
               case 'ghost_trial_2_alt':
-                // Wikipedia → Humara 2.0 → Nuru 2.0
+                // Wikipedia → Humara 2.0 (Full) → Nuru 2.0
                 phases = [
                   { name: 'Wikipedia', type: 'emit' },
-                  { name: 'Humara 2.0', type: 'sync', fn: (s) => runHumara20(s) },
+                  { name: 'Humara 2.0 (Full)', type: 'async', fn: (s) => runHumara20Full(s) },
                   { name: 'Nuru 2.0', type: 'nuru', passes: CHAIN_TS },
                 ];
                 break;
@@ -856,10 +900,10 @@ export async function POST(req: Request) {
                 ];
                 break;
               case 'conscusion_12':
-                // Humara 2.1 → Humara 2.4 → Wikipedia → Nuru 2.0
+                // Humara 2.1 → Humara 2.4 (Full) → Wikipedia → Nuru 2.0
                 phases = [
                   { name: 'Humara 2.1', type: 'emit' },
-                  { name: 'Humara 2.4', type: 'async', fn: (s) => runHumara24(s) },
+                  { name: 'Humara 2.4 (Full)', type: 'async', fn: (s) => runHumara24Full(s) },
                   { name: 'Wikipedia', type: 'async', fn: (s) => runWikipediaClean(s) },
                   { name: 'Nuru 2.0', type: 'nuru', passes: CHAIN_TS },
                 ];
