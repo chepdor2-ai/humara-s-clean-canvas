@@ -13,6 +13,7 @@ import { findSubject, findMainVerb, detectTense, isPassiveVoice } from '../synta
 import { ALL_RULES } from '../rules';
 import { rankIssues } from '../ranking';
 import { applyFixes } from '../output';
+import { applySingleFix } from '../output/applySuggestion';
 import { TRANSITION_WORDS, UNCOUNTABLE_NOUNS, SINGULAR_PRONOUNS } from '../lexicon';
 import { IRREGULAR_VERBS, FORM_TO_BASE } from '../lexicon/irregularVerbs';
 
@@ -264,5 +265,25 @@ export class GrammarChecker {
       scores: { grammar: grammarScore, naturalness, clarity, flow, overall },
       stats: { errors, warnings, style },
     };
+  }
+
+  /**
+   * Correct all fixable issues in text and return the corrected string.
+   * Applies errors and warnings (confidence >= 0.65) from end-to-start.
+   * This is the "fix everything" mode for the humanizer integration.
+   */
+  correctAll(text: string): string {
+    if (!text.trim()) return text;
+    const result = this.check(text);
+    // Apply all fixable issues — errors first, then warnings
+    const fixable = result.issues
+      .filter(i => i.replacements.length > 0 && i.confidence >= 0.65 && (i.severity === 'error' || i.severity === 'warning'))
+      .sort((a, b) => b.start - a.start); // end-to-start to preserve offsets
+
+    let corrected = text;
+    for (const issue of fixable) {
+      corrected = applySingleFix(corrected, issue);
+    }
+    return corrected;
   }
 }

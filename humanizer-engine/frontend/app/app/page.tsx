@@ -1,7 +1,8 @@
 'use client';
 import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 
-import { Copy, Check, Zap, Eraser, RotateCcw, Type, AlignLeft, RefreshCw, AlertTriangle, Clock, ChevronDown, ChevronUp, Shield, Settings, ClipboardPaste } from 'lucide-react';
+import { Copy, Check, Zap, Eraser, RotateCcw, Type, AlignLeft, RefreshCw, AlertTriangle, Clock, ChevronDown, ChevronUp, Shield, Settings, ClipboardPaste, SpellCheck } from 'lucide-react';
+import { GrammarChecker } from '@/lib/engine/grammar-corrector';
 import UsageBar, { useUsage } from './UsageBar';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../AuthProvider';
@@ -236,6 +237,7 @@ export default function EditorPage() {
   const [tone, setTone] = useState('academic');
   const [strictMeaning, setStrictMeaning] = useState(true);
   const [humanizationRate, setHumanizationRate] = useState(8);
+  const [grammarCorrection, setGrammarCorrection] = useState(false);
   const [mode, setMode] = useState<ModeId>('anti_gptzero');
 
   // Admin-controlled engine visibility
@@ -644,7 +646,14 @@ export default function EditorPage() {
       const finalData = await runStreamingHumanize(text, controller.signal);
 
       if (finalData) {
-        const currentResult = finalData.humanized as string;
+        let currentResult = finalData.humanized as string;
+
+        // Grammar correction pass — fix capitalization, punctuation, agreement etc.
+        if (grammarCorrection) {
+          const checker = new GrammarChecker();
+          currentResult = checker.correctAll(currentResult);
+        }
+
         setResult(currentResult);
         setMeaningScore(finalData.meaning_similarity as number);
 
@@ -695,7 +704,12 @@ export default function EditorPage() {
       const finalData = await runStreamingHumanize(result, controller.signal);
 
       if (finalData) {
-        setResult(finalData.humanized as string);
+        let rephrased = finalData.humanized as string;
+        if (grammarCorrection) {
+          const checker = new GrammarChecker();
+          rephrased = checker.correctAll(rephrased);
+        }
+        setResult(rephrased);
         setMeaningScore(finalData.meaning_similarity as number);
         // Detection disabled — coming soon
         refreshUsage();
@@ -803,6 +817,13 @@ export default function EditorPage() {
       const finalData = await finalRes.json();
       if (finalRes.ok && !finalData.error) {
         setOutputDetection({ overallAi: finalData.summary.overall_ai_score, overallHuman: finalData.summary.overall_human_score, detectors: finalData.detectors });
+      }
+
+      // Apply grammar correction to final output
+      if (grammarCorrection) {
+        const checker = new GrammarChecker();
+        currentText = checker.correctAll(currentText);
+        setResult(currentText);
       }
     } catch (err) { setError(err instanceof Error ? err.message : 'Rehumanize failed'); }
     finally { setRehumanizing(false); }
@@ -1028,6 +1049,15 @@ export default function EditorPage() {
             </button>
           </label>
           <div className="w-px h-4 bg-slate-200 dark:bg-cyan-950/70 hidden sm:block" />
+          <label className="flex items-center gap-1.5 cursor-pointer select-none" title="Auto-correct grammar, punctuation & capitalization in the output">
+            <SpellCheck className={`w-3 h-3 ${grammarCorrection ? 'text-emerald-500' : 'text-slate-400 dark:text-zinc-500'}`} />
+            <span className="text-[10px] font-semibold text-slate-500 dark:text-zinc-500 uppercase">Grammar</span>
+            <button onClick={() => setGrammarCorrection(!grammarCorrection)}
+              className={`w-7 h-[16px] rounded-full transition-all relative ${grammarCorrection ? 'bg-emerald-500 dark:bg-emerald-600' : 'bg-slate-300 dark:bg-zinc-700'}`}>
+              <div className={`w-2.5 h-2.5 bg-white rounded-full absolute top-[3px] transition-all shadow-sm ${grammarCorrection ? 'left-[13px]' : 'left-[3px]'}`} />
+            </button>
+          </label>
+          <div className="w-px h-4 bg-slate-200 dark:bg-cyan-950/70 hidden sm:block" />
           <div className="flex items-center gap-1.5">
             <span className="text-[10px] font-semibold text-slate-500 dark:text-zinc-500 uppercase">Rate</span>
             <input type="range" min={1} max={10} value={humanizationRate} onChange={(e) => setHumanizationRate(Number(e.target.value))}
@@ -1050,6 +1080,9 @@ export default function EditorPage() {
           <span className="text-[10px] px-2 py-0.5 rounded-full bg-cyan-50 dark:bg-cyan-950/50 border border-cyan-200 dark:border-cyan-900/60 text-cyan-700 dark:text-cyan-200">{MODE_LABELS[mode]}</span>
           <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-100 dark:bg-zinc-900/70 border border-slate-200 dark:border-zinc-800 text-slate-700 dark:text-zinc-300">{ENGINES.find(e => e.id === engine)?.label}</span>
           <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-100 dark:bg-zinc-900/70 border border-slate-200 dark:border-zinc-800 text-slate-700 dark:text-zinc-300">{TONES.find(t => t.id === tone)?.label}</span>
+          {grammarCorrection && (
+            <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-900/60 text-emerald-700 dark:text-emerald-200">Grammar ✓</span>
+          )}
         </div>
       </div>
 

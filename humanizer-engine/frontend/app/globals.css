@@ -1,4 +1,4 @@
-@import "../node_modules/tailwindcss/index.css";
+﻿@import "../node_modules/tailwindcss/index.css";
 
 @variant dark (&:where(.dark, .dark *));
 
@@ -74,13 +74,19 @@
     --font-sans: var(--font-inter), -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   }
   body {
-    background-color: #05050A;
-    color: #fafafa;
+    background-color: #f8fafc;
+    color: #0f172a;
     font-family: var(--font-sans);
-    -webkit-font-smoothing: antialiased;
-    -moz-osx-font-smoothing: grayscale;
+    -webkit-font-smoothing: subpixel-antialiased;
+    -moz-osx-font-smoothing: auto;
     text-rendering: optimizeLegibility;
     scroll-behavior: smooth;
+  }
+  .dark body {
+    background-color: #05050A;
+    color: #fafafa;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
 
   /* Faster button/link interactions */
@@ -100,6 +106,10 @@
   background-image: radial-gradient(circle, rgba(168, 85, 247, 0.06) 1px, transparent 1px);
   background-size: 24px 24px;
 }
+[data-theme="light"] .premium-dots {
+  background-image: radial-gradient(circle, rgba(147, 51, 234, 0.04) 1px, transparent 1px) !important;
+  background-color: #ffffff !important;
+}
 
 /* Subtle noise texture overlay */
 .premium-noise::before {
@@ -111,21 +121,43 @@
   z-index: 0;
 }
 
-.stealth-shell {
-  background:
-    radial-gradient(1200px 380px at 8% -15%, rgba(6, 182, 212, 0.11), transparent 65%),
-    radial-gradient(1000px 340px at 92% -25%, rgba(20, 184, 166, 0.08), transparent 65%),
-    linear-gradient(180deg, #06090f 0%, #070b12 100%);
-}
-
-.stealth-top-glow {
-  background: radial-gradient(1200px 280px at 12% -10%, rgba(45, 212, 191, 0.12), transparent 60%);
-}
-
 @layer components {
+  /* ── Stealth Shell ─────────────────────────────────────── */
+  .stealth-shell {
+    background: #ffffff;
+  }
+  .dark .stealth-shell {
+    background:
+      radial-gradient(1200px 380px at 8% -15%, rgba(6, 182, 212, 0.11), transparent 65%),
+      radial-gradient(1000px 340px at 92% -25%, rgba(20, 184, 166, 0.08), transparent 65%),
+      linear-gradient(180deg, #06090f 0%, #070b12 100%);
+  }
+
+  .stealth-top-glow {
+    background: radial-gradient(1200px 280px at 12% -10%, rgba(14, 165, 233, 0.12), transparent 60%);
+  }
+  .dark .stealth-top-glow {
+    background: radial-gradient(1200px 280px at 12% -10%, rgba(45, 212, 191, 0.12), transparent 60%);
+  }
+
   /* ── Glowing brand text ───────────────────────────────── */
   .brand-glow-text {
     text-shadow: 0 0 12px rgba(168, 85, 247, 0.4), 0 0 24px rgba(147, 51, 234, 0.2);
+  }
+
+  .brand-wordmark {
+    background: linear-gradient(90deg, #0f172a, #7e22ce, #a855f7);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    text-shadow: 0 0 10px rgba(126, 34, 206, 0.14);
+  }
+  .dark .brand-wordmark {
+    background: linear-gradient(90deg, #ffffff, #e9d5ff, #c084fc);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    text-shadow: 0 0 20px rgba(168, 85, 247, 0.4);
   }
 
   .glass-nav {
@@ -142,13 +174,13 @@
   /* ── Premium Background Mesh ──────────────────────────── */
   .premium-bg {
     position: relative;
-    background:
+    background-image:
       radial-gradient(ellipse 80% 60% at 10% 20%, rgba(147, 51, 234, 0.04) 0%, transparent 60%),
       radial-gradient(ellipse 60% 50% at 90% 80%, rgba(126, 34, 206, 0.03) 0%, transparent 60%),
       radial-gradient(ellipse 50% 40% at 50% 10%, rgba(168, 85, 247, 0.03) 0%, transparent 50%);
   }
   .dark .premium-bg {
-    background:
+    background-image:
       radial-gradient(ellipse 80% 60% at 10% 20%, rgba(147, 51, 234, 0.08) 0%, transparent 60%),
       radial-gradient(ellipse 60% 50% at 90% 80%, rgba(126, 34, 206, 0.06) 0%, transparent 60%),
       radial-gradient(ellipse 50% 40% at 50% 10%, rgba(168, 85, 247, 0.06) 0%, transparent 50%);
@@ -338,11 +370,11 @@
 
   /* ── Premium Sidebar ──────────────────────────────────── */
   .premium-sidebar {
-    background: linear-gradient(180deg, rgba(255,255,255,1) 0%, rgba(248,250,252,1) 100%);
+    background-image: linear-gradient(180deg, rgba(255,255,255,1) 0%, rgba(248,250,252,1) 100%);
     border-right: 1px solid rgba(226, 232, 240, 0.8);
   }
   .dark .premium-sidebar {
-    background: linear-gradient(180deg, rgba(24,24,27,1) 0%, rgba(15,15,18,1) 100%);
+    background-image: linear-gradient(180deg, rgba(24,24,27,1) 0%, rgba(15,15,18,1) 100%);
     border-right-color: rgba(63, 63, 70, 0.5);
   }
 
@@ -513,8 +545,8 @@
   /* ── Magic UI: Shiny Text ──────────────────────────────── */
   .shiny-text {
     background-size: var(--shiny-width, 100px) 100%;
-    background-clip: text;
     -webkit-background-clip: text;
+    background-clip: text;
     background-repeat: no-repeat;
     background-position: 0 0;
     animation: shinyText 4s ease-in-out infinite;
@@ -804,4 +836,1197 @@
   .dark .ref-card:hover {
     box-shadow: 0 25px 50px -12px rgba(168, 85, 247, 0.25);
   }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   LIGHT-MODE OVERRIDES
+   ───────────────────────────────────────────────────────────────
+   Uses [data-theme="light"] attribute selector because Tailwind
+   CSS v4 strips :root:not(.dark) rules from its PostCSS output.
+   The data-theme attribute is set by ThemeProvider + layout script.
+   ═══════════════════════════════════════════════════════════════ */
+
+/* ── 1. Dark Hex Backgrounds → White ─────────────────────────── */
+[data-theme="light"] [class~="bg-[#05050A]"],
+[data-theme="light"] [class~="bg-[#0F0F17]"],
+[data-theme="light"] [class~="bg-[#0A0A12]"],
+[data-theme="light"] [class~="bg-[#09090F]"],
+[data-theme="light"] [class~="bg-[#0c0c14]"],
+[data-theme="light"] [class~="bg-[#12121a]"],
+[data-theme="light"] [class~="bg-[#090d14]"],
+[data-theme="light"] [class~="bg-[#0a1018]"],
+[data-theme="light"] [class~="bg-[#0a0a0b]"] {
+  background-color: #ffffff !important;
+  background-image: none !important;
+}
+
+/* ── 2. Named Dark Backgrounds → Light ───────────────────────── */
+[data-theme="light"] [class~="bg-black"] {
+  background-color: #f8fafc !important;
+}
+[data-theme="light"] [class~="bg-zinc-950"],
+[data-theme="light"] [class~="bg-zinc-900"],
+[data-theme="light"] [class~="bg-slate-950"],
+[data-theme="light"] [class~="bg-slate-900"],
+[data-theme="light"] [class~="bg-gray-900"] {
+  background-color: #ffffff !important;
+}
+[data-theme="light"] [class~="bg-zinc-800"] {
+  background-color: #f1f5f9 !important;
+}
+
+/* ── 3. Opacity Dark Backgrounds → Light ─────────────────────── */
+[data-theme="light"] [class~="bg-zinc-950/60"],
+[data-theme="light"] [class~="bg-zinc-950/80"],
+[data-theme="light"] [class~="bg-zinc-900/90"],
+[data-theme="light"] [class~="bg-zinc-900/80"],
+[data-theme="light"] [class~="bg-zinc-900/60"],
+[data-theme="light"] [class~="bg-zinc-900/70"] {
+  background-color: #ffffff !important;
+  border-color: #e2e8f0 !important;
+}
+[data-theme="light"] [class~="bg-zinc-800/80"],
+[data-theme="light"] [class~="bg-zinc-800/60"],
+[data-theme="light"] [class~="bg-zinc-800/50"],
+[data-theme="light"] [class~="bg-zinc-800/30"],
+[data-theme="light"] [class~="bg-zinc-800/20"] {
+  background-color: #f1f5f9 !important;
+}
+
+/* ── 4. Near-transparent Overlays → Transparent ──────────────── */
+[data-theme="light"] [class~="bg-white/[0.02]"],
+[data-theme="light"] [class~="bg-white/[0.04]"],
+[data-theme="light"] [class~="bg-white/[0.08]"],
+[data-theme="light"] [class~="bg-white/5"],
+[data-theme="light"] [class~="bg-white/10"] {
+  background-color: transparent !important;
+}
+
+/* ── 5. Gradient Overlays → Transparent ──────────────────────── */
+[data-theme="light"] [class~="from-[#05050A]"],
+[data-theme="light"] [class~="from-[#05050A]/60"],
+[data-theme="light"] [class~="from-[#05050A]/50"],
+[data-theme="light"] [class~="from-[#05050A]/40"],
+[data-theme="light"] [class~="from-[#09090F]"] {
+  background-image: none !important;
+}
+[data-theme="light"] [class~="via-[#05050A]"],
+[data-theme="light"] [class~="via-[#05050A]/40"],
+[data-theme="light"] [class~="via-[#09090F]/80"] {
+  background-image: none !important;
+}
+
+/* ── 6. Text Color Shifts ────────────────────────────────────── */
+/* text-white → dark inside overridden dark sections */
+[data-theme="light"] [class~="bg-[#05050A]"] [class~="text-white"],
+[data-theme="light"] [class~="bg-[#0F0F17]"] [class~="text-white"],
+[data-theme="light"] [class~="bg-[#0A0A12]"] [class~="text-white"],
+[data-theme="light"] [class~="bg-[#0c0c14]"] [class~="text-white"],
+[data-theme="light"] [class~="bg-[#12121a]"] [class~="text-white"],
+[data-theme="light"] [class~="bg-black"] [class~="text-white"],
+[data-theme="light"] [class~="bg-zinc-950"] [class~="text-white"],
+[data-theme="light"] [class~="bg-zinc-900"] [class~="text-white"],
+[data-theme="light"] [class~="bg-slate-950"] [class~="text-white"],
+[data-theme="light"] [class~="bg-slate-900"] [class~="text-white"],
+[data-theme="light"] [class~="bg-gray-900"] [class~="text-white"],
+[data-theme="light"] [class~="bg-[#05050A]"][class~="text-white"],
+[data-theme="light"] [class~="bg-black"][class~="text-white"],
+[data-theme="light"] [class~="bg-zinc-900"][class~="text-white"],
+[data-theme="light"] [class~="bg-zinc-950"][class~="text-white"],
+[data-theme="light"] [class~="bg-slate-950"][class~="text-white"] {
+  color: #0f172a !important;
+}
+
+/* Keep white text on colored/gradient backgrounds */
+[data-theme="light"] [class*="from-purple"][class~="text-white"],
+[data-theme="light"] [class*="bg-purple"][class~="text-white"],
+[data-theme="light"] [class*="bg-emerald"][class~="text-white"],
+[data-theme="light"] [class*="bg-orange"][class~="text-white"],
+[data-theme="light"] [class*="bg-red-"][class~="text-white"],
+[data-theme="light"] [class*="bg-blue"][class~="text-white"],
+[data-theme="light"] [class*="bg-cyan"][class~="text-white"],
+[data-theme="light"] [class*="bg-gradient"][class~="text-white"] {
+  color: #ffffff !important;
+}
+
+/* text-zinc-100/200 → dark inside overridden sections */
+[data-theme="light"] [class~="bg-[#05050A]"] [class~="text-zinc-100"],
+[data-theme="light"] [class~="bg-[#05050A]"] [class~="text-zinc-200"],
+[data-theme="light"] [class~="bg-black"] [class~="text-zinc-100"],
+[data-theme="light"] [class~="bg-black"] [class~="text-zinc-200"],
+[data-theme="light"] [class~="bg-zinc-900"] [class~="text-zinc-100"],
+[data-theme="light"] [class~="bg-zinc-900"] [class~="text-zinc-200"],
+[data-theme="light"] [class~="bg-zinc-950"] [class~="text-zinc-100"],
+[data-theme="light"] [class~="bg-slate-950"] [class~="text-zinc-100"] {
+  color: #1e293b !important;
+}
+
+/* Muted text: gray-300/zinc-300 → darker equivalent */
+[data-theme="light"] [class~="bg-[#05050A]"] [class~="text-gray-300"],
+[data-theme="light"] [class~="bg-[#0F0F17]"] [class~="text-gray-300"],
+[data-theme="light"] [class~="bg-black"] [class~="text-gray-300"],
+[data-theme="light"] [class~="bg-zinc-900"] [class~="text-gray-300"],
+[data-theme="light"] [class~="bg-zinc-950"] [class~="text-gray-300"],
+[data-theme="light"] [class~="bg-slate-950"] [class~="text-gray-300"],
+[data-theme="light"] [class~="bg-[#05050A]"] [class~="text-zinc-300"],
+[data-theme="light"] [class~="bg-black"] [class~="text-zinc-300"],
+[data-theme="light"] [class~="bg-zinc-900"] [class~="text-zinc-300"] {
+  color: #475569 !important;
+}
+
+/* Muted text: gray-400/zinc-400 → medium gray */
+[data-theme="light"] [class~="bg-[#05050A]"] [class~="text-gray-400"],
+[data-theme="light"] [class~="bg-[#0F0F17]"] [class~="text-gray-400"],
+[data-theme="light"] [class~="bg-black"] [class~="text-gray-400"],
+[data-theme="light"] [class~="bg-zinc-900"] [class~="text-gray-400"],
+[data-theme="light"] [class~="bg-zinc-950"] [class~="text-gray-400"],
+[data-theme="light"] [class~="bg-slate-950"] [class~="text-gray-400"],
+[data-theme="light"] [class~="bg-[#05050A]"] [class~="text-zinc-400"],
+[data-theme="light"] [class~="bg-black"] [class~="text-zinc-400"],
+[data-theme="light"] [class~="bg-zinc-900"] [class~="text-zinc-400"],
+[data-theme="light"] [class~="bg-zinc-950"] [class~="text-zinc-400"],
+[data-theme="light"] [class~="bg-slate-950"] [class~="text-zinc-400"] {
+  color: #64748b !important;
+}
+
+/* Muted text: gray-500/zinc-500 → slate-500 equivalent */
+[data-theme="light"] [class~="bg-[#05050A]"] [class~="text-gray-500"],
+[data-theme="light"] [class~="bg-[#0F0F17]"] [class~="text-gray-500"],
+[data-theme="light"] [class~="bg-black"] [class~="text-gray-500"],
+[data-theme="light"] [class~="bg-zinc-900"] [class~="text-gray-500"],
+[data-theme="light"] [class~="bg-zinc-950"] [class~="text-gray-500"],
+[data-theme="light"] [class~="bg-slate-950"] [class~="text-gray-500"],
+[data-theme="light"] [class~="bg-[#05050A]"] [class~="text-zinc-500"],
+[data-theme="light"] [class~="bg-black"] [class~="text-zinc-500"],
+[data-theme="light"] [class~="bg-zinc-900"] [class~="text-zinc-500"] {
+  color: #64748b !important;
+}
+
+/* Muted text: gray-600/zinc-600 */
+[data-theme="light"] [class~="bg-[#05050A]"] [class~="text-zinc-600"],
+[data-theme="light"] [class~="bg-black"] [class~="text-zinc-600"],
+[data-theme="light"] [class~="bg-zinc-900"] [class~="text-zinc-600"] {
+  color: #94a3b8 !important;
+}
+
+/* ── 7. Border Color Shifts ──────────────────────────────────── */
+[data-theme="light"] [class~="border-white/10"],
+[data-theme="light"] [class~="border-white/5"] {
+  border-color: #e2e8f0 !important;
+}
+[data-theme="light"] [class~="border-zinc-800"],
+[data-theme="light"] [class~="border-zinc-800/50"],
+[data-theme="light"] [class~="border-zinc-800/60"],
+[data-theme="light"] [class~="border-zinc-800/40"],
+[data-theme="light"] [class~="border-zinc-800/30"],
+[data-theme="light"] [class~="border-zinc-700"],
+[data-theme="light"] [class~="border-zinc-700/60"],
+[data-theme="light"] [class~="border-zinc-700/80"],
+[data-theme="light"] [class~="border-slate-800"] {
+  border-color: #e2e8f0 !important;
+}
+[data-theme="light"] [class~="border-purple-500/10"] {
+  border-color: rgba(168, 85, 247, 0.08) !important;
+}
+[data-theme="light"] [class~="border-purple-800/60"] {
+  border-color: rgba(168, 85, 247, 0.15) !important;
+}
+
+/* ── 8. Ring Colors ──────────────────────────────────────────── */
+[data-theme="light"] [class~="ring-white/5"] {
+  --tw-ring-color: rgba(148, 163, 184, 0.15) !important;
+}
+
+/* ── 9. Shadow Normalization ─────────────────────────────────── */
+[data-theme="light"] [class~="shadow-purple-900/10"] {
+  --tw-shadow-color: rgba(168, 85, 247, 0.06) !important;
+}
+[data-theme="light"] [class~="shadow-purple-900/20"] {
+  --tw-shadow-color: rgba(168, 85, 247, 0.08) !important;
+}
+[data-theme="light"] [class~="shadow-black/60"] {
+  --tw-shadow-color: rgba(148, 163, 184, 0.2) !important;
+}
+
+/* ── 10. Auth Page Input/Card Refinements ────────────────────── */
+[data-theme="light"] input[class~="bg-zinc-950/80"],
+[data-theme="light"] textarea[class~="bg-zinc-950/80"],
+[data-theme="light"] select[class~="bg-zinc-950/80"] {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+}
+[data-theme="light"] input[class~="text-white"],
+[data-theme="light"] textarea[class~="text-white"] {
+  color: #0f172a !important;
+}
+[data-theme="light"] input[class~="placeholder-zinc-600"]::placeholder,
+[data-theme="light"] textarea[class~="placeholder-zinc-600"]::placeholder {
+  color: #94a3b8 !important;
+}
+
+/* ── 11. Auth Divider Line Text ──────────────────────────────── */
+[data-theme="light"] span[class~="bg-zinc-900"] {
+  background-color: #ffffff !important;
+  color: #94a3b8 !important;
+}
+
+/* ── 12. Radial Gradient Glow Overlays ───────────────────────── */
+/* Keep purple accent but reduce intensity on white backgrounds */
+[data-theme="light"] [class*="bg-[radial-gradient"] {
+  opacity: 0.5;
+}
+
+/* ── 13. Ref-Card Light Styling ──────────────────────────────── */
+[data-theme="light"] .ref-card {
+  background-color: #ffffff !important;
+  border: 1px solid #e2e8f0 !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06) !important;
+}
+[data-theme="light"] .ref-card:hover {
+  box-shadow: 0 10px 30px -8px rgba(147, 51, 234, 0.12) !important;
+  border-color: rgba(168, 85, 247, 0.2) !important;
+}
+
+/* ── 14. Auth Logo Gradient Text Fix ─────────────────────────── */
+[data-theme="light"] [class*="bg-clip-text"][class*="from-white"] {
+  background-image: linear-gradient(to right, #6b21a8, #9333ea, #c084fc) !important;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   FORCE-DARK RESTORATION
+   ───────────────────────────────────────────────────────────────
+   Components with the .force-dark class (HeroAnimation,
+   IPhoneMockup) should remain dark in light mode so they
+   look correct as product demos / mockups.
+   ═══════════════════════════════════════════════════════════════ */
+
+[data-theme="light"] .force-dark [class~="bg-[#0F0F17]"],
+[data-theme="light"] .force-dark[class~="bg-[#0F0F17]"] {
+  background-color: #0F0F17 !important;
+}
+[data-theme="light"] .force-dark [class~="bg-[#0A0A12]"],
+[data-theme="light"] .force-dark[class~="bg-[#0A0A12]"] {
+  background-color: #0A0A12 !important;
+}
+[data-theme="light"] .force-dark [class~="bg-[#05050A]"],
+[data-theme="light"] .force-dark[class~="bg-[#05050A]"] {
+  background-color: #05050A !important;
+}
+[data-theme="light"] .force-dark [class~="bg-[#0c0c14]"],
+[data-theme="light"] .force-dark[class~="bg-[#0c0c14]"] {
+  background-color: #0c0c14 !important;
+}
+[data-theme="light"] .force-dark [class~="text-white"] {
+  color: #ffffff !important;
+}
+[data-theme="light"] .force-dark [class~="text-gray-400"],
+[data-theme="light"] .force-dark [class~="text-gray-300"],
+[data-theme="light"] .force-dark [class~="text-zinc-400"],
+[data-theme="light"] .force-dark [class~="text-zinc-300"],
+[data-theme="light"] .force-dark [class~="text-zinc-100"] {
+  color: revert !important;
+}
+[data-theme="light"] .force-dark [class~="border-white/10"],
+[data-theme="light"] .force-dark [class~="border-white/5"] {
+  border-color: rgba(255, 255, 255, 0.1) !important;
+}
+
+/* ── Light-mode ref-card: white card with soft shadow ──── */
+:root:not(.dark) .ref-card {
+  background: #ffffff !important;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06), 0 4px 16px rgba(15, 23, 42, 0.04) !important;
+  border-color: #e2e8f0 !important;
+}
+:root:not(.dark) .ref-card:hover {
+  box-shadow: 0 12px 40px -8px rgba(147, 51, 234, 0.12), 0 4px 12px rgba(15, 23, 42, 0.04) !important;
+  border-color: rgba(168, 85, 247, 0.25) !important;
+}
+
+/* ══════════════════════════════════════════════════════════
+   LIGHT-MODE OVERRIDES (unlayered — wins over Tailwind)
+   ══════════════════════════════════════════════════════════ */
+
+/* ── Global light-mode normalization ─────────────────── */
+:root:not(.dark) .bg-\[\#05050A\],
+:root:not(.dark) .bg-\[\#0a0a0b\],
+:root:not(.dark) .bg-zinc-950,
+:root:not(.dark) .bg-zinc-950\/60,
+:root:not(.dark) .bg-zinc-950\/80,
+:root:not(.dark) .bg-slate-950,
+:root:not(.dark) .bg-gray-900 {
+  background-color: #ffffff !important;
+}
+
+/* Separator / accent sections → subtle off-white for visual rhythm */
+:root:not(.dark) .bg-black {
+  background-color: #f8fafc !important;
+}
+
+:root:not(.dark) .bg-zinc-900,
+:root:not(.dark) .bg-zinc-900\/90,
+:root:not(.dark) .bg-zinc-900\/80,
+:root:not(.dark) .bg-zinc-900\/60,
+:root:not(.dark) .bg-zinc-900\/70,
+:root:not(.dark) .bg-zinc-800,
+:root:not(.dark) .bg-zinc-800\/50,
+:root:not(.dark) .bg-zinc-800\/30,
+:root:not(.dark) .bg-zinc-800\/20,
+:root:not(.dark) .bg-zinc-800\/60,
+:root:not(.dark) .bg-zinc-800\/80,
+:root:not(.dark) .bg-zinc-700,
+:root:not(.dark) .bg-zinc-700\/80,
+:root:not(.dark) .bg-\[\#0F0F17\],
+:root:not(.dark) .bg-\[\#0A0A12\],
+:root:not(.dark) .bg-\[\#0c0c14\],
+:root:not(.dark) .bg-\[\#12121a\],
+:root:not(.dark) .bg-\[\#090d14\],
+:root:not(.dark) .bg-\[\#0a1018\],
+:root:not(.dark) .bg-slate-900,
+:root:not(.dark) .bg-slate-800 {
+  background-color: #ffffff !important;
+}
+
+:root:not(.dark) .bg-white\/5,
+:root:not(.dark) .bg-white\/10,
+:root:not(.dark) .bg-white\/20 {
+  background-color: rgba(241, 245, 249, 0.7) !important;
+}
+
+:root:not(.dark) .bg-white\/\[0\.03\],
+:root:not(.dark) .bg-white\/\[0\.04\],
+:root:not(.dark) .bg-white\/\[0\.06\],
+:root:not(.dark) .bg-white\/\[0\.08\] {
+  background-color: rgba(241, 245, 249, 0.55) !important;
+}
+
+:root:not(.dark) .bg-purple-950\/20,
+:root:not(.dark) .bg-purple-950\/30,
+:root:not(.dark) .bg-purple-950\/40,
+:root:not(.dark) .bg-purple-950\/50,
+:root:not(.dark) .bg-purple-950,
+:root:not(.dark) .bg-purple-900,
+:root:not(.dark) .bg-purple-900\/20,
+:root:not(.dark) .bg-purple-900\/30,
+:root:not(.dark) .bg-purple-500\/10,
+:root:not(.dark) .bg-brand-950\/40,
+:root:not(.dark) .bg-brand-950\/30,
+:root:not(.dark) .bg-brand-950,
+:root:not(.dark) .bg-brand-900\/30 {
+  background-color: rgba(243, 232, 255, 0.6) !important;
+}
+
+:root:not(.dark) .bg-red-950\/10,
+:root:not(.dark) .bg-red-950\/20,
+:root:not(.dark) .bg-red-950\/30,
+:root:not(.dark) .bg-red-950\/40,
+:root:not(.dark) .bg-red-950\/50,
+:root:not(.dark) .bg-red-950,
+:root:not(.dark) .bg-red-900,
+:root:not(.dark) .bg-red-900\/20,
+:root:not(.dark) .bg-red-900\/30,
+:root:not(.dark) .bg-red-800,
+:root:not(.dark) .bg-red-500\/20 {
+  background-color: rgba(254, 242, 242, 0.7) !important;
+}
+
+:root:not(.dark) .bg-emerald-950\/10,
+:root:not(.dark) .bg-emerald-950\/20,
+:root:not(.dark) .bg-emerald-950\/30,
+:root:not(.dark) .bg-emerald-950\/40,
+:root:not(.dark) .bg-emerald-950\/50,
+:root:not(.dark) .bg-emerald-950\/60,
+:root:not(.dark) .bg-emerald-950,
+:root:not(.dark) .bg-emerald-900,
+:root:not(.dark) .bg-emerald-900\/20,
+:root:not(.dark) .bg-emerald-900\/30,
+:root:not(.dark) .bg-emerald-800,
+:root:not(.dark) .bg-emerald-500\/20 {
+  background-color: rgba(236, 253, 245, 0.6) !important;
+}
+
+:root:not(.dark) .bg-amber-950\/30,
+:root:not(.dark) .bg-amber-950\/40,
+:root:not(.dark) .bg-amber-950 {
+  background-color: rgba(255, 251, 235, 0.6) !important;
+}
+
+:root:not(.dark) .bg-violet-950\/30,
+:root:not(.dark) .bg-violet-950 {
+  background-color: rgba(245, 243, 255, 0.6) !important;
+}
+
+:root:not(.dark) .bg-blue-900\/30 {
+  background-color: rgba(239, 246, 255, 0.6) !important;
+}
+
+:root:not(.dark) .bg-slate-900\/20,
+:root:not(.dark) .bg-slate-900\/50 {
+  background-color: rgba(241, 245, 249, 0.5) !important;
+}
+
+:root:not(.dark) .border-white\/10,
+:root:not(.dark) .border-white\/5,
+:root:not(.dark) .border-white\/20,
+:root:not(.dark) .border-zinc-800,
+:root:not(.dark) .border-zinc-800\/50,
+:root:not(.dark) .border-zinc-800\/60,
+:root:not(.dark) .border-zinc-800\/40,
+:root:not(.dark) .border-zinc-800\/80,
+:root:not(.dark) .border-zinc-700,
+:root:not(.dark) .border-zinc-700\/80,
+:root:not(.dark) .border-zinc-600,
+:root:not(.dark) .border-slate-800,
+:root:not(.dark) .border-slate-900,
+:root:not(.dark) .border-cyan-900\/40,
+:root:not(.dark) .border-cyan-950\/60 {
+  border-color: #dbe5f1 !important;
+}
+
+:root:not(.dark) .border-red-900,
+:root:not(.dark) .border-red-900\/30,
+:root:not(.dark) .border-red-900\/40,
+:root:not(.dark) .border-red-900\/50,
+:root:not(.dark) .border-2.border-red-900\/50,
+:root:not(.dark) .border-red-800\/30,
+:root:not(.dark) .border-red-500\/20,
+:root:not(.dark) .border-red-500\/10 {
+  border-color: #fecaca !important;
+}
+
+:root:not(.dark) .border-purple-500\/10,
+:root:not(.dark) .border-purple-500\/20,
+:root:not(.dark) .border-purple-700,
+:root:not(.dark) .border-purple-700\/50,
+:root:not(.dark) .border-purple-800,
+:root:not(.dark) .border-purple-800\/30,
+:root:not(.dark) .border-purple-900\/30,
+:root:not(.dark) .border-purple-900\/40,
+:root:not(.dark) .border-brand-800,
+:root:not(.dark) .border-brand-700 {
+  border-color: #d8b4fe !important;
+}
+
+:root:not(.dark) .border-emerald-900,
+:root:not(.dark) .border-emerald-800,
+:root:not(.dark) .border-emerald-800\/30,
+:root:not(.dark) .border-emerald-500\/20,
+:root:not(.dark) .border-emerald-500\/10 {
+  border-color: #6ee7b7 !important;
+}
+
+:root:not(.dark) .border-red-800 {
+  border-color: #f87171 !important;
+}
+
+:root:not(.dark) .divide-white\/10 > * + *,
+:root:not(.dark) .divide-zinc-800\/40 > * + * {
+  border-color: #dbe5f1 !important;
+}
+
+:root:not(.dark) .border-amber-800\/40 {
+  border-color: #fcd34d !important;
+}
+
+:root:not(.dark) .border-l-4.border-purple-500 {
+  border-left-color: #a855f7 !important;
+}
+
+:root:not(.dark) .border-b-4.border-purple-500 {
+  border-bottom-color: #a855f7 !important;
+}
+
+:root:not(.dark) .text-zinc-500,
+:root:not(.dark) .text-zinc-600,
+:root:not(.dark) .text-gray-500 {
+  color: #475569 !important;
+}
+
+:root:not(.dark) .text-zinc-400,
+:root:not(.dark) .text-zinc-300,
+:root:not(.dark) .text-zinc-200,
+:root:not(.dark) .text-zinc-100,
+:root:not(.dark) .text-gray-400,
+:root:not(.dark) .text-gray-300,
+:root:not(.dark) .text-gray-200 {
+  color: #475569 !important;
+}
+
+:root:not(.dark) .text-gray-600 {
+  color: #475569 !important;
+}
+
+:root:not(.dark) .text-slate-200,
+:root:not(.dark) .text-slate-300 {
+  color: #475569 !important;
+}
+
+:root:not(.dark) .text-slate-400 {
+  color: #475569 !important;
+}
+
+:root:not(.dark) .text-slate-500 {
+  color: #475569 !important;
+}
+
+:root:not(.dark) .text-slate-600 {
+  color: #334155 !important;
+}
+
+:root:not(.dark) .text-purple-300,
+:root:not(.dark) .text-purple-400 {
+  color: #7c3aed !important;
+}
+
+:root:not(.dark) .text-brand-300,
+:root:not(.dark) .text-brand-400 {
+  color: #7c3aed !important;
+}
+
+:root:not(.dark) .text-emerald-400,
+:root:not(.dark) .text-emerald-300 {
+  color: #059669 !important;
+}
+
+:root:not(.dark) .text-blue-300 {
+  color: #2563eb !important;
+}
+
+:root:not(.dark) .text-amber-300 {
+  color: #d97706 !important;
+}
+
+:root:not(.dark) .text-white,
+:root:not(.dark) .text-white\/90,
+:root:not(.dark) .text-white\/80,
+:root:not(.dark) .text-white\/70,
+:root:not(.dark) .text-white\/60 {
+  color: #0f172a !important;
+}
+
+:root:not(.dark) [class*="bg-purple-"].text-white,
+:root:not(.dark) [class*="bg-brand-"].text-white,
+:root:not(.dark) [class*="bg-red-"].text-white,
+:root:not(.dark) [class*="bg-emerald-"].text-white,
+:root:not(.dark) [class*="bg-amber-"].text-white,
+:root:not(.dark) [class*="bg-cyan-"].text-white,
+:root:not(.dark) [class*="bg-teal-"].text-white,
+:root:not(.dark) [class*="bg-purple-"].text-white\/90,
+:root:not(.dark) [class*="bg-purple-"].text-white\/80,
+:root:not(.dark) [class*="bg-brand-"].text-white\/90,
+:root:not(.dark) [class*="bg-brand-"].text-white\/80,
+:root:not(.dark) [class*="bg-red-"].text-white\/90,
+:root:not(.dark) [class*="bg-red-"].text-white\/80,
+:root:not(.dark) [class*="bg-emerald-"].text-white\/90,
+:root:not(.dark) [class*="bg-emerald-"].text-white\/80,
+:root:not(.dark) [class*="bg-amber-"].text-white\/90,
+:root:not(.dark) [class*="bg-amber-"].text-white\/80,
+:root:not(.dark) [class*="bg-cyan-"].text-white\/90,
+:root:not(.dark) [class*="bg-cyan-"].text-white\/80,
+:root:not(.dark) [class*="bg-teal-"].text-white\/90,
+:root:not(.dark) [class*="bg-teal-"].text-white\/80,
+:root:not(.dark) [class*="from-"][class*="to-"].text-white,
+:root:not(.dark) [class*="from-"][class*="to-"].text-white\/90,
+:root:not(.dark) [class*="from-"][class*="to-"].text-white\/80,
+:root:not(.dark) .shimmer-btn,
+:root:not(.dark) .shimmer-btn .text-white {
+  color: #ffffff !important;
+}
+
+:root:not(.dark) .bg-black\/60 {
+  background-color: rgba(15, 23, 42, 0.35) !important;
+}
+
+:root:not(.dark) .bg-black\/40 {
+  background-color: rgba(15, 23, 42, 0.22) !important;
+}
+
+/* ── Ring colors for light mode ──────────────────────── */
+:root:not(.dark) .ring-white\/5 {
+  --tw-ring-color: rgba(148, 163, 184, 0.2) !important;
+}
+:root:not(.dark) .ring-zinc-700 {
+  --tw-ring-color: #cbd5e1 !important;
+}
+
+/* ── Heavy shadow normalization ──────────────────────── */
+:root:not(.dark) .shadow-\[0_20px_60px_-15px_rgba\(0\,0\,0\,0\.7\)\] {
+  box-shadow: 0 20px 60px -15px rgba(15, 23, 42, 0.12) !important;
+}
+:root:not(.dark) .shadow-2xl.shadow-purple-900\/20 {
+  box-shadow: 0 25px 50px -12px rgba(147, 51, 234, 0.06) !important;
+}
+:root:not(.dark) .shadow-2xl.shadow-purple-900\/40 {
+  box-shadow: 0 25px 50px -12px rgba(147, 51, 234, 0.08) !important;
+}
+
+/* ── Dark inline CSS function gradients → light ──────── */
+:root:not(.dark) .bg-\[linear-gradient\(145deg\,rgba\(8\,11\,16\,\.95\)\,rgba\(10\,13\,19\,\.92\)\)\] {
+  background: linear-gradient(145deg, rgba(255,255,255,.98), rgba(248,250,252,.96)) !important;
+}
+:root:not(.dark) .bg-\[linear-gradient\(145deg\,rgba\(9\,14\,22\,\.95\)\,rgba\(9\,12\,19\,\.94\)\)\] {
+  background: linear-gradient(145deg, rgba(255,255,255,.98), rgba(248,250,252,.96)) !important;
+}
+
+/* ── Auth-page logo gradient text (from-white invisible on light) ── */
+:root:not(.dark) .bg-gradient-to-r.from-white.via-purple-200.to-purple-400 {
+  background-image: linear-gradient(to right, #1e1b4b, #7c3aed, #a855f7) !important;
+}
+
+/* ── App Workspace Light Theme (Deep) ────────────────── */
+:root:not(.dark) .stealth-control-card,
+:root:not(.dark) .stealth-editor-panel,
+:root:not(.dark) .stealth-hint-bar,
+:root:not(.dark) .stealth-history,
+:root:not(.dark) .stealth-popup {
+  background: #ffffff !important;
+  border-color: #d7e3f1 !important;
+  box-shadow: 0 16px 38px -28px rgba(15, 23, 42, 0.25);
+}
+
+:root:not(.dark) .stealth-shell .bg-\[\#090d14\],
+:root:not(.dark) .stealth-shell .bg-\[\#0a1018\],
+:root:not(.dark) .stealth-shell .bg-\[\#0c0c14\],
+:root:not(.dark) .stealth-shell .bg-zinc-950\/60,
+:root:not(.dark) .stealth-shell .bg-zinc-900\/70,
+:root:not(.dark) .stealth-shell .bg-zinc-900\/60,
+:root:not(.dark) .stealth-shell .bg-zinc-800\/60,
+:root:not(.dark) .stealth-shell .bg-zinc-800\/50,
+:root:not(.dark) .stealth-shell .bg-zinc-800\/30,
+:root:not(.dark) .stealth-shell .bg-zinc-800\/20 {
+  background-color: #f1f5f9 !important;
+}
+
+:root:not(.dark) .stealth-shell .text-zinc-100,
+:root:not(.dark) .stealth-shell .text-zinc-200,
+:root:not(.dark) .stealth-shell .text-zinc-300 {
+  color: #0f172a !important;
+}
+
+:root:not(.dark) .stealth-shell .text-zinc-400,
+:root:not(.dark) .stealth-shell .text-zinc-500,
+:root:not(.dark) .stealth-shell .text-zinc-600,
+:root:not(.dark) .stealth-shell .text-zinc-700 {
+  color: #475569 !important;
+}
+
+:root:not(.dark) .stealth-shell .bg-zinc-700 {
+  background-color: #94a3b8 !important;
+}
+
+:root:not(.dark) .bg-zinc-800\/80 {
+  background-color: #f1f5f9 !important;
+}
+
+:root:not(.dark) .stealth-shell .hover\:bg-zinc-800\/30:hover,
+:root:not(.dark) .stealth-shell .hover\:bg-zinc-800\/50:hover,
+:root:not(.dark) .stealth-shell .hover\:bg-cyan-950\/30:hover {
+  background-color: #e9f2ff !important;
+}
+
+:root:not(.dark) .stealth-shell .bg-orange-950\/30 {
+  background-color: rgba(255, 237, 213, 0.78) !important;
+}
+
+:root:not(.dark) .stealth-shell .bg-teal-950\/30 {
+  background-color: rgba(204, 251, 241, 0.78) !important;
+}
+
+:root:not(.dark) .stealth-shell .bg-fuchsia-950\/30 {
+  background-color: rgba(250, 232, 255, 0.78) !important;
+}
+
+:root:not(.dark) .stealth-shell .bg-red-950\/30 {
+  background-color: rgba(254, 226, 226, 0.78) !important;
+}
+
+:root:not(.dark) .stealth-shell textarea,
+:root:not(.dark) .stealth-shell select {
+  color: #0f172a !important;
+}
+
+:root:not(.dark) .stealth-shell textarea::placeholder {
+  color: #64748b !important;
+}
+
+/* ── Dashboard Light Theme (Deep) ────────────────────── */
+:root:not(.dark) .dashboard-card {
+  background: #ffffff !important;
+  border-color: #d7e3f1 !important;
+  box-shadow: 0 14px 30px -24px rgba(15, 23, 42, 0.22);
+}
+
+:root:not(.dark) .dashboard-plan-badge {
+  background: #eef2ff !important;
+  border-color: #c7d2fe !important;
+  color: #5b21b6 !important;
+}
+
+:root:not(.dark) .dashboard-shell .bg-\[\#0c0c14\],
+:root:not(.dark) .dashboard-shell .bg-\[\#12121a\],
+:root:not(.dark) .dashboard-shell .bg-zinc-800\/80,
+:root:not(.dark) .dashboard-shell .bg-zinc-800\/50,
+:root:not(.dark) .dashboard-shell .hover\:bg-white\/\[0\.02\]:hover {
+  background-color: #ffffff !important;
+}
+
+:root:not(.dark) .dashboard-shell .hover\:bg-white\/\[0\.02\]:hover {
+  background-color: #f1f5f9 !important;
+}
+
+:root:not(.dark) .dashboard-shell .text-white,
+:root:not(.dark) .dashboard-shell .text-zinc-200,
+:root:not(.dark) .dashboard-shell .text-zinc-300 {
+  color: #0f172a !important;
+}
+
+:root:not(.dark) .dashboard-shell .text-zinc-400,
+:root:not(.dark) .dashboard-shell .text-zinc-500,
+:root:not(.dark) .dashboard-shell .text-zinc-600,
+:root:not(.dark) .dashboard-shell .text-zinc-700 {
+  color: #475569 !important;
+}
+
+:root:not(.dark) .dashboard-shell .border-zinc-800\/60,
+:root:not(.dark) .dashboard-shell .border-zinc-800\/50,
+:root:not(.dark) .dashboard-shell .border-zinc-800\/30,
+:root:not(.dark) .dashboard-shell .border-zinc-800 {
+  border-color: #d7e3f1 !important;
+}
+
+/* ── Light mode hero overrides ────────────────────────── */
+:root:not(.dark) .container-snap > section:first-of-type {
+  background:
+    radial-gradient(900px 420px at 15% -5%, rgba(147, 51, 234, 0.08), transparent 65%),
+    radial-gradient(700px 360px at 85% -15%, rgba(56, 189, 248, 0.08), transparent 60%),
+    linear-gradient(180deg, #ffffff 0%, #fafbff 55%, #f5f7ff 100%);
+}
+:root:not(.dark) .container-snap > section:first-of-type > .absolute.inset-0.overflow-hidden > video {
+  opacity: 0.18;
+  filter: saturate(0.7) brightness(1.18);
+}
+:root:not(.dark) .container-snap > section:first-of-type > .absolute.inset-0.overflow-hidden > div:nth-child(2) {
+  background: linear-gradient(to bottom, rgba(248, 251, 255, 0.35), rgba(248, 251, 255, 0.2), rgba(236, 243, 255, 0.55));
+}
+:root:not(.dark) .container-snap > section:first-of-type > .absolute.inset-0.overflow-hidden > div:nth-child(3) {
+  background: linear-gradient(to right, rgba(248, 251, 255, 0.3), transparent, rgba(248, 251, 255, 0.3));
+}
+:root:not(.dark) .container-snap > section:first-of-type .text-white {
+  color: #0f172a;
+}
+:root:not(.dark) .container-snap > section:first-of-type .text-gray-300 {
+  color: #334155;
+}
+:root:not(.dark) .container-snap > section:first-of-type .text-gray-500 {
+  color: #64748b;
+}
+:root:not(.dark) .container-snap > section:first-of-type .bg-white\/5 {
+  background: rgba(255, 255, 255, 0.8);
+}
+:root:not(.dark) .container-snap > section:first-of-type .border-white\/10 {
+  border-color: rgba(148, 163, 184, 0.35);
+}
+:root:not(.dark) .container-snap > section:first-of-type a.bg-white\/5 {
+  color: #1e293b;
+}
+:root:not(.dark) .container-snap > section:first-of-type a.bg-white\/5:hover {
+  background: rgba(255, 255, 255, 0.92);
+  color: #0f172a;
+}
+
+/* ── Gradient backgrounds in light mode ───────────────── */
+:root:not(.dark) .bg-gradient-to-b.from-\[\#05050A\] {
+  background-image: linear-gradient(to bottom, #ffffff, #f8fafc) !important;
+}
+:root:not(.dark) .bg-gradient-to-b.from-\[\#05050A\].to-purple-950\/20 {
+  background-image: linear-gradient(to bottom, #ffffff, #faf5ff) !important;
+}
+:root:not(.dark) .bg-gradient-to-b.from-\[\#05050A\].via-\[\#05050A\] {
+  background-image: linear-gradient(to bottom, #ffffff, #ffffff, rgba(250, 245, 255, 0.6)) !important;
+}
+
+/* ── Hover state normalization ───────────────────────── */
+:root:not(.dark) .hover\:bg-white\/10:hover,
+:root:not(.dark) .hover\:bg-zinc-700:hover,
+:root:not(.dark) .hover\:bg-zinc-800:hover {
+  background-color: #e2e8f0 !important;
+}
+:root:not(.dark) .hover\:bg-purple-800:hover,
+:root:not(.dark) .hover\:border-purple-800:hover {
+  border-color: #c084fc !important;
+}
+:root:not(.dark) .hover\:border-purple-700\/50:hover {
+  border-color: rgba(168, 85, 247, 0.5) !important;
+}
+:root:not(.dark) .hover\:bg-zinc-900\/80:hover {
+  background-color: #f1f5f9 !important;
+}
+
+/* ── Radial glow backgrounds → subtle light versions ── */
+:root:not(.dark) .bg-\[radial-gradient\(at_center\,\#9333ea15_0\%\,transparent_70\%\)\] {
+  background: radial-gradient(at center, rgba(147, 51, 234, 0.06) 0%, transparent 70%) !important;
+}
+
+/* ── Category color badges (blog, etc.) in light mode ── */
+:root:not(.dark) .bg-blue-900\/30 { background-color: rgba(219, 234, 254, 0.8) !important; }
+:root:not(.dark) .text-blue-300 { color: #2563eb !important; }
+:root:not(.dark) .border-blue-700 { border-color: #93c5fd !important; }
+
+:root:not(.dark) .bg-purple-900\/30 { background-color: rgba(243, 232, 255, 0.8) !important; }
+:root:not(.dark) .text-purple-300 { color: #7c3aed !important; }
+:root:not(.dark) .border-purple-700 { border-color: #c4b5fd !important; }
+
+:root:not(.dark) .bg-emerald-900\/30 { background-color: rgba(209, 250, 229, 0.8) !important; }
+:root:not(.dark) .text-emerald-300 { color: #059669 !important; }
+:root:not(.dark) .border-emerald-700 { border-color: #6ee7b7 !important; }
+
+:root:not(.dark) .bg-amber-900\/30 { background-color: rgba(254, 243, 199, 0.8) !important; }
+:root:not(.dark) .text-amber-300 { color: #d97706 !important; }
+:root:not(.dark) .border-amber-700 { border-color: #fcd34d !important; }
+
+/* ── Contact form & misc component overrides ─────────── */
+:root:not(.dark) .bg-zinc-800 input,
+:root:not(.dark) .bg-zinc-800 textarea,
+:root:not(.dark) input.bg-zinc-800,
+:root:not(.dark) textarea.bg-zinc-800 {
+  background-color: #f8fafc !important;
+  border-color: #cbd5e1 !important;
+  color: #0f172a !important;
+}
+
+:root:not(.dark) .bg-zinc-800\/50 {
+  background-color: #f1f5f9 !important;
+}
+
+/* ── Ensure glow-text works in light mode ──────────────── */
+:root:not(.dark) .glow-text {
+  text-shadow: none;
+}
+
+/* ── Red/prohibited sections light overrides ──────────── */
+:root:not(.dark) .border-2.border-red-900\/50 {
+  border-color: #fca5a5 !important;
+}
+:root:not(.dark) .text-red-400 {
+  color: #dc2626 !important;
+}
+:root:not(.dark) .text-red-400\/80 {
+  color: rgba(220, 38, 38, 0.8) !important;
+}
+
+/* ── Additional component patterns (IPhoneMockup, HeroAnimation, etc.) */
+:root:not(.dark) .bg-\[\#09090F\] {
+  background-color: #f8fafc !important;
+}
+
+:root:not(.dark) .bg-white\/\[0\.03\] {
+  background-color: rgba(241, 245, 249, 0.5) !important;
+}
+
+:root:not(.dark) .bg-purple-950\/50 {
+  background-color: rgba(243, 232, 255, 0.6) !important;
+}
+
+:root:not(.dark) .bg-emerald-500\/\[0\.04\] {
+  background-color: rgba(236, 253, 245, 0.4) !important;
+}
+
+:root:not(.dark) .bg-emerald-950 {
+  background-color: rgba(236, 253, 245, 0.7) !important;
+}
+
+:root:not(.dark) .border-white\/\[0\.06\] {
+  border-color: #dbe5f1 !important;
+}
+
+:root:not(.dark) .border-emerald-500\/10 {
+  border-color: rgba(16, 185, 129, 0.2) !important;
+}
+
+:root:not(.dark) .border-zinc-700\/60 {
+  border-color: #dbe5f1 !important;
+}
+
+:root:not(.dark) .border-purple-500\/30 {
+  border-color: rgba(168, 85, 247, 0.35) !important;
+}
+
+/* ── Additional text colors ──────────────────────────── */
+:root:not(.dark) .text-emerald-500 {
+  color: #059669 !important;
+}
+
+:root:not(.dark) .text-purple-500 {
+  color: #7c3aed !important;
+}
+
+:root:not(.dark) .text-red-400\/60 {
+  color: rgba(220, 38, 38, 0.6) !important;
+}
+
+:root:not(.dark) .text-red-500,
+:root:not(.dark) .text-red-500\/80 {
+  color: #dc2626 !important;
+}
+
+/* ── Placeholder colors ──────────────────────────────── */
+:root:not(.dark) .placeholder-zinc-600::placeholder {
+  color: #94a3b8 !important;
+}
+
+/* ── Hover text normalization ────────────────────────── */
+:root:not(.dark) .hover\:text-gray-300:hover,
+:root:not(.dark) .hover\:text-zinc-300:hover {
+  color: #1e293b !important;
+}
+
+:root:not(.dark) .group:hover .group-hover\:text-purple-300 {
+  color: #7c3aed !important;
+}
+
+:root:not(.dark) .hover\:text-purple-400:hover {
+  color: #7c3aed !important;
+}
+
+:root:not(.dark) .hover\:border-purple-700\/50:hover {
+  border-color: rgba(168, 85, 247, 0.5) !important;
+}
+
+/* ── Shadow adjustments for light mode ───────────────── */
+:root:not(.dark) .shadow-2xl.shadow-purple-900\/10 {
+  box-shadow: 0 25px 50px -12px rgba(147, 51, 234, 0.08) !important;
+}
+
+:root:not(.dark) .shadow-2xl.shadow-brand-500\/15 {
+  box-shadow: 0 25px 50px -12px rgba(147, 51, 234, 0.1) !important;
+}
+
+/* ── HeroVideo gradient overlays in light mode ───────── */
+:root:not(.dark) .bg-gradient-to-b.from-\[\#05050A\]\/60 {
+  background-image: linear-gradient(to bottom, rgba(248, 251, 255, 0.6), rgba(248, 251, 255, 0.4), rgba(248, 251, 255, 0.85)) !important;
+}
+:root:not(.dark) .bg-gradient-to-r.from-\[\#05050A\]\/50 {
+  background-image: linear-gradient(to right, rgba(248, 251, 255, 0.5), transparent, rgba(248, 251, 255, 0.5)) !important;
+}
+
+/* ── Blog inline markdown strong/em ──────────────────── */
+:root:not(.dark) strong.text-white {
+  color: #0f172a !important;
+}
+:root:not(.dark) em.text-zinc-200 {
+  color: #334155 !important;
+}
+
+/* ── PricingCards toggle/currency switcher ────────────── */
+:root:not(.dark) .bg-zinc-700 {
+  background-color: #e2e8f0 !important;
+}
+
+/* ── Auth page form inputs & cards comprehensive ─────── */
+:root:not(.dark) input.bg-zinc-950\/80,
+:root:not(.dark) input.bg-zinc-950\/60,
+:root:not(.dark) .bg-zinc-950\/80 input,
+:root:not(.dark) .bg-zinc-950\/60 input {
+  background-color: #ffffff !important;
+  border-color: #d1d5db !important;
+  color: #0f172a !important;
+}
+:root:not(.dark) input.bg-zinc-950\/80:focus,
+:root:not(.dark) input.bg-zinc-950\/60:focus {
+  border-color: #a855f7 !important;
+  box-shadow: 0 0 0 3px rgba(168, 85, 247, 0.1) !important;
+}
+:root:not(.dark) .bg-zinc-950\/80::placeholder,
+:root:not(.dark) .bg-zinc-950\/60::placeholder {
+  color: #94a3b8 !important;
+}
+
+/* ── Auth card backdrop-blur containers ──────────────── */
+:root:not(.dark) .backdrop-blur-2xl,
+:root:not(.dark) .backdrop-blur-xl {
+  --tw-backdrop-blur: blur(0px);
+}
+
+/* ── Auth page ambient glow \u2192 subtle light version ─── */
+:root:not(.dark) .bg-purple-600\/8,
+:root:not(.dark) .bg-purple-600\/\\[0\\.07\\],
+:root:not(.dark) .bg-purple-600\/\\[0\\.06\\],
+:root:not(.dark) .bg-purple-600\/5,
+:root:not(.dark) .bg-purple-500\/5,
+:root:not(.dark) .bg-purple-500\/\\[0\\.04\\],
+:root:not(.dark) .bg-purple-400\/\\[0\\.03\\],
+:root:not(.dark) .bg-purple-500\/12,
+:root:not(.dark) .bg-purple-500\/8,
+:root:not(.dark) .bg-emerald-600\/\\[0\\.06\\] {
+  background-color: transparent !important;
+}
+
+/* ── Logo glow rings \u2192 lighter in light mode ─────────── */
+:root:not(.dark) .bg-purple-500\/25,
+:root:not(.dark) .bg-purple-400\/15 {
+  background-color: rgba(168, 85, 247, 0.1) !important;
+}
+
+/* ── Drop shadow normalization for light mode ──────────── */
+:root:not(.dark) .drop-shadow-\\[0_0_14px_rgba\\(147\\,51\\,234\\,0\\.7\\)\\] {
+  filter: drop-shadow(0 0 10px rgba(147, 51, 234, 0.3)) !important;
+}
+:root:not(.dark) .drop-shadow-\\[0_0_20px_rgba\\(168\\,85\\,247\\,0\\.4\\)\\] {
+  filter: drop-shadow(0 0 14px rgba(168, 85, 247, 0.2)) !important;
+}
+
+/* ── Hover states for auth/light mode buttons ────────── */
+:root:not(.dark) .hover\:bg-zinc-700\/80:hover {
+  background-color: #e2e8f0 !important;
+}
+:root:not(.dark) .hover\:bg-white\/\\[0\\.08\\]:hover,
+:root:not(.dark) .hover\:bg-white\/\\[0\\.02\\]:hover {
+  background-color: #f1f5f9 !important;
+}
+:root:not(.dark) .hover\:bg-zinc-800:hover {
+  background-color: #f1f5f9 !important;
+}
+:root:not(.dark) .hover\:border-zinc-600:hover {
+  border-color: #cbd5e1 !important;
+}
+:root:not(.dark) .hover\:text-white:hover {
+  color: #0f172a !important;
+}
+
+/* ── Focus ring for inputs in light mode ──────────────── */
+:root:not(.dark) .focus\\:ring-purple-500\\/20:focus {
+  --tw-ring-color: rgba(168, 85, 247, 0.15) !important;
+}
+:root:not(.dark) .focus\\:ring-purple-500\\/10:focus {
+  --tw-ring-color: rgba(168, 85, 247, 0.1) !important;
+}
+:root:not(.dark) .focus\\:border-purple-500:focus {
+  border-color: #a855f7 !important;
+}
+:root:not(.dark) .focus\\:border-purple-500\\/60:focus {
+  border-color: rgba(168, 85, 247, 0.6) !important;
+}
+
+/* ── Checkbox styling in light mode ──────────────────── */
+:root:not(.dark) input[type=\"checkbox\"].bg-zinc-950 {
+  background-color: #ffffff !important;
+  border-color: #d1d5db !important;
+}
+
+/* ══════════════════════════════════════════════════════════
+   FORCE-DARK: preserve dark appearance in light mode
+   (IPhoneMockup, HeroAnimation — always-dark components)
+   Uses a single rule to undo all light-mode overrides.
+   ══════════════════════════════════════════════════════════ */
+.force-dark,
+.force-dark *,
+.force-dark *::before,
+.force-dark *::after {
+  --force-dark: 1;
+}
+
+:root:not(.dark) .force-dark {
+  color-scheme: dark;
+}
+
+/*  The trick: every light-mode override above uses `:root:not(.dark) .utility`.
+    That is specificity 0-2-0. By targeting `:root:not(.dark) .force-dark .utility`
+    we get 0-3-0 which always wins. We group ALL overrides into one block instead
+    of repeating every selector individually.                                       */
+
+/* — Backgrounds — */
+:root:not(.dark) .force-dark .bg-black,
+:root:not(.dark) .force-dark .bg-zinc-950,
+:root:not(.dark) .force-dark .bg-zinc-900,
+:root:not(.dark) .force-dark .bg-zinc-900\/80,
+:root:not(.dark) .force-dark .bg-zinc-900\/90,
+:root:not(.dark) .force-dark .bg-zinc-800,
+:root:not(.dark) .force-dark .bg-zinc-700,
+:root:not(.dark) .force-dark .bg-zinc-800\/50,
+:root:not(.dark) .force-dark .bg-zinc-800\/30,
+:root:not(.dark) .force-dark .bg-zinc-800\/20,
+:root:not(.dark) .force-dark .bg-zinc-800\/60,
+:root:not(.dark) .force-dark .bg-slate-900,
+:root:not(.dark) .force-dark .bg-slate-800,
+:root:not(.dark) .force-dark .bg-\[\#0F0F17\],
+:root:not(.dark) .force-dark .bg-\[\#0A0A12\],
+:root:not(.dark) .force-dark .bg-\[\#0c0c14\],
+:root:not(.dark) .force-dark .bg-\[\#09090F\],
+:root:not(.dark) .force-dark .bg-\[\#05050A\],
+:root:not(.dark) .force-dark .bg-\[\#12121a\] {
+  background-color: revert !important;
+}
+
+:root:not(.dark) .force-dark .bg-white\/5,
+:root:not(.dark) .force-dark .bg-white\/10,
+:root:not(.dark) .force-dark .bg-white\/\[0\.03\] {
+  background-color: revert !important;
+}
+
+:root:not(.dark) .force-dark .bg-emerald-500\/\[0\.04\],
+:root:not(.dark) .force-dark .bg-emerald-500\/\[0\.06\],
+:root:not(.dark) .force-dark .bg-emerald-950\/20,
+:root:not(.dark) .force-dark .bg-purple-950\/20,
+:root:not(.dark) .force-dark .bg-purple-950\/50,
+:root:not(.dark) .force-dark .bg-red-950\/20,
+:root:not(.dark) .force-dark .bg-red-950\/30 {
+  background-color: revert !important;
+}
+
+/* — Also revert the wrapper's own bg if it has a utility — */
+:root:not(.dark) .force-dark.bg-\[\#0F0F17\],
+:root:not(.dark) .force-dark.bg-\[\#09090F\] {
+  background-color: revert !important;
+}
+
+/* — Borders — */
+:root:not(.dark) .force-dark .border-white\/5,
+:root:not(.dark) .force-dark .border-white\/10,
+:root:not(.dark) .force-dark .border-white\/\[0\.06\],
+:root:not(.dark) .force-dark .border-zinc-800,
+:root:not(.dark) .force-dark .border-zinc-700,
+:root:not(.dark) .force-dark .border-emerald-500\/10,
+:root:not(.dark) .force-dark .border-emerald-500\/15 {
+  border-color: revert !important;
+}
+
+:root:not(.dark) .force-dark.border-white\/10 {
+  border-color: revert !important;
+}
+
+/* — Text — */
+:root:not(.dark) .force-dark .text-white,
+:root:not(.dark) .force-dark .text-white\/90,
+:root:not(.dark) .force-dark .text-white\/80,
+:root:not(.dark) .force-dark .text-zinc-100,
+:root:not(.dark) .force-dark .text-zinc-200,
+:root:not(.dark) .force-dark .text-zinc-300,
+:root:not(.dark) .force-dark .text-zinc-400,
+:root:not(.dark) .force-dark .text-gray-200,
+:root:not(.dark) .force-dark .text-gray-300,
+:root:not(.dark) .force-dark .text-gray-400,
+:root:not(.dark) .force-dark .text-gray-500,
+:root:not(.dark) .force-dark .text-gray-600 {
+  color: revert !important;
+}
+
+:root:not(.dark) .force-dark .text-purple-400,
+:root:not(.dark) .force-dark .text-purple-500,
+:root:not(.dark) .force-dark .text-emerald-400,
+:root:not(.dark) .force-dark .text-emerald-500,
+:root:not(.dark) .force-dark .text-red-400,
+:root:not(.dark) .force-dark .text-red-400\/60,
+:root:not(.dark) .force-dark .text-amber-300 {
+  color: revert !important;
+}
+
+/* — Shadows — */
+:root:not(.dark) .force-dark .shadow-2xl {
+  box-shadow: revert !important;
+}
+
+/* — Gradients — */
+:root:not(.dark) .force-dark .bg-gradient-to-t,
+:root:not(.dark) .force-dark .bg-gradient-to-b,
+:root:not(.dark) .force-dark .bg-gradient-to-r {
+  background-image: revert !important;
 }

@@ -367,10 +367,22 @@ export default function GrammarPage() {
 
   /* ── Check backend health on mount ────── */
   useEffect(() => {
-    fetch('/api/grammar-check', { method: 'GET' })
-      .then(r => r.json())
-      .then(d => setBackendStatus(d.status === 'ok' ? 'online' : 'offline'))
-      .catch(() => setBackendStatus('offline'));
+    let cancelled = false;
+    const check = async () => {
+      try {
+        const r = await fetch('/api/grammar-check', { method: 'GET', signal: AbortSignal.timeout(10_000) });
+        const d = await r.json();
+        if (!cancelled) setBackendStatus(d.status === 'ok' ? 'online' : 'offline');
+      } catch {
+        if (!cancelled) setBackendStatus('offline');
+      }
+    };
+    check();
+    // Retry once after 5s if offline (Render cold-start)
+    const timer = setTimeout(() => {
+      if (!cancelled) check();
+    }, 6000);
+    return () => { cancelled = true; clearTimeout(timer); };
   }, []);
 
   /* â”€â”€ Analysis â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
@@ -432,9 +444,19 @@ export default function GrammarPage() {
               });
             }
           }
+        } else {
+          // Backend returned an error — fall back to rules
+          setBackendStatus('offline');
+          if (!usesRules) {
+            base = { ...r, issues: [...r.issues] };
+          }
         }
       } catch {
+        // Backend unreachable — fall back to rules
         setBackendStatus('offline');
+        if (!usesRules) {
+          base = { ...r, issues: [...r.issues] };
+        }
       }
     }
 
