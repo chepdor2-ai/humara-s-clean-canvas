@@ -2,7 +2,7 @@
 import Link from 'next/link';
 import Image from 'next/image';
 import { usePathname } from 'next/navigation';
-import { LayoutDashboard, Edit3, FileText, BrainCircuit, Settings, LogOut, Menu, X, ArrowRight, ShieldCheck, FlaskConical, BookOpen, Shield, Sun, Moon, PenTool } from 'lucide-react';
+import { LayoutDashboard, Edit3, FileText, BrainCircuit, Settings, LogOut, Menu, X, ArrowRight, ShieldCheck, FlaskConical, BookOpen, Shield, Sun, Moon, PenTool, Code2, MessageCircle } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useAuth } from './AuthProvider';
 import { useTheme } from './ThemeProvider';
@@ -48,6 +48,7 @@ export default function RootLayoutClient({ children }: { children: React.ReactNo
     { name: 'Style Profiles', href: '/app/style', icon: BrainCircuit },
     { name: 'Grammar', href: '/app/grammar', icon: PenTool },
     { name: 'Advanced', href: '/app/advanced', icon: FlaskConical },
+    { name: 'API', href: '/app/api-dashboard', icon: Code2 },
     { name: 'Docs', href: '/app/docs', icon: BookOpen },
     { name: 'Settings', href: '/app/settings', icon: Settings },
     ...(isAdmin ? [{ name: 'Admin', href: '/app/admin', icon: Shield }] : []),
@@ -67,6 +68,8 @@ export default function RootLayoutClient({ children }: { children: React.ReactNo
                 <Link href="/about" className="text-sm text-slate-600 dark:text-zinc-400 hover:text-purple-500 font-medium transition-colors">About</Link>
                 <Link href="/blog" className="text-sm text-slate-600 dark:text-zinc-400 hover:text-purple-500 font-medium transition-colors">Blog</Link>
                 <Link href="/detector" className="text-sm text-slate-600 dark:text-zinc-400 hover:text-purple-500 font-medium transition-colors inline-flex items-center gap-1.5">AI Detector <span className="text-[9px] font-bold text-amber-500 bg-amber-100 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800/40 px-1.5 py-0.5 rounded-full">Soon</span></Link>
+                <Link href="/api-pricing" className="text-sm text-slate-600 dark:text-zinc-400 hover:text-purple-500 font-medium transition-colors">API</Link>
+                <Link href="/contact" className="text-sm text-slate-600 dark:text-zinc-400 hover:text-purple-500 font-medium transition-colors">Contact</Link>
               </nav>
 
               <div className="hidden md:flex items-center gap-4">
@@ -105,6 +108,8 @@ export default function RootLayoutClient({ children }: { children: React.ReactNo
               <Link href="/about" onClick={() => setMobileMenuOpen(false)} className="text-sm font-medium text-slate-700 dark:text-zinc-200 py-1">About</Link>
               <Link href="/blog" onClick={() => setMobileMenuOpen(false)} className="text-sm font-medium text-slate-700 dark:text-zinc-200 py-1">Blog</Link>
               <Link href="/detector" onClick={() => setMobileMenuOpen(false)} className="text-sm font-medium text-slate-700 dark:text-zinc-200 py-1 inline-flex items-center gap-1.5">AI Detector <span className="text-[9px] font-bold text-amber-500 bg-amber-100 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800/40 px-1.5 py-0.5 rounded-full">Soon</span></Link>
+              <Link href="/api-pricing" onClick={() => setMobileMenuOpen(false)} className="text-sm font-medium text-slate-700 dark:text-zinc-200 py-1">API</Link>
+              <Link href="/contact" onClick={() => setMobileMenuOpen(false)} className="text-sm font-medium text-slate-700 dark:text-zinc-200 py-1">Contact</Link>
               <div className="h-px bg-slate-200 dark:bg-white/10 my-1"></div>
               <Link href="/login" onClick={() => setMobileMenuOpen(false)} className="text-sm font-medium text-slate-700 dark:text-zinc-200 py-1">Log In</Link>
               <Link href="/signup" onClick={() => setMobileMenuOpen(false)} className="text-sm font-medium text-purple-400 py-1">Get Started</Link>
@@ -142,6 +147,7 @@ export default function RootLayoutClient({ children }: { children: React.ReactNo
                     <li><Link href="/about" className="hover:text-slate-900 dark:hover:text-white transition-colors">About</Link></li>
                     <li><Link href="/blog" className="hover:text-slate-900 dark:hover:text-white transition-colors">Blog</Link></li>
                     <li><Link href="/contact" className="hover:text-slate-900 dark:hover:text-white transition-colors">Contact</Link></li>
+                    <li><a href="https://wa.me/254743468864" target="_blank" rel="noopener noreferrer" className="hover:text-slate-900 dark:hover:text-white transition-colors inline-flex items-center gap-1.5"><MessageCircle className="w-3.5 h-3.5" /> WhatsApp</a></li>
                   </ul>
                 </div>
                 <div>
@@ -160,6 +166,17 @@ export default function RootLayoutClient({ children }: { children: React.ReactNo
             </div>
           </div>
         </footer>
+
+        {/* Floating WhatsApp Button */}
+        <a
+          href="https://wa.me/254743468864?text=Hi%20HumaraGPT%20team!"
+          target="_blank"
+          rel="noopener noreferrer"
+          title="Chat on WhatsApp"
+          className="fixed bottom-6 right-6 z-50 w-14 h-14 bg-[#25D366] hover:bg-[#20BD5A] text-white rounded-full flex items-center justify-center shadow-lg shadow-green-500/30 hover:shadow-green-500/50 hover:scale-110 active:scale-95 transition-all"
+        >
+          <MessageCircle className="w-7 h-7" />
+        </a>
       </div>
     );
   }
