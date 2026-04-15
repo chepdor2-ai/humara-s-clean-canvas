@@ -13,6 +13,21 @@ services:
     healthCheckPath: /health
 
   - type: web
+    name: king-server
+    runtime: docker
+    dockerfilePath: king-server/Dockerfile
+    dockerContext: .
+    envVars:
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: LLM_MODEL
+        value: "gpt-4o-mini"
+      - key: KING_CONCURRENCY
+        value: "10"
+    plan: starter
+    healthCheckPath: /health
+
+  - type: web
     name: oxygen3
     runtime: docker
     dockerfilePath: render-oxygen3/Dockerfile

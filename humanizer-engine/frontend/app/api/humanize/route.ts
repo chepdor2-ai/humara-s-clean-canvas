@@ -30,6 +30,7 @@ import { synonymReplace } from '@/lib/engine/utils';
 import { applyAIWordKill } from '@/lib/engine/shared-dictionaries';
 import { postCleanGrammar } from '@/lib/engine/grammar-cleaner';
 import { apexHumanize } from '@/lib/engine/apex-humanizer';
+import { kingHumanize } from '@/lib/engine/king-humanizer';
 
 export const maxDuration = 120; // LLM engines need more time
 
@@ -933,6 +934,13 @@ export async function POST(req: Request) {
         strength ?? 'medium',
         tone ?? 'academic',
       );
+    } else if (engine === 'king') {
+      // King: Pure LLM multi-phase sentence-by-sentence humanizer (GPT-4o-mini)
+      // Phase 1: Deep rewrite (29 Wikipedia AI Cleanup rules)
+      // Phase 2: Self-audit ("what makes this AI?")
+      // Phase 3: Targeted revision (fix Phase 2 findings)
+      const kingResult = await kingHumanize(normalizedText);
+      humanized = kingResult.humanized;
     } else if (engine === 'humara') {
       // Humara: Independent humanizer engine — phrase-level, strategy-diverse
       const humaraStrength: 'light' | 'medium' | 'heavy' =
@@ -1036,21 +1044,21 @@ export async function POST(req: Request) {
     const FIRST_PERSON_RE_EARLY = /\b(I|me|my|mine|myself|we|us|our|ours|ourselves)\b/i;
     const earlyFirstPerson = FIRST_PERSON_RE_EARLY.test(text);
     const inputAiScore = inputAnalysis.summary.overall_ai_score;
-    if (engine !== 'humara' && engine !== 'humara_v1_3' && engine !== 'nuru' && engine !== 'nuru_v2' && engine !== 'omega' && engine !== 'oxygen' && engine !== 'ozone' && engine !== 'apex' && engine !== 'ghost_pro_wiki' && !isDeepKill) {
+    if (engine !== 'humara' && engine !== 'humara_v1_3' && engine !== 'nuru' && engine !== 'nuru_v2' && engine !== 'omega' && engine !== 'oxygen' && engine !== 'ozone' && engine !== 'apex' && engine !== 'king' && engine !== 'ghost_pro_wiki' && !isDeepKill) {
       humanized = unifiedSentenceProcess(humanized, earlyFirstPerson, inputAiScore);
     }
 
     // ── 60% Restructuring Enforcement ──────────────────────────────
     // Ensures at least 60% of sentences show meaningful word-level changes.
     // Applies additional transforms to under-changed sentences.
-    if (engine !== 'oxygen' && engine !== 'ozone' && engine !== 'apex' && engine !== 'nuru_v2' && !isDeepKill) {
+    if (engine !== 'oxygen' && engine !== 'ozone' && engine !== 'apex' && engine !== 'king' && engine !== 'nuru_v2' && !isDeepKill) {
       humanized = enforceRestructuringThreshold(text, humanized, 0.70);
     }
 
     // Post-capitalization formatting — fix sentence casing for all engine outputs
     // Skip for humara/nuru/omega: they have their own capitalization handling
     // Pass original text so proper nouns from the input are preserved
-    if (engine !== 'humara' && engine !== 'humara_v1_3' && engine !== 'nuru' && engine !== 'nuru_v2' && engine !== 'omega' && engine !== 'oxygen' && engine !== 'ozone' && engine !== 'apex' && !isDeepKill) {
+    if (engine !== 'humara' && engine !== 'humara_v1_3' && engine !== 'nuru' && engine !== 'nuru_v2' && engine !== 'omega' && engine !== 'oxygen' && engine !== 'ozone' && engine !== 'apex' && engine !== 'king' && !isDeepKill) {
       humanized = fixCapitalization(humanized, text);
     }
 
@@ -1062,14 +1070,14 @@ export async function POST(req: Request) {
 
     // Cross-sentence repetition cleanup — deduplicates phrases repeated across sentences
     // Skip for humara engine: it has its own coherence layer
-    if (engine !== 'humara' && engine !== 'humara_v1_3' && engine !== 'nuru' && engine !== 'nuru_v2' && engine !== 'omega' && engine !== 'oxygen' && engine !== 'ozone' && !isDeepKill) {
+    if (engine !== 'humara' && engine !== 'humara_v1_3' && engine !== 'nuru' && engine !== 'nuru_v2' && engine !== 'omega' && engine !== 'oxygen' && engine !== 'ozone' && engine !== 'king' && !isDeepKill) {
       humanized = deduplicateRepeatedPhrases(humanized);
     }
 
     // Structural post-processing — attacks document-level statistical signals
     // (spectral_flatness, burstiness, sentence_uniformity, readability_consistency, vocabulary_richness)
     // Skip for humara engine: it has its own structural diversity layer
-    if (engine !== 'humara' && engine !== 'humara_v1_3' && engine !== 'nuru' && engine !== 'nuru_v2' && engine !== 'omega' && engine !== 'ninja' && engine !== 'undetectable' && engine !== 'oxygen' && engine !== 'ozone' && engine !== 'ghost_pro_wiki' && !isDeepKill) {
+    if (engine !== 'humara' && engine !== 'humara_v1_3' && engine !== 'nuru' && engine !== 'nuru_v2' && engine !== 'omega' && engine !== 'ninja' && engine !== 'undetectable' && engine !== 'oxygen' && engine !== 'ozone' && engine !== 'king' && engine !== 'ghost_pro_wiki' && !isDeepKill) {
       humanized = structuralPostProcess(humanized);
     }
 

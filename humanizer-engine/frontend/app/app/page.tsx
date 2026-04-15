@@ -155,13 +155,14 @@ const ALL_ENGINES: EngineConfig[] = [
   { id: 'conscusion_1', label: 'Conscusion 1' },
   { id: 'conscusion_12', label: 'Conscusion 12' },
   { id: 'nuru_v2', label: 'Nuru 2.0' },
+  { id: 'king', label: 'King' },
   { id: 'ninja_1', label: 'Ninja 1' },
   { id: 'ghost_pro_wiki', label: 'Wikipedia' },
 ];
 
 type ModeId = 'stealth_mode' | 'anti_gptzero' | 'deep_signal_kill';
 const MODE_ENGINES: Record<ModeId, Set<string>> = {
-  stealth_mode: new Set(['ozone', 'easy', 'ninja_1']),
+  stealth_mode: new Set(['ozone', 'easy', 'ninja_1', 'king']),
   anti_gptzero: new Set(['oxygen', 'humara_v3_3', 'nuru_v2', 'ghost_pro_wiki']),
   deep_signal_kill: new Set([
     'ninja_2',
@@ -180,6 +181,7 @@ const ENGINE_GUIDES: Record<string, string> = {
   easy: 'Stealth Mode wide-coverage engine for balanced, natural sounding rewrites.',
   nuru_v2: 'Purely non-LLM stealth engine. Runs 10 iterative passes for deep transformation without any AI calls.',
   ninja_1: 'LLM-powered Ninja rewrite followed by 10 Nuru stealth passes for maximum detector evasion.',
+  king: 'Pure LLM humanizer (GPT-4o-mini). 3-phase sentence-by-sentence pipeline: deep rewrite, self-audit, targeted revision. Removes all 29 Wikipedia AI writing patterns.',
 
   oxygen: 'Anti GPTZero engine tuned for GPTZero signal suppression.',
   humara_v3_3: 'Anti GPTZero high-power engine (2.4) for stubborn GPTZero flags.',
