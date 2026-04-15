@@ -164,14 +164,9 @@ const MODE_ENGINES: Record<ModeId, Set<string>> = {
   stealth_mode: new Set(['ozone', 'easy', 'ninja_1']),
   anti_gptzero: new Set(['oxygen', 'humara_v3_3', 'nuru_v2', 'ghost_pro_wiki']),
   deep_signal_kill: new Set([
-    'ninja_3',
     'ninja_2',
+    'ninja_3',
     'ninja_4',
-    'ninja_5',
-    'ghost_trial_2',
-    'ghost_trial_2_alt',
-    'conscusion_1',
-    'conscusion_12',
   ]),
 };
 const MODE_LABELS: Record<ModeId, string> = {
