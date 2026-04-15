@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, createContext, useContext, ReactNode } from 'react';
 import { useAuth } from '../AuthProvider';
 import { supabase } from '../../lib/supabase';
 
@@ -8,6 +8,23 @@ interface UsageData {
   wordsLimit: number;
   daysRemaining: number;
   planName: string;
+}
+
+interface UsageContextValue {
+  usage: UsageData | null;
+  loading: boolean;
+  refresh: () => Promise<void>;
+  /** Optimistically add words to the count without waiting for a server round-trip */
+  addWords: (count: number) => void;
+}
+
+const UsageContext = createContext<UsageContextValue | null>(null);
+
+export function useUsage(): UsageContextValue {
+  const ctx = useContext(UsageContext);
+  if (ctx) return ctx;
+  // Fallback for components rendered outside the provider (e.g. dashboard, settings)
+  return useFallbackUsage();
 }
 
 function useCountUp(target: number, duration: number = 1000) {
@@ -38,7 +55,47 @@ function useCountUp(target: number, duration: number = 1000) {
   return count;
 }
 
-export function useUsage() {
+function parseUsageResponse(data: any): UsageData {
+  const totalUsed = (data.words_used_fast || 0) + (data.words_used_stealth || 0);
+  const rawLimit = (data.words_limit_fast || 0) + (data.words_limit_stealth || 0);
+  const planName = String(data.plan_name || 'Free');
+  const isFree = planName.trim().toLowerCase() === 'free';
+  const totalLimit = rawLimit > 0 ? rawLimit : (isFree ? 1000 : 0);
+  return {
+    wordsUsed: totalUsed,
+    wordsLimit: totalLimit,
+    daysRemaining: data.days_remaining || 0,
+    planName,
+  };
+}
+
+async function fetchUsageData(accessToken: string | undefined, userId: string): Promise<UsageData | null> {
+  // Prefer server API (service-role) to avoid RLS/RPC privilege issues.
+  if (accessToken) {
+    try {
+      const res = await fetch('/api/usage', {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        return parseUsageResponse(data);
+      }
+    } catch {}
+  }
+
+  // Fallback to direct RPC
+  const rpc = await supabase.rpc('get_usage_stats', { p_user_id: userId });
+  if (!rpc.error && rpc.data) {
+    return parseUsageResponse(rpc.data);
+  }
+
+  console.warn('Usage RPC unavailable:', rpc.error?.message);
+  return null;
+}
+
+const FREE_DEFAULTS: UsageData = { wordsUsed: 0, wordsLimit: 1000, daysRemaining: 0, planName: 'Free' };
+
+function useUsageInternal() {
   const { user, session } = useAuth();
   const [usage, setUsage] = useState<UsageData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -46,60 +103,30 @@ export function useUsage() {
   const refresh = useCallback(async () => {
     if (!user) return;
     try {
-      // Prefer server API (service-role) to avoid RLS/RPC privilege issues.
-      // Fallback to direct RPC if the API isn't available.
-      let data: any = null;
-      let error: { message?: string } | null = null;
-
-      if (session?.access_token) {
-        const res = await fetch('/api/usage', {
-          headers: { Authorization: `Bearer ${session.access_token}` },
-        });
-        if (res.ok) {
-          data = await res.json();
-        } else {
-          // Continue to RPC fallback
-          error = { message: `API status ${res.status}` };
-        }
-      }
-
-      if (!data) {
-        const rpc = await supabase.rpc('get_usage_stats', { p_user_id: user.id });
-        data = rpc.data;
-        error = rpc.error as any;
-      }
-
-      if (!error && data) {
-        // Combine fast + stealth into single word count
-        const totalUsed = (data.words_used_fast || 0) + (data.words_used_stealth || 0);
-        const rawLimit = (data.words_limit_fast || 0) + (data.words_limit_stealth || 0);
-        const planName = String(data.plan_name || 'Free');
-        const isFree = planName.trim().toLowerCase() === 'free';
-        const totalLimit = rawLimit > 0 ? rawLimit : (isFree ? 1000 : 0);
-        setUsage({
-          wordsUsed: totalUsed,
-          wordsLimit: totalLimit,
-          daysRemaining: data.days_remaining || 0,
-          planName,
-        });
+      const data = await fetchUsageData(session?.access_token, user.id);
+      if (data) {
+        setUsage(data);
       } else {
-        // RPC failed or not deployed — show free tier defaults so bar is always visible
-        console.warn('Usage RPC unavailable, using free defaults:', error?.message);
-        setUsage(prev => prev ?? { wordsUsed: 0, wordsLimit: 1000, daysRemaining: 0, planName: 'Free' });
+        setUsage(prev => prev ?? FREE_DEFAULTS);
       }
     } catch (err) {
       console.error('Usage fetch error:', err);
-      // Ensure bar always shows even on network / RPC errors
-      setUsage(prev => prev ?? { wordsUsed: 0, wordsLimit: 1000, daysRemaining: 0, planName: 'Free' });
+      setUsage(prev => prev ?? FREE_DEFAULTS);
     } finally {
       setLoading(false);
     }
   }, [session?.access_token, user]);
 
+  const addWords = useCallback((count: number) => {
+    setUsage(prev => {
+      if (!prev) return prev;
+      return { ...prev, wordsUsed: prev.wordsUsed + count };
+    });
+  }, []);
+
   useEffect(() => { 
     if (!user) {
-      // No user yet — show free defaults, stop loading
-      setUsage({ wordsUsed: 0, wordsLimit: 1000, daysRemaining: 0, planName: 'Free' });
+      setUsage(FREE_DEFAULTS);
       setLoading(false);
       return;
     }
@@ -108,7 +135,19 @@ export function useUsage() {
     return () => clearInterval(interval);
   }, [refresh, user]);
 
-  return { usage, loading, refresh };
+  return { usage, loading, refresh, addWords };
+}
+
+/** Standalone hook for pages that are outside the UsageProvider (dashboard, settings) */
+function useFallbackUsage(): UsageContextValue {
+  const internal = useUsageInternal();
+  return internal;
+}
+
+/** Wrap the main /app page with this so UsageBar and page.tsx share one piece of state */
+export function UsageProvider({ children }: { children: ReactNode }) {
+  const value = useUsageInternal();
+  return <UsageContext.Provider value={value}>{children}</UsageContext.Provider>;
 }
 
 export default function UsageBar() {

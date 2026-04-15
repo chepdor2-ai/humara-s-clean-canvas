@@ -3,7 +3,7 @@ import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 
 import { Copy, Check, Zap, Eraser, RotateCcw, Type, AlignLeft, RefreshCw, AlertTriangle, Clock, ChevronDown, ChevronUp, Shield, Settings, ClipboardPaste, SpellCheck } from 'lucide-react';
 import { GrammarChecker } from '@/lib/engine/grammar-corrector';
-import UsageBar, { useUsage } from './UsageBar';
+import UsageBar, { useUsage, UsageProvider } from './UsageBar';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../AuthProvider';
 import Link from 'next/link';
@@ -219,6 +219,14 @@ const TONES = [
 
 /* ── Page ───────────────────────────────────────────────────────────────── */
 export default function EditorPage() {
+  return (
+    <UsageProvider>
+      <EditorPageInner />
+    </UsageProvider>
+  );
+}
+
+function EditorPageInner() {
   const { user, session } = useAuth();
   const isAdmin = user?.email ? ADMIN_EMAILS.includes(user.email) : false;
   const [text, setText] = useState('');
@@ -304,7 +312,7 @@ export default function EditorPage() {
   const [_sentenceScores, setSentenceScores] = useState<ScoredSentence[]>([]);
   const [_meaningScore, setMeaningScore] = useState<number | null>(null);
 
-  const { usage, refresh: refreshUsage } = useUsage();
+  const { usage, refresh: refreshUsage, addWords } = useUsage();
   const PLAN_COLORS: Record<string, string> = { Starter: '#64748b', Creator: '#a855f7', Professional: '#10b981', Business: '#f59e0b' };
   const planColor = usage ? PLAN_COLORS[usage.planName] || '' : '';
 
@@ -660,6 +668,14 @@ export default function EditorPage() {
         // Add to temporary history
         // Detection disabled — scores set to 0
         addToHistory(text, currentResult, (finalData.engine_used as string) || engine, 0, 0, (finalData.word_count as number) || outputWords);
+
+        // Update usage: if backend returned updated counts, use them; otherwise optimistic + refresh
+        if (typeof finalData.usage_words_used === 'number') {
+          // Backend gave us exact counts — handled by refresh below
+        } else {
+          // Optimistic: add input word count immediately
+          addWords((finalData.input_word_count as number) || inputWords);
+        }
         refreshUsage();
 
         setStreamProgressTarget(100);
@@ -709,6 +725,11 @@ export default function EditorPage() {
         setResult(rephrased);
         setMeaningScore(finalData.meaning_similarity as number);
         // Detection disabled — coming soon
+
+        // Update usage: optimistic + server refresh
+        if (typeof finalData.usage_words_used !== 'number') {
+          addWords((finalData.input_word_count as number) || outputWords);
+        }
         refreshUsage();
 
         setStreamProgressTarget(100);

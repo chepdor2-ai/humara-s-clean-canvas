@@ -1361,18 +1361,8 @@ export async function POST(req: Request) {
           const inputWords = text.trim().split(/\s+/).length;
           const outputWords = humanized.trim().split(/\s+/).length;
 
-          // Final done event — detection results omitted (coming soon)
-          sendSSE(controller, {
-            type: 'done',
-            humanized,
-            word_count: outputWords,
-            input_word_count: inputWords,
-            engine_used: eng,
-            meaning_preserved: meaningCheck.isSafe,
-            meaning_similarity: Math.round(meaningCheck.similarity * 100) / 100,
-          });
-
-          // Track usage + save document (awaited before stream close so serverless doesn't kill it)
+          // Track usage + save document BEFORE sending done event so we can include updated counts
+          let usageUpdate: { words_used?: number; words_limit?: number } = {};
           if (userId) {
             try {
               const supa = createServiceClient();
@@ -1380,7 +1370,7 @@ export async function POST(req: Request) {
               const toneDb = ({ neutral: 'natural', academic: 'academic', professional: 'business', simple: 'direct' } as Record<string, string>)[tone ?? 'neutral'] ?? 'natural';
 
               const [usageResult, docResult] = await Promise.all([
-                supa.rpc('increment_usage', { p_user_id: userId, p_words: outputWords, p_engine_type: engineType }),
+                supa.rpc('increment_usage', { p_user_id: userId, p_words: inputWords, p_engine_type: engineType }),
                 supa.from('documents').insert({
                   user_id: userId, title: text.slice(0, 60).replace(/\n/g, ' ').trim() + (text.length > 60 ? '…' : ''),
                   input_text: text, output_text: humanized,
@@ -1392,12 +1382,84 @@ export async function POST(req: Request) {
                 }),
               ]);
 
-              if (usageResult.error) console.error('increment_usage RPC failed:', usageResult.error.message, usageResult.error.details);
+              if (usageResult.error) {
+                console.error('increment_usage RPC failed:', usageResult.error.message, usageResult.error.details);
+                // Fallback: direct upsert if RPC doesn't exist or fails
+                try {
+                  const today = new Date().toISOString().slice(0, 10);
+                  const { data: existingUsage } = await supa
+                    .from('usage')
+                    .select('words_used_fast, words_limit_fast')
+                    .eq('user_id', userId)
+                    .eq('usage_date', today)
+                    .maybeSingle();
+
+                  if (existingUsage) {
+                    await supa.from('usage').update({
+                      words_used_fast: (existingUsage.words_used_fast || 0) + inputWords,
+                      updated_at: new Date().toISOString(),
+                    }).eq('user_id', userId).eq('usage_date', today);
+                    usageUpdate = {
+                      words_used: (existingUsage.words_used_fast || 0) + inputWords,
+                      words_limit: existingUsage.words_limit_fast || 1000,
+                    };
+                  } else {
+                    // Determine limit from subscription
+                    let wordLimit = 1000;
+                    const { data: subRow } = await supa
+                      .from('subscriptions')
+                      .select('plan_id, plans(daily_words_fast)')
+                      .eq('user_id', userId)
+                      .eq('status', 'active')
+                      .order('created_at', { ascending: false })
+                      .limit(1)
+                      .maybeSingle();
+                    if (subRow?.plans && typeof (subRow.plans as any).daily_words_fast === 'number') {
+                      wordLimit = (subRow.plans as any).daily_words_fast;
+                    }
+                    await supa.from('usage').insert({
+                      user_id: userId,
+                      usage_date: today,
+                      words_used_fast: inputWords,
+                      words_used_stealth: 0,
+                      words_limit_fast: wordLimit,
+                      words_limit_stealth: 0,
+                      requests: 1,
+                    });
+                    usageUpdate = { words_used: inputWords, words_limit: wordLimit };
+                  }
+                } catch (fallbackErr) {
+                  console.error('Usage fallback upsert failed:', fallbackErr);
+                }
+              } else if (usageResult.data) {
+                // Extract updated totals from the RPC response
+                const d = usageResult.data as Record<string, unknown>;
+                const usedFast = Number(d.words_used_fast ?? 0);
+                const usedStealth = Number(d.words_used_stealth ?? 0);
+                const limitFast = Number(d.words_limit_fast ?? 0);
+                const limitStealth = Number(d.words_limit_stealth ?? 0);
+                usageUpdate = {
+                  words_used: usedFast + usedStealth,
+                  words_limit: (limitFast + limitStealth) || 1000,
+                };
+              }
               if (docResult.error) console.error('Document insert failed:', docResult.error.message, docResult.error.details);
             } catch (e) {
               console.error('Usage tracking error:', e);
             }
           }
+
+          // Final done event — includes updated usage so frontend can reflect immediately
+          sendSSE(controller, {
+            type: 'done',
+            humanized,
+            word_count: outputWords,
+            input_word_count: inputWords,
+            engine_used: eng,
+            meaning_preserved: meaningCheck.isSafe,
+            meaning_similarity: Math.round(meaningCheck.similarity * 100) / 100,
+            ...(usageUpdate.words_used !== undefined ? { usage_words_used: usageUpdate.words_used, usage_words_limit: usageUpdate.words_limit } : {}),
+          });
 
           controller.close();
         } catch (err) {
