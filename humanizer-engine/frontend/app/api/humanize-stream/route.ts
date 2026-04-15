@@ -627,14 +627,14 @@ export async function POST(req: Request) {
               // Phase 1 only: Humara 2.0 — remaining phases handled in pipeline
               return runHumara20(sentence);
             } else if (eng === 'ninja_2') {
-              // Phase 1 only: Humara 2.0 — remaining phases handled in pipeline
-              return runHumara20(sentence);
+              // Phase 1 only: Humara 2.1 — remaining phases handled in pipeline
+              return await runGuarded('ninja_2_s1', () => runHumara21(sentence), sentence, 35_000);
             } else if (eng === 'ninja_4') {
-              // Phase 1 only: Humara 2.4 — remaining phases handled in pipeline
-              return await runGuarded('ninja_4_s1', () => runHumara24(sentence), sentence);
+              // Phase 1 only: Humara 2.1 — remaining phases handled in pipeline
+              return await runGuarded('ninja_4_s1', () => runHumara21(sentence), sentence, 35_000);
             } else if (eng === 'ninja_5') {
-              // Phase 1 only: Humara 2.4 — remaining phases handled in pipeline
-              return await runGuarded('ninja_5_s1', () => runHumara24(sentence), sentence);
+              // Phase 1 only: Humara 2.2 — remaining phases handled in pipeline
+              return await runGuarded('ninja_5_s1', () => runHumara22(sentence), sentence, 35_000);
             } else if (eng === 'ghost_trial_2') {
               // Phase 1 only: Wikipedia — remaining phases handled in pipeline
               return await runGuarded('gt2_s1', () => runWikipediaClean(sentence), sentence);
@@ -846,9 +846,10 @@ export async function POST(req: Request) {
                 break;
               // Deep Kill engines — multi-step pipelines with visible phases
               case 'ninja_2':
-                // Humara 2.0 → Nuru 2.0
+                // Humara 2.1 → Wikipedia → Nuru 2.0
                 phases = [
-                  { name: 'Humara 2.0', type: 'emit' },
+                  { name: 'Humara 2.1', type: 'emit' },
+                  { name: 'Wikipedia', type: 'async', fn: (s) => runWikipediaClean(s) },
                   { name: 'Nuru 2.0', type: 'nuru', passes: CHAIN_TS },
                 ];
                 break;
@@ -861,17 +862,18 @@ export async function POST(req: Request) {
                 ];
                 break;
               case 'ninja_4':
-                // Humara 2.4 → Wikipedia → Nuru 2.0
+                // Humara 2.1 → Humara 2.4 (Full) → Nuru 2.0
                 phases = [
-                  { name: 'Humara 2.4', type: 'emit' },
-                  { name: 'Wikipedia', type: 'async', fn: (s) => runWikipediaClean(s) },
+                  { name: 'Humara 2.1', type: 'emit' },
+                  { name: 'Humara 2.4 (Full)', type: 'async', fn: (s) => runHumara24Full(s) },
                   { name: 'Nuru 2.0', type: 'nuru', passes: CHAIN_TS },
                 ];
                 break;
               case 'ninja_5':
-                // Humara 2.4 → Nuru 2.0
+                // Humara 2.2 → Humara 2.4 (Full) → Nuru 2.0
                 phases = [
-                  { name: 'Humara 2.4', type: 'emit' },
+                  { name: 'Humara 2.2', type: 'emit' },
+                  { name: 'Humara 2.4 (Full)', type: 'async', fn: (s) => runHumara24Full(s) },
                   { name: 'Nuru 2.0', type: 'nuru', passes: CHAIN_TS },
                 ];
                 break;

@@ -9,7 +9,7 @@ import type { Sentence, Issue } from '../../core/types';
 const MISSPELLINGS: Record<string, string> = {
   // Common typos
   'becuase': 'because', 'becasue': 'because', 'becouse': 'because',
-  'wich': 'which', 'whch': 'which', 'wich': 'which',
+  'wich': 'which', 'whch': 'which',
   'comming': 'coming', 'comeing': 'coming',
   'happend': 'happened', 'happended': 'happened',
   'diffrent': 'different', 'diffferent': 'different', 'diferent': 'different',
@@ -32,9 +32,8 @@ const MISSPELLINGS: Record<string, string> = {
   'usefull': 'useful', 'usful': 'useful',
   'ussually': 'usually', 'usally': 'usually',
   'wether': 'whether',
-  'wich': 'which',
   'writen': 'written', 'writting': 'writing',
-  'noticable': 'noticeable', 'noticable': 'noticeable',
+  'noticable': 'noticeable',
   'occassion': 'occasion', 'occaison': 'occasion',
   'persue': 'pursue',
   'prefered': 'preferred', 'prefering': 'preferring',
@@ -43,7 +42,7 @@ const MISSPELLINGS: Record<string, string> = {
   'sentance': 'sentence',
   'similiar': 'similar', 'similer': 'similar',
   'speach': 'speech',
-  'suprise': 'surprise', 'surprize': 'surprise',
+  'suprise': 'surprise',
   'temperture': 'temperature', 'temprature': 'temperature',
   'therefor': 'therefore',
   'thru': 'through',
@@ -66,7 +65,7 @@ const MISSPELLINGS: Record<string, string> = {
   'concieve': 'conceive',
   'consciense': 'conscience',
   'consistant': 'consistent',
-  'critisism': 'criticism', 'critisism': 'criticism',
+  'critisism': 'criticism',
   'defintion': 'definition', 'defination': 'definition',
   'develope': 'develop',
   'dissapear': 'disappear', 'dissappear': 'disappear',
@@ -82,7 +81,7 @@ const MISSPELLINGS: Record<string, string> = {
   'fulfil': 'fulfill',
   'gaurd': 'guard',
   'grammer': 'grammar',
-  'harrass': 'harass', 'harrass': 'harass',
+  'harrass': 'harass',
   'hieght': 'height', 'heigth': 'height',
   'humourous': 'humorous',
   'hygeine': 'hygiene',
@@ -91,7 +90,7 @@ const MISSPELLINGS: Record<string, string> = {
   'independance': 'independence',
   'innoculate': 'inoculate',
   'inteligent': 'intelligent', 'inteligence': 'intelligence',
-  'intresting': 'interesting', 'intresting': 'interesting',
+  'intresting': 'interesting',
   'iresistible': 'irresistible',
   'jellous': 'jealous',
   'judgement': 'judgment',
@@ -151,7 +150,6 @@ const MISSPELLINGS: Record<string, string> = {
   'wieght': 'weight', 'wiegh': 'weigh',
   'wellfare': 'welfare',
   'whereever': 'wherever',
-  'wich': 'which',
 };
 
 export const extendedSpellingRule: Rule = {
