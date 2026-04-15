@@ -380,7 +380,7 @@
 :root:not(.dark) .dashboard-shell .bg-zinc-800\/50 {
   background-color: #ffffff !important;
 }
-:root:not(.dark) .dashboard-shell .hover\:bg-white\/\[0\.02\]:hover {
+:root:not(.dark) .dashboard-shell [class~="hover:bg-white/[0.02]"]:hover {
   background-color: #f1f5f9 !important;
 }
 :root:not(.dark) .dashboard-shell .text-white,
@@ -483,11 +483,17 @@
 [data-theme="light"] .force-dark [class~="text-gray-600"] {
   color: #4b5563 !important;
 }
-[data-theme="light"] .force-dark [class~="text-zinc-100"],
-[data-theme="light"] .force-dark [class~="text-zinc-200"],
-[data-theme="light"] .force-dark [class~="text-zinc-300"],
+[data-theme="light"] .force-dark [class~="text-zinc-100"] {
+  color: #f4f4f5 !important;
+}
+[data-theme="light"] .force-dark [class~="text-zinc-200"] {
+  color: #e4e4e7 !important;
+}
+[data-theme="light"] .force-dark [class~="text-zinc-300"] {
+  color: #d4d4d8 !important;
+}
 [data-theme="light"] .force-dark [class~="text-zinc-400"] {
-  color: revert !important;
+  color: #a1a1aa !important;
 }
 
 /* Restore borders inside force-dark */
@@ -602,7 +608,7 @@
 [data-theme="light"] [class*="bg-brand"] [class~="text-gray-400"],
 [data-theme="light"] [class*="bg-purple"] [class~="text-gray-400"],
 [data-theme="light"] [class*="bg-emerald"] [class~="text-gray-400"] {
-  color: revert !important;
+  color: #9ca3af !important;
 }
 /* Keep hover:text-white on purple/brand/colored buttons */
 [data-theme="light"] [class*="bg-purple"][class~="hover:text-white"]:hover,
@@ -615,12 +621,58 @@
 [data-theme="light"] .force-dark [class~="text-slate-200"] {
   color: #e2e8f0 !important;
 }
+[data-theme="light"] .force-dark [class~="text-slate-300"] {
+  color: #cbd5e1 !important;
+}
+[data-theme="light"] .force-dark [class~="text-slate-400"] {
+  color: #94a3b8 !important;
+}
+[data-theme="light"] .force-dark [class~="text-slate-500"] {
+  color: #64748b !important;
+}
 [data-theme="light"] .force-dark [class~="text-zinc-200"] {
   color: #e4e4e7 !important;
+}
+[data-theme="light"] .force-dark [class~="text-zinc-300"] {
+  color: #d4d4d8 !important;
+}
+[data-theme="light"] .force-dark [class~="text-zinc-400"] {
+  color: #a1a1aa !important;
+}
+[data-theme="light"] .force-dark [class~="text-zinc-500"] {
+  color: #71717a !important;
 }
 [data-theme="light"] .force-dark [class~="text-zinc-600"] {
   color: #52525b !important;
 }
-[data-theme="light"] .force-dark [class~="text-slate-500"] {
-  color: #64748b !important;
+[data-theme="light"] .force-dark [class~="text-gray-200"] {
+  color: #e5e7eb !important;
+}
+[data-theme="light"] .force-dark [class~="text-gray-300"] {
+  color: #d1d5db !important;
+}
+[data-theme="light"] .force-dark [class~="text-gray-400"] {
+  color: #9ca3af !important;
+}
+[data-theme="light"] .force-dark [class~="text-gray-500"] {
+  color: #6b7280 !important;
+}
+[data-theme="light"] .force-dark [class~="text-gray-600"] {
+  color: #4b5563 !important;
+}
+[data-theme="light"] .force-dark [class~="text-purple-400"] {
+  color: #c084fc !important;
+}
+[data-theme="light"] .force-dark [class~="text-emerald-400"] {
+  color: #34d399 !important;
+}
+[data-theme="light"] .force-dark [class~="text-red-400"] {
+  color: #f87171 !important;
+}
+[data-theme="light"] .force-dark [class~="text-amber-300"] {
+  color: #fcd34d !important;
+}
+/* Force-dark hover states */
+[data-theme="light"] .force-dark [class~="hover:text-white"]:hover {
+  color: #ffffff !important;
 }

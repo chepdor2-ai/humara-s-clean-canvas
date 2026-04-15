@@ -923,17 +923,29 @@
   --tw-gradient-to: rgba(248, 250, 252, 0.7) !important;
 }
 /* Restore dark gradients inside force-dark wrappers */
-[data-theme="light"] .force-dark [class~="from-[#05050A]"],
-[data-theme="light"] .force-dark [class~="from-[#05050A]/60"],
-[data-theme="light"] .force-dark [class~="from-[#05050A]/50"],
-[data-theme="light"] .force-dark [class~="from-[#05050A]/40"],
-[data-theme="light"] .force-dark [class~="from-[#09090F]"],
-[data-theme="light"] .force-dark [class~="via-[#05050A]"],
-[data-theme="light"] .force-dark [class~="via-[#05050A]/40"],
+[data-theme="light"] .force-dark [class~="from-[#05050A]"] {
+  --tw-gradient-from: #05050A !important;
+}
+[data-theme="light"] .force-dark [class~="from-[#05050A]/60"] {
+  --tw-gradient-from: rgba(5,5,10,0.6) !important;
+}
+[data-theme="light"] .force-dark [class~="from-[#05050A]/50"] {
+  --tw-gradient-from: rgba(5,5,10,0.5) !important;
+}
+[data-theme="light"] .force-dark [class~="from-[#05050A]/40"] {
+  --tw-gradient-from: rgba(5,5,10,0.4) !important;
+}
+[data-theme="light"] .force-dark [class~="from-[#09090F]"] {
+  --tw-gradient-from: #09090F !important;
+}
+[data-theme="light"] .force-dark [class~="via-[#05050A]"] {
+  --tw-gradient-via: #05050A !important;
+}
+[data-theme="light"] .force-dark [class~="via-[#05050A]/40"] {
+  --tw-gradient-via: rgba(5,5,10,0.4) !important;
+}
 [data-theme="light"] .force-dark [class~="via-[#09090F]/80"] {
-  --tw-gradient-from: revert !important;
-  --tw-gradient-via: revert !important;
-  --tw-gradient-to: revert !important;
+  --tw-gradient-via: rgba(9,9,15,0.8) !important;
 }
 
 /* ── 6. Text Color Shifts ────────────────────────────────────── */
@@ -1150,17 +1162,17 @@
 /* — Named backgrounds — */
 [data-theme="light"] .force-dark [class~="bg-zinc-900"],
 [data-theme="light"] .force-dark[class~="bg-zinc-900"] {
-  background-color: revert !important;
+  background-color: #18181b !important;
 }
 [data-theme="light"] .force-dark [class~="bg-zinc-800"],
 [data-theme="light"] .force-dark[class~="bg-zinc-800"] {
-  background-color: revert !important;
+  background-color: #27272a !important;
 }
 [data-theme="light"] .force-dark [class~="bg-zinc-700"] {
-  background-color: revert !important;
+  background-color: #3f3f46 !important;
 }
 [data-theme="light"] .force-dark [class~="bg-black"] {
-  background-color: revert !important;
+  background-color: #000000 !important;
 }
 
 /* — Transparent / overlay backgrounds — */
@@ -1171,19 +1183,33 @@
 [data-theme="light"] .force-dark [class~="bg-white/[0.04]"],
 [data-theme="light"] .force-dark [class~="bg-white/[0.06]"],
 [data-theme="light"] .force-dark [class~="bg-white/[0.08]"] {
-  background-color: revert !important;
+  background-color: rgba(255,255,255,0.05) !important;
 }
 
 /* — Colored tinted backgrounds — */
-[data-theme="light"] .force-dark [class~="bg-emerald-400/20"],
-[data-theme="light"] .force-dark [class~="bg-emerald-500/[0.04]"],
-[data-theme="light"] .force-dark [class~="bg-emerald-500/[0.06]"],
-[data-theme="light"] .force-dark [class~="bg-emerald-950/20"],
-[data-theme="light"] .force-dark [class~="bg-purple-950/20"],
-[data-theme="light"] .force-dark [class~="bg-purple-950/50"],
-[data-theme="light"] .force-dark [class~="bg-red-950/20"],
+[data-theme="light"] .force-dark [class~="bg-emerald-400/20"] {
+  background-color: rgba(52,211,153,0.2) !important;
+}
+[data-theme="light"] .force-dark [class~="bg-emerald-500/[0.04]"] {
+  background-color: rgba(16,185,129,0.04) !important;
+}
+[data-theme="light"] .force-dark [class~="bg-emerald-500/[0.06]"] {
+  background-color: rgba(16,185,129,0.06) !important;
+}
+[data-theme="light"] .force-dark [class~="bg-emerald-950/20"] {
+  background-color: rgba(2,44,34,0.2) !important;
+}
+[data-theme="light"] .force-dark [class~="bg-purple-950/20"] {
+  background-color: rgba(59,7,100,0.2) !important;
+}
+[data-theme="light"] .force-dark [class~="bg-purple-950/50"] {
+  background-color: rgba(59,7,100,0.5) !important;
+}
+[data-theme="light"] .force-dark [class~="bg-red-950/20"] {
+  background-color: rgba(69,10,10,0.2) !important;
+}
 [data-theme="light"] .force-dark [class~="bg-red-950/30"] {
-  background-color: revert !important;
+  background-color: rgba(69,10,10,0.3) !important;
 }
 
 /* — Text: white/light gray — */
@@ -1194,64 +1220,114 @@
 [data-theme="light"] .force-dark [class~="text-white/60"] {
   color: #ffffff !important;
 }
-[data-theme="light"] .force-dark [class~="text-zinc-100"],
-[data-theme="light"] .force-dark [class~="text-zinc-200"],
-[data-theme="light"] .force-dark [class~="text-zinc-300"],
-[data-theme="light"] .force-dark [class~="text-zinc-400"],
-[data-theme="light"] .force-dark [class~="text-zinc-500"],
-[data-theme="light"] .force-dark [class~="text-zinc-600"] {
-  color: revert !important;
+[data-theme="light"] .force-dark [class~="text-zinc-100"] {
+  color: #f4f4f5 !important;
 }
-[data-theme="light"] .force-dark [class~="text-gray-200"],
-[data-theme="light"] .force-dark [class~="text-gray-300"],
-[data-theme="light"] .force-dark [class~="text-gray-400"],
-[data-theme="light"] .force-dark [class~="text-gray-500"],
+[data-theme="light"] .force-dark [class~="text-zinc-200"] {
+  color: #e4e4e7 !important;
+}
+[data-theme="light"] .force-dark [class~="text-zinc-300"] {
+  color: #d4d4d8 !important;
+}
+[data-theme="light"] .force-dark [class~="text-zinc-400"] {
+  color: #a1a1aa !important;
+}
+[data-theme="light"] .force-dark [class~="text-zinc-500"] {
+  color: #71717a !important;
+}
+[data-theme="light"] .force-dark [class~="text-zinc-600"] {
+  color: #52525b !important;
+}
+[data-theme="light"] .force-dark [class~="text-gray-200"] {
+  color: #e5e7eb !important;
+}
+[data-theme="light"] .force-dark [class~="text-gray-300"] {
+  color: #d1d5db !important;
+}
+[data-theme="light"] .force-dark [class~="text-gray-400"] {
+  color: #9ca3af !important;
+}
+[data-theme="light"] .force-dark [class~="text-gray-500"] {
+  color: #6b7280 !important;
+}
 [data-theme="light"] .force-dark [class~="text-gray-600"] {
-  color: revert !important;
+  color: #4b5563 !important;
 }
 
 /* — Accent text colors — */
-[data-theme="light"] .force-dark [class~="text-purple-400"],
-[data-theme="light"] .force-dark [class~="text-purple-500"],
-[data-theme="light"] .force-dark [class~="text-emerald-400"],
-[data-theme="light"] .force-dark [class~="text-emerald-500"],
-[data-theme="light"] .force-dark [class~="text-red-400"],
-[data-theme="light"] .force-dark [class~="text-red-400/60"],
+[data-theme="light"] .force-dark [class~="text-purple-400"] {
+  color: #c084fc !important;
+}
+[data-theme="light"] .force-dark [class~="text-purple-500"] {
+  color: #a855f7 !important;
+}
+[data-theme="light"] .force-dark [class~="text-emerald-400"] {
+  color: #34d399 !important;
+}
+[data-theme="light"] .force-dark [class~="text-emerald-500"] {
+  color: #10b981 !important;
+}
+[data-theme="light"] .force-dark [class~="text-red-400"] {
+  color: #f87171 !important;
+}
+[data-theme="light"] .force-dark [class~="text-red-400/60"] {
+  color: rgba(248,113,113,0.6) !important;
+}
 [data-theme="light"] .force-dark [class~="text-amber-300"] {
-  color: revert !important;
+  color: #fcd34d !important;
 }
 
 /* — Borders — */
 [data-theme="light"] .force-dark [class~="border-white/10"],
 [data-theme="light"] .force-dark [class~="border-white/5"],
 [data-theme="light"] .force-dark [class~="border-white/[0.06]"],
-[data-theme="light"] .force-dark[class~="border-white/10"],
-[data-theme="light"] .force-dark [class~="border-zinc-800"],
-[data-theme="light"] .force-dark [class~="border-zinc-700"],
-[data-theme="light"] .force-dark [class~="border-zinc-700/60"],
-[data-theme="light"] .force-dark [class~="border-emerald-500/10"],
+[data-theme="light"] .force-dark[class~="border-white/10"] {
+  border-color: rgba(255,255,255,0.1) !important;
+}
+[data-theme="light"] .force-dark [class~="border-zinc-800"] {
+  border-color: #27272a !important;
+}
+[data-theme="light"] .force-dark [class~="border-zinc-700"] {
+  border-color: #3f3f46 !important;
+}
+[data-theme="light"] .force-dark [class~="border-zinc-700/60"] {
+  border-color: rgba(63,63,70,0.6) !important;
+}
+[data-theme="light"] .force-dark [class~="border-emerald-500/10"] {
+  border-color: rgba(16,185,129,0.1) !important;
+}
 [data-theme="light"] .force-dark [class~="border-emerald-500/15"] {
-  border-color: revert !important;
+  border-color: rgba(16,185,129,0.15) !important;
 }
 
 /* — Ring colors — */
-[data-theme="light"] .force-dark [class~="ring-white/5"],
+[data-theme="light"] .force-dark [class~="ring-white/5"] {
+  --tw-ring-color: rgba(255,255,255,0.05) !important;
+}
 [data-theme="light"] .force-dark [class~="ring-zinc-700"] {
-  --tw-ring-color: revert !important;
+  --tw-ring-color: #3f3f46 !important;
 }
 
 /* — Shadows — */
-[data-theme="light"] .force-dark [class~="shadow-2xl"],
+[data-theme="light"] .force-dark [class~="shadow-2xl"] {
+  box-shadow: 0 25px 50px -12px rgb(0 0 0 / 0.25) !important;
+}
 [data-theme="light"] .force-dark [class~="shadow-lg"] {
-  box-shadow: revert !important;
+  box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1) !important;
 }
 
 /* — Gradients inside force-dark — */
-[data-theme="light"] .force-dark [class~="bg-gradient-to-t"],
-[data-theme="light"] .force-dark [class~="bg-gradient-to-b"],
-[data-theme="light"] .force-dark [class~="bg-gradient-to-r"],
+[data-theme="light"] .force-dark [class~="bg-gradient-to-t"] {
+  background-image: linear-gradient(to top, var(--tw-gradient-stops)) !important;
+}
+[data-theme="light"] .force-dark [class~="bg-gradient-to-b"] {
+  background-image: linear-gradient(to bottom, var(--tw-gradient-stops)) !important;
+}
+[data-theme="light"] .force-dark [class~="bg-gradient-to-r"] {
+  background-image: linear-gradient(to right, var(--tw-gradient-stops)) !important;
+}
 [data-theme="light"] .force-dark [class~="bg-gradient-to-br"] {
-  background-image: revert !important;
+  background-image: linear-gradient(to bottom right, var(--tw-gradient-stops)) !important;
 }
 
 /* — Radial gradient glow: keep inside force-dark — */
@@ -1320,10 +1396,10 @@
   background-color: rgba(241, 245, 249, 0.7) !important;
 }
 
-:root:not(.dark) .bg-white\/\[0\.03\],
-:root:not(.dark) .bg-white\/\[0\.04\],
-:root:not(.dark) .bg-white\/\[0\.06\],
-:root:not(.dark) .bg-white\/\[0\.08\] {
+:root:not(.dark) [class~="bg-white/[0.03]"],
+:root:not(.dark) [class~="bg-white/[0.04]"],
+:root:not(.dark) [class~="bg-white/[0.06]"],
+:root:not(.dark) [class~="bg-white/[0.08]"] {
   background-color: rgba(241, 245, 249, 0.55) !important;
 }
 
@@ -1693,11 +1769,11 @@
 :root:not(.dark) .dashboard-shell .bg-\[\#12121a\],
 :root:not(.dark) .dashboard-shell .bg-zinc-800\/80,
 :root:not(.dark) .dashboard-shell .bg-zinc-800\/50,
-:root:not(.dark) .dashboard-shell .hover\:bg-white\/\[0\.02\]:hover {
+:root:not(.dark) .dashboard-shell [class~="hover:bg-white/[0.02]"]:hover {
   background-color: #ffffff !important;
 }
 
-:root:not(.dark) .dashboard-shell .hover\:bg-white\/\[0\.02\]:hover {
+:root:not(.dark) .dashboard-shell [class~="hover:bg-white/[0.02]"]:hover {
   background-color: #f1f5f9 !important;
 }
 
@@ -1846,7 +1922,7 @@
   background-color: #f8fafc !important;
 }
 
-:root:not(.dark) .bg-white\/\[0\.03\] {
+:root:not(.dark) [class~="bg-white/[0.03]"] {
   background-color: rgba(241, 245, 249, 0.5) !important;
 }
 
@@ -1854,7 +1930,7 @@
   background-color: rgba(243, 232, 255, 0.6) !important;
 }
 
-:root:not(.dark) .bg-emerald-500\/\[0\.04\] {
+:root:not(.dark) [class~="bg-emerald-500/[0.04]"] {
   background-color: rgba(236, 253, 245, 0.4) !important;
 }
 
@@ -1862,7 +1938,7 @@
   background-color: rgba(236, 253, 245, 0.7) !important;
 }
 
-:root:not(.dark) .border-white\/\[0\.06\] {
+:root:not(.dark) [class~="border-white/[0.06]"] {
   border-color: #dbe5f1 !important;
 }
 
@@ -1976,15 +2052,15 @@
 
 /* ── Auth page ambient glow \u2192 subtle light version ─── */
 :root:not(.dark) .bg-purple-600\/8,
-:root:not(.dark) .bg-purple-600\/\\[0\\.07\\],
-:root:not(.dark) .bg-purple-600\/\\[0\\.06\\],
+:root:not(.dark) [class~="bg-purple-600/[0.07]"],
+:root:not(.dark) [class~="bg-purple-600/[0.06]"],
 :root:not(.dark) .bg-purple-600\/5,
 :root:not(.dark) .bg-purple-500\/5,
-:root:not(.dark) .bg-purple-500\/\\[0\\.04\\],
-:root:not(.dark) .bg-purple-400\/\\[0\\.03\\],
+:root:not(.dark) [class~="bg-purple-500/[0.04]"],
+:root:not(.dark) [class~="bg-purple-400/[0.03]"],
 :root:not(.dark) .bg-purple-500\/12,
 :root:not(.dark) .bg-purple-500\/8,
-:root:not(.dark) .bg-emerald-600\/\\[0\\.06\\] {
+:root:not(.dark) [class~="bg-emerald-600/[0.06]"] {
   background-color: transparent !important;
 }
 
@@ -1995,10 +2071,10 @@
 }
 
 /* ── Drop shadow normalization for light mode ──────────── */
-:root:not(.dark) .drop-shadow-\\[0_0_14px_rgba\\(147\\,51\\,234\\,0\\.7\\)\\] {
+:root:not(.dark) [class~="drop-shadow-[0_0_14px_rgba(147,51,234,0.7)]"] {
   filter: drop-shadow(0 0 10px rgba(147, 51, 234, 0.3)) !important;
 }
-:root:not(.dark) .drop-shadow-\\[0_0_20px_rgba\\(168\\,85\\,247\\,0\\.4\\)\\] {
+:root:not(.dark) [class~="drop-shadow-[0_0_20px_rgba(168,85,247,0.4)]"] {
   filter: drop-shadow(0 0 14px rgba(168, 85, 247, 0.2)) !important;
 }
 
@@ -2006,8 +2082,8 @@
 :root:not(.dark) .hover\:bg-zinc-700\/80:hover {
   background-color: #e2e8f0 !important;
 }
-:root:not(.dark) .hover\:bg-white\/\[0\.08\]:hover,
-:root:not(.dark) .hover\:bg-white\/\[0\.02\]:hover {
+:root:not(.dark) [class~="hover:bg-white/[0.08]"]:hover,
+:root:not(.dark) [class~="hover:bg-white/[0.02]"]:hover {
   background-color: #f1f5f9 !important;
 }
 :root:not(.dark) .hover\:bg-zinc-800:hover {
@@ -2021,21 +2097,21 @@
 }
 
 /* ── Focus ring for inputs in light mode ──────────────── */
-:root:not(.dark) .focus\\:ring-purple-500\\/20:focus {
+:root:not(.dark) [class~="focus:ring-purple-500/20"]:focus {
   --tw-ring-color: rgba(168, 85, 247, 0.15) !important;
 }
-:root:not(.dark) .focus\\:ring-purple-500\\/10:focus {
+:root:not(.dark) [class~="focus:ring-purple-500/10"]:focus {
   --tw-ring-color: rgba(168, 85, 247, 0.1) !important;
 }
-:root:not(.dark) .focus\\:border-purple-500:focus {
+:root:not(.dark) [class~="focus:border-purple-500"]:focus {
   border-color: #a855f7 !important;
 }
-:root:not(.dark) .focus\\:border-purple-500\\/60:focus {
+:root:not(.dark) [class~="focus:border-purple-500/60"]:focus {
   border-color: rgba(168, 85, 247, 0.6) !important;
 }
 
 /* ── Checkbox styling in light mode ──────────────────── */
-:root:not(.dark) input[type=\"checkbox\"].bg-zinc-950 {
+:root:not(.dark) input[type="checkbox"].bg-zinc-950 {
   background-color: #ffffff !important;
   border-color: #d1d5db !important;
 }
@@ -2062,99 +2138,179 @@
     of repeating every selector individually.                                       */
 
 /* — Backgrounds — */
-:root:not(.dark) .force-dark .bg-black,
-:root:not(.dark) .force-dark .bg-zinc-950,
+:root:not(.dark) .force-dark .bg-black {
+  background-color: #000000 !important;
+}
+:root:not(.dark) .force-dark .bg-zinc-950 {
+  background-color: #09090b !important;
+}
 :root:not(.dark) .force-dark .bg-zinc-900,
 :root:not(.dark) .force-dark .bg-zinc-900\/80,
-:root:not(.dark) .force-dark .bg-zinc-900\/90,
+:root:not(.dark) .force-dark .bg-zinc-900\/90 {
+  background-color: #18181b !important;
+}
 :root:not(.dark) .force-dark .bg-zinc-800,
-:root:not(.dark) .force-dark .bg-zinc-700,
 :root:not(.dark) .force-dark .bg-zinc-800\/50,
 :root:not(.dark) .force-dark .bg-zinc-800\/30,
 :root:not(.dark) .force-dark .bg-zinc-800\/20,
-:root:not(.dark) .force-dark .bg-zinc-800\/60,
-:root:not(.dark) .force-dark .bg-slate-900,
-:root:not(.dark) .force-dark .bg-slate-800,
-:root:not(.dark) .force-dark .bg-\[\#0F0F17\],
-:root:not(.dark) .force-dark .bg-\[\#0A0A12\],
-:root:not(.dark) .force-dark .bg-\[\#0c0c14\],
-:root:not(.dark) .force-dark .bg-\[\#09090F\],
-:root:not(.dark) .force-dark .bg-\[\#05050A\],
+:root:not(.dark) .force-dark .bg-zinc-800\/60 {
+  background-color: #27272a !important;
+}
+:root:not(.dark) .force-dark .bg-zinc-700 {
+  background-color: #3f3f46 !important;
+}
+:root:not(.dark) .force-dark .bg-slate-900 {
+  background-color: #0f172a !important;
+}
+:root:not(.dark) .force-dark .bg-slate-800 {
+  background-color: #1e293b !important;
+}
+:root:not(.dark) .force-dark .bg-\[\#0F0F17\] {
+  background-color: #0F0F17 !important;
+}
+:root:not(.dark) .force-dark .bg-\[\#0A0A12\] {
+  background-color: #0A0A12 !important;
+}
+:root:not(.dark) .force-dark .bg-\[\#0c0c14\] {
+  background-color: #0c0c14 !important;
+}
+:root:not(.dark) .force-dark .bg-\[\#09090F\] {
+  background-color: #09090F !important;
+}
+:root:not(.dark) .force-dark .bg-\[\#05050A\] {
+  background-color: #05050A !important;
+}
 :root:not(.dark) .force-dark .bg-\[\#12121a\] {
-  background-color: revert !important;
+  background-color: #12121a !important;
 }
 
 :root:not(.dark) .force-dark .bg-white\/5,
 :root:not(.dark) .force-dark .bg-white\/10,
-:root:not(.dark) .force-dark .bg-white\/\[0\.03\] {
-  background-color: revert !important;
+:root:not(.dark) .force-dark [class~="bg-white/[0.03]"] {
+  background-color: rgba(255,255,255,0.05) !important;
 }
 
-:root:not(.dark) .force-dark .bg-emerald-500\/\[0\.04\],
-:root:not(.dark) .force-dark .bg-emerald-500\/\[0\.06\],
-:root:not(.dark) .force-dark .bg-emerald-950\/20,
-:root:not(.dark) .force-dark .bg-purple-950\/20,
-:root:not(.dark) .force-dark .bg-purple-950\/50,
-:root:not(.dark) .force-dark .bg-red-950\/20,
+:root:not(.dark) .force-dark [class~="bg-emerald-500/[0.04]"] {
+  background-color: rgba(16,185,129,0.04) !important;
+}
+:root:not(.dark) .force-dark [class~="bg-emerald-500/[0.06]"] {
+  background-color: rgba(16,185,129,0.06) !important;
+}
+:root:not(.dark) .force-dark .bg-emerald-950\/20 {
+  background-color: rgba(2,44,34,0.2) !important;
+}
+:root:not(.dark) .force-dark .bg-purple-950\/20 {
+  background-color: rgba(59,7,100,0.2) !important;
+}
+:root:not(.dark) .force-dark .bg-purple-950\/50 {
+  background-color: rgba(59,7,100,0.5) !important;
+}
+:root:not(.dark) .force-dark .bg-red-950\/20 {
+  background-color: rgba(69,10,10,0.2) !important;
+}
 :root:not(.dark) .force-dark .bg-red-950\/30 {
-  background-color: revert !important;
+  background-color: rgba(69,10,10,0.3) !important;
 }
 
-/* — Also revert the wrapper's own bg if it has a utility — */
-:root:not(.dark) .force-dark.bg-\[\#0F0F17\],
+/* — Also restore the wrapper's own bg if it has a utility — */
+:root:not(.dark) .force-dark.bg-\[\#0F0F17\] {
+  background-color: #0F0F17 !important;
+}
 :root:not(.dark) .force-dark.bg-\[\#09090F\] {
-  background-color: revert !important;
+  background-color: #09090F !important;
 }
 
 /* — Borders — */
 :root:not(.dark) .force-dark .border-white\/5,
 :root:not(.dark) .force-dark .border-white\/10,
-:root:not(.dark) .force-dark .border-white\/\[0\.06\],
-:root:not(.dark) .force-dark .border-zinc-800,
-:root:not(.dark) .force-dark .border-zinc-700,
-:root:not(.dark) .force-dark .border-emerald-500\/10,
+:root:not(.dark) .force-dark [class~="border-white/[0.06]"] {
+  border-color: rgba(255,255,255,0.1) !important;
+}
+:root:not(.dark) .force-dark .border-zinc-800 {
+  border-color: #27272a !important;
+}
+:root:not(.dark) .force-dark .border-zinc-700 {
+  border-color: #3f3f46 !important;
+}
+:root:not(.dark) .force-dark .border-emerald-500\/10 {
+  border-color: rgba(16,185,129,0.1) !important;
+}
 :root:not(.dark) .force-dark .border-emerald-500\/15 {
-  border-color: revert !important;
+  border-color: rgba(16,185,129,0.15) !important;
 }
 
 :root:not(.dark) .force-dark.border-white\/10 {
-  border-color: revert !important;
+  border-color: rgba(255,255,255,0.1) !important;
 }
 
 /* — Text — */
 :root:not(.dark) .force-dark .text-white,
 :root:not(.dark) .force-dark .text-white\/90,
-:root:not(.dark) .force-dark .text-white\/80,
-:root:not(.dark) .force-dark .text-zinc-100,
-:root:not(.dark) .force-dark .text-zinc-200,
-:root:not(.dark) .force-dark .text-zinc-300,
-:root:not(.dark) .force-dark .text-zinc-400,
-:root:not(.dark) .force-dark .text-gray-200,
-:root:not(.dark) .force-dark .text-gray-300,
-:root:not(.dark) .force-dark .text-gray-400,
-:root:not(.dark) .force-dark .text-gray-500,
+:root:not(.dark) .force-dark .text-white\/80 {
+  color: #ffffff !important;
+}
+:root:not(.dark) .force-dark .text-zinc-100 {
+  color: #f4f4f5 !important;
+}
+:root:not(.dark) .force-dark .text-zinc-200 {
+  color: #e4e4e7 !important;
+}
+:root:not(.dark) .force-dark .text-zinc-300 {
+  color: #d4d4d8 !important;
+}
+:root:not(.dark) .force-dark .text-zinc-400 {
+  color: #a1a1aa !important;
+}
+:root:not(.dark) .force-dark .text-gray-200 {
+  color: #e5e7eb !important;
+}
+:root:not(.dark) .force-dark .text-gray-300 {
+  color: #d1d5db !important;
+}
+:root:not(.dark) .force-dark .text-gray-400 {
+  color: #9ca3af !important;
+}
+:root:not(.dark) .force-dark .text-gray-500 {
+  color: #6b7280 !important;
+}
 :root:not(.dark) .force-dark .text-gray-600 {
-  color: revert !important;
+  color: #4b5563 !important;
 }
 
-:root:not(.dark) .force-dark .text-purple-400,
-:root:not(.dark) .force-dark .text-purple-500,
-:root:not(.dark) .force-dark .text-emerald-400,
-:root:not(.dark) .force-dark .text-emerald-500,
-:root:not(.dark) .force-dark .text-red-400,
-:root:not(.dark) .force-dark .text-red-400\/60,
+:root:not(.dark) .force-dark .text-purple-400 {
+  color: #c084fc !important;
+}
+:root:not(.dark) .force-dark .text-purple-500 {
+  color: #a855f7 !important;
+}
+:root:not(.dark) .force-dark .text-emerald-400 {
+  color: #34d399 !important;
+}
+:root:not(.dark) .force-dark .text-emerald-500 {
+  color: #10b981 !important;
+}
+:root:not(.dark) .force-dark .text-red-400 {
+  color: #f87171 !important;
+}
+:root:not(.dark) .force-dark .text-red-400\/60 {
+  color: rgba(248,113,113,0.6) !important;
+}
 :root:not(.dark) .force-dark .text-amber-300 {
-  color: revert !important;
+  color: #fcd34d !important;
 }
 
 /* — Shadows — */
 :root:not(.dark) .force-dark .shadow-2xl {
-  box-shadow: revert !important;
+  box-shadow: 0 25px 50px -12px rgb(0 0 0 / 0.25) !important;
 }
 
 /* — Gradients — */
-:root:not(.dark) .force-dark .bg-gradient-to-t,
-:root:not(.dark) .force-dark .bg-gradient-to-b,
+:root:not(.dark) .force-dark .bg-gradient-to-t {
+  background-image: linear-gradient(to top, var(--tw-gradient-stops)) !important;
+}
+:root:not(.dark) .force-dark .bg-gradient-to-b {
+  background-image: linear-gradient(to bottom, var(--tw-gradient-stops)) !important;
+}
 :root:not(.dark) .force-dark .bg-gradient-to-r {
-  background-image: revert !important;
+  background-image: linear-gradient(to right, var(--tw-gradient-stops)) !important;
 }
