@@ -63,12 +63,23 @@ function detectVerbForm(word: string): string {
   return 'base';
 }
 
+// Words that must never get an "-ly" suffix (they're already adverbs/particles)
+const NO_LY_WORDS = new Set([
+  'also','so','then','still','yet','too','just','even','well','often','always',
+  'never','already','now','here','there','soon','again','instead','hence','thus',
+  'together','apart','in fact','in practice','especially','basically',
+]);
+
 function matchForm(matched: string, replacement: string): string {
   const form = detectVerbForm(matched);
   if (form === 'base') return replacement;
   const repForm = detectVerbForm(replacement.split(' ', 1)[0]);
   if (repForm === form) return replacement;
-  if (form === 'adverb' && !replacement.endsWith('ly')) return replacement + 'ly';
+  // Only add -ly if the replacement is a single adjective-like word that can take -ly
+  if (form === 'adverb' && !replacement.endsWith('ly')) {
+    if (NO_LY_WORDS.has(replacement.toLowerCase()) || replacement.includes(' ')) return replacement;
+    return replacement + 'ly';
+  }
   if (form === 'past' || form === '3sg' || form === 'gerund') {
     const parts = replacement.split(' ', 2);
     const inflected = inflectVerb(parts[0], form);
@@ -136,7 +147,7 @@ const AI_WORD_KILLS: [RegExp, string][] = [
   [/\bsynergy\b/gi, 'cooperation'],
   [/\brobust\b/gi, 'strong'],
   [/\bseamless(?:ly)?\b/gi, 'smooth'],
-  [/\binnovative\b/gi, 'new'],
+  [/\binnovative\b/gi, 'novel'],
   [/\bcutting-edge\b/gi, 'modern'],
   [/\bgroundbreaking\b/gi, 'new'],
   [/\bcomprehensive\b/gi, 'thorough'],
@@ -156,9 +167,9 @@ const AI_WORD_KILLS: [RegExp, string][] = [
   [/\bnotably\b/gi, 'especially'],
   [/\bremarkab(?:le|ly)\b/gi, 'striking'],
   [/\bexponential(?:ly)?\b/gi, 'rapid'],
-  [/\blandscape\b/gi, 'scene'],
-  [/\becosystem\b/gi, 'network'],
-  [/\bframework\b/gi, 'structure'],
+  [/\blandscape\b/gi, 'field'],
+  [/\becosystem\b/gi, 'system'],
+  [/\bframework\b/gi, 'model'],
   [/\btrajectory\b/gi, 'path'],
   [/\bparadigm shift\b/gi, 'major change'],
 ];
@@ -199,7 +210,7 @@ const DEEP_SYNONYMS: [RegExp, string[]][] = [
   [/\btransformed\b/gi, ['changed', 'reshaped', 'altered', 'shifted']],
   [/\bsignificantly\b/gi, ['greatly', 'notably', 'markedly', 'considerably']],
   [/\badvancements\b/gi, ['progress', 'developments', 'improvements', 'strides']],
-  [/\balgorithms\b/gi, ['methods', 'processes', 'techniques', 'approaches']],
+  [/\balgorithms\b/gi, ['methods', 'techniques', 'approaches', 'routines']],
   [/\bdisciplines?\b/gi, ['fields', 'areas', 'branches', 'domains']],
   [/\bintegration\b/gi, ['adoption', 'incorporation', 'blending', 'merging']],
   [/\brequires?\b/gi, ['need', 'call for', 'demand', 'take']],
@@ -209,9 +220,9 @@ const DEEP_SYNONYMS: [RegExp, string[]][] = [
   [/\badoption\b/gi, ['uptake', 'acceptance', 'embrace', 'rollout']],
   [/\boutcomes?\b/gi, ['results', 'findings', 'effects', 'impacts']],
   [/\bimpact\b/gi, ['effect', 'influence']],
-  [/\bsystems?\b/gi, ['setups', 'frameworks', 'structures', 'platforms']],
-  [/\btechnology\b/gi, ['tech', 'digital tooling', 'modern solution']],
-  [/\btechnologies\b/gi, ['digital tools', 'modern tools', 'current tools']],
+  [/\bsystems?\b/gi, ['platforms', 'frameworks', 'configurations', 'arrangements']],
+  [/\btechnology\b/gi, ['modern tools', 'applied science', 'technical solution']],
+  [/\btechnologies\b/gi, ['tools', 'modern tools', 'technical solutions']],
   [/\btechnological\b/gi, ['digital', 'modern', 'current', 'technical']],
   [/\bprovides?\b/gi, ['offer', 'give', 'supply', 'deliver']],
   [/\bprovided\b/gi, ['offered', 'gave', 'supplied', 'delivered']],
@@ -245,7 +256,7 @@ const DEEP_SYNONYMS: [RegExp, string[]][] = [
   [/\bestablished\b/gi, ['set up', 'created', 'formed', 'built']],
   [/\bestablishing\b/gi, ['setting up', 'creating', 'forming', 'building']],
   [/\bsignificant\b/gi, ['major', 'notable', 'meaningful', 'real']],
-  [/\bmodern\b/gi, ['current', 'present-day', "today's", 'recent']],
+  [/\bmodern\b/gi, ['current', 'present-day', 'up-to-date', 'recent']],
   [/\bacross\b/gi, ['throughout', 'over', 'spanning', 'covering']],
   [/\bfocuses\b/gi, ['centers on', 'concentrates on', 'zeroes in on', 'homes in on']],
   [/\bfocused\b/gi, ['centered', 'concentrated', 'zeroed in', 'homed in']],
@@ -258,7 +269,7 @@ const DEEP_SYNONYMS: [RegExp, string[]][] = [
   [/\bfunctioned\b/gi, ['worked', 'operated', 'served', 'acted']],
   [/\bfunctioning\b/gi, ['working', 'operating', 'serving', 'acting']],
   [/\bcapabilit(?:y|ies)\b/gi, ['ability', 'skill', 'power', 'capacity']],
-  [/\bprocesses\b/gi, ['handles', 'manages', 'works through', 'deals with']],
+  [/\bprocesses\b/gi, ['manages', 'handles', 'runs through', 'works on']],
   [/\bprocessed\b/gi, ['handled', 'managed', 'worked through', 'dealt with']],
   [/\bprocessing\b/gi, ['handling', 'managing', 'working through', 'running']],
   [/\bgenerates?\b/gi, ['create', 'produce', 'make', 'yield']],
@@ -270,16 +281,16 @@ const DEEP_SYNONYMS: [RegExp, string[]][] = [
   [/\boptimizing\b/gi, ['improving', 'refining', 'fine-tuning', 'streamlining']],
   [/\baccuracy\b/gi, ['precision', 'correctness', 'exactness', 'reliability']],
   [/\befficiency\b/gi, ['productivity', 'speed', 'performance', 'throughput']],
-  [/\binteraction(?:s)?\b/gi, ['exchange', 'engagement', 'communication', 'dialogue']],
+  [/\binteraction(?:s)?\b/gi, ['exchange', 'engagement', 'communication', 'contact']],
   [/\bimplements?\b/gi, ['put in place', 'roll out', 'set up', 'apply']],
   [/\bimplemented\b/gi, ['put in place', 'rolled out', 'set up', 'applied']],
   [/\bimplementing\b/gi, ['putting in place', 'rolling out', 'setting up', 'applying']],
   [/\bstrateg(?:y|ies)\b/gi, ['plan', 'approach', 'tactic', 'game plan']],
   [/\bphenomen(?:on|a)\b/gi, ['trend', 'occurrence', 'event', 'pattern']],
-  [/\bcontributes?\b/gi, ['add', 'give', 'help', 'pitch in']],
-  [/\bcontributed\b/gi, ['added', 'gave', 'helped', 'pitched in']],
-  [/\bcontribution\b/gi, ['addition', 'input', 'effort', 'part']],
-  [/\bcontributing\b/gi, ['adding', 'giving', 'helping', 'pitching in']],
+  [/\bcontributes?\b/gi, ['add', 'give', 'help', 'support']],
+  [/\bcontributed\b/gi, ['added', 'gave', 'helped', 'supported']],
+  [/\bcontribution\b/gi, ['addition', 'input', 'effort', 'role']],
+  [/\bcontributing\b/gi, ['adding', 'giving', 'helping', 'supporting']],
   [/\binfluences?\b/gi, ['shape', 'affect', 'sway', 'steer']],
   [/\binfluenced\b/gi, ['shaped', 'affected', 'swayed', 'steered']],
   [/\binfluencing\b/gi, ['shaping', 'affecting', 'swaying', 'steering']],
@@ -290,57 +301,41 @@ const DEEP_SYNONYMS: [RegExp, string[]][] = [
   [/\bcommunicated\b/gi, ['shared', 'conveyed', 'passed along', 'relayed']],
   [/\bcommunication\b/gi, ['exchange', 'discussion', 'dialogue', 'contact']],
   [/\bcommunicating\b/gi, ['sharing', 'conveying', 'passing along', 'relaying']],
-  [/\bcomplex(?:ity)?\b/gi, ['complicated', 'involved', 'intricate', 'layered']],
+  [/\\bcomplex(?:ity)?\\b/gi, ['involved', 'intricate', 'layered', 'challenging']],
   [/\bcritically\b/gi, ['vitally', 'crucially', 'decisively']],
   [/\bcritical\b/gi, ['vital', 'key', 'central', 'decisive']],
-  [/\brapidly\b/gi, ['fast', 'quickly', 'swiftly', 'at speed']],
+  [/\brapidly\b/gi, ['fast', 'quickly', 'swiftly', 'briskly']],
   [/\brapid\b/gi, ['fast', 'quick', 'swift', 'speedy']],
   [/\bsophisticated\b/gi, ['advanced', 'refined', 'elaborate', 'complex']],
   [/\bunprecedented\b/gi, ['unmatched', 'historic', 'extraordinary', 'remarkable']],
-  [/\bpotential\b/gi, ['promise', 'capacity', 'ability', 'prospect']],
+  [/\bpotential\b/gi, ['possible', 'likely', 'probable', 'expected']],
   [/\bscenario(?:s)?\b/gi, ['situation', 'case', 'setting', 'condition']],
   [/\bcontext\b/gi, ['setting', 'circumstances', 'situation', 'framework']],
-  [/\benvironment(?:s)?\b/gi, ['setting', 'surrounding', 'space', 'habitat']],
+  [/\benvironment(?:s)?\b/gi, ['setting', 'surrounding', 'space', 'context']],
   [/\bincorporates?\b/gi, ['include', 'blend in', 'fold in', 'add']],
   [/\bincorporated\b/gi, ['included', 'blended in', 'folded in', 'added']],
   [/\bincorporating\b/gi, ['including', 'blending in', 'folding in', 'adding']],
   [/\bsignaling\b/gi, ['pointing to', 'showing', 'indicating', 'suggesting']],
   [/\bfacilitatd?\b/gi, ['helped', 'enabled', 'supported', 'made easier']],
-  [/\benabled\b/gi, ['allowed', 'let', 'made possible', 'empowered']],
-  [/\benabling\b/gi, ['allowing', 'giving the ability for', 'making it possible for', 'empowering']],
-  [/\benables?\b/gi, ['allows', 'gives the ability to', 'makes possible', 'empowers']],
+  [/\benabled\b/gi, ['allowed', 'let', 'made possible', 'supported']],
+  [/\benabling\b/gi, ['allowing', 'supporting', 'making it possible for', 'empowering']],
+  [/\benables?\b/gi, ['allows', 'supports', 'makes possible', 'empowers']],
   [/\bprecisely\b/gi, ['exactly', 'specifically', 'accurately']],
   [/\bprecise\b/gi, ['exact', 'specific', 'accurate', 'pinpoint']],
 ];
 
 // ── Sentence Rewrites (structural templates) ──
+// DISABLED: These patterns garble sentence structure (e.g. "Through $1, $2 can $3"
+// splits clauses incorrectly). Keeping array empty to preserve sentence integrity.
 
 const SENTENCE_REWRITES: [RegExp, string][] = [
-  [/^(.+?)\s+has\s+(significantly|greatly|notably|fundamentally|dramatically)\s+(.+)$/i,
-   'When it comes to $1, there has been a $2 $3'],
-  [/^The\s+(\w+)\s+of\s+(.+?)\s+has\s+(.+)$/i,
-   '$2 has experienced $1 that $3'],
-  [/^(.+?)\s+(?:enables?|allows?)\s+(.+?)\s+to\s+(.+)$/i,
-   'Through $1, $2 can $3'],
-  [/^(.+?)\s+(?:provides?|offers?|gives?)\s+(.+?)\s+with\s+(.+)$/i,
-   'With $1, $2 gains $3'],
-  [/^It\s+is\s+(\w+)\s+that\s+(.+)$/i,
-   '$2 — this is $1'],
-  [/^(\w[\w\s]{5,30}?)\s+and\s+(\w[\w\s]{5,30}?)\s+have\s+(.+)$/i,
-   'Both $1 and $2 show $3'],
 ];
 
 // ── Voice switching patterns ──
+// DISABLED: Passive/active voice swaps blindly rearrange subject/object,
+// producing garbled output like "Was designed by AI refers to computer structures".
 
 const VOICE_PATTERNS: [RegExp, string][] = [
-  [/^(.{8,40}?)\s+(created|developed|designed|built|produced|introduced|established|launched)\s+(.{8,})$/i,
-   '$3 was $2 by $1'],
-  [/^(.{8,40}?)\s+(?:was|were)\s+(created|developed|designed|built|produced|introduced|established)\s+by\s+(.{8,})$/i,
-   '$3 $2 $1'],
-  [/^(.{8,40}?)\s+(improved|enhanced|boosted|advanced|strengthened)\s+(.{8,})$/i,
-   '$3 saw $2ment from $1'],
-  [/^(Researchers|Scientists|Studies|Experts|Analysts)\s+(found|showed|demonstrated|revealed|discovered|confirmed)\s+that\s+(.+)$/i,
-   '$3 — as $1 have $2'],
 ];
 
 // ── Opener variations ──

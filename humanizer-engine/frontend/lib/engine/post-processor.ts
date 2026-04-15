@@ -120,8 +120,8 @@ function reducePhraseRepetition(text: string): string {
 
     if (repeatedPhrases.length === 0) { result.push(para); continue; }
 
-    // Remove excess sentences (max 40% removal)
-    const maxRemove = Math.floor(sentences.length * 0.4);
+    // Remove excess sentences (max 15% removal — reduced from 40% to preserve content)
+    const maxRemove = Math.max(1, Math.floor(sentences.length * 0.15));
     const toRemove = new Set<number>();
 
     for (const [phrase] of repeatedPhrases) {
@@ -432,22 +432,13 @@ export function postProcess(text: string): string {
   result = removeOrphanAnaphora(result);
   result = flagCircularConclusion(result);
 
-  // Phase 8: AI vocabulary killing — catch AI words that survived all prior processing
-  {
-    const paras = result.split(/\n\s*\n/).filter(p => p.trim());
-    const cleaned: string[] = [];
-    for (const para of paras) {
-      const sents = robustSentenceSplit(para.trim());
-      const cleanedSents = sents.map(s => {
-        let c = applyAIWordKill(s);
-        c = c.replace(/ {2,}/g, " ").trim();
-        if (c && /^[a-z]/.test(c)) c = c[0].toUpperCase() + c.slice(1);
-        return c;
-      });
-      cleaned.push(cleanedSents.join(" "));
-    }
-    result = cleaned.join("\n\n");
-  }
+  // Phase 8: AI vocabulary killing — DISABLED
+  // Re-running applyAIWordKill at this stage undoes careful word choices from
+  // earlier phases and re-introduces grammar bugs (e.g. matchForm "alsoly").
+  // AI word killing already runs in the main pipeline.
+  // {
+  //   ...
+  // }
 
   return result;
 }

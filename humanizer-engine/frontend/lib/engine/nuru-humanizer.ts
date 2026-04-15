@@ -479,7 +479,7 @@ function enforceMinimumChange(original: string, current: string, seed: number): 
   let changePercent = calculateWordChangePercent(original, result);
 
   // Pass 1: Apply additional swap dicts
-  if (changePercent < 55) {
+  if (changePercent < 40) {
     result = applySwapDict(result, VERB_PHRASE_SWAPS, seed + 20);
     result = applySwapDict(result, CLAUSE_REPHRASINGS, seed + 21);
     result = applySwapDict(result, TRANSITION_SWAPS, seed + 22);
@@ -487,13 +487,13 @@ function enforceMinimumChange(original: string, current: string, seed: number): 
     changePercent = calculateWordChangePercent(original, result);
   }
 
-  // Pass 2: Voice shift + deep restructure + tense variation
-  if (changePercent < 55) {
-    let pass2 = voiceShift(result, 0.7);
+  // Pass 2: Voice shift + deep restructure (at reduced intensity to prevent garbling)
+  if (changePercent < 40) {
+    let pass2 = voiceShift(result, 0.4);
     if (isGarbledSentence(pass2)) pass2 = result;
-    let pass2b = deepRestructure(pass2, 0.4);
+    let pass2b = deepRestructure(pass2, 0.25);
     if (isGarbledSentence(pass2b)) pass2b = pass2;
-    pass2b = tenseVariation(pass2b, 0.15);
+    // Tense variation removed — it produces wrong tenses on academic text
     // Revert if garbled
     if (isGarbledSentence(pass2b)) pass2b = result;
     result = pass2b;
@@ -501,7 +501,7 @@ function enforceMinimumChange(original: string, current: string, seed: number): 
   }
 
   // Pass 3: All remaining dicts + syntactic template
-  if (changePercent < 55) {
+  if (changePercent < 40) {
     result = applySwapDict(result, MODIFIER_SWAPS, seed + 30);
     result = applySwapDict(result, HEDGING_PHRASES, seed + 31);
     result = applySwapDict(result, QUANTIFIER_SWAPS, seed + 32);
@@ -730,10 +730,10 @@ const PP_AI_PHRASE_PATTERNS: [RegExp, string][] = [
   [/\bfor the purpose of\b/gi, 'to'],
   [/\bin the event that\b/gi, 'if'],
   [/\bby virtue of\b/gi, 'through'],
-  [/\bremarkably,?\s*/gi, ''], [/\bundeniably,?\s*/gi, ''], [/\bundoubtedly,?\s*/gi, ''],
-  [/\binterestingly,?\s*/gi, ''], [/\bcrucially,?\s*/gi, ''], [/\bimportantly,?\s*/gi, ''],
-  [/\bessentially,?\s*/gi, ''], [/\bfundamentally,?\s*/gi, ''], [/\barguably,?\s*/gi, ''],
-  [/\bevidently,?\s*/gi, ''],
+  // Only strip the most egregious AI-tell adverbs — keep natural transitions
+  [/\bundeniably,?\s*/gi, ''], [/\bundoubtedly,?\s*/gi, ''],
+  [/\bcrucially,?\s*/gi, ''],
+  [/\barguably,?\s*/gi, ''],
 ];
 
 function ppAIPhrasesKill(text: string): string {
@@ -752,11 +752,10 @@ function ppAIPhrasesKill(text: string): string {
 }
 
 const PP_AI_STARTERS = new Set([
-  'furthermore', 'moreover', 'additionally', 'however', 'nevertheless',
-  'consequently', 'subsequently', 'notwithstanding', 'accordingly',
-  'thus', 'hence', 'indeed', 'notably', 'specifically', 'crucially',
-  'importantly', 'essentially', 'fundamentally', 'arguably',
-  'undeniably', 'undoubtedly', 'interestingly', 'remarkably', 'evidently',
+  // Only strip truly overused AI starters — leave natural transitions alone
+  'notwithstanding', 'crucially',
+  'importantly', 'arguably',
+  'undeniably', 'undoubtedly', 'remarkably', 'evidently',
 ]);
 
 function ppStarterKill(text: string): string {
@@ -948,9 +947,12 @@ export function nuruHumanize(
       let sent = results.get(cls.index) ?? cls.text;
 
       // Apply error injection to statistically marked sentences
-      if (cls.shouldInjectError) {
-        sent = injectAcademicError(sent, cls.index);
-      }
+      // DISABLED: Error injection adds AI-sounding phrases back into text
+      // (e.g. "because of the fact that", "appears to show", "seems to suggest")
+      // which defeats the purpose of humanization.
+      // if (cls.shouldInjectError) {
+      //   sent = injectAcademicError(sent, cls.index);
+      // }
 
       // Fix capitalization
       if (sent[0] && sent[0] !== sent[0].toUpperCase()) {

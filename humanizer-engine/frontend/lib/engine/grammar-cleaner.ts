@@ -184,6 +184,29 @@ const COLLOCATION_FIXES: [RegExp, string][] = [
   [/\bemphasized on\b/gi, 'emphasized'],
   // "approach to solving" is ok, "approach to solve" → "approach to solving"
   [/\bapproach to solve\b/gi, 'approach to solving'],
+  // Therapy/clinical domain collocations
+  // "benefit from" not "benefit of" when used as verb
+  [/\b(can|could|may|might|will|would|should)\s+benefit of\b/gi, '$1 benefit from'],
+  // "respond to therapy" not "respond for therapy"
+  [/\brespond for\b/gi, 'respond to'],
+  [/\bresponds for\b/gi, 'responds to'],
+  // "tailored to" not "tailored for" in clinical context
+  [/\btailored for each\b/gi, 'tailored to each'],
+  // "insight into" not "insight on" or "insight about"
+  [/\binsights?\s+on\b/gi, 'insight into'],
+  [/\binsights?\s+about\b/gi, 'insight into'],
+  // "consistent with" not "consistent to"
+  [/\bconsistent to\b/gi, 'consistent with'],
+  // "participate in" not "participate to"
+  [/\bparticipates?\s+to\b/gi, 'participate in'],
+  [/\bparticipated\s+to\b/gi, 'participated in'],
+  // "sensitive to" not "sensitive of"
+  [/\bsensitive of\b/gi, 'sensitive to'],
+  // "exposure to" not "exposure of" (when meaning contact with)
+  [/\bexposure of\s+(sound|light|noise|stimulus|stimuli|touch|movement)\b/gi, 'exposure to $1'],
+  // "aligned with" not "aligned to"
+  [/\baligned to\b/gi, 'aligned with'],
+  [/\baligns to\b/gi, 'aligns with'],
 ];
 
 // ── Dangling / structural grammar fixes ─────────────────────────────
@@ -424,6 +447,34 @@ export function postCleanGrammar(text: string): string {
     // Don't add period to headings (short lines without periods)
     return m;
   });
+
+  // 8. Flow smoothing — fix awkward constructions from synonym replacement
+  // "that that" → "that" (doubled from clause rephrasings)
+  result = result.replace(/\bthat that\b/gi, 'that');
+  // "which which" → "which"
+  result = result.replace(/\bwhich which\b/gi, 'which');
+  // "as as" → "as"
+  result = result.replace(/\bas as\b/gi, 'as');
+  // "more more" → "more"
+  result = result.replace(/\bmore more\b/gi, 'more');
+  // "can can" → "can"
+  result = result.replace(/\bcan can\b/gi, 'can');
+  // Fix orphaned "to to" from double replacement
+  result = result.replace(/\bto to\b/gi, 'to');
+  // Fix "is is" → "is"
+  result = result.replace(/\bis is\b/gi, 'is');
+  // Fix "are are" → "are"
+  result = result.replace(/\bare are\b/gi, 'are');
+  // Fix dangling "for for" → "for"
+  result = result.replace(/\bfor for\b/gi, 'for');
+  // Fix "not not" → "not"
+  result = result.replace(/\bnot not\b/gi, 'not');
+  // Fix double commas from phrase removal
+  result = result.replace(/,\s*,/g, ',');
+  // Fix space before period from phrase removal
+  result = result.replace(/\s+\./g, '.');
+  // Fix "., " → ". " (comma after period)
+  result = result.replace(/\.,\s*/g, '. ');
 
   return result;
 }

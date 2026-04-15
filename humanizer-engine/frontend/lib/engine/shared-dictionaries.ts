@@ -1844,68 +1844,12 @@ export function deepCleaningPass(sentences: string[]): string[] {
   // Phase F: Sentence coherence validation
   result = validateSentenceCoherence(result);
 
-  // Phase G: Readability variation — break readability_consistency signal
-  // Turnitin and Surfer SEO flag text where all sentences have similar readability grades.
-  // Inject variation by simplifying ~20% of sentences and making ~15% more complex.
-  if (result.length >= 4) {
-    result = result.map((sent, i) => {
-      const words = sent.split(/\s+/);
-      if (words.length < 6) return sent;
-      const roll = Math.random();
-
-      // Simplify every ~5th sentence: break long words into simpler ones
-      if (roll < 0.20 && words.length >= 12) {
-        let simplified = sent;
-        // Replace a multi-syllable word with a shorter synonym
-        const simplifyMap: Record<string, string> = {
-          'approximately': 'about', 'demonstrate': 'show', 'establish': 'set up',
-          'significant': 'big', 'considerable': 'large', 'preliminary': 'early',
-          'subsequently': 'then', 'nevertheless': 'still', 'consequently': 'so',
-          'predominantly': 'mostly', 'essentially': 'really',
-          'particularly': 'mainly', 'fundamental': 'basic',
-          'immediately': 'right away', 'unfortunately': 'sadly', 'increasingly': 'more and more',
-          'traditionally': 'in the past', 'substantially': 'a lot', 'significantly': 'greatly',
-          'continuously': 'always', 'simultaneously': 'at once', 'independently': 'on its own',
-          'appropriately': 'rightly', 'investigation': 'study',
-          'understanding': 'grasp', 'opportunities': 'chances',
-          'circumstances': 'conditions', 'characteristics': 'traits', 'determination': 'resolve',
-          'environmental': 'nature-related', 'organizations': 'groups',
-          'collaboration': 'teamwork', 'implementation': 'rollout',
-        };
-        for (const [long, short] of Object.entries(simplifyMap)) {
-          const rx = new RegExp(`\\b${long}\\b`, 'i');
-          if (rx.test(simplified)) {
-            simplified = simplified.replace(rx, (m) => m[0] === m[0].toUpperCase() ? short[0].toUpperCase() + short.slice(1) : short);
-            break;
-          }
-        }
-        return simplified;
-      }
-
-      // Make every ~7th sentence slightly more complex: swap a short word for a longer synonym
-      if (roll > 0.85 && words.length >= 8 && words.length <= 18) {
-        const complexifyMap: Record<string, string> = {
-          'show': 'illustrate', 'help': 'facilitate', 'use': 'employ',
-          'get': 'obtain', 'keep': 'maintain', 'give': 'provide',
-          'start': 'commence', 'end': 'conclude', 'try': 'attempt',
-          'need': 'require', 'make': 'construct', 'find': 'identify',
-          'grow': 'expand', 'drop': 'diminish', 'link': 'associate',
-          'pick': 'select', 'fix': 'resolve', 'cut': 'reduce',
-        };
-        let complexified = sent;
-        for (const [short, long] of Object.entries(complexifyMap)) {
-          const rx = new RegExp(`\\b${short}\\b`, 'i');
-          if (rx.test(complexified)) {
-            complexified = complexified.replace(rx, (m) => m[0] === m[0].toUpperCase() ? long[0].toUpperCase() + long.slice(1) : long);
-            break;
-          }
-        }
-        return complexified;
-      }
-
-      return sent;
-    });
-  }
+  // Phase G: Readability variation — DISABLED
+  // This was destroying academic register by replacing words like
+  // "significant" → "big", "organizations" → "groups" (simplify map)
+  // and reintroducing AI-flagged words like "facilitate", "illustrate" (complexify map).
+  // The natural variation from 10 different strategies already provides sufficient
+  // readability diversity without register damage.
 
   // Phase H: Cross-sentence n-gram deduplication — break ngram_repetition signal
   // Turnitin and Pangram flag texts with repeated bigrams across sentences.

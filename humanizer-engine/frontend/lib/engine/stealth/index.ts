@@ -147,6 +147,40 @@ const PROTECTED = new Set([
   // Structural/transition words that must stay
   'while', 'although', 'despite', 'such', 'both', 'particularly',
   'increasingly', 'especially', 'specifically', 'once', 'past',
+  // ASD / sensory integration / therapy domain terms
+  'sensory', 'integration', 'autism', 'asd', 'spectrum', 'disorder',
+  'occupational', 'therapy', 'therapist', 'therapists', 'intervention',
+  'interventions', 'stimulation', 'hypersensitivity', 'hyposensitivity',
+  'neuroimaging', 'wearable', 'sensors', 'fnirs', 'footscan',
+  'caregivers', 'caregiver', 'neuroscience', 'psychology',
+  'behavioral', 'developmental', 'cognitive', 'motor', 'executive',
+  'longitudinal', 'interdisciplinary', 'standardized', 'protocols',
+  'generalization', 'inclusive', 'personalized', 'individualized',
+  'sustained', 'physiological', 'adaptive', 'interactive',
+  'practitioner', 'practitioners', 'clinician', 'clinicians',
+  'multi-sensory', 'multisensory',
+  // Key academic terms that garble when replaced
+  'processing', 'performance', 'relationships', 'environments',
+  'development', 'populations', 'settings', 'evidence', 'outcomes',
+  'community', 'practices', 'assessment', 'emerging', 'ensuring',
+  'remaining', 'including', 'culturally', 'responsive', 'work',
+  'tools', 'measures', 'profiles', 'frameworks', 'presents',
+  'early', 'remains', 'academic',
+  // Clinical/research vocab that morphology destroys
+  'limited', 'validated', 'systems', 'establishing', 'developing',
+  'improvements', 'examining', 'prioritize', 'methodologies',
+  'personalize', 'outcome', 'methodology',
+  // Terms whose replacements lose precision in academic context
+  'research', 'profile', 'practice', 'current', 'existing',
+  'ethical', 'insights', 'insight', 'validation', 'address',
+  'educators', 'technologies', 'comprehensive', 'programs', 'areas',
+  // Confusable word pairs — morphology can swap affect/effect
+  'affect', 'affected', 'affecting', 'affects',
+  'effect', 'effected', 'effecting', 'effects',
+  // Medical/nursing domain terms
+  'vital', 'monitoring', 'clinical', 'intervention', 'patient',
+  'medication', 'chronic', 'diagnosis', 'therapeutic',
+  'impacted', 'interaction', 'delivery',
 ]);
 
 /* ── Helper: check if a token is a proper noun (capitalized, non-sentence-start) ── */
@@ -248,6 +282,8 @@ const REPLACEMENT_BLACKLIST = new Set([
   'stated', // wrong for "high" (means "declared", not "elevated")
   'pecuniary', // too obscure
   'deficit', 'deficits', 'scarcity', 'shortage', 'absence', // noun-only, wrong when replacing verb "lack"
+  // affect/effect confusion prevention
+  'effected', 'effecting', // almost always wrong (should be "affected"/"affecting")
 ]);
 
 /* ── Stopwords (skip for synonym replacement) ─────────────────────── */
@@ -265,6 +301,14 @@ const STOPWORDS = new Set([
   'or', 'if', 'while', 'that', 'this', 'these', 'those', 'it', 'its',
   'they', 'them', 'their', 'we', 'our', 'he', 'she', 'his', 'her',
   'which', 'what', 'who', 'whom', 'about', 'also', 'up', 'down', 'much',
+  // ── Academic garble prevention ──
+  'publication', 'workflow', 'workflowing', 'scheme', 'schemed',
+  'tooling', 'toolings', 'zero', 'residents', 'citizenry',
+  'stretch', 'boundary', 'organization', 'districts', 'surfacing',
+  'dwelling', 'denizen', 'populace', 'edifice', 'pedagogue',
+  'methoding', 'populaces', 'milieus', 'milieu', 'coursing',
+  'operationing', 'proceduring', 'linger', 'lingering',
+  'ceilinged', 'betterment', 'apparatus', 'inspect', 'initiatived',
 ]);
 
 /* ── Extra Academic Replacements (fills gaps in AI_WORD_REPLACEMENTS) ── */
@@ -276,15 +320,15 @@ const EXTRA_REPLACEMENTS: Record<string, string[]> = {
   landscape: ['domain', 'sphere', 'arena', 'terrain'],
   student: ['learner', 'scholar', 'pupil', 'trainee'],
   teacher: ['educator', 'instructor', 'professor', 'mentor'],
-  educator: ['instructor', 'teacher', 'professor', 'trainer'],
-  technology: ['innovation', 'advancement', 'tooling', 'engineering'],
+  educator: ['instructor', 'teacher', 'mentor', 'trainer'],
+  technology: ['innovation', 'advancement', 'technique', 'engineering'],
   society: ['community', 'populace', 'civilization', 'culture'],
-  process: ['procedure', 'method', 'workflow', 'operation'],
-  processes: ['procedures', 'methods', 'workflows', 'operations'],
+  process: ['procedure', 'method', 'course', 'operation'],
+  processes: ['procedures', 'methods', 'steps', 'operations'],
   system: ['framework', 'mechanism', 'apparatus', 'structure'],
   research: ['study', 'investigation', 'inquiry', 'analysis'],
   development: ['growth', 'progress', 'expansion', 'evolution'],
-  environment: ['setting', 'context', 'surroundings', 'milieu'],
+  environment: ['setting', 'context', 'surroundings', 'landscape'],
   experience: ['exposure', 'encounter', 'involvement', 'practice'],
   analysis: ['examination', 'assessment', 'evaluation', 'review'],
   strategy: ['approach', 'plan', 'tactic', 'method'],
@@ -295,9 +339,9 @@ const EXTRA_REPLACEMENTS: Record<string, string[]> = {
   community: ['group', 'network', 'collective', 'population'],
   individual: ['person', 'single', 'distinct', 'separate'],
   organization: ['structure', 'arrangement', 'framework', 'body'],
-  program: ['initiative', 'scheme', 'project', 'effort'],
+  program: ['initiative', 'plan', 'project', 'effort'],
   activity: ['task', 'endeavor', 'undertaking', 'pursuit'],
-  improvement: ['enhancement', 'betterment', 'refinement', 'upgrade'],
+  improvement: ['enhancement', 'advancement', 'refinement', 'gain'],
   participation: ['engagement', 'involvement', 'contribution', 'inclusion'],
   response: ['reaction', 'reply', 'answer', 'feedback'],
   // ── High-frequency academic verbs ──
@@ -312,7 +356,7 @@ const EXTRA_REPLACEMENTS: Record<string, string[]> = {
   analyze: ['examine', 'evaluate', 'assess', 'study'],
   investigate: ['explore', 'probe', 'research', 'study'],
   design: ['build', 'construct', 'craft', 'structure'],
-  present: ['introduce', 'pose', 'offer', 'display'],
+  present: ['introduce', 'pose', 'show', 'display'],
   revolutionize: ['overhaul', 'reshape', 'redefine', 'modernize'],
   acknowledge: ['recognize', 'accept', 'concede', 'admit'],
   identify: ['detect', 'recognize', 'locate', 'determine'],
@@ -323,13 +367,13 @@ const EXTRA_REPLACEMENTS: Record<string, string[]> = {
   vast: ['large', 'extensive', 'broad', 'sweeping'],
   observer: ['reviewer', 'analyst', 'examiner', 'assessor'],
   integration: ['incorporation', 'blending', 'merging', 'unification'],
-  potential: ['capacity', 'promise', 'likelihood', 'prospect'],
+  potential: ['possible', 'probable', 'expected', 'likely'],
   adoption: ['uptake', 'acceptance', 'incorporation', 'implementation'],
   // ── Words that produce catastrophic WordNet garble ──
   federal: ['national', 'governmental', 'central', 'public'],
   investment: ['funding', 'spending', 'commitment', 'allocation'],
   investments: ['funds', 'expenditures', 'commitments', 'allocations'],
-  population: ['populace', 'citizenry', 'residents', 'inhabitants'],
+  population: ['populace', 'group', 'community', 'demographic'],
   resident: ['inhabitant', 'occupant', 'dweller', 'local'],
   residents: ['inhabitants', 'occupants', 'dwellers', 'locals'],
   economy: ['market', 'financial system', 'marketplace'],
@@ -397,7 +441,7 @@ const EXTRA_REPLACEMENTS: Record<string, string[]> = {
   substantial: ['considerable', 'meaningful', 'sizable', 'large'],
   primary: ['chief', 'main', 'principal', 'foremost'],
   critical: ['vital', 'pivotal', 'essential', 'crucial'],
-  comprehensive: ['thorough', 'broad', 'extensive', 'sweeping'],
+  comprehensive: ['thorough', 'complete', 'extensive', 'wide-ranging'],
   increasing: ['growing', 'rising', 'expanding', 'mounting'],
   overall: ['general', 'broad', 'total', 'aggregate'],
   notable: ['remarkable', 'striking', 'prominent', 'significant'],
@@ -408,7 +452,7 @@ const EXTRA_REPLACEMENTS: Record<string, string[]> = {
   automated: ['mechanized', 'computerized', 'streamlined', 'automatic'],
   sheer: ['absolute', 'pure', 'utter', 'total'],
   available: ['accessible', 'obtainable', 'usable', 'present'],
-  early: ['initial', 'preliminary', 'prompt', 'timely'],
+  early: ['initial', 'preliminary', 'formative', 'foundational'],
   widespread: ['broad', 'extensive', 'pervasive', 'prevalent'],
   unfair: ['unjust', 'inequitable', 'uneven', 'lopsided'],
   ethical: ['moral', 'principled', 'responsible', 'sound'],
@@ -418,7 +462,7 @@ const EXTRA_REPLACEMENTS: Record<string, string[]> = {
   central: ['key', 'main', 'pivotal', 'core'],
   useful: ['helpful', 'valuable', 'practical', 'beneficial'],
   relevant: ['pertinent', 'applicable', 'fitting', 'suitable'],
-  clear: ['plain', 'obvious', 'apparent', 'evident'],
+  clear: ['definite', 'distinct', 'apparent', 'evident'],
   broad: ['wide', 'expansive', 'general', 'sweeping'],
   main: ['chief', 'principal', 'primary', 'leading'],
   key: ['central', 'vital', 'crucial', 'essential'],
@@ -452,7 +496,7 @@ const EXTRA_REPLACEMENTS: Record<string, string[]> = {
   // ── Verbs (base forms — morphology handles -ed/-ing) ──
   transform: ['reshape', 'alter', 'shift', 'revamp'],
   demonstrate: ['show', 'reveal', 'illustrate', 'display'],
-  establish: ['create', 'build', 'found', 'institute'],
+  establish: ['set up', 'build', 'found', 'institute'],
   require: ['demand', 'need', 'necessitate', 'expect'],
   indicate: ['suggest', 'signal', 'imply', 'denote'],
   provide: ['offer', 'supply', 'deliver', 'furnish'],
@@ -474,12 +518,12 @@ const EXTRA_REPLACEMENTS: Record<string, string[]> = {
   prompt: ['motivate', 'spur', 'encourage', 'push'],
   raise: ['pose', 'introduce', 'spark', 'bring'],
   serve: ['function', 'act', 'operate', 'work'],
-  remain: ['stay', 'continue', 'last', 'linger'],
-  range: ['span', 'extend', 'stretch', 'vary'],
-  limit: ['cap', 'ceiling', 'boundary', 'threshold'],
+  remain: ['stay', 'continue', 'persist', 'endure'],
+  range: ['span', 'scope', 'breadth', 'spectrum'],
+  limit: ['cap', 'ceiling', 'constraint', 'threshold'],
   exceed: ['surpass', 'outstrip', 'outpace', 'eclipse'],
   match: ['rival', 'equal', 'parallel', 'mirror'],
-  emerge: ['arise', 'surface', 'appear', 'develop'],
+  emerge: ['arise', 'come about', 'appear', 'develop'],
   adopt: ['embrace', 'implement', 'accept', 'employ'],
   train: ['educate', 'prepare', 'instruct', 'develop'],
   perpetuate: ['sustain', 'prolong', 'continue', 'maintain'],
@@ -493,17 +537,17 @@ const EXTRA_REPLACEMENTS: Record<string, string[]> = {
   describe: ['depict', 'portray', 'outline', 'detail'],
   illustrate: ['show', 'demonstrate', 'highlight', 'display'],
   highlight: ['emphasize', 'underscore', 'showcase', 'stress'],
-  examine: ['inspect', 'analyze', 'assess', 'study'],
+  examine: ['review', 'analyze', 'assess', 'study'],
   suggest: ['propose', 'imply', 'hint', 'indicate'],
   determine: ['decide', 'establish', 'figure', 'resolve'],
-  develop: ['build', 'create', 'form', 'craft'],
+  develop: ['build', 'create', 'design', 'craft'],
   consider: ['weigh', 'assess', 'evaluate', 'contemplate'],
   engage: ['participate', 'involve', 'interact', 'partake'],
   follow: ['adhere', 'observe', 'track', 'pursue'],
-  include: ['contain', 'encompass', 'cover', 'embrace'],
+  include: ['encompass', 'cover', 'incorporate', 'involve'],
   argue: ['contend', 'assert', 'claim', 'maintain'],
   note: ['observe', 'mention', 'remark', 'point'],
-  focus: ['concentrate', 'center', 'zero', 'hone'],
+  focus: ['concentrate', 'center', 'emphasize', 'target'],
   allow: ['enable', 'permit', 'let', 'empower'],
   outline: ['detail', 'sketch', 'describe', 'lay'],
   summarize: ['condense', 'recap', 'encapsulate', 'distill'],
@@ -531,11 +575,11 @@ const EXTRA_REPLACEMENTS: Record<string, string[]> = {
   // ── Nouns ──
   rise: ['growth', 'surge', 'expansion', 'climb'],
   approach: ['method', 'strategy', 'technique', 'framework'],
-  impact: ['effect', 'consequence', 'outcome', 'result'],
+  impact: ['consequence', 'outcome', 'result', 'influence'],
   framework: ['structure', 'model', 'system', 'scaffold'],
   perspective: ['viewpoint', 'angle', 'outlook', 'stance'],
   evidence: ['proof', 'data', 'findings', 'support'],
-  outcome: ['result', 'consequence', 'product', 'effect'],
+  outcome: ['result', 'finding', 'product', 'effect'],
   context: ['setting', 'backdrop', 'circumstances', 'situation'],
   aspect: ['facet', 'dimension', 'element', 'feature'],
   ability: ['capacity', 'capability', 'power', 'skill'],
@@ -554,8 +598,8 @@ const EXTRA_REPLACEMENTS: Record<string, string[]> = {
   speed: ['pace', 'rate', 'velocity', 'tempo'],
   shift: ['change', 'transition', 'move', 'adjustment'],
   balance: ['equilibrium', 'harmony', 'parity', 'stability'],
-  area: ['region', 'zone', 'district', 'sector'],
-  areas: ['regions', 'zones', 'districts', 'sectors'],
+  area: ['field', 'domain', 'sphere', 'sector'],
+  areas: ['fields', 'domains', 'spheres', 'sectors'],
   choice: ['selection', 'option', 'pick', 'preference'],
   action: ['step', 'measure', 'move', 'initiative'],
   // "lack" removed — verb/noun ambiguity causes POS mismatches
@@ -588,7 +632,7 @@ const EXTRA_REPLACEMENTS: Record<string, string[]> = {
   insight: ['understanding', 'awareness', 'perception', 'grasp'],
   topic: ['subject', 'theme', 'issue', 'matter'],
   regulation: ['rule', 'standard', 'guideline', 'policy'],
-  issue: ['matter', 'concern', 'topic', 'problem'],
+  issue: ['matter', 'concern', 'challenge', 'problem'],
   method: ['technique', 'approach', 'procedure', 'process'],
   characteristic: ['feature', 'trait', 'quality', 'attribute'],
   relationship: ['connection', 'link', 'bond', 'tie'],
@@ -605,11 +649,11 @@ const EXTRA_REPLACEMENTS: Record<string, string[]> = {
   content: ['substance', 'material', 'body', 'subject'],
   debate: ['discussion', 'discourse', 'dispute', 'dialogue'],
   field: ['area', 'domain', 'sector', 'discipline'],
-  work: ['text', 'piece', 'publication', 'study'],
+  work: ['research', 'effort', 'study', 'contribution'],
   trust: ['confidence', 'faith', 'belief', 'reliance'],
   life: ['existence', 'experience', 'reality', 'livelihood'],
   freedom: ['liberty', 'autonomy', 'independence', 'right'],
-  body: ['group', 'organization', 'entity', 'assembly'],
+  body: ['collection', 'volume', 'set', 'corpus'],
   // ── Adverbs ──
   significantly: ['markedly', 'considerably', 'substantially', 'notably'],
   particularly: ['especially', 'specifically', 'notably', 'chiefly'],
@@ -632,6 +676,33 @@ const EXTRA_REPLACEMENTS: Record<string, string[]> = {
   inadvertently: ['accidentally', 'unintentionally', 'unknowingly', 'unwittingly'],
   considerably: ['substantially', 'markedly', 'greatly', 'notably'],
   consequent: ['resulting', 'following', 'ensuing', 'subsequent'],
+  // ── ASD / Sensory / Therapy domain verbs ──
+  reinforce: ['strengthen', 'solidify', 'support', 'bolster'],
+  validate: ['substantiate', 'verify', 'corroborate', 'support'],
+  standardize: ['normalize', 'regulate', 'formalize', 'systematize'],
+  monitor: ['track', 'observe', 'watch', 'follow'],
+  tailor: ['customize', 'adapt', 'adjust', 'fine-tune'],
+  collaborate: ['cooperate', 'partner', 'coordinate', 'work together'],
+  promote: ['advance', 'encourage', 'support', 'further'],
+  coordinate: ['organize', 'arrange', 'synchronize', 'harmonize'],
+  // ── ASD / Sensory / Therapy domain nouns ──
+  stimulus: ['trigger', 'prompt', 'cue', 'input'],
+  stimuli: ['triggers', 'inputs', 'cues', 'prompts'],
+  profile: ['outline', 'overview', 'description', 'snapshot'],
+  profiles: ['patterns', 'makeups', 'configurations', 'compositions'],
+  sensitivity: ['responsiveness', 'reactivity', 'susceptibility', 'awareness'],
+  modality: ['mode', 'form', 'channel', 'medium'],
+  deficit: ['shortfall', 'gap', 'weakness', 'impairment'],
+  dysfunction: ['impairment', 'disruption', 'malfunction', 'irregularity'],
+  engagement: ['involvement', 'participation', 'interaction', 'commitment'],
+  exposure: ['contact', 'encounter', 'access', 'introduction'],
+  consistency: ['uniformity', 'regularity', 'steadiness', 'stability'],
+  validation: ['confirmation', 'verification', 'proof', 'corroboration'],
+  protocol: ['procedure', 'guideline', 'standard', 'method'],
+  frequency: ['rate', 'regularity', 'occurrence', 'recurrence'],
+  intensity: ['strength', 'degree', 'force', 'magnitude'],
+  duration: ['length', 'span', 'extent', 'period'],
+  generalization: ['transfer', 'extension', 'application', 'spread'],
 };
 
 /* ── Morphology Helpers ───────────────────────────────────────────── */
@@ -1011,10 +1082,10 @@ function processSentence(
   }
 
   // ─── Step 4: Probabilistic sentence starter injection ────────
-  // ~25% chance, only if sentence doesn't already start with a varied opener
+  // ~5% chance, only if sentence doesn't already start with a varied opener
   const starterRoll = Math.random();
   const alreadyHasStarter = /^(Notably|Historically|Traditionally|In practice|In broad|From a|At its|On balance|By extension|In reality|Against|Under these|For instance|For example|To illustrate|In particular|More specifically)/i.test(text);
-  if (starterRoll < 0.40 && !alreadyHasStarter && sentenceIndex > 0 && text.length > 30) {
+  if (starterRoll < 0.05 && !alreadyHasStarter && sentenceIndex > 0 && text.length > 30) {
     const available = STARTERS_ACADEMIC.filter(s => !usedStarters.has(s));
     if (available.length > 0) {
       const starter = available[Math.floor(Math.random() * available.length)];
