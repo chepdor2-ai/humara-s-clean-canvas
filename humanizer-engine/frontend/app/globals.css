@@ -902,18 +902,38 @@
   background-color: transparent !important;
 }
 
-/* ── 5. Gradient Overlays → Transparent ──────────────────────── */
+/* ── 5. Gradient Overlays → Light equivalents ────────────────── */
+/* Replace dark gradient overlays with light ones for readability */
 [data-theme="light"] [class~="from-[#05050A]"],
 [data-theme="light"] [class~="from-[#05050A]/60"],
 [data-theme="light"] [class~="from-[#05050A]/50"],
 [data-theme="light"] [class~="from-[#05050A]/40"],
 [data-theme="light"] [class~="from-[#09090F]"] {
-  background-image: none !important;
+  --tw-gradient-from: rgba(248, 250, 252, 0.85) !important;
 }
 [data-theme="light"] [class~="via-[#05050A]"],
 [data-theme="light"] [class~="via-[#05050A]/40"],
 [data-theme="light"] [class~="via-[#09090F]/80"] {
-  background-image: none !important;
+  --tw-gradient-via: rgba(248, 250, 252, 0.6) !important;
+}
+[data-theme="light"] [class~="to-[#05050A]/90"] {
+  --tw-gradient-to: rgba(248, 250, 252, 0.95) !important;
+}
+[data-theme="light"] [class~="to-[#05050A]/50"] {
+  --tw-gradient-to: rgba(248, 250, 252, 0.7) !important;
+}
+/* Restore dark gradients inside force-dark wrappers */
+[data-theme="light"] .force-dark [class~="from-[#05050A]"],
+[data-theme="light"] .force-dark [class~="from-[#05050A]/60"],
+[data-theme="light"] .force-dark [class~="from-[#05050A]/50"],
+[data-theme="light"] .force-dark [class~="from-[#05050A]/40"],
+[data-theme="light"] .force-dark [class~="from-[#09090F]"],
+[data-theme="light"] .force-dark [class~="via-[#05050A]"],
+[data-theme="light"] .force-dark [class~="via-[#05050A]/40"],
+[data-theme="light"] .force-dark [class~="via-[#09090F]/80"] {
+  --tw-gradient-from: revert !important;
+  --tw-gradient-via: revert !important;
+  --tw-gradient-to: revert !important;
 }
 
 /* ── 6. Text Color Shifts ────────────────────────────────────── */
@@ -1100,9 +1120,11 @@
    look correct as product demos / mockups.
    ═══════════════════════════════════════════════════════════════ */
 
+/* — Hex backgrounds — */
 [data-theme="light"] .force-dark [class~="bg-[#0F0F17]"],
 [data-theme="light"] .force-dark[class~="bg-[#0F0F17]"] {
   background-color: #0F0F17 !important;
+  background-image: none !important;
 }
 [data-theme="light"] .force-dark [class~="bg-[#0A0A12]"],
 [data-theme="light"] .force-dark[class~="bg-[#0A0A12]"] {
@@ -1112,23 +1134,129 @@
 [data-theme="light"] .force-dark[class~="bg-[#05050A]"] {
   background-color: #05050A !important;
 }
+[data-theme="light"] .force-dark [class~="bg-[#09090F]"],
+[data-theme="light"] .force-dark[class~="bg-[#09090F]"] {
+  background-color: #09090F !important;
+}
 [data-theme="light"] .force-dark [class~="bg-[#0c0c14]"],
 [data-theme="light"] .force-dark[class~="bg-[#0c0c14]"] {
   background-color: #0c0c14 !important;
 }
-[data-theme="light"] .force-dark [class~="text-white"] {
+[data-theme="light"] .force-dark [class~="bg-[#12121a]"],
+[data-theme="light"] .force-dark[class~="bg-[#12121a]"] {
+  background-color: #12121a !important;
+}
+
+/* — Named backgrounds — */
+[data-theme="light"] .force-dark [class~="bg-zinc-900"],
+[data-theme="light"] .force-dark[class~="bg-zinc-900"] {
+  background-color: revert !important;
+}
+[data-theme="light"] .force-dark [class~="bg-zinc-800"],
+[data-theme="light"] .force-dark[class~="bg-zinc-800"] {
+  background-color: revert !important;
+}
+[data-theme="light"] .force-dark [class~="bg-zinc-700"] {
+  background-color: revert !important;
+}
+[data-theme="light"] .force-dark [class~="bg-black"] {
+  background-color: revert !important;
+}
+
+/* — Transparent / overlay backgrounds — */
+[data-theme="light"] .force-dark [class~="bg-white/5"],
+[data-theme="light"] .force-dark [class~="bg-white/10"],
+[data-theme="light"] .force-dark [class~="bg-white/[0.02]"],
+[data-theme="light"] .force-dark [class~="bg-white/[0.03]"],
+[data-theme="light"] .force-dark [class~="bg-white/[0.04]"],
+[data-theme="light"] .force-dark [class~="bg-white/[0.06]"],
+[data-theme="light"] .force-dark [class~="bg-white/[0.08]"] {
+  background-color: revert !important;
+}
+
+/* — Colored tinted backgrounds — */
+[data-theme="light"] .force-dark [class~="bg-emerald-400/20"],
+[data-theme="light"] .force-dark [class~="bg-emerald-500/[0.04]"],
+[data-theme="light"] .force-dark [class~="bg-emerald-500/[0.06]"],
+[data-theme="light"] .force-dark [class~="bg-emerald-950/20"],
+[data-theme="light"] .force-dark [class~="bg-purple-950/20"],
+[data-theme="light"] .force-dark [class~="bg-purple-950/50"],
+[data-theme="light"] .force-dark [class~="bg-red-950/20"],
+[data-theme="light"] .force-dark [class~="bg-red-950/30"] {
+  background-color: revert !important;
+}
+
+/* — Text: white/light gray — */
+[data-theme="light"] .force-dark [class~="text-white"],
+[data-theme="light"] .force-dark [class~="text-white/90"],
+[data-theme="light"] .force-dark [class~="text-white/80"],
+[data-theme="light"] .force-dark [class~="text-white/70"],
+[data-theme="light"] .force-dark [class~="text-white/60"] {
   color: #ffffff !important;
 }
-[data-theme="light"] .force-dark [class~="text-gray-400"],
-[data-theme="light"] .force-dark [class~="text-gray-300"],
-[data-theme="light"] .force-dark [class~="text-zinc-400"],
+[data-theme="light"] .force-dark [class~="text-zinc-100"],
+[data-theme="light"] .force-dark [class~="text-zinc-200"],
 [data-theme="light"] .force-dark [class~="text-zinc-300"],
-[data-theme="light"] .force-dark [class~="text-zinc-100"] {
+[data-theme="light"] .force-dark [class~="text-zinc-400"],
+[data-theme="light"] .force-dark [class~="text-zinc-500"],
+[data-theme="light"] .force-dark [class~="text-zinc-600"] {
   color: revert !important;
 }
+[data-theme="light"] .force-dark [class~="text-gray-200"],
+[data-theme="light"] .force-dark [class~="text-gray-300"],
+[data-theme="light"] .force-dark [class~="text-gray-400"],
+[data-theme="light"] .force-dark [class~="text-gray-500"],
+[data-theme="light"] .force-dark [class~="text-gray-600"] {
+  color: revert !important;
+}
+
+/* — Accent text colors — */
+[data-theme="light"] .force-dark [class~="text-purple-400"],
+[data-theme="light"] .force-dark [class~="text-purple-500"],
+[data-theme="light"] .force-dark [class~="text-emerald-400"],
+[data-theme="light"] .force-dark [class~="text-emerald-500"],
+[data-theme="light"] .force-dark [class~="text-red-400"],
+[data-theme="light"] .force-dark [class~="text-red-400/60"],
+[data-theme="light"] .force-dark [class~="text-amber-300"] {
+  color: revert !important;
+}
+
+/* — Borders — */
 [data-theme="light"] .force-dark [class~="border-white/10"],
-[data-theme="light"] .force-dark [class~="border-white/5"] {
-  border-color: rgba(255, 255, 255, 0.1) !important;
+[data-theme="light"] .force-dark [class~="border-white/5"],
+[data-theme="light"] .force-dark [class~="border-white/[0.06]"],
+[data-theme="light"] .force-dark[class~="border-white/10"],
+[data-theme="light"] .force-dark [class~="border-zinc-800"],
+[data-theme="light"] .force-dark [class~="border-zinc-700"],
+[data-theme="light"] .force-dark [class~="border-zinc-700/60"],
+[data-theme="light"] .force-dark [class~="border-emerald-500/10"],
+[data-theme="light"] .force-dark [class~="border-emerald-500/15"] {
+  border-color: revert !important;
+}
+
+/* — Ring colors — */
+[data-theme="light"] .force-dark [class~="ring-white/5"],
+[data-theme="light"] .force-dark [class~="ring-zinc-700"] {
+  --tw-ring-color: revert !important;
+}
+
+/* — Shadows — */
+[data-theme="light"] .force-dark [class~="shadow-2xl"],
+[data-theme="light"] .force-dark [class~="shadow-lg"] {
+  box-shadow: revert !important;
+}
+
+/* — Gradients inside force-dark — */
+[data-theme="light"] .force-dark [class~="bg-gradient-to-t"],
+[data-theme="light"] .force-dark [class~="bg-gradient-to-b"],
+[data-theme="light"] .force-dark [class~="bg-gradient-to-r"],
+[data-theme="light"] .force-dark [class~="bg-gradient-to-br"] {
+  background-image: revert !important;
+}
+
+/* — Radial gradient glow: keep inside force-dark — */
+[data-theme="light"] .force-dark [class*="bg-[radial-gradient"] {
+  opacity: 1 !important;
 }
 
 /* ── Light-mode ref-card: white card with soft shadow ──── */
