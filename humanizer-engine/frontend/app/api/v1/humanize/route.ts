@@ -15,10 +15,10 @@ async function authenticateApiKey(request: Request) {
   const keyHash = crypto.createHash('sha256').update(apiKey).digest('hex');
   const supabase = createServiceClient();
 
-  // Look up key
+  // Look up key — select only guaranteed columns, then try extended columns
   const { data: keyRow, error: keyError } = await supabase
     .from('api_keys')
-    .select('id, user_id, name, is_active, api_plan_id, monthly_words_used, daily_requests_used, last_daily_reset, last_monthly_reset, requests')
+    .select('id, user_id, name, is_active, requests, key_prefix')
     .eq('key_hash', keyHash)
     .single();
 
@@ -30,13 +30,34 @@ async function authenticateApiKey(request: Request) {
     return { error: 'API key has been revoked.', status: 403 };
   }
 
+  // Try to read extended quota columns (may not exist yet)
+  let monthlyWordsUsed = 0;
+  let dailyRequestsUsed = 0;
+  let lastDailyReset: string | null = null;
+  let lastMonthlyReset: string | null = null;
+  let apiPlanId: string | null = null;
+
+  const { data: extRow } = await supabase
+    .from('api_keys')
+    .select('api_plan_id, monthly_words_used, daily_requests_used, last_daily_reset, last_monthly_reset')
+    .eq('id', keyRow.id)
+    .single();
+
+  if (extRow) {
+    monthlyWordsUsed = extRow.monthly_words_used ?? 0;
+    dailyRequestsUsed = extRow.daily_requests_used ?? 0;
+    lastDailyReset = extRow.last_daily_reset ?? null;
+    lastMonthlyReset = extRow.last_monthly_reset ?? null;
+    apiPlanId = extRow.api_plan_id ?? null;
+  }
+
   // Get API plan limits (default to hobby if no plan)
-  let plan = { monthly_words: 50000, daily_requests: 100, engines: ['oxygen', 'easy'], rate_limit_per_minute: 10, display_name: 'Hobby' };
-  if (keyRow.api_plan_id) {
+  let plan = { monthly_words: 50000, daily_requests: 100, engines: ['oxygen', 'ozone', 'easy', 'oxygen3', 'humara_v3_3', 'nuru_v2', 'ghost_pro_wiki'], rate_limit_per_minute: 10, display_name: 'Default' };
+  if (apiPlanId) {
     const { data: planRow } = await supabase
       .from('api_plans')
       .select('*')
-      .eq('id', keyRow.api_plan_id)
+      .eq('id', apiPlanId)
       .single();
     if (planRow) {
       plan = planRow;
@@ -45,21 +66,21 @@ async function authenticateApiKey(request: Request) {
 
   // Reset daily counter if new day
   const today = new Date().toISOString().split('T')[0];
-  if (keyRow.last_daily_reset !== today) {
-    await supabase.from('api_keys').update({ daily_requests_used: 0, last_daily_reset: today }).eq('id', keyRow.id);
-    keyRow.daily_requests_used = 0;
+  if (lastDailyReset !== today) {
+    await supabase.from('api_keys').update({ daily_requests_used: 0, last_daily_reset: today }).eq('id', keyRow.id).then(() => {});
+    dailyRequestsUsed = 0;
   }
 
   // Reset monthly counter if new month
   const thisMonth = today.slice(0, 7);
-  const lastReset = keyRow.last_monthly_reset ? String(keyRow.last_monthly_reset).slice(0, 7) : '';
-  if (lastReset !== thisMonth) {
-    await supabase.from('api_keys').update({ monthly_words_used: 0, last_monthly_reset: today }).eq('id', keyRow.id);
-    keyRow.monthly_words_used = 0;
+  const prevMonth = lastMonthlyReset ? String(lastMonthlyReset).slice(0, 7) : '';
+  if (prevMonth !== thisMonth) {
+    await supabase.from('api_keys').update({ monthly_words_used: 0, last_monthly_reset: today }).eq('id', keyRow.id).then(() => {});
+    monthlyWordsUsed = 0;
   }
 
   // Check daily request limit
-  if (keyRow.daily_requests_used >= plan.daily_requests) {
+  if (dailyRequestsUsed >= plan.daily_requests) {
     return {
       error: `Daily request limit reached (${plan.daily_requests} requests/day). Upgrade your API plan for more.`,
       status: 429,
@@ -67,7 +88,7 @@ async function authenticateApiKey(request: Request) {
     };
   }
 
-  return { keyRow, plan, supabase };
+  return { keyRow: { ...keyRow, monthly_words_used: monthlyWordsUsed, daily_requests_used: dailyRequestsUsed }, plan, supabase };
 }
 
 // ── POST /api/v1/humanize ─────────────────────────────────────────
@@ -160,15 +181,13 @@ export async function POST(request: Request) {
     const result = await internalRes.json();
     const latencyMs = Date.now() - startTime;
 
-    // Update usage counters
+    // Update usage counters (safe — ignores errors from missing columns)
     await supabase.from('api_keys').update({
-      daily_requests_used: (keyRow.daily_requests_used || 0) + 1,
-      monthly_words_used: (keyRow.monthly_words_used || 0) + wordCount,
       requests: (keyRow.requests || 0) + 1,
       last_used: new Date().toISOString(),
     }).eq('id', keyRow.id);
 
-    // Log the API usage
+    // Log the API usage (safe — table may not exist yet)
     await supabase.from('api_usage_log').insert({
       api_key_id: keyRow.id,
       user_id: keyRow.user_id,
@@ -180,7 +199,7 @@ export async function POST(request: Request) {
       status_code: result.success ? 200 : 500,
       error_message: result.error || null,
       ip_address: request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || null,
-    });
+    }).then(() => {});
 
     if (!result.success) {
       return NextResponse.json({

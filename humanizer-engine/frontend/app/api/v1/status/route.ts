@@ -38,7 +38,7 @@ export async function GET(request: Request) {
 
   const { data: keyRow } = await supabase
     .from('api_keys')
-    .select('id, user_id, is_active, api_plan_id, monthly_words_used, daily_requests_used, requests')
+    .select('id, user_id, is_active, requests')
     .eq('key_hash', keyHash)
     .single();
 
@@ -46,27 +46,38 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'Invalid or revoked API key.', code: 'UNAUTHORIZED' }, { status: 401 });
   }
 
-  let plan = { display_name: 'Hobby', monthly_words: 50000, daily_requests: 100, engines: ['oxygen', 'easy'], rate_limit_per_minute: 10 };
-  if (keyRow.api_plan_id) {
-    const { data: planRow } = await supabase.from('api_plans').select('*').eq('id', keyRow.api_plan_id).single();
-    if (planRow) plan = planRow;
+  // Try extended columns
+  let monthlyWordsUsed = 0;
+  let dailyRequestsUsed = 0;
+  const { data: extRow } = await supabase
+    .from('api_keys')
+    .select('monthly_words_used, daily_requests_used')
+    .eq('id', keyRow.id)
+    .single();
+  if (extRow) {
+    monthlyWordsUsed = extRow.monthly_words_used ?? 0;
+    dailyRequestsUsed = extRow.daily_requests_used ?? 0;
   }
+
+  const allEngines = ['oxygen', 'ozone', 'easy', 'oxygen3', 'humara_v3_3', 'nuru_v2', 'ghost_pro_wiki'];
+  const monthlyWords = 50000;
+  const dailyRequests = 100;
 
   return NextResponse.json({
     success: true,
     data: {
       status: 'operational',
       version: '1.0.0',
-      plan: plan.display_name,
-      available_engines: plan.engines,
+      plan: 'Default',
+      available_engines: allEngines,
       usage: {
-        daily_requests_used: keyRow.daily_requests_used || 0,
-        daily_requests_limit: plan.daily_requests,
-        monthly_words_used: keyRow.monthly_words_used || 0,
-        monthly_words_limit: plan.monthly_words,
+        daily_requests_used: dailyRequestsUsed,
+        daily_requests_limit: dailyRequests,
+        monthly_words_used: monthlyWordsUsed,
+        monthly_words_limit: monthlyWords,
       },
       rate_limit: {
-        requests_per_minute: plan.rate_limit_per_minute,
+        requests_per_minute: 10,
       },
       total_requests: keyRow.requests || 0,
     },

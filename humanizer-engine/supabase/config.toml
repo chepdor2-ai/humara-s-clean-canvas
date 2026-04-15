@@ -20,12 +20,10 @@ api_url = "http://localhost"
 
 [auth]
 enabled = true
-port = 54324
 site_url = "http://localhost:3000"
 additional_redirect_urls = ["https://localhost:3000", "https://humaragpt.com/auth/callback", "https://humaragpt.com/**"]
 jwt_expiry = 3600
 enable_signup = true
 
-[edge_functions]
+[functions.humanize]
 enabled = true
-port = 54325

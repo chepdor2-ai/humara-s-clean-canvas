@@ -30,6 +30,28 @@ const PUBLIC_PREFIXES = [
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
+  // ── CORS for public API v1 routes ──────────────────────────────
+  if (pathname.startsWith('/api/v1/')) {
+    // Preflight
+    if (request.method === 'OPTIONS') {
+      return new NextResponse(null, {
+        status: 204,
+        headers: {
+          'Access-Control-Allow-Origin': '*',
+          'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+          'Access-Control-Allow-Headers': 'Authorization, Content-Type, X-Requested-With',
+          'Access-Control-Max-Age': '86400',
+        },
+      });
+    }
+    // Actual request — add CORS headers
+    const response = NextResponse.next();
+    response.headers.set('Access-Control-Allow-Origin', '*');
+    response.headers.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    response.headers.set('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-Requested-With');
+    return response;
+  }
+
   // Allow public routes
   if (PUBLIC_ROUTES.includes(pathname)) return NextResponse.next();
   if (PUBLIC_PREFIXES.some(prefix => pathname.startsWith(prefix))) return NextResponse.next();

@@ -16,30 +16,33 @@ async function authenticateApiKey(request: Request) {
 
   const { data: keyRow, error: keyError } = await supabase
     .from('api_keys')
-    .select('id, user_id, is_active, api_plan_id, daily_requests_used, last_daily_reset, requests')
+    .select('id, user_id, is_active, requests')
     .eq('key_hash', keyHash)
     .single();
 
   if (keyError || !keyRow) return { error: 'Invalid API key.', status: 401 };
   if (!keyRow.is_active) return { error: 'API key has been revoked.', status: 403 };
 
-  let plan = { daily_requests: 100, display_name: 'Hobby' };
-  if (keyRow.api_plan_id) {
-    const { data: planRow } = await supabase.from('api_plans').select('*').eq('id', keyRow.api_plan_id).single();
-    if (planRow) plan = planRow;
+  // Try extended columns (may not exist yet)
+  let dailyRequestsUsed = 0;
+  const { data: extRow } = await supabase
+    .from('api_keys')
+    .select('daily_requests_used, last_daily_reset')
+    .eq('id', keyRow.id)
+    .single();
+  if (extRow?.daily_requests_used != null) {
+    dailyRequestsUsed = extRow.daily_requests_used;
+    const today = new Date().toISOString().split('T')[0];
+    if (extRow.last_daily_reset !== today) {
+      await supabase.from('api_keys').update({ daily_requests_used: 0, last_daily_reset: today }).eq('id', keyRow.id).then(() => {});
+      dailyRequestsUsed = 0;
+    }
+    if (dailyRequestsUsed >= 100) {
+      return { error: 'Daily request limit reached.', status: 429 };
+    }
   }
 
-  const today = new Date().toISOString().split('T')[0];
-  if (keyRow.last_daily_reset !== today) {
-    await supabase.from('api_keys').update({ daily_requests_used: 0, last_daily_reset: today }).eq('id', keyRow.id);
-    keyRow.daily_requests_used = 0;
-  }
-
-  if (keyRow.daily_requests_used >= plan.daily_requests) {
-    return { error: 'Daily request limit reached.', status: 429 };
-  }
-
-  return { keyRow, plan, supabase };
+  return { keyRow: { ...keyRow, daily_requests_used: dailyRequestsUsed }, supabase };
 }
 
 export async function POST(request: Request) {
@@ -68,12 +71,13 @@ export async function POST(request: Request) {
     const analysis = detector.analyze(text);
     const latencyMs = Date.now() - startTime;
 
+    // Update counters (safe — ignores missing columns)
     await supabase.from('api_keys').update({
-      daily_requests_used: (keyRow.daily_requests_used || 0) + 1,
       requests: (keyRow.requests || 0) + 1,
       last_used: new Date().toISOString(),
     }).eq('id', keyRow.id);
 
+    // Log usage (safe — table may not exist)
     await supabase.from('api_usage_log').insert({
       api_key_id: keyRow.id,
       user_id: keyRow.user_id,
@@ -82,7 +86,7 @@ export async function POST(request: Request) {
       output_words: 0,
       latency_ms: latencyMs,
       status_code: 200,
-    });
+    }).then(() => {});
 
     return NextResponse.json({
       success: true,

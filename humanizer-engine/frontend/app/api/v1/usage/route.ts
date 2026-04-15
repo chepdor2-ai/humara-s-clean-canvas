@@ -14,7 +14,7 @@ export async function GET(request: Request) {
 
   const { data: keyRow } = await supabase
     .from('api_keys')
-    .select('id, user_id, is_active, api_plan_id, monthly_words_used, daily_requests_used, requests')
+    .select('id, user_id, is_active, requests')
     .eq('key_hash', keyHash)
     .single();
 
@@ -22,17 +22,27 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'Invalid API key.', code: 'UNAUTHORIZED' }, { status: 401 });
   }
 
-  // Get plan
-  let plan = { display_name: 'Hobby', monthly_words: 50000, daily_requests: 100 };
-  if (keyRow.api_plan_id) {
-    const { data: planRow } = await supabase.from('api_plans').select('*').eq('id', keyRow.api_plan_id).single();
-    if (planRow) plan = planRow;
+  // Try extended columns
+  let monthlyWordsUsed = 0;
+  let dailyRequestsUsed = 0;
+  const { data: extRow } = await supabase
+    .from('api_keys')
+    .select('monthly_words_used, daily_requests_used')
+    .eq('id', keyRow.id)
+    .single();
+  if (extRow) {
+    monthlyWordsUsed = extRow.monthly_words_used ?? 0;
+    dailyRequestsUsed = extRow.daily_requests_used ?? 0;
   }
 
-  // Get usage for last 30 days
+  const monthlyWords = 50000;
+  const dailyRequests = 100;
+
+  // Get usage for last 30 days (table may not exist yet)
   const thirtyDaysAgo = new Date();
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
+  let logs: Array<{ endpoint?: string; engine?: string; input_words?: number; output_words?: number; latency_ms?: number; status_code?: number; created_at: string }> = [];
   const { data: usageLogs } = await supabase
     .from('api_usage_log')
     .select('endpoint, engine, input_words, output_words, latency_ms, status_code, created_at')
@@ -40,15 +50,14 @@ export async function GET(request: Request) {
     .gte('created_at', thirtyDaysAgo.toISOString())
     .order('created_at', { ascending: false })
     .limit(1000);
-
-  const logs = usageLogs || [];
+  if (usageLogs) logs = usageLogs;
 
   // Aggregate stats
   const totalRequests = logs.length;
   const totalInputWords = logs.reduce((sum, l) => sum + (l.input_words || 0), 0);
   const totalOutputWords = logs.reduce((sum, l) => sum + (l.output_words || 0), 0);
   const avgLatency = totalRequests > 0 ? Math.round(logs.reduce((sum, l) => sum + (l.latency_ms || 0), 0) / totalRequests) : 0;
-  const errorCount = logs.filter(l => l.status_code >= 400).length;
+  const errorCount = logs.filter(l => (l.status_code ?? 0) >= 400).length;
   const successRate = totalRequests > 0 ? Math.round((1 - errorCount / totalRequests) * 100 * 10) / 10 : 100;
 
   // Daily breakdown (last 30 days)
@@ -58,7 +67,7 @@ export async function GET(request: Request) {
     if (!dailyMap[day]) dailyMap[day] = { requests: 0, words: 0, errors: 0 };
     dailyMap[day].requests++;
     dailyMap[day].words += log.input_words || 0;
-    if (log.status_code >= 400) dailyMap[day].errors++;
+    if ((log.status_code ?? 0) >= 400) dailyMap[day].errors++;
   }
 
   // Engine breakdown
@@ -72,7 +81,7 @@ export async function GET(request: Request) {
   return NextResponse.json({
     success: true,
     data: {
-      plan: plan.display_name,
+      plan: 'Default',
       period: {
         start: thirtyDaysAgo.toISOString().split('T')[0],
         end: new Date().toISOString().split('T')[0],
@@ -86,10 +95,10 @@ export async function GET(request: Request) {
         error_count: errorCount,
       },
       quota: {
-        daily_requests_used: keyRow.daily_requests_used || 0,
-        daily_requests_limit: plan.daily_requests,
-        monthly_words_used: keyRow.monthly_words_used || 0,
-        monthly_words_limit: plan.monthly_words,
+        daily_requests_used: dailyRequestsUsed,
+        daily_requests_limit: dailyRequests,
+        monthly_words_used: monthlyWordsUsed,
+        monthly_words_limit: monthlyWords,
       },
       daily_breakdown: Object.entries(dailyMap)
         .sort(([a], [b]) => a.localeCompare(b))
