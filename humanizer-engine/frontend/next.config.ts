@@ -16,7 +16,7 @@ const nextConfig: NextConfig = {
         source: '/:path*',
         has: [{ type: 'host', value: 'humaragpt.com' }],
         destination: 'https://www.humaragpt.com/:path*',
-        permanent: true,
+        statusCode: 301,
       },
     ];
   },
