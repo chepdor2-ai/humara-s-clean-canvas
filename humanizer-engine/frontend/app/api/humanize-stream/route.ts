@@ -1176,8 +1176,8 @@ Respond with ONLY a JSON array of objects: [{ "index": <int>, "fixed": "sentence
                     if (!apiKey) break;
                     const oai = new OpenAI({ apiKey });
                     const flaggedSubset = activeFlagged
-                      .filter((f) => !isHeadingSentCheck(currentSentences[f.index]))
-                      .map((f) => ({ index: f.index, sentence: currentSentences[f.index] }));
+                      .filter((f: any) => !isHeadingSentCheck(currentSentences[f.index]))
+                      .map((f: any) => ({ index: f.index, sentence: currentSentences[f.index] }));
                     if (flaggedSubset.length === 0) break;
 
                     const recheckResp = await Promise.race([
@@ -1458,8 +1458,8 @@ Only include sentences with ai_score >= 55.`,
                 if (!gptApiKey) break;
                 const oai = new OpenAI({ apiKey: gptApiKey });
                 const flaggedSubset = activePostFlagged
-                  .filter((f) => !isHeadingSentCheck(postSents[f.index]))
-                  .map((f) => ({ index: f.index, sentence: postSents[f.index] }));
+                  .filter((f: any) => !isHeadingSentCheck(postSents[f.index]))
+                  .map((f: any) => ({ index: f.index, sentence: postSents[f.index] }));
                 if (flaggedSubset.length === 0) break;
 
                 const recheckResp = await Promise.race([

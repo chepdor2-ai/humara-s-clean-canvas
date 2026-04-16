@@ -1146,8 +1146,8 @@ export async function POST(req: Request) {
           if (!gptApiKey) break;
           const oai = new OpenAI({ apiKey: gptApiKey });
           const flaggedSubset = activePostFlagged
-            .filter((f) => !isHeadingSentPost(postSents[f.index]))
-            .map((f) => ({ index: f.index, sentence: postSents[f.index] }));
+            .filter((f: any) => !isHeadingSentPost(postSents[f.index]))
+            .map((f: any) => ({ index: f.index, sentence: postSents[f.index] }));
           if (flaggedSubset.length === 0) break;
 
           const recheckResp = await Promise.race([
@@ -1190,7 +1190,7 @@ If all sentences are below 5, return { "flagged": [] }.`,
                   ai_score: typeof f.ai_score === 'number' ? f.ai_score : 0,
                   flagged_phrases: Array.isArray(f.phrases) ? f.phrases.filter((p: any) => typeof p === 'string') : [],
                 }))
-                .filter((f) => f.ai_score >= TARGET_AI_SCORE);
+                .filter((f: any) => f.ai_score >= TARGET_AI_SCORE);
             }
           } catch { /* ignore parse errors */ }
 
