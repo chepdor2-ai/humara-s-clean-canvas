@@ -1085,7 +1085,7 @@ function processSentence(
   // ─── Step 4: Probabilistic sentence starter injection ────────
   // ~5% chance, only if sentence doesn't already start with a varied opener
   const starterRoll = Math.random();
-  const alreadyHasStarter = /^(Notably|Historically|Traditionally|In practice|In broad|From a|At its|On balance|By extension|In reality|Against|Under these|For instance|For example|To illustrate|In particular|More specifically)/i.test(text);
+  const alreadyHasStarter = /^(However|Although|Though|Moreover|Furthermore|Thus|Therefore|Hence|Consequently|Because|Since|Yet|Meanwhile|Additionally|Instead|Despite|In spite|Driven by|As a|As the|Notably|Historically|Traditionally|In practice|In broad|From a|At its|On balance|By extension|In reality|Against|Under these|For instance|For example|To illustrate|In particular|More specifically)/i.test(text) || /^[A-Z][a-z]+,\s/.test(text);
   if (starterRoll < 0.05 && !alreadyHasStarter && sentenceIndex > 0 && text.length > 30) {
     const available = STARTERS_ACADEMIC.filter(s => !usedStarters.has(s));
     if (available.length > 0) {

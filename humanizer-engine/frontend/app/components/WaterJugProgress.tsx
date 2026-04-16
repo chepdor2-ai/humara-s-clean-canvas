@@ -32,10 +32,14 @@ const WaterJugProgress: React.FC<WaterJugProgressProps> = ({ percent, size = 224
 
   const waveAmplitude = Math.max(3, 10 - safePercent * 0.06);
   const secondaryWaveAmplitude = Math.max(2, waveAmplitude * 0.62);
+  const tertiaryWaveAmplitude = Math.max(4, waveAmplitude * 0.85);
+
   const d1 = `M26 ${waterY} C 52 ${waterY - waveAmplitude}, 78 ${waterY + waveAmplitude}, 110 ${waterY} C 138 ${waterY - waveAmplitude}, 164 ${waterY + waveAmplitude}, 194 ${waterY} L194 198 L26 198 Z`;
   const d2 = `M26 ${waterY} C 52 ${waterY + waveAmplitude}, 78 ${waterY - waveAmplitude}, 110 ${waterY} C 138 ${waterY + waveAmplitude}, 164 ${waterY - waveAmplitude}, 194 ${waterY} L194 198 L26 198 Z`;
   const d3 = `M26 ${waterY + 4} C 50 ${waterY - secondaryWaveAmplitude}, 86 ${waterY + secondaryWaveAmplitude}, 120 ${waterY + 4} C 148 ${waterY - secondaryWaveAmplitude}, 172 ${waterY + secondaryWaveAmplitude}, 194 ${waterY + 4} L194 198 L26 198 Z`;
   const d4 = `M26 ${waterY + 4} C 50 ${waterY + secondaryWaveAmplitude}, 86 ${waterY - secondaryWaveAmplitude}, 120 ${waterY + 4} C 148 ${waterY + secondaryWaveAmplitude}, 172 ${waterY - secondaryWaveAmplitude}, 194 ${waterY + 4} L194 198 L26 198 Z`;
+  const d5 = `M26 ${waterY - 2} C 60 ${waterY + tertiaryWaveAmplitude}, 90 ${waterY - tertiaryWaveAmplitude}, 130 ${waterY - 2} C 160 ${waterY + tertiaryWaveAmplitude}, 180 ${waterY - tertiaryWaveAmplitude}, 194 ${waterY - 2} L194 198 L26 198 Z`;
+  const d6 = `M26 ${waterY - 2} C 60 ${waterY - tertiaryWaveAmplitude}, 90 ${waterY + tertiaryWaveAmplitude}, 130 ${waterY - 2} C 160 ${waterY - tertiaryWaveAmplitude}, 180 ${waterY + tertiaryWaveAmplitude}, 194 ${waterY - 2} L194 198 L26 198 Z`;
 
   const colors = useMemo(() => {
     const hue = Math.round((safePercent / 100) * 120); // 0:red -> 120:green
@@ -60,9 +64,9 @@ const WaterJugProgress: React.FC<WaterJugProgressProps> = ({ percent, size = 224
             <circle cx="110" cy="110" r="84" />
           </clipPath>
           <linearGradient id={glassGradientId} x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#f8fbff" stopOpacity="0.9" />
-            <stop offset="55%" stopColor="#dbeafe" stopOpacity="0.42" />
-            <stop offset="100%" stopColor="#cbd5e1" stopOpacity="0.3" />
+            <stop offset="0%" stopColor="#ffffff" stopOpacity="0.85" />
+            <stop offset="35%" stopColor="#e2e8f0" stopOpacity="0.55" />
+            <stop offset="100%" stopColor="#94a3b8" stopOpacity="0.25" />
           </linearGradient>
           <linearGradient id={waterGradientId} x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor={colors.top} />
@@ -83,20 +87,30 @@ const WaterJugProgress: React.FC<WaterJugProgressProps> = ({ percent, size = 224
         <circle cx="110" cy="110" r="92" fill={`url(#${glassGradientId})`} stroke="#cbd5e1" strokeWidth="2.5" />
 
         <g clipPath={`url(#${clipId})`}>
-          <rect x="26" y={waterY} width="168" height={198 - waterY} fill={`url(#${waterGradientId})`} />
-          <path d={d1} fill={`url(#${waterGradientId})`} opacity="0.97">
-            <animate attributeName="d" dur="2.7s" repeatCount="indefinite" values={`${d1};${d2};${d1}`} />
+          <rect x="26" y={waterY + 4} width="168" height={194 - waterY} fill={`url(#${waterGradientId})`} />
+          
+          {/* Deepest BG Wave */}
+          <path d={d5} fill={`url(#${waterGradientId})`} opacity="0.45">
+            <animate attributeName="d" dur="5.3s" repeatCount="indefinite" values={`${d5};${d6};${d5}`} />
           </path>
-          <path d={d3} fill={`url(#${surfaceGradientId})`} opacity="0.32">
+          
+          {/* Middle Surface Wave */}
+          <path d={d3} fill={`url(#${surfaceGradientId})`} opacity="0.65">
             <animate attributeName="d" dur="4.1s" repeatCount="indefinite" values={`${d3};${d4};${d3}`} />
           </path>
-          <ellipse cx="110" cy={Math.max(innerTop + 8, waterY + 2)} rx="73" ry="7" fill={colors.foam} opacity="0.2">
-            <animate attributeName="opacity" dur="3.8s" repeatCount="indefinite" values="0.14;0.28;0.14" />
+          
+          {/* Front Active Wave */}
+          <path d={d1} fill={`url(#${waterGradientId})`} opacity="0.95">
+            <animate attributeName="d" dur="2.7s" repeatCount="indefinite" values={`${d1};${d2};${d1}`} />
+          </path>
+          
+          <ellipse cx="110" cy={Math.max(innerTop + 8, waterY + 4)} rx="80" ry="10" fill={colors.foam} opacity="0.25">
+            <animate attributeName="opacity" dur="3.8s" repeatCount="indefinite" values="0.18;0.35;0.18" />
           </ellipse>
 
           <circle cx="74" cy={bubbleStart} r="2.8" fill={colors.foam} opacity="0">
             <animate attributeName="cy" dur="2.5s" repeatCount="indefinite" values={`${bubbleStart};${bubblePeak};${bubbleStart}`} />
-            <animate attributeName="opacity" dur="2.5s" repeatCount="indefinite" values="0;0.85;0" />
+            <animate attributeName="opacity" dur="2.5s" repeatCount="indefinite" values="0;0.9;0" />
           </circle>
           <circle cx="112" cy={bubbleStart + 8} r="3.5" fill={colors.foam} opacity="0">
             <animate attributeName="cy" dur="2.9s" repeatCount="indefinite" values={`${bubbleStart + 8};${bubblePeak - 2};${bubbleStart + 8}`} />
@@ -104,15 +118,23 @@ const WaterJugProgress: React.FC<WaterJugProgressProps> = ({ percent, size = 224
           </circle>
           <circle cx="148" cy={bubbleStart + 3} r="2.4" fill={colors.foam} opacity="0">
             <animate attributeName="cy" dur="2.2s" repeatCount="indefinite" values={`${bubbleStart + 3};${bubblePeak + 3};${bubbleStart + 3}`} />
-            <animate attributeName="opacity" dur="2.2s" repeatCount="indefinite" values="0;0.75;0" />
+            <animate attributeName="opacity" dur="2.2s" repeatCount="indefinite" values="0;0.85;0" />
           </circle>
           <circle cx="96" cy={bubbleStart + 14} r="2.1" fill={colors.foam} opacity="0">
             <animate attributeName="cy" dur="3.2s" repeatCount="indefinite" values={`${bubbleStart + 14};${bubblePeak - 6};${bubbleStart + 14}`} />
-            <animate attributeName="opacity" dur="3.2s" repeatCount="indefinite" values="0;0.68;0" />
+            <animate attributeName="opacity" dur="3.2s" repeatCount="indefinite" values="0;0.7;0" />
           </circle>
           <circle cx="132" cy={bubbleStart + 10} r="1.9" fill={colors.foam} opacity="0">
             <animate attributeName="cy" dur="2.7s" repeatCount="indefinite" values={`${bubbleStart + 10};${bubblePeak - 10};${bubbleStart + 10}`} />
-            <animate attributeName="opacity" dur="2.7s" repeatCount="indefinite" values="0;0.7;0" />
+            <animate attributeName="opacity" dur="2.7s" repeatCount="indefinite" values="0;0.75;0" />
+          </circle>
+          <circle cx="56" cy={bubbleStart + 6} r="1.5" fill={colors.foam} opacity="0">
+            <animate attributeName="cy" dur="1.8s" repeatCount="indefinite" values={`${bubbleStart + 6};${bubblePeak + 8};${bubbleStart + 6}`} />
+            <animate attributeName="opacity" dur="1.8s" repeatCount="indefinite" values="0;0.6;0" />
+          </circle>
+          <circle cx="168" cy={bubbleStart + 18} r="2.2" fill={colors.foam} opacity="0">
+            <animate attributeName="cy" dur="3.4s" repeatCount="indefinite" values={`${bubbleStart + 18};${bubblePeak - 4};${bubbleStart + 18}`} />
+            <animate attributeName="opacity" dur="3.4s" repeatCount="indefinite" values="0;0.8;0" />
           </circle>
         </g>
 
