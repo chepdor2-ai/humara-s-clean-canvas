@@ -1169,8 +1169,122 @@ Keep phrases to the most suspicious 1-3 per sentence.`,
           const detector = getDetector();
           const inputAnalysis = detector.analyze(text);
 
-          // ── POST-PROCESSING (skip for ozone and oxygen_t5 — they handle their own full pipelines) ──
-          if (eng !== 'ozone' && eng !== 'oxygen_t5' && eng !== 'oxygen3' && eng !== 'dipper' && eng !== 'humarin') {
+          // ═══════════════════════════════════════════════════════════════
+          // UNIVERSAL Nuru x5 + GPT-4o-mini DETECTION POST-PROCESSING
+          // Applies to ALL engines EXCEPT ozone (Humara 2.1).
+          // Engines that already ran Nuru in their phase pipeline skip the
+          // 5 baseline passes but still get GPT detection + targeted cleanup.
+          // Hard time budget: 10 seconds max.
+          // ═══════════════════════════════════════════════════════════════
+          if (eng !== 'ozone' && !(deadlineReached || Date.now() - startTime > DEADLINE_MS - 12000)) {
+            const nuruPostStart = Date.now();
+            const NURU_POST_DEADLINE_MS = 10_000; // 10s hard budget
+            const nuruPostTimeOk = () => Date.now() - nuruPostStart < NURU_POST_DEADLINE_MS && !(deadlineReached || Date.now() - startTime > DEADLINE_MS - 8000);
+
+            const { sentences: postSentences, paragraphBoundaries: postParaBounds } = splitIntoIndexedSentences(humanized);
+            const postSents = [...postSentences];
+
+            sendSSE(controller, { type: 'stage', stage: 'Nuru 2.0 Post-Processing' });
+            await flushDelay(10);
+
+            // ── Phase A: 5 baseline Nuru passes (skip if engine already ran Nuru) ──
+            if (!usePhasePipeline && nuruPostTimeOk()) {
+              for (let pass = 0; pass < 5; pass++) {
+                for (let i = 0; i < postSents.length; i++) {
+                  if (!isHeadingSentCheck(postSents[i])) {
+                    postSents[i] = runNuruSinglePass(postSents[i]);
+                  }
+                  sendSSE(controller, { type: 'sentence', index: i, text: postSents[i], stage: 'Nuru 2.0 Post-Processing' });
+                }
+                await flushDelay(5);
+                if (!nuruPostTimeOk()) break;
+              }
+              console.log(`[Nuru Post] 5 baseline passes done (${Date.now() - nuruPostStart}ms)`);
+            }
+
+            // ── Phase B: GPT-4o-mini forensic detection ──
+            interface PostFlagged { index: number; ai_score: number; flagged_phrases: string[]; }
+            let postFlagged: PostFlagged[] = [];
+
+            if (nuruPostTimeOk()) {
+              try {
+                const gptApiKey = process.env.OPENAI_API_KEY?.trim();
+                if (gptApiKey) {
+                  const oai = new OpenAI({ apiKey: gptApiKey });
+                  const sentList = postSents
+                    .map((s, i) => isHeadingSentCheck(s) ? null : `[${i}] ${s}`)
+                    .filter(Boolean)
+                    .join('\n');
+
+                  const gptResp = await Promise.race([
+                    oai.chat.completions.create({
+                      model: 'gpt-4o-mini',
+                      messages: [
+                        {
+                          role: 'system',
+                          content: `You are a forensic AI text analyzer. Analyze EACH sentence for AI generation signals.
+For each sentence: assign AI likelihood (0-100%), identify 1-3 suspicious phrases (3-10 words).
+Respond with ONLY valid JSON: { "flagged": [{ "index": <int>, "ai_score": <0-100>, "phrases": ["phrase1"] }] }
+Only include sentences with ai_score >= 60.`,
+                        },
+                        { role: 'user', content: sentList.slice(0, 4000) },
+                      ],
+                      temperature: 0,
+                      max_tokens: 1200,
+                    }),
+                    new Promise<never>((_, reject) =>
+                      setTimeout(() => reject(new Error('GPT detection timed out')), 4000)
+                    ),
+                  ]);
+
+                  const raw = gptResp.choices[0]?.message?.content?.trim() ?? '';
+                  try {
+                    const parsed = JSON.parse(raw);
+                    if (Array.isArray(parsed.flagged)) {
+                      postFlagged = parsed.flagged
+                        .filter((f: any) => typeof f.index === 'number' && f.index >= 0 && f.index < postSents.length)
+                        .map((f: any) => ({
+                          index: f.index,
+                          ai_score: typeof f.ai_score === 'number' ? f.ai_score : 80,
+                          flagged_phrases: Array.isArray(f.phrases) ? f.phrases.filter((p: any) => typeof p === 'string') : [],
+                        }));
+                    }
+                  } catch { /* ignore parse errors */ }
+                  console.log(`[Nuru Post GPT] Flagged ${postFlagged.length}/${postSents.length} sentences (${Date.now() - nuruPostStart}ms)`);
+                }
+              } catch (e: any) {
+                console.warn(`[Nuru Post GPT] Detection failed: ${e.message}`);
+              }
+            }
+
+            // ── Phase C: 5 targeted passes on flagged sentences only ──
+            if (postFlagged.length > 0 && nuruPostTimeOk()) {
+              const flagMap = new Map<number, string[]>();
+              for (const f of postFlagged) flagMap.set(f.index, f.flagged_phrases);
+              console.log(`[Nuru Post Targeted] Applying targeted passes to ${flagMap.size} flagged sentences`);
+
+              for (let pass = 0; pass < 5; pass++) {
+                for (const [idx, phrases] of flagMap) {
+                  if (isHeadingSentCheck(postSents[idx])) continue;
+                  if (phrases.length > 0) {
+                    postSents[idx] = stealthHumanizeTargeted(postSents[idx], phrases, strength ?? 'medium');
+                  } else {
+                    postSents[idx] = runNuruSinglePass(postSents[idx]);
+                  }
+                  sendSSE(controller, { type: 'sentence', index: idx, text: postSents[idx], stage: 'Nuru 2.0 (targeted)' });
+                }
+                await flushDelay(5);
+                if (!nuruPostTimeOk()) break;
+              }
+            }
+
+            humanized = reassembleText(postSents, postParaBounds.length ? postParaBounds : [0]);
+            latestHumanized = humanized;
+            console.log(`[Nuru Post] Complete in ${Date.now() - nuruPostStart}ms`);
+          }
+
+          // ── POST-PROCESSING (skip for ozone — it handles its own full pipeline) ──
+          if (eng !== 'ozone') {
 
           // 4. Unified Sentence Process
           const FIRST_PERSON_RE_EARLY = /\b(I|me|my|mine|myself|we|us|our|ours|ourselves)\b/i;
@@ -1357,7 +1471,7 @@ Keep phrases to the most suspicious 1-3 per sentence.`,
           humanized = humanized.replace(/(^|[.!?]\s+)([a-z])/g, (_m: string, pre: string, ch: string) => pre + ch.toUpperCase());
           humanized = fixMidSentenceCapitalization(humanized, text);
 
-          } // end: if (eng !== 'ozone' && eng !== 'oxygen_t5' && eng !== 'dipper' && eng !== 'humarin') post-processing block
+          } // end: if (eng !== 'ozone') post-processing block
 
           // Structure preservation for ozone (runs after ozone's own dedup, restores heading placement)
           if (eng === 'ozone') {

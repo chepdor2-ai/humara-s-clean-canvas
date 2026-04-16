@@ -133,16 +133,16 @@ export async function humarinHumanize(
 ): Promise<HumarinResult> {
   const apiKey = process.env.HUMARIN_API_KEY;
   if (!apiKey) {
-    throw new Error('HUMARIN_API_KEY environment variable is not set');
+    console.warn('[Humarin] HUMARIN_API_KEY not set, falling back to LLM Academic');
+    return llmAcademicFallback(text);
   }
 
   const primaryUrl = HUMARIN_API_URL.replace(/\/$/, '');
-  const FAILOVER_TIMEOUT_MS = 30_000; // 30s — HF Spaces need 10-30s to respond
+  const FAST_TIMEOUT_MS = 5_000; // 5s — fail fast, fall back to LLM Academic
 
   // ── Parallel dual-endpoint batching ──────────────────────────
   // When both primary and backup are available and text is large enough,
   // split into 2 chunks and process them in parallel (one per endpoint).
-  // This halves latency since each HF Space worker handles one chunk.
   const wordCount = text.split(/\s+/).filter(Boolean).length;
   if (HUMARIN_BACKUP_URL && wordCount > 300) {
     const backupUrl = HUMARIN_BACKUP_URL.replace(/\/$/, '');
@@ -155,13 +155,13 @@ export async function humarinHumanize(
           Promise.race([
             runHumarinPass(chunks[0], mode, sentenceBySentence, apiKey, primaryUrl),
             new Promise<never>((_, reject) =>
-              setTimeout(() => reject(new Error('primary timed out')), FAILOVER_TIMEOUT_MS)
+              setTimeout(() => reject(new Error('primary timed out')), FAST_TIMEOUT_MS)
             ),
           ]),
           Promise.race([
             runHumarinPass(chunks[1], mode, sentenceBySentence, backupKey, backupUrl),
             new Promise<never>((_, reject) =>
-              setTimeout(() => reject(new Error('backup timed out')), FAILOVER_TIMEOUT_MS)
+              setTimeout(() => reject(new Error('backup timed out')), FAST_TIMEOUT_MS)
             ),
           ]),
         ]);
@@ -173,17 +173,17 @@ export async function humarinHumanize(
           stats: { mode, total_sentences: totalSentences, avg_change_ratio: Math.round(avgChange * 1000) / 1000, met_threshold: totalSentences, threshold_ratio: 1.0 },
         };
       } catch (parallelErr) {
-        console.warn(`[Humarin] Dual-endpoint parallel failed, falling back to sequential: ${parallelErr instanceof Error ? parallelErr.message : parallelErr}`);
+        console.warn(`[Humarin] Dual-endpoint parallel failed: ${parallelErr instanceof Error ? parallelErr.message : parallelErr}`);
       }
     }
   }
 
-  // Phase 1: Try primary with 30s timeout
+  // Phase 1: Try primary with 5s timeout (fail fast)
   try {
     const result = await Promise.race([
       runHumarinPass(text, mode, sentenceBySentence, apiKey, primaryUrl),
       new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error('Humarin primary timed out after 30s')), FAILOVER_TIMEOUT_MS)
+        setTimeout(() => reject(new Error('Humarin primary timed out after 5s')), FAST_TIMEOUT_MS)
       ),
     ]);
     return result;
@@ -191,7 +191,7 @@ export async function humarinHumanize(
     console.warn(`[Humarin] Primary failed/timed out: ${primaryErr instanceof Error ? primaryErr.message : primaryErr}`);
   }
 
-  // Phase 2: Try backup URL if configured (with 30s timeout)
+  // Phase 2: Try backup URL if configured (with 5s timeout)
   if (HUMARIN_BACKUP_URL) {
     try {
       const backupUrl = HUMARIN_BACKUP_URL.replace(/\/$/, '');
@@ -200,7 +200,7 @@ export async function humarinHumanize(
       const result = await Promise.race([
         runHumarinPass(text, mode, sentenceBySentence, backupKey, backupUrl),
         new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error('Humarin backup timed out after 30s')), FAILOVER_TIMEOUT_MS)
+          setTimeout(() => reject(new Error('Humarin backup timed out after 5s')), FAST_TIMEOUT_MS)
         ),
       ]);
       return result;
@@ -209,20 +209,34 @@ export async function humarinHumanize(
     }
   }
 
-  // Phase 3: Oxygen TS fallback — instant, serverless, always available
-  console.log('[Humarin] All API endpoints failed, falling back to Oxygen TS engine');
-  const { oxygenHumanize } = await import('@/lib/engine/oxygen-humanizer');
-  const oxygenStrength = mode === 'aggressive' ? 'strong' : mode === 'fast' || mode === 'turbo' ? 'light' : 'medium';
-  const oxygenMode = oxygenStrength === 'light' ? 'fast' : oxygenStrength === 'strong' ? 'aggressive' : 'quality';
-  const humanized = oxygenHumanize(text, oxygenStrength, oxygenMode, sentenceBySentence);
-  return {
-    humanized,
-    stats: {
-      mode: `oxygen-fallback-${mode || 'quality'}`,
-      total_sentences: humanized.split(/[.!?]+/).filter(s => s.trim()).length,
-      avg_change_ratio: 0.5,
-      met_threshold: 1,
-      threshold_ratio: 1.0,
-    },
-  };
+  // Phase 3: LLM Academic Humanizer fallback — 5-phase GPT-4o-mini pipeline
+  return llmAcademicFallback(text);
+}
+
+/**
+ * Fall back to 5-phase LLM Academic Humanizer (GPT-4o-mini).
+ * Deep structural rewrites + targeted AI signal removal.
+ */
+async function llmAcademicFallback(text: string): Promise<HumarinResult> {
+  console.log('[Humarin] Falling back to 5-phase LLM Academic Humanizer');
+  try {
+    const { llmAcademicHumanize } = await import('@/lib/engine/llm-academic-humanizer');
+    return await llmAcademicHumanize(text, 15000);
+  } catch (llmErr) {
+    console.warn(`[Humarin] LLM Academic fallback failed: ${llmErr instanceof Error ? llmErr.message : llmErr}`);
+    // Final fallback: Oxygen TS — instant, serverless, always available
+    console.log('[Humarin] Final fallback to Oxygen TS engine');
+    const { oxygenHumanize } = await import('@/lib/engine/oxygen-humanizer');
+    const humanized = oxygenHumanize(text, 'medium', 'quality', true);
+    return {
+      humanized,
+      stats: {
+        mode: 'oxygen-fallback',
+        total_sentences: humanized.split(/[.!?]+/).filter(s => s.trim()).length,
+        avg_change_ratio: 0.5,
+        met_threshold: 1,
+        threshold_ratio: 1.0,
+      },
+    };
+  }
 }
