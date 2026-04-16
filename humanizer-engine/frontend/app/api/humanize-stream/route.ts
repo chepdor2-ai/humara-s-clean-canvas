@@ -1187,6 +1187,112 @@ export async function POST(req: Request) {
             return current;
           };
 
+          const SENTENCE_DETECTOR_PRIORITY = new Set([
+            'gptzero',
+            'turnitin',
+            'originality_ai',
+            'winston_ai',
+            'copyleaks',
+            'stealth_detector',
+          ]);
+
+          const HEURISTIC_AI_PHRASES = [
+            'it is important to note that',
+            'it is worth noting that',
+            'plays a crucial role',
+            'plays a vital role',
+            'plays a key role',
+            'in today\'s world',
+            'in today\'s society',
+            'cannot be overstated',
+            'first and foremost',
+            'at the end of the day',
+            'when it comes to',
+            'in the context of',
+            'a wide range of',
+            'due to the fact that',
+            'in the realm of',
+            'in order to',
+            'needless to say',
+            'serves as a',
+            'it goes without saying',
+            'with respect to',
+            'for the purpose of',
+            'in the event that',
+            'by virtue of',
+          ];
+
+          const SENTENCE_FLAG_THRESHOLD = 20;
+          const SENTENCE_RECHECK_THRESHOLD = 5;
+
+          const normalizeSentenceAiScore = (rawScore: number): number => {
+            return Math.max(0, Math.min(100, Math.round(Math.max(0, (rawScore - 45) * 1.8) * 10) / 10));
+          };
+
+          const extractFlaggedPhrasesHeuristically = (sentence: string): string[] => {
+            const lowered = sentence.toLowerCase();
+            const found = new Set<string>();
+
+            for (const phrase of HEURISTIC_AI_PHRASES) {
+              if (lowered.includes(phrase)) {
+                found.add(phrase);
+              }
+            }
+
+            for (const phrase of Object.keys(AI_WORD_REPLACEMENTS)) {
+              if (!phrase || phrase.length < 4 || phrase.length > 40) continue;
+              if (lowered.includes(phrase.toLowerCase())) {
+                found.add(phrase);
+              }
+              if (found.size >= 5) break;
+            }
+
+            const starterMatch = sentence.match(/^\s*([^,]{3,32}),/);
+            if (starterMatch) {
+              const starter = starterMatch[1].trim().toLowerCase();
+              if (HEURISTIC_AI_PHRASES.some((phrase) => phrase.startsWith(starter)) || /^(however|therefore|moreover|furthermore|notably|specifically|accordingly|thus|indeed)$/.test(starter)) {
+                found.add(starter);
+              }
+            }
+
+            return [...found].slice(0, 5);
+          };
+
+          const analyzeSentenceWithBuiltInDetector = (sentence: string): { ai_score: number; flagged_phrases: string[] } => {
+            const analysis = getDetector().analyze(sentence);
+            const priorityScores = analysis.detectors
+              .filter((det) => SENTENCE_DETECTOR_PRIORITY.has(det.detector))
+              .map((det) => det.ai_score);
+            const detectorPeak = priorityScores.length > 0 ? Math.max(...priorityScores) : analysis.summary.overall_ai_score;
+            const flaggedPhrases = extractFlaggedPhrasesHeuristically(sentence);
+            const normalizedDetectorScore = normalizeSentenceAiScore(Math.max(detectorPeak, analysis.summary.overall_ai_score));
+            const phrasePressure = Math.min(100, flaggedPhrases.length * 12);
+            const aiScore = Math.max(normalizedDetectorScore, phrasePressure);
+
+            return {
+              ai_score: Math.round(aiScore * 10) / 10,
+              flagged_phrases: flaggedPhrases,
+            };
+          };
+
+          const findFlaggedSentencesWithBuiltInDetector = (
+            sentences: string[],
+            threshold: number,
+          ): Array<{ index: number; ai_score: number; flagged_phrases: string[] }> => {
+            return sentences
+              .map((sentence, index) => {
+                if (isHeadingSentCheck(sentence)) return null;
+                const analysis = analyzeSentenceWithBuiltInDetector(sentence);
+                if (analysis.ai_score < threshold) return null;
+                return {
+                  index,
+                  ai_score: analysis.ai_score,
+                  flagged_phrases: analysis.flagged_phrases,
+                };
+              })
+              .filter((flagged): flagged is { index: number; ai_score: number; flagged_phrases: string[] } => flagged !== null);
+          };
+
           // ══════════════════════════════════════════════════════════════
           // FULL-PIPELINE RUNNERS — called when one engine invokes another
           // within a phase. These include ALL sub-engine processing stages
@@ -1628,10 +1734,10 @@ export async function POST(req: Request) {
                 }
               } else if (phase.type === 'nuru') {
                 // ═══════════════════════════════════════════════════════
-                // NURU 2.0 PIPELINE: 10 passes → GPT detect → non-LLM targeted clean
+                // NURU 2.0 PIPELINE: 10 passes → built-in detect → non-LLM targeted clean
                 // → extra cleanup cycles → flagged-only re-detect/re-clean loop
                 // 1. 10 baseline Nuru passes on ALL sentences
-                // 2. GPT-4o-mini forensic detection (flagged sentences + phrases)
+                // 2. Built-in sentence detection (flagged sentences + phrases)
                 // 3. Deterministic non-LLM replacement of flagged words/phrases
                 // 4. 5 targeted cleanup cycles to remove remaining AI traces
                 // 5. Fast micro-loops on flagged sentences only until they drop <5
@@ -1639,7 +1745,6 @@ export async function POST(req: Request) {
                 const BASELINE_PASSES = 10;
                 const CLEANUP_PASSES = 10;
                 const FAST_RECHECK_PASSES = 10;
-                const TARGET_AI_SCORE = 5;
                 const MAX_FAST_LOOPS = 10;
                 const POST_DETECTION_MIN_CHANGE = Math.max(0.4, MIN_CHANGE);
 
@@ -1662,7 +1767,7 @@ export async function POST(req: Request) {
                   if (deadlineReached) break;
                 }
 
-                // ── Step 2: GPT-4o-mini forensic detection ──
+                // ── Step 2: built-in sentence detection ──
                 interface FlaggedSentence {
                   index: number;
                   ai_score: number;
@@ -1671,61 +1776,12 @@ export async function POST(req: Request) {
                 let flaggedSentences: FlaggedSentence[] = [];
 
                 try {
-                  const apiKey = process.env.OPENAI_API_KEY?.trim();
-                  if (apiKey && !deadlineReached) {
-                    const oai = new OpenAI({ apiKey });
-                    const sentenceList = currentSentences
-                      .map((s, i) => isHeadingSentCheck(s) ? null : `[${i}] ${s}`)
-                      .filter(Boolean)
-                      .join('\n');
-
-                    const resp = await oai.chat.completions.create({
-                      model: 'gpt-4o-mini',
-                      messages: [
-                        {
-                          role: 'system',
-                          content: `You are a forensic AI text analyzer. Analyze EACH sentence for AI generation signals.
-
-For each sentence:
-- Assign AI likelihood (0-100%)
-- Identify exact phrases or words (1-10 words) that sound AI-generated
-- Flag unnatural phrasing, generic academic filler, repetitive transitions, predictable patterns
-
-Be strict. Do not assume the text is human.
-
-Respond with ONLY valid JSON, no markdown:
-{
-  "flagged": [
-    { "index": <sentence_index>, "ai_score": <0-100>, "phrases": ["flagged phrase 1", "flagged word"] }
-  ]
-}
-
-Only include sentences with ai_score >= 55 in the flagged array.
-List ALL suspicious words and phrases (up to 5 per sentence).`,
-                        },
-                        { role: 'user', content: sentenceList.slice(0, 4000) },
-                      ],
-                      temperature: 0,
-                      max_tokens: 1500,
-                    });
-
-                    const raw = resp.choices[0]?.message?.content?.trim() ?? '';
-                    try {
-                      const parsed = JSON.parse(raw);
-                      if (Array.isArray(parsed.flagged)) {
-                        flaggedSentences = parsed.flagged
-                          .filter((f: any) => typeof f.index === 'number' && f.index >= 0 && f.index < currentSentences.length)
-                          .map((f: any) => ({
-                            index: f.index,
-                            ai_score: typeof f.ai_score === 'number' ? f.ai_score : 80,
-                            flagged_phrases: Array.isArray(f.phrases) ? f.phrases.filter((p: any) => typeof p === 'string') : [],
-                          }));
-                      }
-                    } catch { /* ignore parse errors */ }
-                    console.log(`[Nuru GPT] Flagged ${flaggedSentences.length}/${currentSentences.length} sentences`);
+                  if (!deadlineReached) {
+                    flaggedSentences = findFlaggedSentencesWithBuiltInDetector(currentSentences, SENTENCE_FLAG_THRESHOLD);
+                    console.log(`[Nuru Detector] Flagged ${flaggedSentences.length}/${currentSentences.length} sentences`);
                   }
                 } catch (e: any) {
-                  console.warn(`[Nuru GPT] Detection failed: ${e.message}`);
+                  console.warn(`[Nuru Detector] Detection failed: ${e.message}`);
                 }
 
                 // ── Step 3: Deterministic non-LLM cleanup of flagged words/phrases ──
@@ -1779,57 +1835,22 @@ List ALL suspicious words and phrases (up to 5 per sentence).`,
                 ) {
                   fastLoop++;
                   try {
-                    const apiKey = process.env.OPENAI_API_KEY?.trim();
-                    if (!apiKey) break;
-                    const oai = new OpenAI({ apiKey });
                     const flaggedSubset = activeFlagged
                       .filter((f: any) => !isHeadingSentCheck(currentSentences[f.index]))
                       .map((f: any) => ({ index: f.index, sentence: currentSentences[f.index] }));
                     if (flaggedSubset.length === 0) break;
 
-                    const recheckResp = await Promise.race([
-                      oai.chat.completions.create({
-                        model: 'gpt-4o-mini',
-                        messages: [
-                          {
-                            role: 'system',
-                            content: `You are a forensic AI text analyzer. Re-check ONLY these already-flagged sentences.
-
-For each sentence:
-- Assign AI likelihood (0-100%)
-- List the exact remaining suspicious words/phrases
-
-Respond with ONLY valid JSON:
-{ "flagged": [{ "index": <original_index>, "ai_score": <0-100>, "phrases": ["phrase1", "word1"] }] }
-
-Include EVERY sentence with ai_score >= 5.
-If all sentences are below 5, return { "flagged": [] }.`,
-                          },
-                          { role: 'user', content: JSON.stringify(flaggedSubset).slice(0, 3000) },
-                        ],
-                        temperature: 0,
-                        max_tokens: 900,
-                      }),
-                      new Promise<never>((_, reject) =>
-                        setTimeout(() => reject(new Error('GPT recheck timed out')), 2000)
-                      ),
-                    ]);
-
-                    const recheckRaw = recheckResp.choices[0]?.message?.content?.trim() ?? '';
-                    let reflagged: FlaggedSentence[] = [];
-                    try {
-                      const parsed = JSON.parse(recheckRaw);
-                      if (Array.isArray(parsed.flagged)) {
-                        reflagged = parsed.flagged
-                          .filter((f: any) => typeof f.index === 'number' && f.index >= 0 && f.index < currentSentences.length)
-                          .map((f: any) => ({
-                            index: f.index,
-                            ai_score: typeof f.ai_score === 'number' ? f.ai_score : 0,
-                            flagged_phrases: Array.isArray(f.phrases) ? f.phrases.filter((p: any) => typeof p === 'string') : [],
-                          }))
-                          .filter((f: any) => f.ai_score >= TARGET_AI_SCORE);
-                      }
-                    } catch { /* ignore parse errors */ }
+                    const reflagged: FlaggedSentence[] = flaggedSubset
+                      .map((flagged) => {
+                        const analysis = analyzeSentenceWithBuiltInDetector(flagged.sentence);
+                        if (analysis.ai_score < SENTENCE_RECHECK_THRESHOLD) return null;
+                        return {
+                          index: flagged.index,
+                          ai_score: analysis.ai_score,
+                          flagged_phrases: analysis.flagged_phrases,
+                        };
+                      })
+                      .filter((flagged): flagged is FlaggedSentence => flagged !== null);
 
                     if (reflagged.length === 0) {
                       activeFlagged = [];
@@ -1875,7 +1896,7 @@ If all sentences are below 5, return { "flagged": [] }.`,
 
                     activeFlagged = reflagged;
                   } catch (e: any) {
-                    console.warn(`[Nuru GPT Loop] Fast recheck failed: ${e.message}`);
+                    console.warn(`[Nuru Detector Loop] Fast recheck failed: ${e.message}`);
                     break;
                   }
                 }
@@ -1928,7 +1949,7 @@ If all sentences are below 5, return { "flagged": [] }.`,
           const inputAnalysis = detector.analyze(text);
 
           // ═══════════════════════════════════════════════════════════════
-          // UNIVERSAL NURU POST-PROCESSING: 10 passes → GPT detect → Nuru cleanup
+          // UNIVERSAL NURU POST-PROCESSING: 10 passes → built-in detect → Nuru cleanup
           // → fast flagged-only re-detect/re-clean loop until <5 AI score
           // Applies to ALL engines EXCEPT ozone (Humara 2.1).
           // Engines that already ran Nuru in their phase pipeline skip baseline.
@@ -1943,7 +1964,6 @@ If all sentences are below 5, return { "flagged": [] }.`,
             const postBaselineSentences = [...postSentences];
             const FLAGGED_CLEANUP_PASSES = 10;
             const FAST_RECHECK_PASSES = 10;
-            const TARGET_AI_SCORE = 5;
             const MAX_FAST_LOOPS = 10;
             const POST_DETECTION_MIN_CHANGE = 0.4;
 
@@ -1973,58 +1993,16 @@ If all sentences are below 5, return { "flagged": [] }.`,
               console.log(`[Nuru Post] 10 baseline passes done (${Date.now() - nuruPostStart}ms)`);
             }
 
-            // ── Step 2: GPT-4o-mini forensic detection ──
+            // ── Step 2: built-in sentence detection ──
             interface PostFlagged { index: number; ai_score: number; flagged_phrases: string[]; }
             let postFlagged: PostFlagged[] = [];
 
             if (nuruPostTimeOk()) {
               try {
-                const gptApiKey = process.env.OPENAI_API_KEY?.trim();
-                if (gptApiKey) {
-                  const oai = new OpenAI({ apiKey: gptApiKey });
-                  const sentList = postSents
-                    .map((s, i) => isHeadingSentCheck(s) ? null : `[${i}] ${s}`)
-                    .filter(Boolean)
-                    .join('\n');
-
-                  const gptResp = await Promise.race([
-                    oai.chat.completions.create({
-                      model: 'gpt-4o-mini',
-                      messages: [
-                        {
-                          role: 'system',
-                          content: `You are a forensic AI text analyzer. Analyze EACH sentence for AI generation signals.
-For each sentence: assign AI likelihood (0-100%), identify ALL suspicious words and phrases (up to 5).
-Respond with ONLY valid JSON: { "flagged": [{ "index": <int>, "ai_score": <0-100>, "phrases": ["phrase1", "word1"] }] }
-Only include sentences with ai_score >= 55.`,
-                        },
-                        { role: 'user', content: sentList.slice(0, 4000) },
-                      ],
-                      temperature: 0,
-                      max_tokens: 1500,
-                    }),
-                    new Promise<never>((_, reject) =>
-                      setTimeout(() => reject(new Error('GPT detection timed out')), 4000)
-                    ),
-                  ]);
-
-                  const raw = gptResp.choices[0]?.message?.content?.trim() ?? '';
-                  try {
-                    const parsed = JSON.parse(raw);
-                    if (Array.isArray(parsed.flagged)) {
-                      postFlagged = parsed.flagged
-                        .filter((f: any) => typeof f.index === 'number' && f.index >= 0 && f.index < postSents.length)
-                        .map((f: any) => ({
-                          index: f.index,
-                          ai_score: typeof f.ai_score === 'number' ? f.ai_score : 80,
-                          flagged_phrases: Array.isArray(f.phrases) ? f.phrases.filter((p: any) => typeof p === 'string') : [],
-                        }));
-                    }
-                  } catch { /* ignore parse errors */ }
-                  console.log(`[Nuru Post GPT] Flagged ${postFlagged.length}/${postSents.length} sentences (${Date.now() - nuruPostStart}ms)`);
-                }
+                postFlagged = findFlaggedSentencesWithBuiltInDetector(postSents, SENTENCE_FLAG_THRESHOLD);
+                console.log(`[Nuru Post Detector] Flagged ${postFlagged.length}/${postSents.length} sentences (${Date.now() - nuruPostStart}ms)`);
               } catch (e: any) {
-                console.warn(`[Nuru Post GPT] Detection failed: ${e.message}`);
+                console.warn(`[Nuru Post Detector] Detection failed: ${e.message}`);
               }
             }
 
@@ -2099,57 +2077,22 @@ Only include sentences with ai_score >= 55.`,
             while (activePostFlagged.length > 0 && fastLoop < MAX_FAST_LOOPS && nuruPostTimeOk()) {
               fastLoop++;
               try {
-                const gptApiKey = process.env.OPENAI_API_KEY?.trim();
-                if (!gptApiKey) break;
-                const oai = new OpenAI({ apiKey: gptApiKey });
                 const flaggedSubset = activePostFlagged
                   .filter((f: any) => !isHeadingSentCheck(postSents[f.index]))
                   .map((f: any) => ({ index: f.index, sentence: postSents[f.index] }));
                 if (flaggedSubset.length === 0) break;
 
-                const recheckResp = await Promise.race([
-                  oai.chat.completions.create({
-                    model: 'gpt-4o-mini',
-                    messages: [
-                      {
-                        role: 'system',
-                        content: `You are a forensic AI text analyzer. Re-check ONLY these already-flagged sentences.
-
-For each sentence:
-- Assign AI likelihood (0-100%)
-- List the exact remaining suspicious words/phrases
-
-Respond with ONLY valid JSON:
-{ "flagged": [{ "index": <original_index>, "ai_score": <0-100>, "phrases": ["phrase1", "word1"] }] }
-
-Include EVERY sentence with ai_score >= 5.
-If all sentences are below 5, return { "flagged": [] }.`,
-                      },
-                      { role: 'user', content: JSON.stringify(flaggedSubset).slice(0, 3000) },
-                    ],
-                    temperature: 0,
-                    max_tokens: 900,
-                  }),
-                  new Promise<never>((_, reject) =>
-                    setTimeout(() => reject(new Error('GPT recheck timed out')), 2000)
-                  ),
-                ]);
-
-                const recheckRaw = recheckResp.choices[0]?.message?.content?.trim() ?? '';
-                let reflagged: PostFlagged[] = [];
-                try {
-                  const parsed = JSON.parse(recheckRaw);
-                  if (Array.isArray(parsed.flagged)) {
-                    reflagged = parsed.flagged
-                      .filter((f: any) => typeof f.index === 'number' && f.index >= 0 && f.index < postSents.length)
-                      .map((f: any) => ({
-                        index: f.index,
-                        ai_score: typeof f.ai_score === 'number' ? f.ai_score : 0,
-                        flagged_phrases: Array.isArray(f.phrases) ? f.phrases.filter((p: any) => typeof p === 'string') : [],
-                      }))
-                      .filter((f: any) => f.ai_score >= TARGET_AI_SCORE);
-                  }
-                } catch { /* ignore parse errors */ }
+                const reflagged: PostFlagged[] = flaggedSubset
+                  .map((flagged) => {
+                    const analysis = analyzeSentenceWithBuiltInDetector(flagged.sentence);
+                    if (analysis.ai_score < SENTENCE_RECHECK_THRESHOLD) return null;
+                    return {
+                      index: flagged.index,
+                      ai_score: analysis.ai_score,
+                      flagged_phrases: analysis.flagged_phrases,
+                    };
+                  })
+                  .filter((flagged): flagged is PostFlagged => flagged !== null);
 
                 if (reflagged.length === 0) {
                   activePostFlagged = [];
@@ -2190,7 +2133,7 @@ If all sentences are below 5, return { "flagged": [] }.`,
 
                 activePostFlagged = reflagged;
               } catch (e: any) {
-                console.warn(`[Nuru Post GPT Loop] Fast recheck failed: ${e.message}`);
+                console.warn(`[Nuru Post Detector Loop] Fast recheck failed: ${e.message}`);
                 break;
               }
             }
