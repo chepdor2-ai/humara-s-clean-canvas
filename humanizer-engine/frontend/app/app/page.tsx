@@ -506,6 +506,20 @@ function EditorPageInner() {
     let buffer = '';
     let finalData: Record<string, unknown> | null = null;
     let doneEventReceived = false;
+    let streamedSentences: string[] = [];
+    let streamedParagraphBoundaries: number[] = [];
+
+    const reassemblePartialText = (sentences: string[], paragraphBoundaries: number[]) => {
+      if (!sentences.length) return '';
+      if (!paragraphBoundaries.length) return sentences.join(' ');
+      const paragraphs: string[] = [];
+      for (let i = 0; i < paragraphBoundaries.length; i++) {
+        const start = paragraphBoundaries[i];
+        const end = i < paragraphBoundaries.length - 1 ? paragraphBoundaries[i + 1] : sentences.length;
+        paragraphs.push(sentences.slice(start, end).filter(Boolean).join(' '));
+      }
+      return paragraphs.filter(Boolean).join('\n\n');
+    };
 
     while (true) {
       const { done, value } = await reader.read();
@@ -520,10 +534,26 @@ function EditorPageInner() {
         let event: Record<string, unknown>;
         try { event = JSON.parse(line.slice(6)); } catch { continue; }
 
-        if (event.type === 'error') throw new Error(event.error as string);
+        if (event.type === 'error') {
+          const errorMessage = typeof event.error === 'string' ? event.error : 'Processing failed';
+          const partialText = reassemblePartialText(streamedSentences, streamedParagraphBoundaries);
+          if (partialText.trim()) {
+            finalData = { type: 'done', humanized: partialText, partial: true, error: errorMessage };
+            setStreamSentences(prev => prev.map(s => ({ ...s, stage: 'done' })));
+            setStreamGlobalStage('Complete');
+            setStreamDone(true);
+            setStreamProgressTarget(100);
+            setStreamPhaseName('Complete');
+            doneEventReceived = true;
+            break;
+          }
+          throw new Error(errorMessage);
+        }
 
         if (event.type === 'init') {
           const rawSents = event.sentences as string[];
+          streamedSentences = [...rawSents];
+          streamedParagraphBoundaries = (event.paragraphBoundaries as number[]) ?? [];
           const sents = rawSents.map(t => ({ text: t, stage: 'original' }));
           setStreamSentences(sents);
           setStreamParagraphBoundaries(event.paragraphBoundaries as number[]);
@@ -565,6 +595,10 @@ function EditorPageInner() {
           const idx = event.index as number;
           const txt = event.text as string;
           const stg = event.stage as string;
+          if (idx >= streamedSentences.length) {
+            streamedSentences.length = idx + 1;
+          }
+          streamedSentences[idx] = txt;
           setStreamSentences(prev => {
             const next = [...prev];
             if (idx < next.length) {
@@ -609,7 +643,16 @@ function EditorPageInner() {
     }
 
     if (!finalData) {
-      throw new Error('Stream ended before completion');
+      const partialText = reassemblePartialText(streamedSentences, streamedParagraphBoundaries);
+      if (partialText.trim()) {
+        finalData = { type: 'done', humanized: partialText, partial: true };
+        setStreamSentences(prev => prev.map(s => ({ ...s, stage: 'done' })));
+        setStreamGlobalStage('Complete');
+        setStreamDone(true);
+        setStreamProgressTarget(100);
+      } else {
+        throw new Error('Stream ended before completion');
+      }
     }
 
     return finalData;

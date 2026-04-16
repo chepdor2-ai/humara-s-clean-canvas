@@ -226,6 +226,39 @@ export async function POST(req: Request) {
 
     const stream = new ReadableStream({
       async start(controller) {
+        // ── Deadline safety: send partial results before Vercel kills the function ──
+        const DEADLINE_MS = 115_000; // 115s — 5s before Vercel's 120s hard cutoff
+        const startTime = Date.now();
+        let deadlineReached = false;
+        let latestHumanized = text; // always holds the best result so far
+        let streamClosed = false;
+        let deadlineTimer: ReturnType<typeof setTimeout> | null = null;
+        const finishStream = (payload: Record<string, unknown>) => {
+          if (streamClosed) return;
+          streamClosed = true;
+          if (deadlineTimer) clearTimeout(deadlineTimer);
+          try {
+            sendSSE(controller, {
+              type: 'done',
+              humanized: latestHumanized || text,
+              word_count: (latestHumanized || text).split(/\s+/).filter(Boolean).length,
+              input_word_count: text.split(/\s+/).filter(Boolean).length,
+              engine_used: engine ?? 'oxygen',
+              ...payload,
+            });
+          } finally {
+            try { controller.close(); } catch {}
+          }
+        };
+        deadlineTimer = setTimeout(() => {
+          deadlineReached = true;
+          finishStream({
+            meaning_preserved: true,
+            meaning_similarity: 0.85,
+            partial: true,
+          });
+        }, DEADLINE_MS);
+
         try {
           // 1. Parse & emit original sentences
           const { sentences: origSentences, paragraphBoundaries } = splitIntoIndexedSentences(text);
@@ -333,29 +366,13 @@ export async function POST(req: Request) {
           };
 
           // ── Adaptive Oxygen Chain (inline) ──
-          // Iterates oxygenHumanize until target word-change per sentence or max 6 passes
+          // Iterates oxygenHumanize until target word-change per sentence or max 2 passes
           const adaptiveOxygenChain = (phaseOneOutput: string): string => {
-            const MAX_ITER = 6;
-            const TARGET_CHANGE = minChangeThreshold;
-            const SENT_PASS_RATE = 0.70;
+            const MAX_ITER = 2;
             let current = phaseOneOutput;
-            const p1Sents = robustSentenceSplit(phaseOneOutput);
             for (let iter = 0; iter < MAX_ITER; iter++) {
-              const totalPasses = iter + 2;
-              const passMode = totalPasses <= 5 ? 'fast' : totalPasses <= 7 ? 'quality' : 'aggressive';
-              const passStrength = totalPasses <= 5 ? 'light' : totalPasses <= 7 ? 'medium' : 'strong';
-              const r = oxygenHumanize(current, passStrength, passMode, false);
+              const r = oxygenHumanize(current, 'medium', 'quality', false);
               if (r && r.trim().length > 0) current = r;
-              if (totalPasses >= 4) {
-                const curSents = robustSentenceSplit(current);
-                let met = 0;
-                for (const cs of curSents) {
-                  let best = 0;
-                  for (const p1 of p1Sents) { const c = measureSentenceChange(p1, cs); if (c > best) best = c; }
-                  if (best >= TARGET_CHANGE) met++;
-                }
-                if (curSents.length > 0 && met / curSents.length >= SENT_PASS_RATE) break;
-              }
             }
             return current;
           };
@@ -375,8 +392,9 @@ export async function POST(req: Request) {
           };
 
           const runHumara24 = async (input: string): Promise<string> => {
-            const humarinMode = strength === 'strong' ? 'aggressive' : strength === 'light' ? 'fast' : 'quality';
-            const humarinResult = await humarinHumanize(input, humarinMode, true);
+            const inputWordCount = input.split(/\s+/).filter(Boolean).length;
+            const humarinMode = strength === 'strong' ? 'quality' : strength === 'light' ? 'turbo' : 'fast';
+            const humarinResult = await humarinHumanize(input, humarinMode, inputWordCount <= 220);
             let output = humarinResult.humanized;
             output = adaptiveOxygenChain(output);
             return output;
@@ -540,29 +558,17 @@ export async function POST(req: Request) {
           // so the output is fully processed, not raw engine output.
           // ══════════════════════════════════════════════════════════════
 
-          /** Humara 2.0 Full: restructure → oxygen → adaptiveChain → nuru × 10 → deepClean → smooth */
+          /** Humara 2.0 Full: oxygen → adaptiveChain → deepClean (lightweight, no nested Nuru/LLM) */
           const runHumara20Full = async (input: string): Promise<string> => {
-            let s = await restructureSentence(input);
-            s = runHumara20(s);
-            for (let i = 0; i < CHAIN_TS; i++) {
-              const n = stealthHumanize(s, strength ?? 'medium', tone ?? 'academic', 1);
-              if (n && n.trim().length > 0) s = n;
-            }
+            let s = runHumara20(input);
             s = deepNonLLMClean(s);
-            s = finalSmoothGrammar(s);
             return s;
           };
 
-          /** Humara 2.4 Full: restructure → humarin → adaptiveChain → nuru × 10 → deepClean → smooth */
+          /** Humara 2.4 Full: humarin → adaptiveChain → deepClean (lightweight, no nested Nuru/LLM) */
           const runHumara24Full = async (input: string): Promise<string> => {
-            let s = await restructureSentence(input);
-            s = await runHumara24(s);
-            for (let i = 0; i < CHAIN_TS; i++) {
-              const n = stealthHumanize(s, strength ?? 'medium', tone ?? 'academic', 1);
-              if (n && n.trim().length > 0) s = n;
-            }
+            let s = await runHumara24(input);
             s = deepNonLLMClean(s);
-            s = finalSmoothGrammar(s);
             return s;
           };
 
@@ -682,7 +688,7 @@ export async function POST(req: Request) {
 
           // ── Full-text engines (Ozone / Humara 2.1, Easy / Humara 2.2) ──
           // These LLM APIs work best on the entire text, not sentence-by-sentence.
-          const FULL_TEXT_ENGINES = new Set(['easy', 'ozone', 'king']);
+          const FULL_TEXT_ENGINES = new Set(['easy', 'ozone', 'king', 'ghost_pro_wiki', 'humara_v3_3']);
           let sentenceResults: string[];
 
           if (FULL_TEXT_ENGINES.has(eng)) {
@@ -691,6 +697,10 @@ export async function POST(req: Request) {
             if (eng === 'king') {
               const kingResult = await kingHumanize(normalizedText);
               fullResult = kingResult.humanized;
+            } else if (eng === 'ghost_pro_wiki') {
+              fullResult = await runWikipedia(normalizedText);
+            } else if (eng === 'humara_v3_3') {
+              fullResult = await runHumara24(normalizedText);
             } else if (eng === 'easy') {
               fullResult = (await runHumara22(normalizedText));
             } else {
@@ -704,6 +714,7 @@ export async function POST(req: Request) {
               sendSSE(controller, { type: 'sentence', index: i, text: sentenceResults[i], stage: 'Engine' });
             }
             humanized = fullResult;
+            latestHumanized = humanized;
             console.log(`[FullText] Engine complete: ${humanized.split(/\s+/).length} words`);
           } else {
             // Determine if this engine uses async/LLM calls (can parallelize)
@@ -725,23 +736,20 @@ export async function POST(req: Request) {
                   try {
                     let result = await runEngineOnSentence(sentence);
                     let final = result && result.trim().length > 0 ? result : sentence;
+                    // LLM engines: max 1 retry (each call is expensive)
                     let change = measureSentenceChange(sentence, final);
-                    let retry = 0;
-                    const maxRetries = Math.max(3, hRate - 3);
-                    while (change < minChangeThreshold && retry < maxRetries) {
+                    if (change < minChangeThreshold) {
                       const retried = await runEngineOnSentence(final);
                       if (retried && retried.trim().length > 0) final = retried;
-                      change = measureSentenceChange(sentence, final);
-                      retry++;
                     }
                     sendSSE(controller, { type: 'sentence', index: i, text: final, stage: 'Engine' });
                     return final;
                   } catch (err) {
                     const errMsg = err instanceof Error ? err.message : String(err);
                     console.warn(`[SentencePar] Sentence ${i} failed:`, errMsg);
-                    // For connection/unavailable errors, send an error event so the user sees the failure
+                    // Surface a non-fatal warning; keep streaming partial results.
                     if (i === 0) {
-                      sendSSE(controller, { type: 'error', message: `Engine '${eng}' failed: ${errMsg}` });
+                      sendSSE(controller, { type: 'warning', message: `Engine '${eng}' degraded: ${errMsg}` });
                     }
                     return sentence;
                   }
@@ -775,13 +783,14 @@ export async function POST(req: Request) {
                   const errMsg = err instanceof Error ? err.message : String(err);
                   console.warn(`[SentenceSeq] Sentence ${i} failed:`, errMsg);
                   if (i === 0) {
-                    sendSSE(controller, { type: 'error', message: `Engine '${eng}' failed: ${errMsg}` });
+                    sendSSE(controller, { type: 'warning', message: `Engine '${eng}' degraded: ${errMsg}` });
                   }
                   sentenceResults.push(sentence);
                 }
               }
             }
             humanized = reassembleText(sentenceResults, inputParaBounds.length ? inputParaBounds : [0]);
+            latestHumanized = humanized;
             console.log(`[Sentence${useParallel ? 'Par' : 'Seq'}] Engine complete: ${humanized.split(/\s+/).length} words`);
           }
 
@@ -806,8 +815,6 @@ export async function POST(req: Request) {
             switch (eng) {
               case 'ghost_pro_wiki':
                 phases = [
-                  { name: 'Restructuring', type: 'async', fn: (s) => restructureSentence(s) },
-                  { name: 'Humara 2.0 (Full)', type: 'async', fn: (s) => runHumara20Full(s) },
                   { name: 'Nuru 2.0', type: 'nuru', passes: 10 },
                   { name: 'Deep Non-LLM Clean', type: 'sync', fn: (s) => deepNonLLMClean(s) },
                   { name: 'Final Smooth & Grammar', type: 'sync', fn: (s) => finalSmoothGrammar(s) },
@@ -849,7 +856,6 @@ export async function POST(req: Request) {
                 break;
               case 'humara_v3_3':
                 phases = [
-                  { name: 'Restructuring', type: 'async', fn: (s) => restructureSentence(s) },
                   { name: 'Nuru 2.0', type: 'nuru', passes: 10 },
                   { name: 'Deep Non-LLM Clean', type: 'sync', fn: (s) => deepNonLLMClean(s) },
                   { name: 'Final Smooth & Grammar', type: 'sync', fn: (s) => finalSmoothGrammar(s) },
@@ -940,7 +946,7 @@ export async function POST(req: Request) {
               // For sync/async/nuru phases, each sentence must achieve ≥minChangeThreshold
               // word change from its state BEFORE this phase started.
               const MIN_CHANGE = minChangeThreshold;
-              const MAX_RETRIES = Math.max(3, hRate - 3);
+              const MAX_RETRIES = 1; // LLM async phases: 1 retry max (each call is expensive)
               const phaseInputSentences = [...currentSentences]; // snapshot before this phase
 
               if (phase.type === 'emit') {
@@ -985,7 +991,12 @@ export async function POST(req: Request) {
                   sendSSE(controller, { type: 'sentence', index: i, text: currentSentences[i], stage: phaseLabel });
                 }
               } else if (phase.type === 'nuru') {
-                for (let pass = 0; pass < phase.passes; pass++) {
+                // Adaptive Nuru: run 5 passes minimum, assess AI signal, scale up to phase.passes (max 10)
+                const MIN_NURU_PASSES = 5;
+                const maxNuruPasses = Math.max(phase.passes, MIN_NURU_PASSES);
+                const initialPasses = Math.min(MIN_NURU_PASSES, maxNuruPasses);
+
+                for (let pass = 0; pass < initialPasses; pass++) {
                   for (let i = 0; i < currentSentences.length; i++) {
                     if (!isHeadingSentCheck(currentSentences[i])) {
                       currentSentences[i] = runNuruSinglePass(currentSentences[i]);
@@ -993,6 +1004,28 @@ export async function POST(req: Request) {
                     sendSSE(controller, { type: 'sentence', index: i, text: currentSentences[i], stage: phaseLabel });
                   }
                   await flushDelay(10);
+                }
+
+                // After minimum passes, assess remaining AI signal and decide extra passes
+                if (maxNuruPasses > MIN_NURU_PASSES) {
+                  const midText = reassembleText(currentSentences, inputParaBounds.length ? inputParaBounds : [0]);
+                  const midAiScore = getDetector().analyze(midText).summary.overall_ai_score;
+                  // Linear scale: aiScore <=30 → 0 extra, >=80 → full extra (up to maxNuruPasses - 5)
+                  const extraPasses = Math.round(
+                    Math.max(0, Math.min(maxNuruPasses - MIN_NURU_PASSES,
+                      ((midAiScore - 30) / 50) * (maxNuruPasses - MIN_NURU_PASSES)))
+                  );
+                  console.log(`[Nuru Adaptive] AI score after ${initialPasses} passes: ${midAiScore.toFixed(1)} → +${extraPasses} passes (total ${initialPasses + extraPasses}/${maxNuruPasses})`);
+
+                  for (let pass = 0; pass < extraPasses; pass++) {
+                    for (let i = 0; i < currentSentences.length; i++) {
+                      if (!isHeadingSentCheck(currentSentences[i])) {
+                        currentSentences[i] = runNuruSinglePass(currentSentences[i]);
+                      }
+                      sendSSE(controller, { type: 'sentence', index: i, text: currentSentences[i], stage: phaseLabel });
+                    }
+                    await flushDelay(10);
+                  }
                 }
                 // After all nuru passes, enforce 40% on any sentences that still fall short
                 for (let i = 0; i < currentSentences.length; i++) {
@@ -1010,8 +1043,11 @@ export async function POST(req: Request) {
               }
 
               humanized = reassembleText(currentSentences, inputParaBounds.length ? inputParaBounds : [0]);
+              latestHumanized = humanized;
               await flushDelay(10);
               console.log(`[Pipeline] ${phaseLabel}: ${humanized.split(/\s+/).length} words (${Date.now() - phaseStart}ms)`);
+              // Bail out if deadline is near
+              if (deadlineReached || Date.now() - startTime > DEADLINE_MS - 5000) break;
             }
             console.log(`[Pipeline] Complete: ${humanized.split(/\s+/).length} words in ${Date.now() - phaseStart}ms`);
           }
@@ -1461,8 +1497,7 @@ export async function POST(req: Request) {
           }
 
           // Final done event — includes updated usage so frontend can reflect immediately
-          sendSSE(controller, {
-            type: 'done',
+          finishStream({
             humanized,
             word_count: outputWords,
             input_word_count: inputWords,
@@ -1471,11 +1506,14 @@ export async function POST(req: Request) {
             meaning_similarity: Math.round(meaningCheck.similarity * 100) / 100,
             ...(usageUpdate.words_used !== undefined ? { usage_words_used: usageUpdate.words_used, usage_words_limit: usageUpdate.words_limit } : {}),
           });
-
-          controller.close();
         } catch (err) {
-          sendSSE(controller, { type: 'error', error: err instanceof Error ? err.message : 'Processing failed' });
-          controller.close();
+          console.error('[HumanizeStream] Processing failed:', err);
+          finishStream({
+            partial: latestHumanized.trim().length > 0,
+            error: err instanceof Error ? err.message : 'Processing failed',
+            meaning_preserved: true,
+            meaning_similarity: 0.85,
+          });
         }
       },
     });

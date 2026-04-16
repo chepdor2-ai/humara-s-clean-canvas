@@ -2202,6 +2202,10 @@ async function processChunk(
     result = rewrittenParagraphs.join("\n\n");
     console.log(`  [GhostPro]   Pass 1A done: ${result.split(/\s+/).length} words (GPT-4o-mini, ${totalSentencesProcessed} sentences processed)`);
 
+    if (options.turbo) {
+      console.log("  [GhostPro]   Pass 1B: SKIPPED (turbo mode — single LLM wiki rewrite)");
+    } else {
+
     // ═══════════════════════════════════════════
     // PASS 1B: Groq/Llama sentence-list envelope re-rewrite (second LLM)
     // Sends each paragraph as a numbered sentence list to Groq.
@@ -2506,6 +2510,7 @@ CRITICAL RULES:
     console.log(`  [GhostPro]   Pass 1C complete: ${result.split(/\s+/).length} words after iterative re-humanization`);
 
     } // end Pass 1C (!turbo)
+    }
 
   } else {
     // ── OTHER MODES: Per-sentence independent LLM rewriting ──

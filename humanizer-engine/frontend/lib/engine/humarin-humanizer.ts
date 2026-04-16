@@ -30,14 +30,6 @@ async function humarinCall(
   apiKey: string,
   url: string,
 ): Promise<{ humanized: string; stats: Record<string, unknown> }> {
-  // Pre-flight: poke the Space awake (non-fatal — cold starts are expected)
-  try {
-    const healthRes = await fetch(`${url}/health`, { signal: AbortSignal.timeout(3_000) });
-    if (!healthRes.ok) console.warn(`[Humarin] Health check returned ${healthRes.status} — proceeding anyway`);
-  } catch (err) {
-    console.warn(`[Humarin] Health check failed (${err instanceof Error ? err.message : err}) — proceeding with main call`);
-  }
-
   const response = await fetch(`${url}/humanize`, {
     method: 'POST',
     headers: {
@@ -94,7 +86,9 @@ async function runHumarinPass(
   apiKey: string,
   url: string,
 ): Promise<HumarinResult> {
-  const chunks = splitIntoChunks(text, 3);
+  const wordCount = text.split(/\s+/).filter(Boolean).length;
+  const useSingleRequest = sentenceBySentence || mode === 'turbo' || mode === 'fast' || wordCount <= 1200;
+  const chunks = useSingleRequest ? [text] : splitIntoChunks(text, 2);
 
   if (chunks.length === 1) {
     const result = await humarinCall(text, mode, sentenceBySentence, apiKey, url);

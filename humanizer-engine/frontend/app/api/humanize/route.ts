@@ -722,8 +722,9 @@ export async function POST(req: Request) {
     };
 
     const runHumara24 = async (input: string): Promise<string> => {
-      const humarinMode = strength === 'strong' ? 'aggressive' : strength === 'light' ? 'fast' : 'quality';
-      const humarinResult = await humarinHumanize(input, humarinMode, true);
+      const inputWordCount = input.split(/\s+/).filter(Boolean).length;
+      const humarinMode = strength === 'strong' ? 'quality' : strength === 'light' ? 'turbo' : 'fast';
+      const humarinResult = await humarinHumanize(input, humarinMode, inputWordCount <= 220);
       let output = humarinResult.humanized;
       output = adaptiveOxygenChain(output, input);
       return output;
@@ -752,6 +753,7 @@ export async function POST(req: Request) {
             tone: 'wikipedia',
             strictMeaning: strict_meaning ?? false,
             enablePostProcessing: enable_post_processing !== false,
+            turbo: true,
           })
         : '';
       output = breakRepetitiveTemplates(output);
@@ -789,6 +791,7 @@ export async function POST(req: Request) {
             tone: 'wikipedia',
             strictMeaning: strict_meaning ?? false,
             enablePostProcessing: enable_post_processing !== false,
+            turbo: true,
           })
         : '';
       output = breakRepetitiveTemplates(output);
