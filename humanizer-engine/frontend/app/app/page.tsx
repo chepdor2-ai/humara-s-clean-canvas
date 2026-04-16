@@ -394,6 +394,9 @@ function EditorPageInner() {
   const [streamPhaseName, setStreamPhaseName] = useState('');
   const [streamPhaseIndex, setStreamPhaseIndex] = useState(0);
   const [streamTotalPhases, setStreamTotalPhases] = useState(1);
+  const [streamCycleCurrent, setStreamCycleCurrent] = useState(0);
+  const [streamCycleTotal, setStreamCycleTotal] = useState(0);
+  const [streamCycleLabel, setStreamCycleLabel] = useState('');
   const [processingMessageIndex, setProcessingMessageIndex] = useState(0);
   const streamSentenceTotalRef = useRef(1);
   const streamPhaseSentenceRef = useRef(0);
@@ -459,10 +462,12 @@ function EditorPageInner() {
   const processingStatusItems = useMemo(
     () => [
       { label: 'Engine', value: activeEngineLabel },
-      { label: 'Mode', value: MODE_LABELS[mode] },
+      streamCycleTotal > 0
+        ? { label: streamCycleLabel || 'Cycle', value: `${streamCycleCurrent}/${streamCycleTotal}` }
+        : { label: 'Mode', value: MODE_LABELS[mode] },
       { label: 'Live Fill', value: `${Math.round(streamProgress)}%` },
     ],
-    [activeEngineLabel, mode, streamProgress],
+    [activeEngineLabel, mode, streamCycleCurrent, streamCycleLabel, streamCycleTotal, streamProgress],
   );
 
   // Auto-expire history entries after TTL
@@ -662,9 +667,21 @@ function EditorPageInner() {
           setStreamPhaseName('');
           setStreamPhaseIndex(0);
           setStreamTotalPhases(1);
+          setStreamCycleCurrent(0);
+          setStreamCycleTotal(0);
+          setStreamCycleLabel('');
         } else if (event.type === 'stage') {
           const stageLabel = event.stage as string;
           setStreamGlobalStage(stageLabel);
+          const cycleCurrent = typeof event.cycleCurrent === 'number' ? event.cycleCurrent : 0;
+          const cycleTotal = typeof event.cycleTotal === 'number' ? event.cycleTotal : 0;
+          setStreamCycleCurrent(cycleCurrent > 0 ? cycleCurrent : 0);
+          setStreamCycleTotal(cycleTotal > 0 ? cycleTotal : 0);
+          setStreamCycleLabel(
+            typeof event.cycleLabel === 'string' && event.cycleLabel.trim().length > 0
+              ? event.cycleLabel
+              : '',
+          );
           // Parse "Phase N/M – Name" format
           const phaseMatch = stageLabel.match(/^Phase\s+(\d+)\/(\d+)\s*[–-]\s*(.+)/i);
           if (phaseMatch) {
@@ -727,6 +744,9 @@ function EditorPageInner() {
           setStreamGlobalStage('Complete');
           setStreamProgressTarget(100);
           setStreamPhaseName('Complete');
+          setStreamCycleCurrent(0);
+          setStreamCycleTotal(0);
+          setStreamCycleLabel('');
           doneEventReceived = true;
         }
       }
@@ -785,6 +805,9 @@ function EditorPageInner() {
     setStreamPhaseName('');
     setStreamPhaseIndex(0);
     setStreamTotalPhases(1);
+    setStreamCycleCurrent(0);
+    setStreamCycleTotal(0);
+    setStreamCycleLabel('');
     setProcessingMessageIndex(0);
     setIsAnimating(true);
 
@@ -850,6 +873,9 @@ function EditorPageInner() {
     setStreamPhaseName('');
     setStreamPhaseIndex(0);
     setStreamTotalPhases(1);
+    setStreamCycleCurrent(0);
+    setStreamCycleTotal(0);
+    setStreamCycleLabel('');
     setProcessingMessageIndex(0);
     setIsAnimating(true);
 
@@ -904,7 +930,7 @@ function EditorPageInner() {
     setSentenceScores([]); setMeaningScore(null);
     setPreGeneratedAlts({});
     setIsAnimating(false);
-    setStreamGlobalStage('Initializing…'); setStreamProgress(0); setStreamProgressTarget(0); setStreamPhaseName(''); setStreamPhaseIndex(0); setStreamTotalPhases(1); setProcessingMessageIndex(0);
+    setStreamGlobalStage('Initializing…'); setStreamProgress(0); setStreamProgressTarget(0); setStreamPhaseName(''); setStreamPhaseIndex(0); setStreamTotalPhases(1); setStreamCycleCurrent(0); setStreamCycleTotal(0); setStreamCycleLabel(''); setProcessingMessageIndex(0);
     if (abortRef.current) { abortRef.current.abort(); abortRef.current = null; }
     setError(''); closePopup();
   };

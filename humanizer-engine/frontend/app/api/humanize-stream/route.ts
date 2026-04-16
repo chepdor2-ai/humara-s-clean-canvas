@@ -2,7 +2,7 @@ import { robustSentenceSplit } from '@/lib/engine/content-protection';
 import { getDetector } from '@/lib/engine/multi-detector';
 import OpenAI from 'openai';
 import { isMeaningPreserved, isMeaningPreservedSync } from '@/lib/engine/semantic-guard';
-import { fixCapitalization, applyPhrasePatterns, fixPunctuation, expandAllContractions } from '@/lib/engine/shared-dictionaries';
+import { fixCapitalization, applyPhrasePatterns, fixPunctuation, expandAllContractions, AI_WORD_REPLACEMENTS } from '@/lib/engine/shared-dictionaries';
 import { deduplicateRepeatedPhrases } from '@/lib/engine/premium-deep-clean';
 import { preserveInputStructure } from '@/lib/engine/structure-preserver';
 import { structuralPostProcess } from '@/lib/engine/structural-post-processor';
@@ -49,6 +49,19 @@ export const maxDuration = 120;
 function sendSSE(controller: ReadableStreamDefaultController, data: unknown) {
   const encoder = new TextEncoder();
   controller.enqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`));
+}
+
+function sendStage(
+  controller: ReadableStreamDefaultController,
+  stage: string,
+  details: {
+    phaseOps?: number;
+    cycleCurrent?: number;
+    cycleTotal?: number;
+    cycleLabel?: string;
+  } = {},
+) {
+  sendSSE(controller, { type: 'stage', stage, ...details });
 }
 
 /** Small delay to allow the stream to flush so the browser can render intermediate states */
@@ -553,6 +566,61 @@ export async function POST(req: Request) {
             return s;
           };
 
+          const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+          const replaceFlaggedPhrasesDeterministically = (sentence: string, flaggedPhrases: string[]): string => {
+            let current = sentence;
+            const uniquePhrases = [...new Set(
+              flaggedPhrases
+                .map((phrase) => phrase.trim())
+                .filter((phrase) => phrase.length > 0)
+            )].sort((left, right) => right.length - left.length);
+
+            for (const phrase of uniquePhrases) {
+              const phraseKey = phrase.toLowerCase();
+              const directReplacement = AI_WORD_REPLACEMENTS[phraseKey]?.[0];
+              if (directReplacement && directReplacement.toLowerCase() !== phraseKey) {
+                current = current.replace(new RegExp(`\\b${escapeRegExp(phrase)}\\b`, 'gi'), directReplacement);
+                continue;
+              }
+
+              current = current.replace(new RegExp(escapeRegExp(phrase), 'gi'), (match) => {
+                let cleaned = applyAIWordKill(match);
+                cleaned = applyPhrasePatterns(cleaned);
+                cleaned = replaceCollocations(cleaned);
+                cleaned = compressPhrases(cleaned);
+                return cleaned === match ? match : cleaned;
+              });
+            }
+
+            return current;
+          };
+
+          const cleanFlaggedSentenceNonLLM = (
+            sentence: string,
+            flaggedPhrases: string[],
+            baselineSentence: string,
+            minChange = 0.4,
+          ): string => {
+            let current = sentence;
+
+            current = replaceFlaggedPhrasesDeterministically(current, flaggedPhrases);
+            current = deepNonLLMClean(current);
+            current = smoothingPass(current);
+
+            let change = measureSentenceChange(baselineSentence, current);
+            let attempts = 0;
+            while (change < minChange && attempts < 3) {
+              current = runNuruSinglePass(current);
+              current = deepNonLLMClean(current);
+              current = finalSmoothGrammar(current);
+              change = measureSentenceChange(baselineSentence, current);
+              attempts++;
+            }
+
+            return current;
+          };
+
           // ══════════════════════════════════════════════════════════════
           // FULL-PIPELINE RUNNERS — called when one engine invokes another
           // within a phase. These include ALL sub-engine processing stages
@@ -994,22 +1062,30 @@ export async function POST(req: Request) {
                 }
               } else if (phase.type === 'nuru') {
                 // ═══════════════════════════════════════════════════════
-                // NURU 2.0 PIPELINE: 10 passes → GPT detect → GPT fix → 5 cleanup
-                // → fast flagged-only re-detect/re-clean loop until <5 AI score
+                // NURU 2.0 PIPELINE: 10 passes → GPT detect → non-LLM targeted clean
+                // → extra cleanup cycles → flagged-only re-detect/re-clean loop
                 // 1. 10 baseline Nuru passes on ALL sentences
                 // 2. GPT-4o-mini forensic detection (flagged sentences + phrases)
-                // 3. GPT-4o-mini strict replacement of ONLY flagged words/phrases
-                // 4. 5 final Nuru cleanup passes to remove remaining AI traces
+                // 3. Deterministic non-LLM replacement of flagged words/phrases
+                // 4. 5 targeted cleanup cycles to remove remaining AI traces
                 // 5. Fast micro-loops on flagged sentences only until they drop <5
                 // ═══════════════════════════════════════════════════════
                 const BASELINE_PASSES = 10;
-                const CLEANUP_PASSES = 5;
-                const FAST_RECHECK_PASSES = 5;
+                const CLEANUP_PASSES = 10;
+                const FAST_RECHECK_PASSES = 10;
                 const TARGET_AI_SCORE = 5;
-                const MAX_FAST_LOOPS = 5;
+                const MAX_FAST_LOOPS = 10;
+                const POST_DETECTION_MIN_CHANGE = Math.max(0.4, MIN_CHANGE);
 
                 // ── Step 1: 10 baseline Nuru 2.0 passes on ALL sentences ──
                 for (let pass = 0; pass < BASELINE_PASSES; pass++) {
+                  sendStage(controller, phaseLabel, {
+                    phaseOps: currentSentences.length,
+                    cycleCurrent: pass + 1,
+                    cycleTotal: BASELINE_PASSES,
+                    cycleLabel: 'Nuru cycle',
+                  });
+                  await flushDelay(1);
                   for (let i = 0; i < currentSentences.length; i++) {
                     if (!isHeadingSentCheck(currentSentences[i])) {
                       currentSentences[i] = runNuruSinglePass(currentSentences[i]);
@@ -1086,74 +1162,39 @@ List ALL suspicious words and phrases (up to 5 per sentence).`,
                   console.warn(`[Nuru GPT] Detection failed: ${e.message}`);
                 }
 
-                // ── Step 3: GPT-4o-mini STRICT replacement of flagged words/phrases ──
-                // STRICT RULES: GPT must ONLY replace the flagged words/phrases with human
-                // equivalents — NO sentence rewriting, NO restructuring, NO adding new words.
+                // ── Step 3: Deterministic non-LLM cleanup of flagged words/phrases ──
                 if (flaggedSentences.length > 0 && !deadlineReached) {
-                  try {
-                    const apiKey = process.env.OPENAI_API_KEY?.trim();
-                    if (apiKey) {
-                      const oai = new OpenAI({ apiKey });
-                      const flaggedInput = flaggedSentences.map(f => ({
-                        index: f.index,
-                        sentence: currentSentences[f.index],
-                        replace_these: f.flagged_phrases,
-                      }));
-
-                      const fixResp = await oai.chat.completions.create({
-                        model: 'gpt-4o-mini',
-                        messages: [
-                          {
-                            role: 'system',
-                            content: `You are a word/phrase replacement specialist. You receive sentences with specific flagged words/phrases that sound AI-generated.
-
-STRICT RULES:
-1. ONLY replace the exact flagged words/phrases with natural human-sounding alternatives
-2. DO NOT rewrite, restructure, or rephrase any sentence
-3. DO NOT add new words, remove words, or change sentence structure
-4. DO NOT change any word that is NOT in the "replace_these" list
-5. Replace with: casual human synonyms, -ing forms, active/passive voice swaps for flagged verbs, informal academic equivalents
-6. Keep the sentence otherwise IDENTICAL — same word order, same punctuation, same length
-
-Examples:
-- "utilize" → "use", "leverage" → "draw on", "facilitate" → "help"
-- "comprehensive" → "thorough", "subsequently" → "then", "Furthermore" → "Also"
-- "demonstrates" → "shows", "implementing" → "carrying out"
-
-Respond with ONLY a JSON array of objects: [{ "index": <int>, "fixed": "sentence with only flagged words replaced" }]`,
-                          },
-                          { role: 'user', content: JSON.stringify(flaggedInput).slice(0, 5000) },
-                        ],
-                        temperature: 0.3,
-                        max_tokens: 2000,
-                      });
-
-                      const fixRaw = fixResp.choices[0]?.message?.content?.trim() ?? '';
-                      try {
-                        const cleaned = fixRaw.replace(/^```(?:json)?\s*\n?/i, '').replace(/\n?```\s*$/i, '').trim();
-                        const fixes = JSON.parse(cleaned);
-                        if (Array.isArray(fixes)) {
-                          for (const fix of fixes) {
-                            if (typeof fix.index === 'number' && typeof fix.fixed === 'string' && fix.index >= 0 && fix.index < currentSentences.length) {
-                              currentSentences[fix.index] = fix.fixed;
-                              sendSSE(controller, { type: 'sentence', index: fix.index, text: fix.fixed, stage: `${phaseLabel} (GPT fix)` });
-                            }
-                          }
-                          console.log(`[Nuru GPT Fix] Applied ${fixes.length} strict replacements`);
-                        }
-                      } catch { /* ignore parse errors */ }
-                    }
-                  } catch (e: any) {
-                    console.warn(`[Nuru GPT Fix] Replacement failed: ${e.message}`);
+                  for (const flagged of flaggedSentences) {
+                    if (isHeadingSentCheck(currentSentences[flagged.index])) continue;
+                    currentSentences[flagged.index] = cleanFlaggedSentenceNonLLM(
+                      currentSentences[flagged.index],
+                      flagged.flagged_phrases,
+                      phaseInputSentences[flagged.index],
+                      POST_DETECTION_MIN_CHANGE,
+                    );
+                    sendSSE(controller, {
+                      type: 'sentence',
+                      index: flagged.index,
+                      text: currentSentences[flagged.index],
+                      stage: `${phaseLabel} (targeted clean)`,
+                    });
                   }
                 }
 
-                // ── Step 4: 5 final Nuru 2.0 cleanup passes to remove remaining traces ──
+                // ── Step 4: 5 targeted cleanup cycles to remove remaining traces ──
                 if (!deadlineReached) {
                   for (let pass = 0; pass < CLEANUP_PASSES; pass++) {
+                    sendStage(controller, phaseLabel, {
+                      phaseOps: currentSentences.length,
+                      cycleCurrent: pass + 1,
+                      cycleTotal: CLEANUP_PASSES,
+                      cycleLabel: 'Cleanup cycle',
+                    });
+                    await flushDelay(1);
                     for (let i = 0; i < currentSentences.length; i++) {
                       if (!isHeadingSentCheck(currentSentences[i])) {
-                        currentSentences[i] = runNuruSinglePass(currentSentences[i]);
+                        currentSentences[i] = deepNonLLMClean(runNuruSinglePass(currentSentences[i]));
+                        currentSentences[i] = smoothingPass(currentSentences[i]);
                       }
                       sendSSE(controller, { type: 'sentence', index: i, text: currentSentences[i], stage: `${phaseLabel} (cleanup)` });
                     }
@@ -1229,56 +1270,38 @@ If all sentences are below 5, return { "flagged": [] }.`,
                       break;
                     }
 
-                    const flaggedInput = reflagged.map((f) => ({
-                      index: f.index,
-                      sentence: currentSentences[f.index],
-                      replace_these: f.flagged_phrases,
-                    }));
-
-                    const fixResp = await Promise.race([
-                      oai.chat.completions.create({
-                        model: 'gpt-4o-mini',
-                        messages: [
-                          {
-                            role: 'system',
-                            content: `You are a word/phrase replacement specialist. Replace ONLY the flagged words/phrases with natural human alternatives.
-
-STRICT RULES:
-1. ONLY replace the exact flagged words/phrases
-2. DO NOT rewrite or restructure the sentence
-3. DO NOT add or remove words
-4. Keep everything else IDENTICAL
-
-Respond with ONLY a JSON array: [{ "index": <int>, "fixed": "sentence with only flagged words replaced" }]`,
-                          },
-                          { role: 'user', content: JSON.stringify(flaggedInput).slice(0, 3000) },
-                        ],
-                        temperature: 0.2,
-                        max_tokens: 1200,
-                      }),
-                      new Promise<never>((_, reject) =>
-                        setTimeout(() => reject(new Error('GPT loop fix timed out')), 2000)
-                      ),
-                    ]);
-
-                    const fixRaw = fixResp.choices[0]?.message?.content?.trim() ?? '';
-                    try {
-                      const cleaned = fixRaw.replace(/^```(?:json)?\s*\n?/i, '').replace(/\n?```\s*$/i, '').trim();
-                      const fixes = JSON.parse(cleaned);
-                      if (Array.isArray(fixes)) {
-                        for (const fix of fixes) {
-                          if (typeof fix.index === 'number' && typeof fix.fixed === 'string' && fix.index >= 0 && fix.index < currentSentences.length) {
-                            currentSentences[fix.index] = fix.fixed;
-                            sendSSE(controller, { type: 'sentence', index: fix.index, text: fix.fixed, stage: `${phaseLabel} (recheck fix)` });
-                          }
-                        }
-                      }
-                    } catch { /* ignore parse errors */ }
+                    for (const flagged of reflagged) {
+                      if (isHeadingSentCheck(currentSentences[flagged.index])) continue;
+                      currentSentences[flagged.index] = cleanFlaggedSentenceNonLLM(
+                        currentSentences[flagged.index],
+                        flagged.flagged_phrases,
+                        phaseInputSentences[flagged.index],
+                        POST_DETECTION_MIN_CHANGE,
+                      );
+                      sendSSE(controller, {
+                        type: 'sentence',
+                        index: flagged.index,
+                        text: currentSentences[flagged.index],
+                        stage: `${phaseLabel} (recheck clean)`,
+                      });
+                    }
 
                     for (let pass = 0; pass < FAST_RECHECK_PASSES; pass++) {
+                      sendStage(controller, phaseLabel, {
+                        phaseOps: Math.max(1, reflagged.length),
+                        cycleCurrent: pass + 1,
+                        cycleTotal: FAST_RECHECK_PASSES,
+                        cycleLabel: 'Recheck cycle',
+                      });
+                      await flushDelay(1);
                       for (const flagged of reflagged) {
                         if (isHeadingSentCheck(currentSentences[flagged.index])) continue;
-                        currentSentences[flagged.index] = runNuruSinglePass(currentSentences[flagged.index]);
+                        currentSentences[flagged.index] = cleanFlaggedSentenceNonLLM(
+                          runNuruSinglePass(currentSentences[flagged.index]),
+                          flagged.flagged_phrases,
+                          phaseInputSentences[flagged.index],
+                          POST_DETECTION_MIN_CHANGE,
+                        );
                         sendSSE(controller, { type: 'sentence', index: flagged.index, text: currentSentences[flagged.index], stage: `${phaseLabel} (recheck cleanup)` });
                       }
                       await flushDelay(1);
@@ -1297,8 +1320,8 @@ Respond with ONLY a JSON array: [{ "index": <int>, "fixed": "sentence with only 
                   const original = phaseInputSentences[i];
                   let change = measureSentenceChange(original, currentSentences[i]);
                   let retry = 0;
-                  while (change < MIN_CHANGE && retry < MAX_RETRIES) {
-                    currentSentences[i] = runNuruSinglePass(currentSentences[i]);
+                  while (change < POST_DETECTION_MIN_CHANGE && retry < 3) {
+                    currentSentences[i] = cleanFlaggedSentenceNonLLM(currentSentences[i], [], original, POST_DETECTION_MIN_CHANGE);
                     change = measureSentenceChange(original, currentSentences[i]);
                     sendSSE(controller, { type: 'sentence', index: i, text: currentSentences[i], stage: phaseLabel });
                     retry++;
@@ -1340,17 +1363,27 @@ Respond with ONLY a JSON array: [{ "index": <int>, "fixed": "sentence with only 
 
             const { sentences: postSentences, paragraphBoundaries: postParaBounds } = splitIntoIndexedSentences(humanized);
             const postSents = [...postSentences];
-            const FAST_RECHECK_PASSES = 5;
+            const postBaselineSentences = [...postSentences];
+            const FLAGGED_CLEANUP_PASSES = 10;
+            const FAST_RECHECK_PASSES = 10;
             const TARGET_AI_SCORE = 5;
-            const MAX_FAST_LOOPS = 5;
+            const MAX_FAST_LOOPS = 10;
+            const POST_DETECTION_MIN_CHANGE = 0.4;
 
             const nuruPostOps = (usePhasePipeline ? 5 : 15) * postSents.length;
-            sendSSE(controller, { type: 'stage', stage: 'Nuru 2.0 Post-Processing', phaseOps: Math.max(1, nuruPostOps) });
+            sendStage(controller, 'Nuru 2.0 Post-Processing', { phaseOps: Math.max(1, nuruPostOps) });
             await flushDelay(1);
 
             // ── Step 1: 10 baseline Nuru passes (skip if engine already ran Nuru in pipeline) ──
             if (!usePhasePipeline && nuruPostTimeOk()) {
               for (let pass = 0; pass < 10; pass++) {
+                sendStage(controller, 'Nuru 2.0 Post-Processing', {
+                  phaseOps: postSents.length,
+                  cycleCurrent: pass + 1,
+                  cycleTotal: 10,
+                  cycleLabel: 'Post cycle',
+                });
+                await flushDelay(1);
                 for (let i = 0; i < postSents.length; i++) {
                   if (!isHeadingSentCheck(postSents[i])) {
                     postSents[i] = runNuruSinglePass(postSents[i]);
@@ -1418,12 +1451,39 @@ Only include sentences with ai_score >= 55.`,
               }
             }
 
-            // ── Step 3: 5 final Nuru 2.0 cleanup passes ──
+            // ── Step 3: targeted non-LLM cleanup of flagged sentences ──
+            if (postFlagged.length > 0 && nuruPostTimeOk()) {
+              for (const flagged of postFlagged) {
+                if (isHeadingSentCheck(postSents[flagged.index])) continue;
+                postSents[flagged.index] = cleanFlaggedSentenceNonLLM(
+                  postSents[flagged.index],
+                  flagged.flagged_phrases,
+                  postBaselineSentences[flagged.index],
+                  POST_DETECTION_MIN_CHANGE,
+                );
+                sendSSE(controller, {
+                  type: 'sentence',
+                  index: flagged.index,
+                  text: postSents[flagged.index],
+                  stage: 'Nuru 2.0 Post-Processing (targeted clean)',
+                });
+              }
+            }
+
+            // ── Step 4: 5 final Nuru 2.0 cleanup passes ──
             if (nuruPostTimeOk()) {
-              for (let pass = 0; pass < 5; pass++) {
+              for (let pass = 0; pass < 10; pass++) {
+                sendStage(controller, 'Nuru 2.0 Post-Processing', {
+                  phaseOps: postSents.length,
+                  cycleCurrent: pass + 1,
+                  cycleTotal: 10,
+                  cycleLabel: 'Cleanup cycle',
+                });
+                await flushDelay(1);
                 for (let i = 0; i < postSents.length; i++) {
                   if (!isHeadingSentCheck(postSents[i])) {
-                    postSents[i] = runNuruSinglePass(postSents[i]);
+                    postSents[i] = deepNonLLMClean(runNuruSinglePass(postSents[i]));
+                    postSents[i] = smoothingPass(postSents[i]);
                   }
                   sendSSE(controller, { type: 'sentence', index: i, text: postSents[i], stage: 'Nuru 2.0 (cleanup)' });
                 }
@@ -1432,22 +1492,31 @@ Only include sentences with ai_score >= 55.`,
               }
             }
 
-            // ── Step 4: extra flagged-sentence Nuru cleanup ──
+            // ── Step 5: extra flagged-sentence Nuru cleanup ──
             if (postFlagged.length > 0 && nuruPostTimeOk()) {
-              for (let pass = 0; pass < 3 && nuruPostTimeOk(); pass++) {
+              for (let pass = 0; pass < FLAGGED_CLEANUP_PASSES && nuruPostTimeOk(); pass++) {
+                sendStage(controller, 'Nuru 2.0 Post-Processing', {
+                  phaseOps: Math.max(1, postFlagged.length),
+                  cycleCurrent: pass + 1,
+                  cycleTotal: FLAGGED_CLEANUP_PASSES,
+                  cycleLabel: 'Flagged cycle',
+                });
+                await flushDelay(1);
                 for (const flagged of postFlagged) {
                   if (isHeadingSentCheck(postSents[flagged.index])) continue;
-                  const phraseCount = Math.max(1, flagged.flagged_phrases.length);
-                  for (let phrasePass = 0; phrasePass < Math.min(3, phraseCount); phrasePass++) {
-                    postSents[flagged.index] = runNuruSinglePass(postSents[flagged.index]);
-                  }
+                  postSents[flagged.index] = cleanFlaggedSentenceNonLLM(
+                    postSents[flagged.index],
+                    flagged.flagged_phrases,
+                    postBaselineSentences[flagged.index],
+                    POST_DETECTION_MIN_CHANGE,
+                  );
                   sendSSE(controller, { type: 'sentence', index: flagged.index, text: postSents[flagged.index], stage: 'Nuru 2.0 (flagged cleanup)' });
                 }
                 await flushDelay(1);
               }
             }
 
-            // ── Step 5: fast flagged-only re-detect/re-clean loop until <5 AI score ──
+            // ── Step 6: fast flagged-only re-detect/re-clean loop until <5 AI score ──
             let activePostFlagged = [...postFlagged];
             let fastLoop = 0;
             while (activePostFlagged.length > 0 && fastLoop < MAX_FAST_LOOPS && nuruPostTimeOk()) {
@@ -1510,58 +1579,33 @@ If all sentences are below 5, return { "flagged": [] }.`,
                   break;
                 }
 
-                // GPT strict replacement of flagged phrases before Nuru cleanup
-                try {
-                  const flaggedFixInput = reflagged
-                    .filter((f: any) => !isHeadingSentCheck(postSents[f.index]))
-                    .map((f: any) => ({
-                      index: f.index,
-                      sentence: postSents[f.index],
-                      replace_these: f.flagged_phrases,
-                    }));
-                  if (flaggedFixInput.length > 0) {
-                    const fixResp = await Promise.race([
-                      oai.chat.completions.create({
-                        model: 'gpt-4o-mini',
-                        messages: [
-                          {
-                            role: 'system',
-                            content: `You are a word/phrase replacement specialist. Replace ONLY the flagged words/phrases with natural human alternatives.\nSTRICT RULES:\n1. ONLY replace the exact flagged words/phrases\n2. DO NOT rewrite or restructure the sentence\n3. DO NOT add or remove words\n4. Keep everything else IDENTICAL\nRespond with ONLY a JSON array: [{ "index": <int>, "fixed": "sentence with only flagged words replaced" }]`,
-                          },
-                          { role: 'user', content: JSON.stringify(flaggedFixInput).slice(0, 3000) },
-                        ],
-                        temperature: 0.2,
-                        max_tokens: 1200,
-                      }),
-                      new Promise<never>((_, reject) =>
-                        setTimeout(() => reject(new Error('GPT loop fix timed out')), 2000)
-                      ),
-                    ]);
-                    const fixRaw = fixResp.choices[0]?.message?.content?.trim() ?? '';
-                    try {
-                      const cleaned = fixRaw.replace(/^```(?:json)?\s*\n?/i, '').replace(/\n?```\s*$/i, '').trim();
-                      const fixes = JSON.parse(cleaned);
-                      if (Array.isArray(fixes)) {
-                        for (const fix of fixes) {
-                          if (typeof fix.index === 'number' && typeof fix.fixed === 'string' && fix.index >= 0 && fix.index < postSents.length) {
-                            postSents[fix.index] = fix.fixed;
-                            sendSSE(controller, { type: 'sentence', index: fix.index, text: fix.fixed, stage: 'Nuru 2.0 (recheck fix)' });
-                          }
-                        }
-                      }
-                    } catch { /* ignore parse errors */ }
-                  }
-                } catch (fixErr: any) {
-                  console.warn(`[Nuru Post GPT Loop] Fix step failed: ${fixErr.message}`);
+                for (const flagged of reflagged) {
+                  if (isHeadingSentCheck(postSents[flagged.index])) continue;
+                  postSents[flagged.index] = cleanFlaggedSentenceNonLLM(
+                    postSents[flagged.index],
+                    flagged.flagged_phrases,
+                    postBaselineSentences[flagged.index],
+                    POST_DETECTION_MIN_CHANGE,
+                  );
+                  sendSSE(controller, { type: 'sentence', index: flagged.index, text: postSents[flagged.index], stage: 'Nuru 2.0 (recheck clean)' });
                 }
 
                 for (let pass = 0; pass < FAST_RECHECK_PASSES && nuruPostTimeOk(); pass++) {
+                  sendStage(controller, 'Nuru 2.0 Post-Processing', {
+                    phaseOps: Math.max(1, reflagged.length),
+                    cycleCurrent: pass + 1,
+                    cycleTotal: FAST_RECHECK_PASSES,
+                    cycleLabel: 'Recheck cycle',
+                  });
+                  await flushDelay(1);
                   for (const flagged of reflagged) {
                     if (isHeadingSentCheck(postSents[flagged.index])) continue;
-                    const phraseCount = Math.max(1, flagged.flagged_phrases.length);
-                    for (let phrasePass = 0; phrasePass < Math.min(3, phraseCount); phrasePass++) {
-                      postSents[flagged.index] = runNuruSinglePass(postSents[flagged.index]);
-                    }
+                    postSents[flagged.index] = cleanFlaggedSentenceNonLLM(
+                      runNuruSinglePass(postSents[flagged.index]),
+                      flagged.flagged_phrases,
+                      postBaselineSentences[flagged.index],
+                      POST_DETECTION_MIN_CHANGE,
+                    );
                     sendSSE(controller, { type: 'sentence', index: flagged.index, text: postSents[flagged.index], stage: 'Nuru 2.0 (recheck cleanup)' });
                   }
                   await flushDelay(1);
@@ -1571,6 +1615,18 @@ If all sentences are below 5, return { "flagged": [] }.`,
               } catch (e: any) {
                 console.warn(`[Nuru Post GPT Loop] Fast recheck failed: ${e.message}`);
                 break;
+              }
+            }
+
+            for (let i = 0; i < postSents.length; i++) {
+              if (isHeadingSentCheck(postSents[i])) continue;
+              let change = measureSentenceChange(postBaselineSentences[i], postSents[i]);
+              let retry = 0;
+              while (change < POST_DETECTION_MIN_CHANGE && retry < 3) {
+                postSents[i] = cleanFlaggedSentenceNonLLM(postSents[i], [], postBaselineSentences[i], POST_DETECTION_MIN_CHANGE);
+                change = measureSentenceChange(postBaselineSentences[i], postSents[i]);
+                sendSSE(controller, { type: 'sentence', index: i, text: postSents[i], stage: 'Nuru 2.0 Post-Processing' });
+                retry++;
               }
             }
 
