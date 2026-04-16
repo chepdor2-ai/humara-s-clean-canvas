@@ -136,7 +136,7 @@ async function callDipperAPI(text: string, lex: number, order: number, baseUrl?:
 
   // Step 2: Poll for result via SSE
   const resultResp = await fetch(`${gradioEndpoint}/${event_id}`, {
-    signal: AbortSignal.timeout(180000), // 3 min timeout for CPU inference
+    signal: AbortSignal.timeout(55_000), // must fit within Vercel function limit
   });
 
   if (!resultResp.ok) {

@@ -35,14 +35,13 @@ async function oxygen3Call(
   mode: string,
   tone: string = 'neutral',
 ): Promise<{ humanized: string; stats: Record<string, unknown> }> {
-  // Health check — ensure the Space is awake
+  // Health check — wake the Space (non-fatal: cold starts may take time)
   try {
-    const healthRes = await fetch(`${OXYGEN3_API_URL}/health`, { signal: AbortSignal.timeout(15_000) });
-    if (!healthRes.ok) throw new Error(`Health check failed: ${healthRes.status}`);
+    const healthRes = await fetch(`${OXYGEN3_API_URL}/health`, { signal: AbortSignal.timeout(5_000) });
+    if (!healthRes.ok) console.warn(`[oxygen3] Health check returned ${healthRes.status} — proceeding anyway`);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    console.error(`[oxygen3] Space unavailable at ${OXYGEN3_API_URL}: ${msg}`);
-    throw new Error(`Oxygen 3.0 Space unavailable (health check failed): ${msg}`);
+    console.warn(`[oxygen3] Health check failed (${msg}) — proceeding with main call anyway`);
   }
 
   console.log(`[oxygen3] Calling ${OXYGEN3_API_URL}/humanize — mode=${mode}, tone=${tone}, len=${text.length}`);
@@ -56,7 +55,7 @@ async function oxygen3Call(
       tone,
       sentence_by_sentence: true,
     }),
-    signal: AbortSignal.timeout(300_000),
+    signal: AbortSignal.timeout(55_000), // must fit within Vercel 60-120s function limit
   });
 
   if (!response.ok) {

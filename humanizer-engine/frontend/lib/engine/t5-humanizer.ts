@@ -30,12 +30,12 @@ async function t5Call(
   apiKey: string,
   url: string,
 ): Promise<{ humanized: string; stats: Record<string, unknown> }> {
-  // Pre-flight: verify the Space is awake and not stuck processing
+  // Pre-flight: poke the Space awake (non-fatal — cold starts are expected)
   try {
-    const healthRes = await fetch(`${url}/health`, { signal: AbortSignal.timeout(10_000) });
-    if (!healthRes.ok) throw new Error(`Health check failed: ${healthRes.status}`);
+    const healthRes = await fetch(`${url}/health`, { signal: AbortSignal.timeout(5_000) });
+    if (!healthRes.ok) console.warn(`[T5] Health check returned ${healthRes.status} — proceeding anyway`);
   } catch (err) {
-    throw new Error(`T5 Space unavailable (health check failed): ${err instanceof Error ? err.message : err}`);
+    console.warn(`[T5] Health check failed (${err instanceof Error ? err.message : err}) — proceeding with main call`);
   }
 
   const response = await fetch(`${url}/humanize`, {
@@ -51,7 +51,7 @@ async function t5Call(
       min_change_ratio: 0.40,
       max_retries: mode === 'turbo' ? 1 : mode === 'fast' ? 2 : 5,
     }),
-    signal: AbortSignal.timeout(300_000), // 5 min — CPU inference is slow on free-tier Spaces
+    signal: AbortSignal.timeout(55_000), // must fit within Vercel 60-120s function limit
   });
 
   if (!response.ok) {

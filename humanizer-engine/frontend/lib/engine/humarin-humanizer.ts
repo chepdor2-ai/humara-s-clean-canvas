@@ -30,12 +30,12 @@ async function humarinCall(
   apiKey: string,
   url: string,
 ): Promise<{ humanized: string; stats: Record<string, unknown> }> {
-  // Pre-flight: verify the Space is awake and not stuck processing
+  // Pre-flight: poke the Space awake (non-fatal — cold starts are expected)
   try {
     const healthRes = await fetch(`${url}/health`, { signal: AbortSignal.timeout(3_000) });
-    if (!healthRes.ok) throw new Error(`Health check failed: ${healthRes.status}`);
+    if (!healthRes.ok) console.warn(`[Humarin] Health check returned ${healthRes.status} — proceeding anyway`);
   } catch (err) {
-    throw new Error(`Humarin Space unavailable (health check failed): ${err instanceof Error ? err.message : err}`);
+    console.warn(`[Humarin] Health check failed (${err instanceof Error ? err.message : err}) — proceeding with main call`);
   }
 
   const response = await fetch(`${url}/humanize`, {
@@ -51,7 +51,7 @@ async function humarinCall(
       min_change_ratio: 0.40,
       max_retries: mode === 'turbo' ? 1 : mode === 'fast' ? 2 : 5,
     }),
-    signal: AbortSignal.timeout(180_000),
+    signal: AbortSignal.timeout(55_000), // must fit within Vercel 60-120s function limit
   });
 
   if (!response.ok) {
@@ -143,7 +143,7 @@ export async function humarinHumanize(
   }
 
   const primaryUrl = HUMARIN_API_URL.replace(/\/$/, '');
-  const FAILOVER_TIMEOUT_MS = 5_000;
+  const FAILOVER_TIMEOUT_MS = 30_000; // 30s — HF Spaces need 10-30s to respond
 
   // Phase 1: Try primary with 20s timeout
   try {

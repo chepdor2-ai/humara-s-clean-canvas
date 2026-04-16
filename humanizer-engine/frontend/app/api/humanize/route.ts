@@ -1453,8 +1453,8 @@ export async function POST(req: Request) {
     // and introduce grammar errors ("boosts", "opportunitied", "pitch in").
     // Skip for nuru_v2: it handles its own sentence-by-sentence quality.
     if (engine !== 'ghost_pro_wiki' && engine !== 'nuru_v2') {
-      const FEEDBACK_MAX_ITERS = 2;
-      const FEEDBACK_AI_THRESHOLD = 30.0; // raised to avoid re-introducing garbling
+      const FEEDBACK_MAX_ITERS = 1; // reduced from 2 — saves 10-20s latency on Vercel
+      const FEEDBACK_AI_THRESHOLD = 50.0; // raised from 30 — only re-run if heavily AI
       const FEEDBACK_STRENGTHS = ['light', 'medium', 'strong'] as const;
 
       for (let fbIter = 0; fbIter < FEEDBACK_MAX_ITERS; fbIter++) {
