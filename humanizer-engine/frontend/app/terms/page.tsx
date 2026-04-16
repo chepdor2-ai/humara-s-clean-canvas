@@ -5,7 +5,7 @@ import Link from 'next/link';
 export const metadata: Metadata = {
   title: 'Terms of Service — HumaraGPT',
   description: 'HumaraGPT terms of service — acceptable use policies, strict academic prohibition, content guidelines, liability, and user responsibilities for AI text humanization.',
-  alternates: { canonical: 'https://humaragpt.com/terms' },
+  alternates: { canonical: 'https://www.humaragpt.com/terms' },
 };
 
 export default function TermsPage() {

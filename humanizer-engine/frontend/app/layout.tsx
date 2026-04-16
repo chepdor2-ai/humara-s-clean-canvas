@@ -7,6 +7,8 @@ import RootLayoutClient from './RootLayoutClient';
 import ThemeProvider from './ThemeProvider';
 import { AuthProvider } from './AuthProvider';
 
+const SITE_URL = 'https://www.humaragpt.com';
+
 const inter = Inter({
   subsets: ['latin'],
   variable: '--font-inter',
@@ -14,12 +16,12 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  metadataBase: new URL('https://humaragpt.com'),
+  metadataBase: new URL(SITE_URL),
   title: {
     default: 'HumaraGPT — AI Text Humanizer | Make AI Content Undetectable',
     template: '%s | HumaraGPT',
   },
-  description: 'HumaraGPT is the leading AI text humanizer that rewrites AI-generated content to sound 100% human. Bypass Turnitin, GPTZero, Originality.AI & Copyleaks. Built for content creators, SEO professionals & enterprises. Strictly prohibited for academic submissions.',
+  description: 'HumaraGPT is the leading AI text humanizer with 16+ specialized engines — Humara, Nuru, Oxygen, Ozone, Ghost, Ninja, King & more — each targeting a different AI detector. Bypass Turnitin, GPTZero, Originality.AI & Copyleaks with the right engine for every detection problem. Built for content creators, SEO professionals & enterprises.',
   keywords: [
     'AI humanizer', 'AI text humanizer', 'humanize AI text', 'AI content humanizer',
     'AI text rewriter', 'make AI text human', 'undetectable AI writer',
@@ -30,6 +32,9 @@ export const metadata: Metadata = {
     'content humanization', 'SEO content humanizer', 'professional AI rewriter',
     'text humanization tool', 'AI writing assistant', 'undetectable AI content',
     'remove AI detection', 'human-like AI text', 'natural AI text rewriter',
+    'multiple AI humanizer engines', 'best humanizer engine collection', 'all AI detectors bypass',
+    'Humara engine', 'Nuru engine', 'Oxygen humanizer', 'Ghost humanizer', 'Ninja humanizer',
+    'King humanizer', 'Ozone humanizer', 'every AI detection solution',
   ],
   authors: [{ name: 'HumaraGPT' }],
   creator: 'HumaraGPT',
@@ -45,10 +50,10 @@ export const metadata: Metadata = {
   openGraph: {
     type: 'website',
     locale: 'en_US',
-    url: 'https://humaragpt.com',
+    url: SITE_URL,
     siteName: 'HumaraGPT',
-    title: 'HumaraGPT — AI Text Humanizer | Make AI Content Undetectable',
-    description: 'The most advanced AI text humanizer. Rewrite AI-generated content to bypass Turnitin, GPTZero, Originality.AI & Copyleaks while preserving original meaning. Not for academic use.',
+    title: 'HumaraGPT — 16+ AI Humanizer Engines | Make AI Content Undetectable',
+    description: 'The most advanced AI text humanizer with 16+ specialized engines for every AI detector. Bypass Turnitin, GPTZero, Originality.AI & Copyleaks while preserving original meaning.',
     images: [{ url: '/og-logo.png', width: 1200, height: 1200, alt: 'HumaraGPT — Leading AI Text Humanization Platform' }],
   },
   twitter: {
@@ -64,7 +69,7 @@ export const metadata: Metadata = {
     googleBot: { index: true, follow: true, 'max-video-preview': -1, 'max-image-preview': 'large', 'max-snippet': -1 },
   },
   alternates: {
-    canonical: 'https://humaragpt.com',
+    canonical: SITE_URL,
   },
 };
 
@@ -128,7 +133,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               name: 'HumaraGPT',
               applicationCategory: 'UtilitiesApplication',
               operatingSystem: 'Web',
-              url: 'https://humaragpt.com',
+              url: SITE_URL,
               description: 'HumaraGPT is the leading AI text humanizer that rewrites AI-generated content to sound 100% human. Bypass Turnitin, GPTZero, Originality.AI & Copyleaks.',
               offers: {
                 '@type': 'AggregateOffer',
@@ -147,8 +152,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               provider: {
                 '@type': 'Organization',
                 name: 'HumaraGPT',
-                url: 'https://humaragpt.com',
-                logo: 'https://humaragpt.com/og-logo.png',
+                url: SITE_URL,
+                logo: `${SITE_URL}/og-logo.png`,
                 sameAs: ['https://twitter.com/humaragpt'],
               },
             }),

@@ -10,6 +10,16 @@ const nextConfig: NextConfig = {
   },
   compress: true,
   poweredByHeader: false,
+  async redirects() {
+    return [
+      {
+        source: '/:path*',
+        has: [{ type: 'host', value: 'humaragpt.com' }],
+        destination: 'https://www.humaragpt.com/:path*',
+        permanent: true,
+      },
+    ];
+  },
   webpack: (config) => {
     // Resolve compromise & openai from ts-engine/node_modules
     // (avoids needing to install them separately in frontend)

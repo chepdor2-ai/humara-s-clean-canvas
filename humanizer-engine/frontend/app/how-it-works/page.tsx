@@ -5,7 +5,7 @@ import { ArrowRight, FileText, Brain, Wand2, ShieldCheck, BarChart3, Sparkles, S
 export const metadata: Metadata = {
   title: 'How It Works — Humanization & AI Detection',
   description: 'See exactly how HumaraGPT humanizes AI-generated text and detects AI content — from the moment you paste your text to the final human-scored output.',
-  alternates: { canonical: 'https://humaragpt.com/how-it-works' },
+  alternates: { canonical: 'https://www.humaragpt.com/how-it-works' },
 };
 
 export default function HowItWorksPage() {

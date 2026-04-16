@@ -2,7 +2,7 @@ import type { MetadataRoute } from 'next';
 import { BLOG_POSTS } from './blog/data';
 
 export default function sitemap(): MetadataRoute.Sitemap {
-  const base = 'https://humaragpt.com';
+  const base = 'https://www.humaragpt.com';
   const routes = ['', '/detector', '/pricing', '/about', '/contact', '/how-it-works', '/blog', '/privacy', '/terms', '/acceptable-use'];
   const pages: MetadataRoute.Sitemap = routes.map((route) => ({
     url: `${base}${route || '/'}`,

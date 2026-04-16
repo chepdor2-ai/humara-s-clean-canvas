@@ -6,7 +6,7 @@ import PricingCards from './PricingCards';
 export const metadata: Metadata = {
   title: 'Pricing — Plans from $5/mo',
   description: 'Choose the HumaraGPT plan that fits your volume. Daily word limits, all engine modes, yearly savings of 15%. Start from $5/mo.',
-  alternates: { canonical: 'https://humaragpt.com/pricing' },
+  alternates: { canonical: 'https://www.humaragpt.com/pricing' },
 };
 
 export default function PricingPage() {

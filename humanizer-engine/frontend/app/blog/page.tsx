@@ -6,7 +6,7 @@ import { BLOG_POSTS } from './data';
 export const metadata: Metadata = {
   title: 'Blog — AI Humanization Guides, Tips & Industry Insights',
   description: 'Expert guides on AI text humanization, bypassing AI detectors, SEO content strategy, and making AI-generated content undetectable. Updated weekly by the HumaraGPT team.',
-  alternates: { canonical: 'https://humaragpt.com/blog' },
+  alternates: { canonical: 'https://www.humaragpt.com/blog' },
   keywords: [
     'AI humanizer blog', 'AI detection tips', 'bypass AI detection guide',
     'AI content strategy', 'SEO AI writing', 'GPTZero bypass tips',
@@ -15,7 +15,7 @@ export const metadata: Metadata = {
   openGraph: {
     title: 'HumaraGPT Blog — AI Humanization Guides & Tips',
     description: 'Expert guides on AI text humanization, detection bypass, and content strategy.',
-    url: 'https://humaragpt.com/blog',
+    url: 'https://www.humaragpt.com/blog',
     type: 'website',
   },
 };

@@ -4,6 +4,8 @@ import { ArrowLeft, Calendar, Clock, Tag, ArrowRight } from 'lucide-react';
 import { notFound } from 'next/navigation';
 import { BLOG_POSTS, getPostBySlug, getAllSlugs } from '../data';
 
+const SITE_URL = 'https://www.humaragpt.com';
+
 interface Props {
   params: Promise<{ slug: string }>;
 }
@@ -21,11 +23,11 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     title: post.title,
     description: post.description,
     keywords: post.keywords,
-    alternates: { canonical: `https://humaragpt.com/blog/${post.slug}` },
+    alternates: { canonical: `${SITE_URL}/blog/${post.slug}` },
     openGraph: {
       title: post.title,
       description: post.description,
-      url: `https://humaragpt.com/blog/${post.slug}`,
+      url: `${SITE_URL}/blog/${post.slug}`,
       type: 'article',
       publishedTime: post.date,
       authors: ['HumaraGPT'],
@@ -305,9 +307,9 @@ export default async function BlogPostPage({ params }: Props) {
             description: post.description,
             datePublished: post.date,
             dateModified: post.date,
-            author: { '@type': 'Organization', name: 'HumaraGPT', url: 'https://humaragpt.com' },
-            publisher: { '@type': 'Organization', name: 'HumaraGPT', logo: { '@type': 'ImageObject', url: 'https://humaragpt.com/og-logo.png' } },
-            mainEntityOfPage: { '@type': 'WebPage', '@id': `https://humaragpt.com/blog/${post.slug}` },
+            author: { '@type': 'Organization', name: 'HumaraGPT', url: SITE_URL },
+            publisher: { '@type': 'Organization', name: 'HumaraGPT', logo: { '@type': 'ImageObject', url: `${SITE_URL}/og-logo.png` } },
+            mainEntityOfPage: { '@type': 'WebPage', '@id': `${SITE_URL}/blog/${post.slug}` },
             keywords: post.keywords.join(', '),
           }),
         }}

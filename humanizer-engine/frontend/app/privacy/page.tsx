@@ -5,7 +5,7 @@ import Link from 'next/link';
 export const metadata: Metadata = {
   title: 'Privacy Policy',
   description: 'HumaraGPT privacy policy � how we collect, use, and protect your data. Your text is never stored or used for training.',
-  alternates: { canonical: 'https://humaragpt.com/privacy' },
+  alternates: { canonical: 'https://www.humaragpt.com/privacy' },
 };
 
 export default function PrivacyPage() {

@@ -9,7 +9,7 @@ const WHATSAPP_LINK = `https://wa.me/${WHATSAPP_NUMBER}`;
 export const metadata: Metadata = {
   title: 'Contact Us',
   description: 'Get in touch with the HumaraGPT team for support, partnerships, or enterprise inquiries.',
-  alternates: { canonical: 'https://humaragpt.com/contact' },
+  alternates: { canonical: 'https://www.humaragpt.com/contact' },
 };
 
 export default function ContactPage() {

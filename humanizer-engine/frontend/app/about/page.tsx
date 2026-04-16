@@ -5,7 +5,7 @@ import Link from 'next/link';
 export const metadata: Metadata = {
   title: 'About HumaraGPT — AI Text Humanization for Professionals',
   description: 'HumaraGPT is the leading AI text humanization platform for SEO professionals, content creators & enterprises. Learn about our mission, technology, and strict policy against academic use.',
-  alternates: { canonical: 'https://humaragpt.com/about' },
+  alternates: { canonical: 'https://www.humaragpt.com/about' },
   keywords: ['about HumaraGPT', 'AI text humanizer company', 'AI humanization technology', 'professional AI rewriter', 'content humanization platform'],
 };
 

@@ -8,10 +8,10 @@ import IPhoneMockup from './IPhoneMockup';
 import HeroVideo from './HeroVideo';
 
 export const metadata: Metadata = {
-  title: 'HumaraGPT — Best AI Text Humanizer 2026 | Bypass Turnitin & GPTZero',
-  description: 'HumaraGPT is the #1 AI text humanizer trusted by 50,000+ professionals. Rewrite AI-generated content to bypass Turnitin, GPTZero, Originality.AI, Copyleaks & Winston AI with a 99.2% human score. Structural rewriting, not synonym spinning. For SEO professionals, content creators & enterprises.',
-  keywords: 'AI humanizer, text humanizer, bypass AI detection, bypass Turnitin, bypass GPTZero, undetectable AI, AI content rewriter, humanize ChatGPT text, AI text converter, make AI content human',
-  alternates: { canonical: 'https://humaragpt.com' },
+  title: 'HumaraGPT — Best AI Text Humanizer 2026 | 16+ Engines | Bypass Turnitin & GPTZero',
+  description: 'HumaraGPT is the #1 AI text humanizer with 16+ specialized engines — Humara, Nuru, Oxygen, Ozone, Ghost, Ninja, King & more. Solve every AI detection problem: bypass Turnitin, GPTZero, Originality.AI, Copyleaks & Winston AI with a 99.2% human score. Every engine targets a different detector. Structural rewriting, not synonym spinning.',
+  keywords: 'AI humanizer, text humanizer, bypass AI detection, bypass Turnitin, bypass GPTZero, undetectable AI, AI content rewriter, humanize ChatGPT text, AI text converter, multiple humanizer engines, best AI humanizer engines, Turnitin bypass tool, GPTZero bypass tool, Originality AI bypass, Copyleaks bypass, all AI detection bypass, AI humanizer for every detector',
+  alternates: { canonical: 'https://www.humaragpt.com' },
 };
 
 export default function Home() {

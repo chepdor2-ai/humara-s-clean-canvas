@@ -5,7 +5,7 @@ import Link from 'next/link';
 export const metadata: Metadata = {
   title: 'Acceptable Use Policy — HumaraGPT',
   description: 'HumaraGPT acceptable use policy. Academic use is strictly prohibited. Learn about permitted professional uses, prohibited activities, and enforcement measures for AI text humanization.',
-  alternates: { canonical: 'https://humaragpt.com/acceptable-use' },
+  alternates: { canonical: 'https://www.humaragpt.com/acceptable-use' },
   keywords: ['HumaraGPT acceptable use', 'AI humanizer policy', 'academic use prohibited', 'AI text humanizer terms', 'content humanization guidelines'],
 };
 
