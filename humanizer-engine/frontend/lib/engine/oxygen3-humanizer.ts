@@ -55,7 +55,7 @@ async function oxygen3Call(
       tone,
       sentence_by_sentence: true,
     }),
-    signal: AbortSignal.timeout(55_000), // must fit within Vercel 60-120s function limit
+    signal: AbortSignal.timeout(10_000),
   });
 
   if (!response.ok) {

@@ -856,7 +856,7 @@ export async function POST(req: Request) {
       label: string,
       task: () => Promise<string>,
       fallback: string,
-      timeoutMs = 110_000,
+      timeoutMs = 10_000,
     ): Promise<string> => {
       try {
         return await withTimeout(task(), timeoutMs, label);
@@ -904,12 +904,12 @@ export async function POST(req: Request) {
       humanized = chainSync(runNuruSinglePass, stage2, CHAIN_TS);
     } else if (engine === 'conscusion_1') {
       // Conscusion 1: Easy (clean) → Wikipedia (clean) → 10× Nuru
-      const stage1 = await runGuarded('conscusion_1_stage_1', () => runHumara22Clean(normalizedText), normalizedText, 35_000);
+      const stage1 = await runGuarded('conscusion_1_stage_1', () => runHumara22Clean(normalizedText), normalizedText, 10_000);
       const stage2 = await runGuarded('conscusion_1_stage_2', () => runWikipediaClean(stage1), stage1);
       humanized = chainSync(runNuruSinglePass, stage2, CHAIN_TS);
     } else if (engine === 'conscusion_12') {
       // Conscusion 12: Ozone → Humara 2.4 → Wikipedia (clean) → 10× Nuru
-      const stage1 = await runGuarded('conscusion_12_stage_1', () => runHumara21(normalizedText), normalizedText, 35_000);
+      const stage1 = await runGuarded('conscusion_12_stage_1', () => runHumara21(normalizedText), normalizedText, 10_000);
       const stage2 = await runGuarded('conscusion_12_stage_2', () => runHumara24(stage1), stage1);
       const stage3 = await runGuarded('conscusion_12_stage_3', () => runWikipediaClean(stage2), stage2);
       humanized = chainSync(runNuruSinglePass, stage3, CHAIN_TS);
@@ -1040,19 +1040,23 @@ export async function POST(req: Request) {
     }
 
     // ═══════════════════════════════════════════════════════════════
-    // UNIVERSAL Nuru x5 + GPT-4o-mini FORENSIC DETECTION (10s budget)
-    // Applies to ALL engines EXCEPT ozone (Humara 2.1).
+    // UNIVERSAL NURU POST-PROCESSING: 10 passes → GPT detect → Nuru cleanup
+    // → fast flagged-only re-detect/re-clean loop until <5 AI score
+    // Applies to ALL engines EXCEPT ozone (Humara 2.1). 10s budget.
     // ═══════════════════════════════════════════════════════════════
     if (engine !== 'ozone') {
       const nuruPostStart = Date.now();
       const NURU_POST_DEADLINE_MS = 10_000;
       const nuruTimeOk = () => Date.now() - nuruPostStart < NURU_POST_DEADLINE_MS;
+      const FAST_RECHECK_PASSES = 2;
+      const TARGET_AI_SCORE = 5;
+      const MAX_FAST_LOOPS = 2;
 
       const postSents = robustSentenceSplit(humanized);
       const isHeadingSentPost = (s: string) => s.trim().length < 120 && !/[.!?]$/.test(s.trim()) && s.trim().split(/\s+/).length <= 15;
 
-      // Phase A: 5 baseline Nuru passes
-      for (let pass = 0; pass < 5 && nuruTimeOk(); pass++) {
+      // Step 1: 10 baseline Nuru passes
+      for (let pass = 0; pass < 10 && nuruTimeOk(); pass++) {
         for (let i = 0; i < postSents.length; i++) {
           if (!isHeadingSentPost(postSents[i])) {
             postSents[i] = runNuruSinglePass(postSents[i]);
@@ -1060,8 +1064,8 @@ export async function POST(req: Request) {
         }
       }
 
-      // Phase B: GPT-4o-mini forensic detection
-      interface PostFlagged { index: number; flagged_phrases: string[]; }
+      // Step 2: GPT-4o-mini forensic detection
+      interface PostFlagged { index: number; ai_score: number; flagged_phrases: string[]; }
       let postFlagged: PostFlagged[] = [];
       if (nuruTimeOk()) {
         try {
@@ -1079,12 +1083,12 @@ export async function POST(req: Request) {
                 messages: [
                   {
                     role: 'system',
-                    content: 'You are a forensic AI text analyzer. Analyze EACH sentence for AI generation signals. For each sentence: assign AI likelihood (0-100%), identify 1-3 suspicious phrases. Respond with ONLY valid JSON: { "flagged": [{ "index": <int>, "ai_score": <0-100>, "phrases": ["phrase1"] }] }. Only include sentences with ai_score >= 60.',
+                    content: 'You are a forensic AI text analyzer. Analyze EACH sentence for AI signals. For each: assign AI likelihood (0-100%), identify ALL suspicious words and phrases (up to 5). Respond with ONLY valid JSON: { "flagged": [{ "index": <int>, "ai_score": <0-100>, "phrases": ["phrase1", "word1"] }] }. Only include sentences with ai_score >= 55.',
                   },
                   { role: 'user', content: sentList.slice(0, 4000) },
                 ],
                 temperature: 0,
-                max_tokens: 1200,
+                max_tokens: 1500,
               }),
               new Promise<never>((_, reject) =>
                 setTimeout(() => reject(new Error('GPT timed out')), 4000)
@@ -1098,6 +1102,7 @@ export async function POST(req: Request) {
                   .filter((f: any) => typeof f.index === 'number' && f.index >= 0 && f.index < postSents.length)
                   .map((f: any) => ({
                     index: f.index,
+                    ai_score: typeof f.ai_score === 'number' ? f.ai_score : 80,
                     flagged_phrases: Array.isArray(f.phrases) ? f.phrases.filter((p: any) => typeof p === 'string') : [],
                   }));
               }
@@ -1109,17 +1114,105 @@ export async function POST(req: Request) {
         }
       }
 
-      // Phase C: 5 targeted passes on flagged sentences only
+      // Step 3: 5 final Nuru 2.0 cleanup passes
+      for (let pass = 0; pass < 5 && nuruTimeOk(); pass++) {
+        for (let i = 0; i < postSents.length; i++) {
+          if (!isHeadingSentPost(postSents[i])) {
+            postSents[i] = runNuruSinglePass(postSents[i]);
+          }
+        }
+      }
+
+      // Step 4: extra flagged-sentence Nuru cleanup
       if (postFlagged.length > 0 && nuruTimeOk()) {
-        for (let pass = 0; pass < 5 && nuruTimeOk(); pass++) {
-          for (const f of postFlagged) {
-            if (isHeadingSentPost(postSents[f.index])) continue;
-            if (f.flagged_phrases.length > 0) {
-              postSents[f.index] = stealthHumanizeTargeted(postSents[f.index], f.flagged_phrases, strength ?? 'medium');
-            } else {
-              postSents[f.index] = runNuruSinglePass(postSents[f.index]);
+        for (let pass = 0; pass < 3 && nuruTimeOk(); pass++) {
+          for (const flagged of postFlagged) {
+            if (isHeadingSentPost(postSents[flagged.index])) continue;
+            const phraseCount = Math.max(1, flagged.flagged_phrases.length);
+            for (let phrasePass = 0; phrasePass < Math.min(3, phraseCount); phrasePass++) {
+              postSents[flagged.index] = runNuruSinglePass(postSents[flagged.index]);
             }
           }
+        }
+      }
+
+      // Step 5: fast flagged-only re-detect/re-clean loop until <5 AI score
+      let activePostFlagged = [...postFlagged];
+      let fastLoop = 0;
+      while (activePostFlagged.length > 0 && fastLoop < MAX_FAST_LOOPS && nuruTimeOk()) {
+        fastLoop++;
+        try {
+          const gptApiKey = process.env.OPENAI_API_KEY?.trim();
+          if (!gptApiKey) break;
+          const oai = new OpenAI({ apiKey: gptApiKey });
+          const flaggedSubset = activePostFlagged
+            .filter((f) => !isHeadingSentPost(postSents[f.index]))
+            .map((f) => ({ index: f.index, sentence: postSents[f.index] }));
+          if (flaggedSubset.length === 0) break;
+
+          const recheckResp = await Promise.race([
+            oai.chat.completions.create({
+              model: 'gpt-4o-mini',
+              messages: [
+                {
+                  role: 'system',
+                  content: `You are a forensic AI text analyzer. Re-check ONLY these already-flagged sentences.
+
+For each sentence:
+- Assign AI likelihood (0-100%)
+- List the exact remaining suspicious words/phrases
+
+Respond with ONLY valid JSON:
+{ "flagged": [{ "index": <original_index>, "ai_score": <0-100>, "phrases": ["phrase1", "word1"] }] }
+
+Include EVERY sentence with ai_score >= 5.
+If all sentences are below 5, return { "flagged": [] }.`,
+                },
+                { role: 'user', content: JSON.stringify(flaggedSubset).slice(0, 3000) },
+              ],
+              temperature: 0,
+              max_tokens: 900,
+            }),
+            new Promise<never>((_, reject) =>
+              setTimeout(() => reject(new Error('GPT recheck timed out')), 2000)
+            ),
+          ]);
+
+          const recheckRaw = recheckResp.choices[0]?.message?.content?.trim() ?? '';
+          let reflagged: PostFlagged[] = [];
+          try {
+            const parsed = JSON.parse(recheckRaw);
+            if (Array.isArray(parsed.flagged)) {
+              reflagged = parsed.flagged
+                .filter((f: any) => typeof f.index === 'number' && f.index >= 0 && f.index < postSents.length)
+                .map((f: any) => ({
+                  index: f.index,
+                  ai_score: typeof f.ai_score === 'number' ? f.ai_score : 0,
+                  flagged_phrases: Array.isArray(f.phrases) ? f.phrases.filter((p: any) => typeof p === 'string') : [],
+                }))
+                .filter((f) => f.ai_score >= TARGET_AI_SCORE);
+            }
+          } catch { /* ignore parse errors */ }
+
+          if (reflagged.length === 0) {
+            activePostFlagged = [];
+            break;
+          }
+
+          for (let pass = 0; pass < FAST_RECHECK_PASSES && nuruTimeOk(); pass++) {
+            for (const flagged of reflagged) {
+              if (isHeadingSentPost(postSents[flagged.index])) continue;
+              const phraseCount = Math.max(1, flagged.flagged_phrases.length);
+              for (let phrasePass = 0; phrasePass < Math.min(3, phraseCount); phrasePass++) {
+                postSents[flagged.index] = runNuruSinglePass(postSents[flagged.index]);
+              }
+            }
+          }
+
+          activePostFlagged = reflagged;
+        } catch (e: any) {
+          console.warn(`[Nuru Post GPT Loop] Fast recheck failed: ${e.message}`);
+          break;
         }
       }
 

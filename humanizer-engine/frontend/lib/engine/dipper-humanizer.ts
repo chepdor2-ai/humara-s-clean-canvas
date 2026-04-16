@@ -122,7 +122,7 @@ async function callDipperAPI(text: string, lex: number, order: number, baseUrl?:
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ data: [text, lex, order] }),
-    signal: AbortSignal.timeout(30000),
+    signal: AbortSignal.timeout(10_000),
   });
 
   if (!submitResp.ok) {
@@ -136,7 +136,7 @@ async function callDipperAPI(text: string, lex: number, order: number, baseUrl?:
 
   // Step 2: Poll for result via SSE
   const resultResp = await fetch(`${gradioEndpoint}/${event_id}`, {
-    signal: AbortSignal.timeout(55_000), // must fit within Vercel function limit
+    signal: AbortSignal.timeout(10_000),
   });
 
   if (!resultResp.ok) {
@@ -230,14 +230,14 @@ export async function dipperHumanize(
   sentenceBySentence: boolean = false,
 ): Promise<DipperResult> {
   const primaryUrl = DIPPER_SPACE_URL.replace(/\/$/, '');
-  const FAILOVER_TIMEOUT_MS = 20_000;
+  const FAILOVER_TIMEOUT_MS = 10_000;
 
-  // Phase 1: Try primary with 20s timeout
+  // Phase 1: Try primary with 10s timeout
   try {
     const result = await Promise.race([
       runDipperPass(text, strength, sentenceBySentence, primaryUrl),
       new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error('Dipper primary timed out after 20s')), FAILOVER_TIMEOUT_MS)
+        setTimeout(() => reject(new Error('Dipper primary timed out after 10s')), FAILOVER_TIMEOUT_MS)
       ),
     ]);
     return result;
@@ -245,7 +245,7 @@ export async function dipperHumanize(
     console.warn(`[Dipper] Primary failed/timed out: ${primaryErr instanceof Error ? primaryErr.message : primaryErr}`);
   }
 
-  // Phase 2: Try backup URL if configured (with 20s timeout)
+  // Phase 2: Try backup URL if configured (with 10s timeout)
   if (DIPPER_BACKUP_URL) {
     try {
       const backupUrl = DIPPER_BACKUP_URL.replace(/\/$/, '');
@@ -253,7 +253,7 @@ export async function dipperHumanize(
       const result = await Promise.race([
         runDipperPass(text, strength, sentenceBySentence, backupUrl),
         new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error('Dipper backup timed out after 20s')), FAILOVER_TIMEOUT_MS)
+          setTimeout(() => reject(new Error('Dipper backup timed out after 10s')), FAILOVER_TIMEOUT_MS)
         ),
       ]);
       return result;

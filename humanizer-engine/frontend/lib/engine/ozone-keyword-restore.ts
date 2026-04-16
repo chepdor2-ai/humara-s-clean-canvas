@@ -1,5 +1,4 @@
 import OpenAI from 'openai';
-import { robustSentenceSplit } from './content-protection';
 
 const KEYWORD_RESTORE_MODEL = process.env.OZONE_KEYWORD_RESTORE_MODEL?.trim() || 'gpt-4o-mini';
 const MAX_CANDIDATES = 24;
@@ -51,6 +50,36 @@ function isHeadingLike(sentence: string): boolean {
   return trimmed.length < 120 && !/[.!?]$/.test(trimmed) && countWords(trimmed) <= 15;
 }
 
+function splitForRestoreReview(text: string): string[] {
+  const paragraphs = text
+    .replace(/\r/g, '')
+    .split(/\n\s*\n/)
+    .map((paragraph) => normalizeWhitespace(paragraph))
+    .filter(Boolean);
+
+  const sentences: string[] = [];
+
+  for (const paragraph of paragraphs) {
+    if (isHeadingLike(paragraph)) {
+      sentences.push(paragraph);
+      continue;
+    }
+
+    const parts = paragraph
+      .split(/(?<=[.!?])\s+(?=[A-Z])/)
+      .map((part) => normalizeWhitespace(part))
+      .filter(Boolean);
+
+    if (parts.length === 0) {
+      sentences.push(paragraph);
+    } else {
+      sentences.push(...parts);
+    }
+  }
+
+  return sentences;
+}
+
 function countSharedWords(a: string, b: string): number {
   const aWords = normalizeWhitespace(a).toLowerCase().split(/\s+/).filter(Boolean);
   const bWords = normalizeWhitespace(b).toLowerCase().split(/\s+/).filter(Boolean);
@@ -96,8 +125,8 @@ function extractKeywordTokens(text: string): string[] {
 }
 
 function buildCandidates(originalText: string, outputText: string): CandidateSentence[] {
-  const originalSentences = robustSentenceSplit(originalText);
-  const outputSentences = robustSentenceSplit(outputText);
+  const originalSentences = splitForRestoreReview(originalText);
+  const outputSentences = splitForRestoreReview(outputText);
   const countGap = Math.abs(originalSentences.length - outputSentences.length);
 
   if (!originalSentences.length || !outputSentences.length) return [];
@@ -309,7 +338,7 @@ export async function restoreOzoneKeywords(originalText: string, outputText: str
   const candidates = buildCandidates(originalText, outputText);
   if (candidates.length === 0) return outputText;
 
-  const outputSentences = robustSentenceSplit(outputText);
+  const outputSentences = splitForRestoreReview(outputText);
   const updatedSentences = [...outputSentences];
 
   for (let start = 0; start < candidates.length; start += CHUNK_SIZE) {

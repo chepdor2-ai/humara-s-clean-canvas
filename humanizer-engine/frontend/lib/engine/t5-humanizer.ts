@@ -51,7 +51,7 @@ async function t5Call(
       min_change_ratio: 0.40,
       max_retries: mode === 'turbo' ? 1 : mode === 'fast' ? 2 : 5,
     }),
-    signal: AbortSignal.timeout(55_000), // must fit within Vercel 60-120s function limit
+    signal: AbortSignal.timeout(10_000),
   });
 
   if (!response.ok) {
@@ -151,14 +151,14 @@ export async function t5Humanize(
   }
 
   const primaryUrl = T5_API_URL.replace(/\/$/, '');
-  const FAILOVER_TIMEOUT_MS = 20_000;
+  const FAILOVER_TIMEOUT_MS = 10_000;
 
-  // Phase 1: Try primary with 20s timeout
+  // Phase 1: Try primary with 10s timeout
   try {
     const result = await Promise.race([
       runT5Pass(text, mode, sentenceBySentence, apiKey, primaryUrl),
       new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error('T5 primary timed out after 20s')), FAILOVER_TIMEOUT_MS)
+        setTimeout(() => reject(new Error('T5 primary timed out after 10s')), FAILOVER_TIMEOUT_MS)
       ),
     ]);
     return result;
@@ -166,7 +166,7 @@ export async function t5Humanize(
     console.warn(`[T5] Primary failed/timed out: ${primaryErr instanceof Error ? primaryErr.message : primaryErr}`);
   }
 
-  // Phase 2: Try backup URL if configured (with 20s timeout)
+  // Phase 2: Try backup URL if configured (with 10s timeout)
   if (T5_BACKUP_URL) {
     try {
       const backupUrl = T5_BACKUP_URL.replace(/\/$/, '');
@@ -175,7 +175,7 @@ export async function t5Humanize(
       const result = await Promise.race([
         runT5Pass(text, mode, sentenceBySentence, backupKey, backupUrl),
         new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error('T5 backup timed out after 20s')), FAILOVER_TIMEOUT_MS)
+          setTimeout(() => reject(new Error('T5 backup timed out after 10s')), FAILOVER_TIMEOUT_MS)
         ),
       ]);
       return result;

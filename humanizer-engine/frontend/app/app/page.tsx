@@ -521,6 +521,12 @@ function EditorPageInner() {
       return paragraphs.filter(Boolean).join('\n\n');
     };
 
+    const normalizeStageLabel = (label: string) =>
+      label
+        .replace(/^Phase\s+\d+\/\d+\s*[–-]\s*/i, '')
+        .replace(/\s+/g, ' ')
+        .trim();
+
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
@@ -588,8 +594,16 @@ function EditorPageInner() {
             } else {
               setStreamProgressTarget(2);
             }
-          } else if (/engine processing/i.test(stageLabel)) {
-            setStreamProgressTarget(2);
+          } else {
+            const normalizedStage = normalizeStageLabel(stageLabel);
+            setStreamPhaseName(normalizedStage);
+            setStreamPhaseIndex(0);
+            setStreamTotalPhases(1);
+            streamPhaseSentenceRef.current = 0;
+            streamPhaseOpsRef.current = (typeof event.phaseOps === 'number' && event.phaseOps > 0)
+              ? event.phaseOps
+              : streamSentenceTotalRef.current;
+            setStreamProgressTarget(/analyzing/i.test(stageLabel) ? 96 : 2);
           }
         } else if (event.type === 'sentence') {
           const idx = event.index as number;

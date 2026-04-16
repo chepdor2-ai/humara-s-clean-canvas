@@ -13,6 +13,11 @@ const clamp = (value: number, min: number, max: number): number => Math.min(max,
 const WaterJugProgress: React.FC<WaterJugProgressProps> = ({ percent, size = 224, phaseName, phaseIndex, totalPhases }) => {
   const safePercent = clamp(Number.isFinite(percent) ? percent : 0, 0, 100);
   const uid = useId().replace(/:/g, '');
+  const displayPhaseName = useMemo(() => {
+    if (phaseName === 'Complete') return 'Complete';
+    if (!phaseName) return 'Processing';
+    return phaseName.replace(/^Phase\s+\d+\/\d+\s*[–-]\s*/i, '').trim();
+  }, [phaseName]);
 
   const clipId = `water_clip_${uid}`;
   const glassGradientId = `glass_gradient_${uid}`;
@@ -95,15 +100,9 @@ const WaterJugProgress: React.FC<WaterJugProgressProps> = ({ percent, size = 224
         <span className="text-[44px] font-black leading-none tracking-tight text-white drop-shadow-[0_3px_10px_rgba(0,0,0,0.45)]">
           {Math.round(safePercent)}%
         </span>
-        {phaseName === 'Complete' ? (
-          <span className="mt-1 max-w-[180px] truncate text-center text-[11px] font-bold uppercase tracking-[0.18em] text-white/95 drop-shadow-[0_2px_8px_rgba(0,0,0,0.42)]">
-            Complete
-          </span>
-        ) : (
-          <span className="mt-1 text-[10px] font-semibold uppercase tracking-[0.24em] text-white/90 drop-shadow-[0_2px_8px_rgba(0,0,0,0.42)]">
-            Processing
-          </span>
-        )}
+        <span className={`mt-1 max-w-[180px] text-center text-white/95 drop-shadow-[0_2px_8px_rgba(0,0,0,0.42)] ${displayPhaseName === 'Complete' ? 'truncate text-[11px] font-bold uppercase tracking-[0.18em]' : 'line-clamp-2 text-[10px] font-semibold tracking-[0.08em]'}`}>
+          {displayPhaseName}
+        </span>
         {totalPhases && totalPhases > 1 && phaseIndex ? (
           <div className="mt-2 flex gap-1.5">
             {Array.from({ length: totalPhases }, (_, i) => (

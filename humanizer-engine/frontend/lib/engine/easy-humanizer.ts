@@ -132,7 +132,7 @@ async function callEasyAPI(text: string, apiKey: string, strength: string, tone:
       style: mapStyle(tone),
       aggressiveness: mapAggressiveness(strength),
     }),
-    signal: AbortSignal.timeout(30000),
+    signal: AbortSignal.timeout(10_000),
   });
 
   if (!response.ok) {

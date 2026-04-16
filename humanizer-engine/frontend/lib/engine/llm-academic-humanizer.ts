@@ -119,7 +119,7 @@ async function batchPhase(
  */
 export async function llmAcademicHumanize(
   text: string,
-  maxTotalMs: number = 15000,
+  maxTotalMs: number = 10000,
 ): Promise<{ humanized: string; stats: { mode: string; total_sentences: number; avg_change_ratio: number; met_threshold: number; threshold_ratio: number } }> {
   const apiKey = process.env.OPENAI_API_KEY?.trim();
   if (!apiKey) {

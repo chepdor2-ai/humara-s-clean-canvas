@@ -50,10 +50,10 @@ import { semanticSimilaritySync } from "./semantic-guard";
 
 const LLM_MODEL = process.env.LLM_MODEL ?? "gpt-4o-mini";
 const CONCURRENCY = Math.min(Number(process.env.PIPELINE_CONCURRENCY ?? 15), 20);
-const LLM_TIMEOUT_MS = 6000; // 6 second timeout per LLM call
-const PHASE1_BUDGET_MS = 25_000; // 25s budget for Phase 1 (parallel LLM rewrites)
-const PHASE4_BUDGET_MS = 15_000; // 15s budget for Phase 4 (paragraph restructuring)
-const TOTAL_BUDGET_MS = 55_000; // 55s hard limit — fits within Vercel function timeout
+const LLM_TIMEOUT_MS = 4_000;
+const PHASE1_BUDGET_MS = 4_000;
+const PHASE4_BUDGET_MS = 3_000;
+const TOTAL_BUDGET_MS = 10_000;
 
 // ── Timeout utility ──
 

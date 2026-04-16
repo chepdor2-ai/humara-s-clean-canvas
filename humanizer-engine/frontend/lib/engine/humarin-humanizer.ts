@@ -43,7 +43,7 @@ async function humarinCall(
       min_change_ratio: 0.40,
       max_retries: mode === 'turbo' ? 1 : mode === 'fast' ? 2 : 5,
     }),
-    signal: AbortSignal.timeout(55_000), // must fit within Vercel 60-120s function limit
+    signal: AbortSignal.timeout(10_000),
   });
 
   if (!response.ok) {
@@ -221,7 +221,7 @@ async function llmAcademicFallback(text: string): Promise<HumarinResult> {
   console.log('[Humarin] Falling back to 5-phase LLM Academic Humanizer');
   try {
     const { llmAcademicHumanize } = await import('@/lib/engine/llm-academic-humanizer');
-    return await llmAcademicHumanize(text, 15000);
+    return await llmAcademicHumanize(text, 10000);
   } catch (llmErr) {
     console.warn(`[Humarin] LLM Academic fallback failed: ${llmErr instanceof Error ? llmErr.message : llmErr}`);
     // Final fallback: Oxygen TS — instant, serverless, always available

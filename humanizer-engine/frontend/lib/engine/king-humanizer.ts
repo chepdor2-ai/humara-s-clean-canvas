@@ -35,8 +35,8 @@ import { semanticSimilaritySync } from "./semantic-guard";
 
 const LLM_MODEL = process.env.LLM_MODEL ?? "gpt-4o-mini";
 const CONCURRENCY = Math.min(Number(process.env.KING_CONCURRENCY ?? 10), 20);
-const LLM_TIMEOUT_MS = 8_000;
-const TOTAL_BUDGET_MS = 60_000;
+const LLM_TIMEOUT_MS = 4_000;
+const TOTAL_BUDGET_MS = 10_000;
 
 // ── OpenAI client ───────────────────────────────────────────────────
 
