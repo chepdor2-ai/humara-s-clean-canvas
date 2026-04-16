@@ -454,129 +454,233 @@ export async function POST(req: Request) {
 
           // ── Nuru 2.0 Sentence Starter Distribution Fix ──
           const applySentenceStartersDistribution = (sentences: string[]): void => {
-            const targetStarters = ['The', 'This', 'These', 'Moreover', 'However', 'Furthermore', 'Additionally', 'In addition', 'Also', 'Therefore', 'Consequently', 'As a result', 'Thus', 'Hence', 'On the other hand', 'On the contrary', 'In contrast', 'Alternatively', 'Nevertheless', 'Nonetheless'].map(s => s.toLowerCase().trim());
-            const transitionStarters = ['Moreover', 'However', 'Furthermore', 'Additionally', 'In addition', 'Also', 'Therefore', 'Consequently', 'As a result', 'Thus', 'Hence', 'On the other hand', 'On the contrary', 'In contrast', 'Alternatively', 'Nevertheless', 'Nonetheless'];
+            type StarterCategory = 'referential' | 'additive' | 'contrast' | 'result' | 'alternative';
+            type StarterDefinition = { text: string; category: StarterCategory };
 
-              const getMatchedStarter = (sentence: string): string | null => {
-                const words = sentence.trim().split(/\s+/);
-                for (const starter of targetStarters) {
-                  const starterWords = starter.split(/\s+/);
-                  const prefix = words
-                    .slice(0, starterWords.length)
-                    .join(' ')
-                    .replace(/[^a-z0-9 ]/gi, '')
-                    .toLowerCase();
-                  if (prefix === starter) return starter;
-                }
-                return null;
-              };
+            const starterDefinitions: StarterDefinition[] = [
+              { text: 'The', category: 'referential' },
+              { text: 'This', category: 'referential' },
+              { text: 'These', category: 'referential' },
+              { text: 'Moreover', category: 'additive' },
+              { text: 'However', category: 'contrast' },
+              { text: 'Furthermore', category: 'additive' },
+              { text: 'Additionally', category: 'additive' },
+              { text: 'In addition', category: 'additive' },
+              { text: 'Also', category: 'additive' },
+              { text: 'Therefore', category: 'result' },
+              { text: 'Consequently', category: 'result' },
+              { text: 'As a result', category: 'result' },
+              { text: 'Thus', category: 'result' },
+              { text: 'Hence', category: 'result' },
+              { text: 'On the other hand', category: 'contrast' },
+              { text: 'On the contrary', category: 'contrast' },
+              { text: 'In contrast', category: 'contrast' },
+              { text: 'Alternatively', category: 'alternative' },
+              { text: 'Nevertheless', category: 'contrast' },
+              { text: 'Nonetheless', category: 'contrast' },
+            ];
 
-              const demoteStarter = (sentence: string, starter: string): string => {
-                const words = sentence.trim().split(/\s+/);
-                const starterLength = starter.split(/\s+/).length;
+            const targetStarters = starterDefinitions.map((starter) => starter.text.toLowerCase());
+            const starterCategory = Object.fromEntries(
+              starterDefinitions.map((starter) => [starter.text.toLowerCase(), starter.category])
+            ) as Record<string, StarterCategory>;
+            const starterChoices: Record<StarterCategory, string[]> = {
+              referential: ['This', 'These', 'The'],
+              additive: ['Additionally', 'In addition', 'Also', 'Moreover', 'Furthermore'],
+              contrast: ['However', 'Nevertheless', 'Nonetheless', 'In contrast', 'On the other hand', 'On the contrary'],
+              result: ['Therefore', 'Consequently', 'As a result', 'Thus', 'Hence'],
+              alternative: ['Alternatively'],
+            };
+            const singularReferentialNouns = new Set([
+              'analysis', 'approach', 'argument', 'assumption', 'change', 'claim', 'comparison', 'condition', 'development', 'effect',
+              'evidence', 'example', 'factor', 'finding', 'framework', 'idea', 'issue', 'method', 'outcome', 'pattern', 'point',
+              'process', 'result', 'shift', 'strategy', 'study', 'trend', 'view'
+            ]);
+            const pluralReferentialNouns = new Set([
+              'analyses', 'approaches', 'arguments', 'assumptions', 'changes', 'claims', 'comparisons', 'conditions', 'developments', 'effects',
+              'examples', 'factors', 'findings', 'ideas', 'issues', 'methods', 'outcomes', 'patterns', 'points', 'processes',
+              'results', 'shifts', 'strategies', 'studies', 'trends', 'views'
+            ]);
+            const additiveCue = /\b(additionally|also|another|further|furthermore|moreover|in addition|similarly|alongside|equally|besides)\b/i;
+            const contrastCue = /\b(however|but|although|though|whereas|while|despite|instead|rather|unlike|in contrast|on the other hand|on the contrary|nevertheless|nonetheless)\b/i;
+            const resultCue = /\b(therefore|thus|hence|consequently|as a result|for this reason|because of this|this means|this led|accordingly)\b/i;
+            const alternativeCue = /\b(alternatively|instead|another option|either|or else)\b/i;
 
-                if (starter === 'the') {
-                  const trimmed = words.slice(starterLength).join(' ').trim();
-                  return trimmed ? trimmed.charAt(0).toUpperCase() + trimmed.slice(1) : sentence;
-                }
+            const normalizeSentence = (sentence: string) => sentence.trim().replace(/^['"([{\s]+/, '');
+            const getWordList = (sentence: string) => normalizeSentence(sentence).split(/\s+/).filter(Boolean);
 
-                if (starter === 'this' || starter === 'these') {
-                  const replacements = starter === 'this' ? ['Such', 'That', 'One'] : ['Such', 'Those'];
-                  return `${replacements[Math.floor(Math.random() * replacements.length)]} ${words.slice(starterLength).join(' ')}`.trim();
-                }
+            const getMatchedStarter = (sentence: string): string | null => {
+              const words = getWordList(sentence);
+              for (const starter of targetStarters) {
+                const starterWords = starter.split(/\s+/);
+                const prefix = words
+                  .slice(0, starterWords.length)
+                  .join(' ')
+                  .replace(/[^a-z0-9 ]/gi, '')
+                  .toLowerCase();
+                if (prefix === starter) return starter;
+              }
+              return null;
+            };
 
-                let trimmed = words.slice(starterLength).join(' ').trim();
-                trimmed = trimmed.replace(/^,\s*/, '');
-                return trimmed ? trimmed.charAt(0).toUpperCase() + trimmed.slice(1) : sentence;
-              };
-            
-            const counts: Record<string, number> = {};
-            targetStarters.forEach(t => counts[t] = 0);
-            
-            // First pass: identify current starters and demote overused ones
-            for (let i = 0; i < sentences.length; i++) {
-              if (isHeadingSentCheck(sentences[i])) continue;
-              let s = sentences[i].trim();
-              const words = s.split(/\s+/);
-              if (words.length < 3) continue;
-              
-              const matchedTarget = getMatchedStarter(s);
-              
-              if (matchedTarget) {
-                counts[matchedTarget]++;
-                if (counts[matchedTarget] > 2) {
-                  s = demoteStarter(s, matchedTarget);
-                  sentences[i] = s;
+            const applyStarter = (sentence: string, starter: string) => {
+              const trimmed = sentence.trim();
+              if (!trimmed) return sentence;
+              const lowerFirst = trimmed.charAt(0).toLowerCase() + trimmed.slice(1);
+              return `${starter}, ${lowerFirst}`;
+            };
+
+            const demoteStarter = (sentence: string, starter: string): string => {
+              const words = getWordList(sentence);
+              const starterLength = starter.split(/\s+/).length;
+              let trimmed = words.slice(starterLength).join(' ').trim();
+              trimmed = trimmed.replace(/^,\s*/, '');
+
+              if (starter === 'this') trimmed = `That ${trimmed}`.trim();
+              if (starter === 'these') trimmed = `Those ${trimmed}`.trim();
+
+              return trimmed ? trimmed.charAt(0).toUpperCase() + trimmed.slice(1) : sentence;
+            };
+
+            const inferStarterCategory = (sentence: string, previousSentence: string | null): StarterCategory | null => {
+              const normalized = normalizeSentence(sentence);
+              const words = normalized.split(/\s+/).filter(Boolean);
+              const firstWord = words[0]?.replace(/[^a-z]/gi, '').toLowerCase() ?? '';
+              const previous = previousSentence ? normalizeSentence(previousSentence) : '';
+
+              if (alternativeCue.test(normalized)) return 'alternative';
+              if (resultCue.test(normalized)) return 'result';
+              if (contrastCue.test(normalized) || /\b(unlike|rather than)\b/i.test(previous)) return 'contrast';
+              if (additiveCue.test(normalized) || /\b(first|second|finally|another|similarly)\b/i.test(previous)) return 'additive';
+              if (pluralReferentialNouns.has(firstWord)) return 'referential';
+              if (singularReferentialNouns.has(firstWord)) return 'referential';
+
+              return null;
+            };
+
+            const isStarterSemanticallyValid = (starter: string, sentence: string, previousSentence: string | null) => {
+              const expectedCategory = inferStarterCategory(sentence, previousSentence);
+              const category = starterCategory[starter];
+              if (!category) return false;
+              if (category === 'referential') return expectedCategory === 'referential';
+              return expectedCategory === category;
+            };
+
+            const pickStarterForSentence = (
+              category: StarterCategory,
+              counts: Record<string, number>,
+              previousStarter: string | null,
+              sentence: string
+            ): string | null => {
+              const words = getWordList(sentence);
+              if (words.length < 4) return null;
+
+              let choices = starterChoices[category]
+                .map((starter) => starter.toLowerCase())
+                .filter((starter) => counts[starter] < 2 && starter !== previousStarter);
+
+              if (category === 'referential') {
+                const firstWord = words[0]?.replace(/[^a-z]/gi, '').toLowerCase() ?? '';
+                if (pluralReferentialNouns.has(firstWord)) {
+                  choices = choices.filter((starter) => starter === 'these' || starter === 'the');
+                } else if (singularReferentialNouns.has(firstWord)) {
+                  choices = choices.filter((starter) => starter === 'this' || starter === 'the');
+                } else {
+                  return null;
                 }
               }
+
+              if (choices.length === 0) return null;
+              choices.sort((left, right) => {
+                if (counts[left] !== counts[right]) return counts[left] - counts[right];
+                return left.localeCompare(right);
+              });
+              return choices[0];
+            };
+
+            const counts: Record<string, number> = {};
+            targetStarters.forEach((starter) => {
+              counts[starter] = 0;
+            });
+
+            for (let i = 0; i < sentences.length; i++) {
+              if (isHeadingSentCheck(sentences[i])) continue;
+              const sentence = sentences[i].trim();
+              const matchedStarter = getMatchedStarter(sentence);
+              if (!matchedStarter) continue;
+
+              const previousSentence = i > 0 ? sentences[i - 1] : null;
+              const previousStarter = i > 0 ? getMatchedStarter(sentences[i - 1]) : null;
+              const repeatedConsecutively = matchedStarter === previousStarter;
+              const semanticallyValid = isStarterSemanticallyValid(matchedStarter, sentence, previousSentence);
+
+              counts[matchedStarter]++;
+              if (counts[matchedStarter] > 2 || repeatedConsecutively || !semanticallyValid) {
+                sentences[i] = demoteStarter(sentence, matchedStarter);
+                counts[matchedStarter] = Math.max(0, counts[matchedStarter] - 1);
+              }
             }
-            
-            // Second pass: recount after demotion
-            for (const t of targetStarters) counts[t] = 0;
+
+            for (const starter of targetStarters) counts[starter] = 0;
+
             const validIndices: number[] = [];
             let totalWithStarter = 0;
-            
             for (let i = 0; i < sentences.length; i++) {
               if (isHeadingSentCheck(sentences[i])) continue;
               validIndices.push(i);
-              let s = sentences[i].trim();
-              const words = s.split(/\s+/);
-              let matched = false;
-              for (const t of targetStarters) {
-                const twords = t.split(/\s+/);
-                const testPrefix = words.slice(0, twords.length).join(' ').replace(/[^a-z0-9 ]/gi, '').toLowerCase();
-                if (testPrefix === t) {
-                  matched = true;
-                  counts[t]++;
-                  break;
-                }
-              }
-              if (matched) totalWithStarter++;
+              const matchedStarter = getMatchedStarter(sentences[i]);
+              if (!matchedStarter) continue;
+              counts[matchedStarter]++;
+              totalWithStarter++;
             }
-            
+
             if (validIndices.length === 0) return;
             const minTarget = Math.max(1, Math.ceil(validIndices.length * 0.10));
-            const maxTarget = Math.floor(validIndices.length * 0.30);
+            const maxTarget = Math.max(minTarget, Math.floor(validIndices.length * 0.30));
 
-            if (maxTarget >= 0 && totalWithStarter > maxTarget) {
+            if (totalWithStarter > maxTarget) {
               let excess = totalWithStarter - maxTarget;
               for (let i = validIndices.length - 1; i >= 0 && excess > 0; i--) {
                 const idx = validIndices[i];
-                const matchedTarget = getMatchedStarter(sentences[idx]);
-                if (!matchedTarget) continue;
-                sentences[idx] = demoteStarter(sentences[idx], matchedTarget);
-                counts[matchedTarget] = Math.max(0, counts[matchedTarget] - 1);
+                const matchedStarter = getMatchedStarter(sentences[idx]);
+                if (!matchedStarter) continue;
+                sentences[idx] = demoteStarter(sentences[idx], matchedStarter);
+                counts[matchedStarter] = Math.max(0, counts[matchedStarter] - 1);
                 totalWithStarter--;
                 excess--;
               }
             }
-            
-            if (totalWithStarter < minTarget) {
-              const needed = minTarget - totalWithStarter;
-              const nonStarterIndices = validIndices.filter(i => {
-                return !getMatchedStarter(sentences[i]);
-              });
-              
-              nonStarterIndices.sort(() => Math.random() - 0.5);
-              let injected = 0;
-              let availableTransitions = transitionStarters.filter(t => counts[t.toLowerCase()] < 2);
-              
-              for (let idx of nonStarterIndices) {
-                if (injected >= needed) break;
-                if (availableTransitions.length === 0) break;
-                
-                availableTransitions.sort(() => Math.random() - 0.5);
-                const t = availableTransitions[0];
-                
-                let s = sentences[idx].trim();
-                s = t + ', ' + s.charAt(0).toLowerCase() + s.slice(1);
-                sentences[idx] = s;
-                
-                counts[t.toLowerCase()]++;
-                totalWithStarter++;
-                injected++;
-                availableTransitions = transitionStarters.filter(tr => counts[tr.toLowerCase()] < 2);
+
+            if (totalWithStarter >= minTarget) return;
+
+            const candidates = validIndices
+              .filter((idx) => !getMatchedStarter(sentences[idx]))
+              .map((idx) => {
+                const previousSentence = idx > 0 ? sentences[idx - 1] : null;
+                const category = inferStarterCategory(sentences[idx], previousSentence);
+                if (!category) return null;
+                return { idx, category, previousSentence };
+              })
+              .filter((value): value is { idx: number; category: StarterCategory; previousSentence: string | null } => Boolean(value));
+
+            for (const candidate of candidates) {
+              if (totalWithStarter >= minTarget) break;
+              const previousStarter = candidate.idx > 0 ? getMatchedStarter(sentences[candidate.idx - 1]) : null;
+              const chosenStarter = pickStarterForSentence(candidate.category, counts, previousStarter, sentences[candidate.idx]);
+              if (!chosenStarter) continue;
+
+              if (candidate.category === 'referential') {
+                const words = getWordList(sentences[candidate.idx]);
+                sentences[candidate.idx] = `${chosenStarter.charAt(0).toUpperCase() + chosenStarter.slice(1)} ${words.join(' ')}`;
+              } else {
+                sentences[candidate.idx] = applyStarter(
+                  sentences[candidate.idx],
+                  chosenStarter.charAt(0).toUpperCase() + chosenStarter.slice(1)
+                );
               }
+
+              counts[chosenStarter]++;
+              totalWithStarter++;
             }
           };
 
