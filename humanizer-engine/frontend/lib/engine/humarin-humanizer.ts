@@ -139,12 +139,51 @@ export async function humarinHumanize(
   const primaryUrl = HUMARIN_API_URL.replace(/\/$/, '');
   const FAILOVER_TIMEOUT_MS = 30_000; // 30s — HF Spaces need 10-30s to respond
 
-  // Phase 1: Try primary with 20s timeout
+  // ── Parallel dual-endpoint batching ──────────────────────────
+  // When both primary and backup are available and text is large enough,
+  // split into 2 chunks and process them in parallel (one per endpoint).
+  // This halves latency since each HF Space worker handles one chunk.
+  const wordCount = text.split(/\s+/).filter(Boolean).length;
+  if (HUMARIN_BACKUP_URL && wordCount > 300) {
+    const backupUrl = HUMARIN_BACKUP_URL.replace(/\/$/, '');
+    const backupKey = HUMARIN_BACKUP_KEY || apiKey;
+    const chunks = splitIntoChunks(text, 2);
+    if (chunks.length === 2) {
+      try {
+        console.log(`[Humarin] Dual-endpoint parallel: ${wordCount} words split across primary + backup`);
+        const [r1, r2] = await Promise.all([
+          Promise.race([
+            runHumarinPass(chunks[0], mode, sentenceBySentence, apiKey, primaryUrl),
+            new Promise<never>((_, reject) =>
+              setTimeout(() => reject(new Error('primary timed out')), FAILOVER_TIMEOUT_MS)
+            ),
+          ]),
+          Promise.race([
+            runHumarinPass(chunks[1], mode, sentenceBySentence, backupKey, backupUrl),
+            new Promise<never>((_, reject) =>
+              setTimeout(() => reject(new Error('backup timed out')), FAILOVER_TIMEOUT_MS)
+            ),
+          ]),
+        ]);
+        const humanized = r1.humanized + '\n\n' + r2.humanized;
+        const totalSentences = ((r1.stats as any).total_sentences || 0) + ((r2.stats as any).total_sentences || 0);
+        const avgChange = (((r1.stats as any).avg_change_ratio || 0) + ((r2.stats as any).avg_change_ratio || 0)) / 2;
+        return {
+          humanized,
+          stats: { mode, total_sentences: totalSentences, avg_change_ratio: Math.round(avgChange * 1000) / 1000, met_threshold: totalSentences, threshold_ratio: 1.0 },
+        };
+      } catch (parallelErr) {
+        console.warn(`[Humarin] Dual-endpoint parallel failed, falling back to sequential: ${parallelErr instanceof Error ? parallelErr.message : parallelErr}`);
+      }
+    }
+  }
+
+  // Phase 1: Try primary with 30s timeout
   try {
     const result = await Promise.race([
       runHumarinPass(text, mode, sentenceBySentence, apiKey, primaryUrl),
       new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error('Humarin primary timed out after 20s')), FAILOVER_TIMEOUT_MS)
+        setTimeout(() => reject(new Error('Humarin primary timed out after 30s')), FAILOVER_TIMEOUT_MS)
       ),
     ]);
     return result;
@@ -152,7 +191,7 @@ export async function humarinHumanize(
     console.warn(`[Humarin] Primary failed/timed out: ${primaryErr instanceof Error ? primaryErr.message : primaryErr}`);
   }
 
-  // Phase 2: Try backup URL if configured (with 20s timeout)
+  // Phase 2: Try backup URL if configured (with 30s timeout)
   if (HUMARIN_BACKUP_URL) {
     try {
       const backupUrl = HUMARIN_BACKUP_URL.replace(/\/$/, '');
@@ -161,7 +200,7 @@ export async function humarinHumanize(
       const result = await Promise.race([
         runHumarinPass(text, mode, sentenceBySentence, backupKey, backupUrl),
         new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error('Humarin backup timed out after 20s')), FAILOVER_TIMEOUT_MS)
+          setTimeout(() => reject(new Error('Humarin backup timed out after 30s')), FAILOVER_TIMEOUT_MS)
         ),
       ]);
       return result;

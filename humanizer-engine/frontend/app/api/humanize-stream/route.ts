@@ -17,7 +17,7 @@ import { premiumHumanize } from '@/lib/engine/premium-humanizer';
 import { humanizeV11 } from '@/lib/engine/v11';
 import { humaraHumanize } from '@/lib/humara';
 import { nuruHumanize } from '@/lib/engine/nuru-humanizer';
-import { stealthHumanize } from '@/lib/engine/stealth';
+import { stealthHumanize, stealthHumanizeTargeted } from '@/lib/engine/stealth';
 import { omegaHumanize } from '@/lib/engine/omega-humanizer';
 import { easyHumanize } from '@/lib/engine/easy-humanizer';
 import { ozoneHumanize } from '@/lib/engine/ozone-humanizer';
@@ -816,8 +816,9 @@ export async function POST(req: Request) {
             switch (eng) {
               case 'ghost_pro_wiki':
                 phases = [
-                  { name: 'Nuru 2.0', type: 'nuru', passes: 10 },
+                  { name: 'Restructuring', type: 'async', fn: (s) => restructureSentence(s) },
                   { name: 'Deep Non-LLM Clean', type: 'sync', fn: (s) => deepNonLLMClean(s) },
+                  { name: 'Nuru 2.0', type: 'nuru', passes: 10 },
                   { name: 'Final Smooth & Grammar', type: 'sync', fn: (s) => finalSmoothGrammar(s) },
                 ];
                 break;
@@ -843,7 +844,7 @@ export async function POST(req: Request) {
               case 'nuru_v2':
                 phases = [
                   { name: 'Restructuring', type: 'async', fn: (s) => restructureSentence(s) },
-                  { name: 'Deep Clean', type: 'nuru', passes: 9 },
+                  { name: 'Deep Clean', type: 'nuru', passes: 10 },
                   { name: 'Deep Non-LLM Clean', type: 'sync', fn: (s) => deepNonLLMClean(s) },
                   { name: 'Final Smooth & Grammar', type: 'sync', fn: (s) => finalSmoothGrammar(s) },
                 ];
@@ -992,12 +993,18 @@ export async function POST(req: Request) {
                   sendSSE(controller, { type: 'sentence', index: i, text: currentSentences[i], stage: phaseLabel });
                 }
               } else if (phase.type === 'nuru') {
-                // Adaptive Nuru: run 5 passes minimum, assess AI signal, scale up to phase.passes (max 10)
+                // ═══════════════════════════════════════════════════════
+                // ADAPTIVE NURU WITH GPT-4o-mini FORENSIC AI DETECTION
+                // Phase 1: 5 baseline passes (minimum for ALL engines)
+                // Phase 2: GPT-4o-mini sentence-level forensic analysis
+                // Phase 3: Score-based extra bulk passes (0-5 more)
+                // Phase 4: 5 targeted passes on flagged sentences ONLY
+                // ═══════════════════════════════════════════════════════
                 const MIN_NURU_PASSES = 5;
                 const maxNuruPasses = Math.max(phase.passes, MIN_NURU_PASSES);
-                const initialPasses = Math.min(MIN_NURU_PASSES, maxNuruPasses);
 
-                for (let pass = 0; pass < initialPasses; pass++) {
+                // ── Phase 1: Baseline 5 passes on ALL sentences ──
+                for (let pass = 0; pass < MIN_NURU_PASSES; pass++) {
                   for (let i = 0; i < currentSentences.length; i++) {
                     if (!isHeadingSentCheck(currentSentences[i])) {
                       currentSentences[i] = runNuruSinglePass(currentSentences[i]);
@@ -1007,37 +1014,89 @@ export async function POST(req: Request) {
                   await flushDelay(10);
                 }
 
-                // After minimum passes, assess remaining AI signal via OpenAI and decide extra passes
-                if (maxNuruPasses > MIN_NURU_PASSES) {
-                  const midText = reassembleText(currentSentences, inputParaBounds.length ? inputParaBounds : [0]);
-                  let midAiScore = 50; // default if LLM call fails
-                  try {
-                    const apiKey = process.env.OPENAI_API_KEY?.trim();
-                    if (apiKey) {
-                      const oai = new OpenAI({ apiKey });
-                      const resp = await oai.chat.completions.create({
-                        model: 'gpt-4o-mini',
-                        messages: [
-                          { role: 'system', content: 'You are an AI content detector. Analyze the text and respond with ONLY a single integer from 0 to 100 representing the likelihood the text was written by AI. 0 = definitely human, 100 = definitely AI. No explanation, just the number.' },
-                          { role: 'user', content: midText.slice(0, 3000) },
-                        ],
-                        temperature: 0,
-                        max_tokens: 5,
-                      });
-                      const raw = resp.choices[0]?.message?.content?.trim() ?? '';
-                      const parsed = parseInt(raw, 10);
-                      if (!isNaN(parsed) && parsed >= 0 && parsed <= 100) midAiScore = parsed;
-                      console.log(`[Nuru Adaptive] OpenAI AI score: ${midAiScore} (raw: "${raw}")`);
+                // ── Phase 2: GPT-4o-mini forensic sentence-level AI detection ──
+                interface FlaggedSentence {
+                  index: number;
+                  ai_score: number;
+                  flagged_phrases: string[];
+                }
+                let overallAiScore = 50;
+                let flaggedSentences: FlaggedSentence[] = [];
+
+                try {
+                  const apiKey = process.env.OPENAI_API_KEY?.trim();
+                  if (apiKey && !(deadlineReached || Date.now() - startTime > DEADLINE_MS - 15000)) {
+                    const oai = new OpenAI({ apiKey });
+                    // Build numbered sentence list for the prompt
+                    const sentenceList = currentSentences
+                      .map((s, i) => isHeadingSentCheck(s) ? null : `[${i}] ${s}`)
+                      .filter(Boolean)
+                      .join('\n');
+
+                    const resp = await oai.chat.completions.create({
+                      model: 'gpt-4o-mini',
+                      messages: [
+                        {
+                          role: 'system',
+                          content: `You are a forensic AI text analyzer. Analyze EACH sentence for AI generation signals.
+
+For each sentence:
+- Assign AI likelihood (0-100%)
+- Identify exact phrases (3-10 words) that indicate AI generation
+- Detect unnatural phrasing, generic academic filler, repetition, predictability
+
+Be strict and critical. Do not assume the text is human.
+
+Respond with ONLY valid JSON, no markdown:
+{
+  "overall_ai_score": <number 0-100>,
+  "flagged": [
+    { "index": <sentence_index>, "ai_score": <0-100>, "phrases": ["phrase1", "phrase2"] }
+  ]
+}
+
+Only include sentences with ai_score >= 60 in the flagged array.
+Keep phrases to the most suspicious 1-3 per sentence.`,
+                        },
+                        { role: 'user', content: sentenceList.slice(0, 4000) },
+                      ],
+                      temperature: 0,
+                      max_tokens: 1500,
+                    });
+
+                    const raw = resp.choices[0]?.message?.content?.trim() ?? '';
+                    try {
+                      const parsed = JSON.parse(raw);
+                      if (typeof parsed.overall_ai_score === 'number') {
+                        overallAiScore = Math.max(0, Math.min(100, parsed.overall_ai_score));
+                      }
+                      if (Array.isArray(parsed.flagged)) {
+                        flaggedSentences = parsed.flagged
+                          .filter((f: any) => typeof f.index === 'number' && f.index >= 0 && f.index < currentSentences.length)
+                          .map((f: any) => ({
+                            index: f.index,
+                            ai_score: typeof f.ai_score === 'number' ? f.ai_score : 80,
+                            flagged_phrases: Array.isArray(f.phrases) ? f.phrases.filter((p: any) => typeof p === 'string') : [],
+                          }));
+                      }
+                    } catch {
+                      // If JSON parse fails, try to extract just the overall score
+                      const scoreMatch = raw.match(/(\d{1,3})/);
+                      if (scoreMatch) overallAiScore = Math.max(0, Math.min(100, parseInt(scoreMatch[1], 10)));
                     }
-                  } catch (e: any) {
-                    console.warn(`[Nuru Adaptive] OpenAI assessment failed, using default: ${e.message}`);
+                    console.log(`[Nuru GPT Forensic] Overall AI score: ${overallAiScore}, flagged sentences: ${flaggedSentences.length}/${currentSentences.length}`);
                   }
-                  // Linear scale: aiScore <=30 → 0 extra, >=80 → full extra (up to maxNuruPasses - 5)
+                } catch (e: any) {
+                  console.warn(`[Nuru GPT Forensic] OpenAI call failed, using defaults: ${e.message}`);
+                }
+
+                // ── Phase 3: Score-based extra bulk Nuru passes (0-5 more) ──
+                if (maxNuruPasses > MIN_NURU_PASSES) {
                   const extraPasses = Math.round(
                     Math.max(0, Math.min(maxNuruPasses - MIN_NURU_PASSES,
-                      ((midAiScore - 30) / 50) * (maxNuruPasses - MIN_NURU_PASSES)))
+                      ((overallAiScore - 30) / 50) * (maxNuruPasses - MIN_NURU_PASSES)))
                   );
-                  console.log(`[Nuru Adaptive] AI score after ${initialPasses} passes: ${midAiScore} → +${extraPasses} passes (total ${initialPasses + extraPasses}/${maxNuruPasses})`);
+                  console.log(`[Nuru Adaptive] AI score ${overallAiScore} → +${extraPasses} bulk passes (total ${MIN_NURU_PASSES + extraPasses}/${maxNuruPasses})`);
 
                   for (let pass = 0; pass < extraPasses; pass++) {
                     for (let i = 0; i < currentSentences.length; i++) {
@@ -1049,7 +1108,32 @@ export async function POST(req: Request) {
                     await flushDelay(10);
                   }
                 }
-                // After all nuru passes, enforce 40% on any sentences that still fall short
+
+                // ── Phase 4: 5 targeted passes on FLAGGED sentences only ──
+                if (flaggedSentences.length > 0 && !(deadlineReached || Date.now() - startTime > DEADLINE_MS - 8000)) {
+                  const TARGETED_PASSES = 5;
+                  const flaggedSet = new Map<number, string[]>();
+                  for (const f of flaggedSentences) {
+                    flaggedSet.set(f.index, f.flagged_phrases);
+                  }
+                  console.log(`[Nuru Targeted] Applying ${TARGETED_PASSES} targeted passes to ${flaggedSet.size} flagged sentences`);
+
+                  for (let pass = 0; pass < TARGETED_PASSES; pass++) {
+                    for (const [idx, phrases] of flaggedSet) {
+                      if (isHeadingSentCheck(currentSentences[idx])) continue;
+                      if (phrases.length > 0) {
+                        // Use phrase-targeted Nuru that focuses on suspicious spans
+                        currentSentences[idx] = stealthHumanizeTargeted(currentSentences[idx], phrases, strength ?? 'medium');
+                      } else {
+                        currentSentences[idx] = runNuruSinglePass(currentSentences[idx]);
+                      }
+                      sendSSE(controller, { type: 'sentence', index: idx, text: currentSentences[idx], stage: `${phaseLabel} (targeted)` });
+                    }
+                    await flushDelay(10);
+                  }
+                }
+
+                // ── Enforce 40% minimum change on any under-performing sentences ──
                 for (let i = 0; i < currentSentences.length; i++) {
                   if (isHeadingSentCheck(currentSentences[i])) continue;
                   const original = phaseInputSentences[i];

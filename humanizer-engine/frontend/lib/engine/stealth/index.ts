@@ -1239,3 +1239,104 @@ export function stealthHumanize(
 }
 
 export default stealthHumanize;
+
+/* ── Phrase-Targeted Nuru Pass ────────────────────────────────────── */
+
+/**
+ * Run a single Nuru pass that focuses extra replacement effort on specific
+ * flagged phrases/words identified by an AI detector. The function:
+ *   1. Splits the sentence into tokens
+ *   2. For tokens that overlap any flagged phrase, forces replacement even
+ *      if the word would normally be protected or below the replacement cap
+ *   3. Falls back to standard processSentence for the rest
+ *
+ * @param sentence  The sentence to reprocess
+ * @param flaggedPhrases  Array of suspicious phrases/words (3-10 words max each)
+ * @param strength  Humanization strength level
+ * @returns Reprocessed sentence with targeted replacements
+ */
+export function stealthHumanizeTargeted(
+  sentence: string,
+  flaggedPhrases: string[],
+  strength: string = 'medium',
+): string {
+  if (!sentence || sentence.trim().length < 8 || flaggedPhrases.length === 0) {
+    // No phrases to target — fall back to standard single pass
+    return stealthHumanize(sentence, strength, 'academic', 1);
+  }
+
+  // Build a set of lower-cased words from all flagged phrases for fast lookup
+  const flaggedWords = new Set<string>();
+  for (const phrase of flaggedPhrases) {
+    for (const w of phrase.toLowerCase().split(/\s+/)) {
+      if (w.length >= 3) flaggedWords.add(w);
+    }
+  }
+
+  // Tokenize
+  const tokens = sentence.split(/(\b)/);
+  const resultTokens: string[] = [];
+  let replacements = 0;
+
+  for (let i = 0; i < tokens.length; i++) {
+    const token = tokens[i];
+    if (!/^[a-zA-Z]{3,}$/.test(token)) {
+      resultTokens.push(token);
+      continue;
+    }
+    const lower = token.toLowerCase();
+
+    // If this word is part of a flagged phrase, prioritize replacement
+    if (flaggedWords.has(lower)) {
+      const stemmed = naiveStem(lower);
+      const rep = EXTRA_REPLACEMENTS[lower] || EXTRA_REPLACEMENTS[stemmed]
+                || AI_WORD_REPLACEMENTS[lower] || AI_WORD_REPLACEMENTS[stemmed];
+      if (rep) {
+        const chosen = Array.isArray(rep) ? rep[Math.floor(Math.random() * rep.length)] : rep;
+        // Preserve capitalization
+        const final = /^[A-Z]/.test(token) ? chosen.charAt(0).toUpperCase() + chosen.slice(1) : chosen;
+        resultTokens.push(final);
+        replacements++;
+        continue;
+      }
+      // Try dictionary service as last resort for flagged words
+      const dictRep = getBestReplacement(lower, 'noun');
+      if (dictRep && dictRep !== lower) {
+        const final = /^[A-Z]/.test(token) ? dictRep.charAt(0).toUpperCase() + dictRep.slice(1) : dictRep;
+        resultTokens.push(final);
+        replacements++;
+        continue;
+      }
+    }
+
+    // Non-flagged words: standard replacement logic (lighter touch)
+    if (PROTECTED.has(lower) || STOPWORDS.has(lower)) {
+      resultTokens.push(token);
+      continue;
+    }
+    const stemmed = naiveStem(lower);
+    const aiRep = EXTRA_REPLACEMENTS[lower] || EXTRA_REPLACEMENTS[stemmed]
+               || AI_WORD_REPLACEMENTS[lower] || AI_WORD_REPLACEMENTS[stemmed];
+    if (aiRep && Math.random() < 0.3) { // 30% chance for non-flagged words
+      const chosen = Array.isArray(aiRep) ? aiRep[Math.floor(Math.random() * aiRep.length)] : aiRep;
+      const final = /^[A-Z]/.test(token) ? chosen.charAt(0).toUpperCase() + chosen.slice(1) : chosen;
+      resultTokens.push(final);
+      replacements++;
+    } else {
+      resultTokens.push(token);
+    }
+  }
+
+  let result = resultTokens.join('');
+
+  // Expand contractions (academic standard)
+  for (const [contraction, expanded] of Object.entries(CONTRACTIONS)) {
+    result = result.replace(new RegExp(`\\b${contraction}\\b`, 'gi'), expanded);
+  }
+
+  // Fix AI/acronym capitalization
+  result = result.replace(/\bAi\b/g, 'AI');
+  result = result.replace(/\bai\b/g, 'AI');
+
+  return result;
+}

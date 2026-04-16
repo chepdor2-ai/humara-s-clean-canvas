@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { humanize } from '@/lib/engine/humanizer';
 import { ghostProHumanize } from '@/lib/engine/ghost-pro';
-import { llmHumanize } from '@/lib/engine/llm-humanizer';
+import { llmHumanize, restructureSentence } from '@/lib/engine/llm-humanizer';
 import { premiumHumanize } from '@/lib/engine/premium-humanizer';
 import { humanizeV11 } from '@/lib/engine/v11';
 import { humaraHumanize } from '@/lib/humara';
@@ -17,7 +17,7 @@ import { unifiedSentenceProcess } from '@/lib/sentence-processor';
 import { expandContractions } from '@/lib/humanize-transforms';
 import { removeEmDashes } from '@/lib/engine/v13-shared-techniques';
 import { nuruHumanize } from '@/lib/engine/nuru-humanizer';
-import { stealthHumanize } from '@/lib/engine/stealth';
+import { stealthHumanize, stealthHumanizeTargeted } from '@/lib/engine/stealth';
 import { omegaHumanize } from '@/lib/engine/omega-humanizer';
 import { easyHumanize } from '@/lib/engine/easy-humanizer';
 import { ozoneHumanize } from '@/lib/engine/ozone-humanizer';
@@ -744,7 +744,7 @@ export async function POST(req: Request) {
     };
 
     const runWikipedia = async (input: string): Promise<string> => {
-      // Wikipedia: Wikipedia (ghostProHumanize) → Humara 2.0 (oxygen) → Nuru 2.0 (single pass) → [10× Nuru 2.0 via outer loop]
+      // Wikipedia: Ghost Pro → Restructuring → Oxygen → 10× Nuru 2.0
       const { paragraphs, protectedIdx } = splitProtectedParas(input);
       const processableParas = paragraphs.filter((_, i) => !protectedIdx.has(i)).join('\n\n');
       let output = processableParas.trim()
@@ -758,11 +758,18 @@ export async function POST(req: Request) {
         : '';
       output = breakRepetitiveTemplates(output);
       output = fixHyphenSpacing(output);
-      // Single oxygen polish (adaptive chain removed — too many passes garble LLM output)
+      // Restructure each sentence for deep structural rewriting
+      const wikiSents = robustSentenceSplit(output);
+      for (let i = 0; i < wikiSents.length; i++) {
+        try {
+          wikiSents[i] = await restructureSentence(wikiSents[i]);
+        } catch { /* keep original on failure */ }
+      }
+      output = wikiSents.join(' ');
+      // Single oxygen polish
       output = runHumara20(output);
-      // Single Nuru pass
-      const nuruSingle = stealthHumanize(output, strength ?? 'medium', tone ?? 'wikipedia', 1);
-      output = nuruSingle && nuruSingle.trim().length > 0 ? nuruSingle : output;
+      // 10× Nuru 2.0 passes
+      output = chainSync(runNuruSinglePass, output, CHAIN_TS);
       // Re-insert protected citation paragraphs in original positions
       if (protectedIdx.size > 0) {
         const outParas = output.split(/\n\s*\n/);
@@ -873,38 +880,38 @@ export async function POST(req: Request) {
       const stage1 = runHumara20(normalizedText);
       humanized = await runGuarded('ninja_3_stage_2', () => runWikipediaClean(stage1), stage1);
     } else if (engine === 'ninja_2') {
-      // Ninja 2: Oxygen → Nuru (single pass)
+      // Ninja 2: Oxygen → 10× Nuru
       const stage1 = runHumara20(normalizedText);
-      humanized = runNuru(stage1);
+      humanized = chainSync(runNuruSinglePass, stage1, CHAIN_TS);
     } else if (engine === 'ninja_4') {
       // Ninja 4: Humara 2.4 → Wikipedia (clean)
       const stage1 = await runGuarded('ninja_4_stage_1', () => runHumara24(normalizedText), normalizedText);
       humanized = await runGuarded('ninja_4_stage_2', () => runWikipediaClean(stage1), stage1);
     } else if (engine === 'ninja_5') {
-      // Ninja 5: Humara 2.4 → Nuru (single pass)
+      // Ninja 5: Humara 2.4 → 10× Nuru
       const stage1 = await runGuarded('ninja_5_stage_1', () => runHumara24(normalizedText), normalizedText);
-      humanized = runNuru(stage1);
+      humanized = chainSync(runNuruSinglePass, stage1, CHAIN_TS);
     } else if (engine === 'ghost_trial_2') {
-      // Ghost Trial 2: Wikipedia (clean) → Humara 2.4 → Nuru (single final)
+      // Ghost Trial 2: Wikipedia (clean) → Humara 2.4 → 10× Nuru
       const stage1 = await runGuarded('ghost_trial_2_stage_1', () => runWikipediaClean(normalizedText), normalizedText);
       const stage2 = await runGuarded('ghost_trial_2_stage_2', () => runHumara24(stage1), stage1);
-      humanized = runNuru(stage2);
+      humanized = chainSync(runNuruSinglePass, stage2, CHAIN_TS);
     } else if (engine === 'ghost_trial_2_alt') {
-      // Ghost Trial 2 Alt: Wikipedia (clean) → Oxygen → Nuru (single final)
+      // Ghost Trial 2 Alt: Wikipedia (clean) → Oxygen → 10× Nuru
       const stage1 = await runGuarded('ghost_trial_2_alt_stage_1', () => runWikipediaClean(normalizedText), normalizedText);
       const stage2 = runHumara20(stage1);
-      humanized = runNuru(stage2);
+      humanized = chainSync(runNuruSinglePass, stage2, CHAIN_TS);
     } else if (engine === 'conscusion_1') {
-      // Conscusion 1: Easy (clean) → Wikipedia (clean) → Nuru (single final)
+      // Conscusion 1: Easy (clean) → Wikipedia (clean) → 10× Nuru
       const stage1 = await runGuarded('conscusion_1_stage_1', () => runHumara22Clean(normalizedText), normalizedText, 35_000);
       const stage2 = await runGuarded('conscusion_1_stage_2', () => runWikipediaClean(stage1), stage1);
-      humanized = runNuru(stage2);
+      humanized = chainSync(runNuruSinglePass, stage2, CHAIN_TS);
     } else if (engine === 'conscusion_12') {
-      // Conscusion 12: Ozone → Humara 2.4 → Wikipedia (clean) → Nuru (single final)
+      // Conscusion 12: Ozone → Humara 2.4 → Wikipedia (clean) → 10× Nuru
       const stage1 = await runGuarded('conscusion_12_stage_1', () => runHumara21(normalizedText), normalizedText, 35_000);
       const stage2 = await runGuarded('conscusion_12_stage_2', () => runHumara24(stage1), stage1);
       const stage3 = await runGuarded('conscusion_12_stage_3', () => runWikipediaClean(stage2), stage2);
-      humanized = runNuru(stage3);
+      humanized = chainSync(runNuruSinglePass, stage3, CHAIN_TS);
     } else if (engine === 'humara_v1_3') {
       // Humara v1.3: Stealth Humanizer Engine v5 from coursework-champ
       const { pipeline } = await import('@/lib/engine/humara-v1-3');
@@ -924,12 +931,8 @@ export async function POST(req: Request) {
         tone ?? 'academic',
       );
     } else if (engine === 'nuru_v2') {
-      // Nuru 2.0: Self-optimizing stealth humanizer with adversarial learning loop
-      humanized = stealthHumanize(
-        normalizedText,
-        strength ?? 'medium',
-        tone ?? 'academic',
-      );
+      // Nuru 2.0: 10-pass stealth humanizer with deep non-LLM cleaning
+      humanized = chainSync(runNuruSinglePass, normalizedText, CHAIN_TS);
     } else if (engine === 'king') {
       // King: Pure LLM multi-phase sentence-by-sentence humanizer (GPT-4o-mini)
       // Phase 1: Deep rewrite (29 Wikipedia AI Cleanup rules)
