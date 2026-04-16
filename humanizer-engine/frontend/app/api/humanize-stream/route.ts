@@ -268,7 +268,7 @@ export async function POST(req: Request) {
             sentences: origSentences,
             paragraphBoundaries,
           });
-          await flushDelay(40); // let client render initial state quickly
+          await flushDelay(5); // let client render initial state quickly
 
           // 2. Heading normalization
           let normalizedText = text;
@@ -318,7 +318,7 @@ export async function POST(req: Request) {
           // Emit initial stage for non-phased engines only
           // (phased engines emit their own Phase labels inside the pipeline below)
           sendSSE(controller, { type: 'stage', stage: 'Engine Processing' });
-          await flushDelay(20);
+          await flushDelay(2);
 
           const runGuarded = async (
             label: string,
@@ -942,7 +942,7 @@ export async function POST(req: Request) {
                 ? (Math.max(10, phase.passes) + 5) * currentSentences.length
                 : currentSentences.length;
               sendSSE(controller, { type: 'stage', stage: phaseLabel, phaseOps });
-              await flushDelay(10);
+              await flushDelay(1);
 
               // ── Minimum change enforcement (driven by humanization rate) ──
               // For sync/async/nuru phases, each sentence must achieve ≥minChangeThreshold
@@ -1016,8 +1016,8 @@ export async function POST(req: Request) {
                     }
                     sendSSE(controller, { type: 'sentence', index: i, text: currentSentences[i], stage: phaseLabel });
                   }
-                  await flushDelay(10);
-                  if (deadlineReached || Date.now() - startTime > DEADLINE_MS - 8000) break;
+                  await flushDelay(1);
+                  if (deadlineReached) break;
                 }
 
                 // ── Step 2: GPT-4o-mini forensic detection ──
@@ -1030,7 +1030,7 @@ export async function POST(req: Request) {
 
                 try {
                   const apiKey = process.env.OPENAI_API_KEY?.trim();
-                  if (apiKey && !(deadlineReached || Date.now() - startTime > DEADLINE_MS - 6000)) {
+                  if (apiKey && !deadlineReached) {
                     const oai = new OpenAI({ apiKey });
                     const sentenceList = currentSentences
                       .map((s, i) => isHeadingSentCheck(s) ? null : `[${i}] ${s}`)
@@ -1089,7 +1089,7 @@ List ALL suspicious words and phrases (up to 5 per sentence).`,
                 // ── Step 3: GPT-4o-mini STRICT replacement of flagged words/phrases ──
                 // STRICT RULES: GPT must ONLY replace the flagged words/phrases with human
                 // equivalents — NO sentence rewriting, NO restructuring, NO adding new words.
-                if (flaggedSentences.length > 0 && !(deadlineReached || Date.now() - startTime > DEADLINE_MS - 5000)) {
+                if (flaggedSentences.length > 0 && !deadlineReached) {
                   try {
                     const apiKey = process.env.OPENAI_API_KEY?.trim();
                     if (apiKey) {
@@ -1149,7 +1149,7 @@ Respond with ONLY a JSON array of objects: [{ "index": <int>, "fixed": "sentence
                 }
 
                 // ── Step 4: 5 final Nuru 2.0 cleanup passes to remove remaining traces ──
-                if (!(deadlineReached || Date.now() - startTime > DEADLINE_MS - 4000)) {
+                if (!deadlineReached) {
                   for (let pass = 0; pass < CLEANUP_PASSES; pass++) {
                     for (let i = 0; i < currentSentences.length; i++) {
                       if (!isHeadingSentCheck(currentSentences[i])) {
@@ -1157,8 +1157,8 @@ Respond with ONLY a JSON array of objects: [{ "index": <int>, "fixed": "sentence
                       }
                       sendSSE(controller, { type: 'sentence', index: i, text: currentSentences[i], stage: `${phaseLabel} (cleanup)` });
                     }
-                    await flushDelay(10);
-                    if (deadlineReached || Date.now() - startTime > DEADLINE_MS - 3500) break;
+                    await flushDelay(1);
+                    if (deadlineReached) break;
                   }
                 }
 
@@ -1168,7 +1168,7 @@ Respond with ONLY a JSON array of objects: [{ "index": <int>, "fixed": "sentence
                 while (
                   activeFlagged.length > 0 &&
                   fastLoop < MAX_FAST_LOOPS &&
-                  !(deadlineReached || Date.now() - startTime > DEADLINE_MS - 2000)
+                  !deadlineReached
                 ) {
                   fastLoop++;
                   try {
@@ -1281,7 +1281,7 @@ Respond with ONLY a JSON array: [{ "index": <int>, "fixed": "sentence with only 
                         currentSentences[flagged.index] = runNuruSinglePass(currentSentences[flagged.index]);
                         sendSSE(controller, { type: 'sentence', index: flagged.index, text: currentSentences[flagged.index], stage: `${phaseLabel} (recheck cleanup)` });
                       }
-                      await flushDelay(5);
+                      await flushDelay(1);
                     }
 
                     activeFlagged = reflagged;
@@ -1308,10 +1308,10 @@ Respond with ONLY a JSON array: [{ "index": <int>, "fixed": "sentence with only 
 
               humanized = reassembleText(currentSentences, inputParaBounds.length ? inputParaBounds : [0]);
               latestHumanized = humanized;
-              await flushDelay(10);
+              await flushDelay(1);
               console.log(`[Pipeline] ${phaseLabel}: ${humanized.split(/\s+/).length} words (${Date.now() - phaseStart}ms)`);
-              // Bail out if deadline is near
-              if (deadlineReached || Date.now() - startTime > DEADLINE_MS - 5000) break;
+              // Bail out only on hard deadline
+              if (deadlineReached) break;
             }
             console.log(`[Pipeline] Complete: ${humanized.split(/\s+/).length} words in ${Date.now() - phaseStart}ms`);
           }
@@ -1319,8 +1319,8 @@ Respond with ONLY a JSON array: [{ "index": <int>, "fixed": "sentence with only 
           // Emit final engine sentences for non-phased engines
           if (!usePhasePipeline) {
             const { sentences: engineSentences } = splitIntoIndexedSentences(humanized);
-            await emitSentencesStaggered(controller, engineSentences, 'Engine', 20);
-            await flushDelay(30);
+            await emitSentencesStaggered(controller, engineSentences, 'Engine', 2);
+            await flushDelay(2);
           }
 
           // Detector + input analysis — needed for both post-processing and final detection
@@ -1332,12 +1332,11 @@ Respond with ONLY a JSON array: [{ "index": <int>, "fixed": "sentence with only 
           // → fast flagged-only re-detect/re-clean loop until <5 AI score
           // Applies to ALL engines EXCEPT ozone (Humara 2.1).
           // Engines that already ran Nuru in their phase pipeline skip baseline.
-          // Hard time budget: 10 seconds max.
+          // Runs all phases until hard deadline (deadlineReached).
           // ═══════════════════════════════════════════════════════════════
-          if (eng !== 'ozone' && !(deadlineReached || Date.now() - startTime > DEADLINE_MS - 12000)) {
+          if (eng !== 'ozone' && !deadlineReached) {
             const nuruPostStart = Date.now();
-            const NURU_POST_DEADLINE_MS = 55_000;
-            const nuruPostTimeOk = () => Date.now() - nuruPostStart < NURU_POST_DEADLINE_MS && !(deadlineReached || Date.now() - startTime > DEADLINE_MS - 8000);
+            const nuruPostTimeOk = () => !deadlineReached;
 
             const { sentences: postSentences, paragraphBoundaries: postParaBounds } = splitIntoIndexedSentences(humanized);
             const postSents = [...postSentences];
@@ -1347,7 +1346,7 @@ Respond with ONLY a JSON array: [{ "index": <int>, "fixed": "sentence with only 
 
             const nuruPostOps = (usePhasePipeline ? 5 : 15) * postSents.length;
             sendSSE(controller, { type: 'stage', stage: 'Nuru 2.0 Post-Processing', phaseOps: Math.max(1, nuruPostOps) });
-            await flushDelay(10);
+            await flushDelay(1);
 
             // ── Step 1: 10 baseline Nuru passes (skip if engine already ran Nuru in pipeline) ──
             if (!usePhasePipeline && nuruPostTimeOk()) {
@@ -1358,7 +1357,7 @@ Respond with ONLY a JSON array: [{ "index": <int>, "fixed": "sentence with only 
                   }
                   sendSSE(controller, { type: 'sentence', index: i, text: postSents[i], stage: 'Nuru 2.0 Post-Processing' });
                 }
-                await flushDelay(5);
+                await flushDelay(1);
                 if (!nuruPostTimeOk()) break;
               }
               console.log(`[Nuru Post] 10 baseline passes done (${Date.now() - nuruPostStart}ms)`);
@@ -1428,7 +1427,7 @@ Only include sentences with ai_score >= 55.`,
                   }
                   sendSSE(controller, { type: 'sentence', index: i, text: postSents[i], stage: 'Nuru 2.0 (cleanup)' });
                 }
-                await flushDelay(5);
+                await flushDelay(1);
                 if (!nuruPostTimeOk()) break;
               }
             }
@@ -1444,7 +1443,7 @@ Only include sentences with ai_score >= 55.`,
                   }
                   sendSSE(controller, { type: 'sentence', index: flagged.index, text: postSents[flagged.index], stage: 'Nuru 2.0 (flagged cleanup)' });
                 }
-                await flushDelay(5);
+                await flushDelay(1);
               }
             }
 
@@ -1565,7 +1564,7 @@ If all sentences are below 5, return { "flagged": [] }.`,
                     }
                     sendSSE(controller, { type: 'sentence', index: flagged.index, text: postSents[flagged.index], stage: 'Nuru 2.0 (recheck cleanup)' });
                   }
-                  await flushDelay(5);
+                  await flushDelay(1);
                 }
 
                 activePostFlagged = reflagged;
@@ -1592,10 +1591,10 @@ If all sentences are below 5, return { "flagged": [] }.`,
             humanized = unifiedSentenceProcess(humanized, earlyFirstPerson, inputAiScore);
             if (!usePhasePipeline) {
               sendSSE(controller, { type: 'stage', stage: 'Sentence Processing' });
-              await flushDelay(20);
+              await flushDelay(2);
               const { sentences: uspSentences } = splitIntoIndexedSentences(humanized);
-              await emitSentencesStaggered(controller, uspSentences, 'Sentence Processing', 20);
-              await flushDelay(30);
+              await emitSentencesStaggered(controller, uspSentences, 'Sentence Processing', 2);
+              await flushDelay(2);
             }
           }
 
@@ -1603,7 +1602,7 @@ If all sentences are below 5, return { "flagged": [] }.`,
           if (!isDeepKill) {
           if (!usePhasePipeline) {
             sendSSE(controller, { type: 'stage', stage: 'Restructuring' });
-            await flushDelay(20);
+            await flushDelay(2);
           }
           {
             const { sentences: origSents } = splitIntoIndexedSentences(normalizedText);
@@ -1638,11 +1637,11 @@ If all sentences are below 5, return { "flagged": [] }.`,
               humanized = reassembleText(humanizedSents, humanParaBounds.length ? humanParaBounds : [0]);
               if (!usePhasePipeline) {
                 const { sentences: restructuredSents } = splitIntoIndexedSentences(humanized);
-                await emitSentencesStaggered(controller, restructuredSents, 'Restructuring', 20);
+                await emitSentencesStaggered(controller, restructuredSents, 'Restructuring', 2);
               }
             }
           }
-          await flushDelay(30);
+          await flushDelay(2);
           } // end !isDeepKill restructuring guard
 
           // 6. Capitalization fix
@@ -1888,26 +1887,26 @@ If all sentences are below 5, return { "flagged": [] }.`,
           if (eng === 'easy') {
             try {
               sendSSE(controller, { type: 'stage', stage: 'Oxygen Polish' });
-              await flushDelay(20);
+              await flushDelay(2);
               const polished = oxygenHumanize(humanized, 'light', 'fast', false);
               if (polished && polished.trim().length > 0) {
                 humanized = polished;
                 const { sentences: oxygenSents } = splitIntoIndexedSentences(humanized);
-                await emitSentencesStaggered(controller, oxygenSents, 'Oxygen Polish', 20);
+                await emitSentencesStaggered(controller, oxygenSents, 'Oxygen Polish', 2);
               }
             } catch {
               // Oxygen polish is best-effort — never block the pipeline
             }
-            await flushDelay(30);
+            await flushDelay(2);
           }
 
           // Emit polished sentences (skip for phased engines)
           if (!usePhasePipeline) {
             sendSSE(controller, { type: 'stage', stage: 'Polishing' });
-            await flushDelay(20);
+            await flushDelay(2);
             const { sentences: polishedSents } = splitIntoIndexedSentences(humanized);
-            await emitSentencesStaggered(controller, polishedSents, 'Polishing', 20);
-            await flushDelay(30);
+            await emitSentencesStaggered(controller, polishedSents, 'Polishing', 2);
+            await flushDelay(2);
           }
 
           // 14. Meaning check (detection disabled — coming soon)
@@ -1915,7 +1914,7 @@ If all sentences are below 5, return { "flagged": [] }.`,
           humanized = humanized.replace(/ {2,}/g, ' ');
           if (!usePhasePipeline) {
             sendSSE(controller, { type: 'stage', stage: 'Analyzing' });
-            await flushDelay(10);
+            await flushDelay(2);
           }
           // For engines with server-side meaning checks (oxygen3), use fast sync heuristic
           const meaningCheck = (eng === 'oxygen3')

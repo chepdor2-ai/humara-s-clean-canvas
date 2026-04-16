@@ -1046,8 +1046,7 @@ export async function POST(req: Request) {
     // ═══════════════════════════════════════════════════════════════
     if (engine !== 'ozone') {
       const nuruPostStart = Date.now();
-      const NURU_POST_DEADLINE_MS = 55_000;
-      const nuruTimeOk = () => Date.now() - nuruPostStart < NURU_POST_DEADLINE_MS;
+      const nuruTimeOk = () => true; // no internal time budget — run all phases
       const FAST_RECHECK_PASSES = 5;
       const TARGET_AI_SCORE = 5;
       const MAX_FAST_LOOPS = 5;
