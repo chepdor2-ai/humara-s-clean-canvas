@@ -452,6 +452,134 @@ export async function POST(req: Request) {
             return out;
           };
 
+          // ── Nuru 2.0 Sentence Starter Distribution Fix ──
+          const applySentenceStartersDistribution = (sentences: string[]): void => {
+            const targetStarters = ['The', 'This', 'These', 'Moreover', 'However', 'Furthermore', 'Additionally', 'In addition', 'Also', 'Therefore', 'Consequently', 'As a result', 'Thus', 'Hence', 'On the other hand', 'On the contrary', 'In contrast', 'Alternatively', 'Nevertheless', 'Nonetheless'].map(s => s.toLowerCase().trim());
+            const transitionStarters = ['Moreover', 'However', 'Furthermore', 'Additionally', 'In addition', 'Also', 'Therefore', 'Consequently', 'As a result', 'Thus', 'Hence', 'On the other hand', 'On the contrary', 'In contrast', 'Alternatively', 'Nevertheless', 'Nonetheless'];
+
+              const getMatchedStarter = (sentence: string): string | null => {
+                const words = sentence.trim().split(/\s+/);
+                for (const starter of targetStarters) {
+                  const starterWords = starter.split(/\s+/);
+                  const prefix = words
+                    .slice(0, starterWords.length)
+                    .join(' ')
+                    .replace(/[^a-z0-9 ]/gi, '')
+                    .toLowerCase();
+                  if (prefix === starter) return starter;
+                }
+                return null;
+              };
+
+              const demoteStarter = (sentence: string, starter: string): string => {
+                const words = sentence.trim().split(/\s+/);
+                const starterLength = starter.split(/\s+/).length;
+
+                if (starter === 'the') {
+                  const trimmed = words.slice(starterLength).join(' ').trim();
+                  return trimmed ? trimmed.charAt(0).toUpperCase() + trimmed.slice(1) : sentence;
+                }
+
+                if (starter === 'this' || starter === 'these') {
+                  const replacements = starter === 'this' ? ['Such', 'That', 'One'] : ['Such', 'Those'];
+                  return `${replacements[Math.floor(Math.random() * replacements.length)]} ${words.slice(starterLength).join(' ')}`.trim();
+                }
+
+                let trimmed = words.slice(starterLength).join(' ').trim();
+                trimmed = trimmed.replace(/^,\s*/, '');
+                return trimmed ? trimmed.charAt(0).toUpperCase() + trimmed.slice(1) : sentence;
+              };
+            
+            const counts: Record<string, number> = {};
+            targetStarters.forEach(t => counts[t] = 0);
+            
+            // First pass: identify current starters and demote overused ones
+            for (let i = 0; i < sentences.length; i++) {
+              if (isHeadingSentCheck(sentences[i])) continue;
+              let s = sentences[i].trim();
+              const words = s.split(/\s+/);
+              if (words.length < 3) continue;
+              
+              const matchedTarget = getMatchedStarter(s);
+              
+              if (matchedTarget) {
+                counts[matchedTarget]++;
+                if (counts[matchedTarget] > 2) {
+                  s = demoteStarter(s, matchedTarget);
+                  sentences[i] = s;
+                }
+              }
+            }
+            
+            // Second pass: recount after demotion
+            for (const t of targetStarters) counts[t] = 0;
+            const validIndices: number[] = [];
+            let totalWithStarter = 0;
+            
+            for (let i = 0; i < sentences.length; i++) {
+              if (isHeadingSentCheck(sentences[i])) continue;
+              validIndices.push(i);
+              let s = sentences[i].trim();
+              const words = s.split(/\s+/);
+              let matched = false;
+              for (const t of targetStarters) {
+                const twords = t.split(/\s+/);
+                const testPrefix = words.slice(0, twords.length).join(' ').replace(/[^a-z0-9 ]/gi, '').toLowerCase();
+                if (testPrefix === t) {
+                  matched = true;
+                  counts[t]++;
+                  break;
+                }
+              }
+              if (matched) totalWithStarter++;
+            }
+            
+            if (validIndices.length === 0) return;
+            const minTarget = Math.max(1, Math.ceil(validIndices.length * 0.10));
+            const maxTarget = Math.floor(validIndices.length * 0.30);
+
+            if (maxTarget >= 0 && totalWithStarter > maxTarget) {
+              let excess = totalWithStarter - maxTarget;
+              for (let i = validIndices.length - 1; i >= 0 && excess > 0; i--) {
+                const idx = validIndices[i];
+                const matchedTarget = getMatchedStarter(sentences[idx]);
+                if (!matchedTarget) continue;
+                sentences[idx] = demoteStarter(sentences[idx], matchedTarget);
+                counts[matchedTarget] = Math.max(0, counts[matchedTarget] - 1);
+                totalWithStarter--;
+                excess--;
+              }
+            }
+            
+            if (totalWithStarter < minTarget) {
+              const needed = minTarget - totalWithStarter;
+              const nonStarterIndices = validIndices.filter(i => {
+                return !getMatchedStarter(sentences[i]);
+              });
+              
+              nonStarterIndices.sort(() => Math.random() - 0.5);
+              let injected = 0;
+              let availableTransitions = transitionStarters.filter(t => counts[t.toLowerCase()] < 2);
+              
+              for (let idx of nonStarterIndices) {
+                if (injected >= needed) break;
+                if (availableTransitions.length === 0) break;
+                
+                availableTransitions.sort(() => Math.random() - 0.5);
+                const t = availableTransitions[0];
+                
+                let s = sentences[idx].trim();
+                s = t + ', ' + s.charAt(0).toLowerCase() + s.slice(1);
+                sentences[idx] = s;
+                
+                counts[t.toLowerCase()]++;
+                totalWithStarter++;
+                injected++;
+                availableTransitions = transitionStarters.filter(tr => counts[tr.toLowerCase()] < 2);
+              }
+            }
+          };
+
           // ══════════════════════════════════════════════════════════════
           // ACADEMIC-GRADE CLEANING & SMOOTHING FUNCTIONS
           // All functions preserve formal academic register.
@@ -1336,6 +1464,17 @@ If all sentences are below 5, return { "flagged": [] }.`,
               // Bail out only on hard deadline
               if (deadlineReached) break;
             }
+
+            if (eng === 'nuru_v2' && !deadlineReached) {
+              applySentenceStartersDistribution(currentSentences);
+              humanized = reassembleText(currentSentences, inputParaBounds.length ? inputParaBounds : [0]);
+              latestHumanized = humanized;
+              sendSSE(controller, { type: 'stage', stage: 'Nuru 2.0 Sentence Starters', phaseOps: currentSentences.length });
+              for (let i = 0; i < currentSentences.length; i++) {
+                sendSSE(controller, { type: 'sentence', index: i, text: currentSentences[i], stage: 'Nuru 2.0 Sentence Starters' });
+              }
+            }
+
             console.log(`[Pipeline] Complete: ${humanized.split(/\s+/).length} words in ${Date.now() - phaseStart}ms`);
           }
 
