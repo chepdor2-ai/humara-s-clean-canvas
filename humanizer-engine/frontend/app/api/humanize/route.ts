@@ -825,6 +825,11 @@ export async function POST(req: Request) {
       return output && output.trim().length > 0 ? output : input;
     };
 
+    const runNuruSinglePass = (input: string): string => {
+      const output = stealthHumanize(input, strength ?? 'medium', tone ?? 'academic', 1);
+      return output && output.trim().length > 0 ? output : input;
+    };
+
     const applySmartNuruPolish = (input: string, maxPasses = 15): string => {
       // Delegate to stealthHumanize which now inherently guarantees min 10 loops
       // and natively applies all our 6 detector specific non-LLM cleanups
