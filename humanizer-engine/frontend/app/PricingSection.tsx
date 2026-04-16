@@ -31,6 +31,23 @@ const plans = [
   },
 ];
 
+import { motion, Variants } from 'framer-motion';
+
+const container: Variants = {
+  hidden: { opacity: 0 },
+  show: {
+    opacity: 1,
+    transition: {
+      staggerChildren: 0.1
+    }
+  }
+};
+
+const item: Variants = {
+  hidden: { opacity: 0, y: 20 },
+  show: { opacity: 1, y: 0, transition: { duration: 0.5, ease: "easeOut" } }
+};
+
 export default function PricingSection() {
   const [isYearly, setIsYearly] = useState(false);
 
@@ -63,14 +80,22 @@ export default function PricingSection() {
       </div>
 
       {/* Cards */}
-      <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5 sm:gap-6">
+      <motion.div 
+        variants={container}
+        initial="hidden"
+        whileInView="show"
+        viewport={{ once: true, margin: "-50px" }}
+        className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5 sm:gap-6"
+      >
         {plans.map((plan) => (
-          <div
+          <motion.div
+            variants={item}
+            whileHover={{ y: -5 }}
             key={plan.name}
-            className={`relative p-7 sm:p-8 rounded-3xl flex flex-col transition-all duration-300 ${
+            className={`relative p-7 sm:p-8 rounded-3xl flex flex-col transition-shadow duration-300 ${
               plan.popular
-                ? 'bg-white dark:bg-[#0F0F17] border-2 border-purple-500 shadow-lg shadow-purple-500/10 scale-[1.03] lg:scale-105'
-                : 'bg-white dark:bg-[#0F0F17] border border-slate-200 dark:border-white/10'
+                ? 'bg-white dark:bg-[#0F0F17] border-2 border-purple-500 shadow-lg shadow-purple-500/10 lg:scale-[1.03]'
+                : 'bg-white dark:bg-[#0F0F17] border border-slate-200 dark:border-white/10 hover:shadow-xl hover:shadow-white/5'
             }`}
           >
             {plan.popular && (
@@ -109,9 +134,9 @@ export default function PricingSection() {
             >
               Get Started
             </Link>
-          </div>
+          </motion.div>
         ))}
-      </div>
+      </motion.div>
     </div>
   );
 }

@@ -36,6 +36,8 @@ function useTyping(text: string, active: boolean, speed = 18) {
   return active ? displayed : '';
 }
 
+import { motion } from 'framer-motion';
+
 export default function IPhoneMockup() {
   const [phase, setPhase] = useState<Phase>('idle');
   const [cycle, setCycle] = useState(0);
@@ -70,9 +72,13 @@ export default function IPhoneMockup() {
       <div className="absolute -inset-10 bg-gradient-to-br from-purple-500/25 via-purple-600/15 to-transparent rounded-full blur-[60px] pointer-events-none" />
 
       {/* iPhone frame — 3D tilt */}
-      <div
-        className="relative mx-auto w-[280px] sm:w-[300px] transition-transform duration-700 hover:scale-[1.02]"
-        style={{ transform: 'rotateY(-8deg) rotateX(4deg)', transformStyle: 'preserve-3d' }}
+      <motion.div
+        className="relative mx-auto w-[280px] sm:w-[300px]"
+        style={{ transformStyle: 'preserve-3d' }}
+        animate={{ y: [0, -12, 0] }}
+        transition={{ duration: 6, ease: "easeInOut", repeat: Infinity }}
+        whileHover={{ scale: 1.03, transition: { duration: 0.4 } }}
+        initial={{ rotateY: -8, rotateX: 4 }}
       >
         {/* Outer shell with metallic edge */}
         <div className="rounded-[3rem] p-[2px] bg-gradient-to-b from-zinc-500 via-zinc-700 to-zinc-800 shadow-2xl shadow-purple-900/40">
@@ -178,7 +184,7 @@ export default function IPhoneMockup() {
         <div className="flex justify-center mt-[-6px] relative z-30">
           <div className="w-[100px] h-[4px] bg-zinc-700 rounded-full" />
         </div>
-      </div>
+      </motion.div>
     </div>
   );
 }

@@ -40,7 +40,7 @@ export default function FreeTrial() {
       const res = await fetch('/api/humanize', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: input, engine: 'ninja_1', strength: 'medium', tone: 'academic', strict_meaning: true, enable_post_processing: true }),
+        body: JSON.stringify({ text: input, engine: 'humara_v3_3', strength: 'medium', tone: 'academic', strict_meaning: true, enable_post_processing: true }),
       });
       const data = await res.json();
       if (!res.ok || data.error) throw new Error(data.error || 'Humanization failed');
@@ -120,9 +120,7 @@ export default function FreeTrial() {
           </button>
           <span className="text-xs text-slate-500 dark:text-zinc-500">{remaining > 0 ? `${remaining} free attempt${remaining === 1 ? '' : 's'} remaining` : 'Free attempts used'}</span>
         </div>
-        <p className="text-[11px] text-slate-500 dark:text-zinc-500 text-center sm:text-right">
-          Fine-tuned to beat <span className="font-semibold text-slate-500 dark:text-zinc-400">GPTZero</span> · Humara 2.4 + Nuru 2.0 · No signup required
-        </p>
+
       </div>
 
       {error && (

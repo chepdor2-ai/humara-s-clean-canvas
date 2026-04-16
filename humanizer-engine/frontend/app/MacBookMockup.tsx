@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { Zap, CheckCircle2, ShieldCheck } from 'lucide-react';
 import Image from 'next/image';
+import { motion } from 'framer-motion';
 
 const DETECTORS = [
   { name: 'GPTZero', beforeAi: 94, afterAi: 1 },
@@ -90,7 +91,12 @@ export default function MacBookMockup() {
         </div>
 
         {/* Floating animated screen — positioned over the laptop */}
-        <div className="absolute inset-0 flex items-center justify-center p-4 sm:p-8">
+        <motion.div 
+          className="absolute inset-0 flex items-center justify-center p-4 sm:p-8"
+          animate={{ y: [0, -8, 0] }}
+          transition={{ duration: 7, ease: "easeInOut", repeat: Infinity }}
+          whileHover={{ scale: 1.02, transition: { duration: 0.4 } }}
+        >
           <div className="w-full max-w-2xl bg-[#09090F]/95 backdrop-blur-xl rounded-xl overflow-hidden border border-white/10 shadow-2xl shadow-purple-500/10">
             {/* App chrome bar */}
             <div className="flex items-center gap-2 px-4 py-2 border-b border-white/5 bg-[#0A0A12]/90">
@@ -203,7 +209,7 @@ export default function MacBookMockup() {
               </div>
             </div>
           </div>
-        </div>
+        </motion.div>
       </div>
     </div>
   );

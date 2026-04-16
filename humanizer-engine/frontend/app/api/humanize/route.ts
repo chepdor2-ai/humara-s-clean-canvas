@@ -33,6 +33,7 @@ import { applyAIWordKill } from '@/lib/engine/shared-dictionaries';
 import { postCleanGrammar } from '@/lib/engine/grammar-cleaner';
 import { apexHumanize } from '@/lib/engine/apex-humanizer';
 import { kingHumanize } from '@/lib/engine/king-humanizer';
+import { analyzeDocumentCoherence, fixDocumentCoherence, type CoherenceReport } from '@/lib/engine/document-coherence';
 
 export const maxDuration = 120; // LLM engines need more time
 
@@ -769,8 +770,8 @@ export async function POST(req: Request) {
       output = wikiSents.join(' ');
       // Single oxygen polish
       output = runHumara20(output);
-      // 10× Nuru 2.0 passes
-      output = chainSync(runNuruSinglePass, output, CHAIN_TS);
+      // Nuru 2.0 Smart Passes (up to 15)
+      output = applySmartNuruPolish(output);
       // Re-insert protected citation paragraphs in original positions
       if (protectedIdx.size > 0) {
         const outParas = output.split(/\n\s*\n/);
@@ -837,10 +838,40 @@ export async function POST(req: Request) {
       return output && output.trim().length > 0 ? output : input;
     };
 
-    const CHAIN_TS = 10;
-    const chainSync = (fn: (s: string) => string, input: string, n: number): string => {
+    const applySmartNuruPolish = (input: string, maxPasses = 15): string => {
       let out = input;
-      for (let i = 0; i < n; i++) out = fn(out);
+      let passesDone = 0;
+
+      // Initial 5 passes
+      for (let i = 0; i < 5 && passesDone < maxPasses; i++) {
+        out = runNuruSinglePass(out);
+        passesDone++;
+      }
+
+      // Check detector early exit
+      let currentScore = detector.analyze(out).summary.overall_ai_score;
+      if (currentScore < 15.0) {
+        console.log(`[Smart Nuru] Exiting early at pass ${passesDone} with score ${currentScore.toFixed(1)}%`);
+        return out;
+      }
+
+      // Loop by 2s up to maxPasses
+      while (passesDone < maxPasses) {
+        out = runNuruSinglePass(out);
+        passesDone++;
+        if (passesDone < maxPasses) {
+          out = runNuruSinglePass(out);
+          passesDone++;
+        }
+        
+        currentScore = detector.analyze(out).summary.overall_ai_score;
+        if (currentScore < 15.0) {
+          console.log(`[Smart Nuru] Exiting early at pass ${passesDone} with score ${currentScore.toFixed(1)}%`);
+          return out;
+        }
+      }
+
+      console.log(`[Smart Nuru] Finished all ${passesDone} passes, final score ${currentScore.toFixed(1)}%`);
       return out;
     };
 
@@ -881,38 +912,38 @@ export async function POST(req: Request) {
       const stage1 = runHumara20(normalizedText);
       humanized = await runGuarded('ninja_3_stage_2', () => runWikipediaClean(stage1), stage1);
     } else if (engine === 'ninja_2') {
-      // Ninja 2: Oxygen → 10× Nuru
+      // Ninja 2: Oxygen → 15× Smart Nuru
       const stage1 = runHumara20(normalizedText);
-      humanized = chainSync(runNuruSinglePass, stage1, CHAIN_TS);
+      humanized = applySmartNuruPolish(stage1);
     } else if (engine === 'ninja_4') {
       // Ninja 4: Humara 2.4 → Wikipedia (clean)
       const stage1 = await runGuarded('ninja_4_stage_1', () => runHumara24(normalizedText), normalizedText);
       humanized = await runGuarded('ninja_4_stage_2', () => runWikipediaClean(stage1), stage1);
     } else if (engine === 'ninja_5') {
-      // Ninja 5: Humara 2.4 → 10× Nuru
+      // Ninja 5: Humara 2.4 → 15× Smart Nuru
       const stage1 = await runGuarded('ninja_5_stage_1', () => runHumara24(normalizedText), normalizedText);
-      humanized = chainSync(runNuruSinglePass, stage1, CHAIN_TS);
+      humanized = applySmartNuruPolish(stage1);
     } else if (engine === 'ghost_trial_2') {
-      // Ghost Trial 2: Wikipedia (clean) → Humara 2.4 → 10× Nuru
+      // Ghost Trial 2: Wikipedia (clean) → Humara 2.4 → 15× Smart Nuru
       const stage1 = await runGuarded('ghost_trial_2_stage_1', () => runWikipediaClean(normalizedText), normalizedText);
       const stage2 = await runGuarded('ghost_trial_2_stage_2', () => runHumara24(stage1), stage1);
-      humanized = chainSync(runNuruSinglePass, stage2, CHAIN_TS);
+      humanized = applySmartNuruPolish(stage2);
     } else if (engine === 'ghost_trial_2_alt') {
-      // Ghost Trial 2 Alt: Wikipedia (clean) → Oxygen → 10× Nuru
+      // Ghost Trial 2 Alt: Wikipedia (clean) → Oxygen → 15× Smart Nuru
       const stage1 = await runGuarded('ghost_trial_2_alt_stage_1', () => runWikipediaClean(normalizedText), normalizedText);
       const stage2 = runHumara20(stage1);
-      humanized = chainSync(runNuruSinglePass, stage2, CHAIN_TS);
+      humanized = applySmartNuruPolish(stage2);
     } else if (engine === 'conscusion_1') {
-      // Conscusion 1: Easy (clean) → Wikipedia (clean) → 10× Nuru
+      // Conscusion 1: Easy (clean) → Wikipedia (clean) → 15× Smart Nuru
       const stage1 = await runGuarded('conscusion_1_stage_1', () => runHumara22Clean(normalizedText), normalizedText, 10_000);
       const stage2 = await runGuarded('conscusion_1_stage_2', () => runWikipediaClean(stage1), stage1);
-      humanized = chainSync(runNuruSinglePass, stage2, CHAIN_TS);
+      humanized = applySmartNuruPolish(stage2);
     } else if (engine === 'conscusion_12') {
-      // Conscusion 12: Ozone → Humara 2.4 → Wikipedia (clean) → 10× Nuru
+      // Conscusion 12: Ozone → Humara 2.4 → Wikipedia (clean) → 15× Smart Nuru
       const stage1 = await runGuarded('conscusion_12_stage_1', () => runHumara21(normalizedText), normalizedText, 10_000);
       const stage2 = await runGuarded('conscusion_12_stage_2', () => runHumara24(stage1), stage1);
       const stage3 = await runGuarded('conscusion_12_stage_3', () => runWikipediaClean(stage2), stage2);
-      humanized = chainSync(runNuruSinglePass, stage3, CHAIN_TS);
+      humanized = applySmartNuruPolish(stage3);
     } else if (engine === 'humara_v1_3') {
       // Humara v1.3: Stealth Humanizer Engine v5 from coursework-champ
       const { pipeline } = await import('@/lib/engine/humara-v1-3');
@@ -932,15 +963,15 @@ export async function POST(req: Request) {
         tone ?? 'academic',
       );
     } else if (engine === 'nuru_v2') {
-      // Nuru 2.0: 10-pass stealth humanizer with deep non-LLM cleaning
-      humanized = chainSync(runNuruSinglePass, normalizedText, CHAIN_TS);
+      // Nuru 2.0: 15-pass stealth humanizer with deep non-LLM cleaning
+      humanized = applySmartNuruPolish(normalizedText);
     } else if (engine === 'king') {
       // King: Pure LLM multi-phase sentence-by-sentence humanizer (GPT-4o-mini)
       // Phase 1: Deep rewrite (29 Wikipedia AI Cleanup rules)
       // Phase 2: Self-audit ("what makes this AI?")
       // Phase 3: Targeted revision (fix Phase 2 findings)
       const kingResult = await kingHumanize(normalizedText);
-      humanized = chainSync(runNuruSinglePass, kingResult.humanized, CHAIN_TS);
+      humanized = applySmartNuruPolish(kingResult.humanized);
     } else if (engine === 'humara') {
       // Humara: Independent humanizer engine — phrase-level, strategy-diverse
       const humaraStrength: 'light' | 'medium' | 'heavy' =
@@ -964,11 +995,11 @@ export async function POST(req: Request) {
         strict_meaning ?? true,
       );
     } else if (engine === 'ninja_1') {
-      // Ninja 1: Ninja LLM → Humara 2.0 (oxygen) → Nuru 2.0 (single pass) → [10× Nuru 2.0 via outer loop]
+      // Ninja 1: Ninja LLM → Humara 2.0 (oxygen) → Nuru 2.0 (single pass) → [15× Smart Nuru]
       const stage1 = await runGuarded('ninja1_stage_1', () => llmHumanize(normalizedText, strength ?? 'medium', true, strict_meaning ?? true, tone ?? 'academic', no_contractions !== false, enable_post_processing !== false), normalizedText);
       const stage2 = runHumara20(stage1);
       const stage3 = runNuruSinglePass(stage2);
-      humanized = chainSync(runNuru, stage3, CHAIN_TS);
+      humanized = applySmartNuruPolish(stage3);
     } else if (engine === 'undetectable') {
       // Undetectable: Ninja (Stealth) only — second Ghost Mini pass removed
       // The double pass was over-processing and creating unnaturally uniform text
@@ -1560,9 +1591,8 @@ If all sentences are below 5, return { "flagged": [] }.`,
     // If any sentence has drifted too far, it gets reprocessed with
     // lighter transforms that preserve meaning. Runs up to 2 iterations
     // to catch sentences that still drift after the first pass.
-    // Skip for nuru_v2: its iterative rewrite loop manages its own meaning check.
     // Skip for Deep Kill: Nuru V2 at end of pipeline handles meaning internally.
-    if (engine !== 'nuru_v2' && !isDeepKill) {
+    if (!isDeepKill) {
       for (let meaningIter = 0; meaningIter < 2; meaningIter++) {
         const beforeFix = humanized;
         humanized = lastMileMeaningValidator(text, humanized, 0.25);
@@ -1570,12 +1600,46 @@ If all sentences are below 5, return { "flagged": [] }.`,
       }
     }
 
+    // ── DOCUMENT-LEVEL COHERENCE ENGINE ─────────────────────────
+    // Runs after meaning preservation, before detector feedback.
+    // Scores and fixes document-level human-flow issues:
+    // paragraph cadence, transition fit, reference chains,
+    // repetition decay, clause-shape diversity, SEO keyword integrity,
+    // heading-body alignment, readability drift, information-gain ordering,
+    // human revision fingerprinting, paragraph purpose labeling,
+    // search-intent coverage, heading hierarchy, snippet-worthiness.
+    // Ordering: meaning → entity retention → coherence → SEO → detector.
+    let coherenceReport: CoherenceReport | null = null;
+    if (!isDeepKill) {
+      try {
+        const coherenceStart = Date.now();
+        const seoKeywords = Array.isArray(body.seo_keywords) ? body.seo_keywords as string[] : undefined;
+        const contentType = (body.content_type as string) || 'general';
+        coherenceReport = analyzeDocumentCoherence(text, humanized, {
+          seoKeywords,
+          contentType: contentType as 'blog' | 'academic' | 'seo' | 'general',
+        });
+        console.log(`[Coherence] Analysis complete in ${Date.now() - coherenceStart}ms — overall score: ${coherenceReport.overallScore}`);
+        console.log(`[Coherence] Cadence=${coherenceReport.paragraphCadence.score} Transition=${coherenceReport.transitionFit.score} RefChains=${coherenceReport.referenceChains.score} Repetition=${coherenceReport.repetitionDecay.score} Clause=${coherenceReport.clauseShapeDiversity.score} Entity=${coherenceReport.entityRetention.score} SEO=${coherenceReport.seoKeywords.score} Heading=${coherenceReport.headingBodyAlignment.score} Drift=${coherenceReport.readabilityDrift.score}`);
+
+        // Apply auto-fixes when coherence is below threshold
+        if (coherenceReport.overallScore < 75) {
+          const beforeFix = humanized;
+          humanized = fixDocumentCoherence(text, humanized, coherenceReport);
+          if (humanized !== beforeFix) {
+            console.log(`[Coherence] Auto-fixes applied`);
+          }
+        }
+      } catch (coherenceErr) {
+        console.warn(`[Coherence] Engine error (non-fatal):`, coherenceErr);
+      }
+    }
+
     // ── COHERENCE SAFETY NET ─────────────────────────────────
     // Catch any garbled sentences that slipped through engine-level checks.
     // Replace them with the best-matching original sentence (natural > garbled).
-    // Skip for nuru_v2: its own quality gate handles garbled output.
     // Skip for Deep Kill: Nuru V2 at end of pipeline handles quality internally.
-    if (engine !== 'nuru_v2' && !isDeepKill) {
+    if (!isDeepKill) {
       const isLikelyGarbled = (s: string): boolean => {
         const st = s.trim().replace(/^["'\u201C\u201D\u2018\u2019\s]+/, '').replace(/["'\u201C\u201D\u2018\u2019\s]+$/, '');
         const w = st.split(/\s+/);
@@ -1778,6 +1842,35 @@ If all sentences are below 5, return { "flagged": [] }.`,
           human_score: Math.round(d.human_score * 10) / 10,
         })),
       },
+      coherence: coherenceReport ? {
+        overall_score: coherenceReport.overallScore,
+        paragraph_cadence: coherenceReport.paragraphCadence.score,
+        transition_fit: coherenceReport.transitionFit.score,
+        reference_chains: coherenceReport.referenceChains.score,
+        repetition_decay: coherenceReport.repetitionDecay.score,
+        clause_shape_diversity: coherenceReport.clauseShapeDiversity.score,
+        entity_retention: coherenceReport.entityRetention.score,
+        seo_keywords: coherenceReport.seoKeywords.score,
+        heading_body_alignment: coherenceReport.headingBodyAlignment.score,
+        readability_drift: coherenceReport.readabilityDrift.score,
+        information_gain: coherenceReport.informationGain.score,
+        paragraph_purpose: coherenceReport.paragraphPurpose.structureScore,
+        search_intent_coverage: coherenceReport.searchIntentCoverage.score,
+        heading_hierarchy: coherenceReport.headingHierarchy.score,
+        snippet_worthiness: coherenceReport.snippetWorthiness.score,
+        entity_retention_details: {
+          missing_entities: coherenceReport.entityRetention.missingEntities,
+          missing_numbers: coherenceReport.entityRetention.missingNumbers,
+          missing_years: coherenceReport.entityRetention.missingYears,
+        },
+        seo_keyword_details: coherenceReport.seoKeywords.keywordDetails,
+        transition_mismatches: coherenceReport.transitionFit.mismatchCount,
+        readability_profile: coherenceReport.readabilityDrift.profileType,
+        paragraph_pattern: coherenceReport.paragraphPurpose.pattern,
+        detected_intent: coherenceReport.searchIntentCoverage.detectedIntent,
+        heading_violations: coherenceReport.headingHierarchy.violations,
+        best_snippets: coherenceReport.snippetWorthiness.bestSnippets.slice(0, 3),
+      } : undefined,
     });
   } catch (error) {
     console.error('Humanize API error:', error);
