@@ -2341,7 +2341,7 @@ CRITICAL RULES:
       console.log(`  [GhostPro]   Pass 1C: SKIPPED (turbo mode — 10x outer loop handles re-humanization)`);
     } else {
 
-    const REHUMANIZE_ITERATIONS = 5;
+    const REHUMANIZE_ITERATIONS = 1; // was 5 — single pass is enough, saves 40-100s
     const CHANGE_THRESHOLD = 0.50; // 50% word change required
 
     // Capture the Pass 1A output as the baseline to measure change against

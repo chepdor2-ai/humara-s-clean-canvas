@@ -69,7 +69,7 @@ async function emitSentencesStaggered(
   controller: ReadableStreamDefaultController,
   sentences: string[],
   stage: string,
-  delayMs = 60,
+  delayMs = 10,
 ) {
   for (let i = 0; i < sentences.length; i++) {
     sendSSE(controller, { type: 'sentence', index: i, text: sentences[i], stage });
@@ -289,7 +289,7 @@ export async function POST(req: Request) {
             label: string,
             task: () => Promise<string>,
             fallback: string,
-            timeoutMs = 45_000,
+            timeoutMs = 110_000,
           ): Promise<string> => {
             try {
               return await withTimeout(task(), timeoutMs, label);

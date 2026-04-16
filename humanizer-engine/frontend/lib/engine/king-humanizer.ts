@@ -291,11 +291,15 @@ async function processSentence(
   // Phase 1: deep rewrite
   let result = await phase1Sentence(sentence, idx, total);
 
-  // Phase 2: self-audit
-  const diagnosis = await phase2Audit(result);
+  // Phase 2+3 only if Phase 1 didn't change enough (saves 2 LLM calls per sentence)
+  const change = measureWordChange(sentence, result);
+  if (change < 0.45) {
+    // Phase 2: self-audit
+    const diagnosis = await phase2Audit(result);
 
-  // Phase 3: targeted revision
-  result = await phase3Revise(result, diagnosis);
+    // Phase 3: targeted revision (skip if audit says CLEAN)
+    result = await phase3Revise(result, diagnosis);
+  }
 
   return result;
 }
