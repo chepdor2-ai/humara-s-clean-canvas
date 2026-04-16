@@ -3,7 +3,7 @@ import { robustSentenceSplit } from './content-protection';
 
 const KEYWORD_RESTORE_MODEL = process.env.OZONE_KEYWORD_RESTORE_MODEL?.trim() || 'gpt-4o-mini';
 const MAX_CANDIDATES = 24;
-const CHUNK_SIZE = 8;
+const CHUNK_SIZE = 1;
 
 type CandidateSentence = {
   index: number;
@@ -15,10 +15,7 @@ type CandidateSentence = {
 type RestoreDecision = {
   index: number;
   action: 'keep' | 'replace' | 'reject';
-  replacements?: Array<{
-    from: string;
-    to: string;
-  }>;
+  fixed_sentence?: string;
 };
 
 type RestorePlan = {
@@ -164,6 +161,18 @@ Your job is extremely narrow:
 - Never change grammar, punctuation, ordering, cadence, clause structure, or sentence framing.
 - If anything beyond exact keyword restoration would be needed, return action="reject".
 - If the output sentence is already acceptable, return action="keep".
+- If a clinical, technical, domain, or topic term from the original was generalized or paraphrased in the output, restore the exact original term.
+
+Examples:
+- original: "...effective form of psychotherapy that focuses on the connection..."
+- output:   "...effective type of talk therapy that looks at how ..."
+- correct action: replace
+- fixed_sentence: "...effective type of psychotherapy that looks at how ..."
+
+- original: "...lead to emotional distress and unhealthy behaviors."
+- output:   "...cause emotional problems and bad habits."
+- correct action: replace
+- fixed_sentence: "...cause emotional distress and unhealthy behaviors."
 
 Allowed output format only:
 {
@@ -171,19 +180,18 @@ Allowed output format only:
     {
       "index": 0,
       "action": "keep" | "replace" | "reject",
-      "replacements": [
-        { "from": "phrase as it appears in output", "to": "phrase as it appears in original" }
-      ]
+      "fixed_sentence": "existing output sentence with only the restored original terms put back"
     }
   ]
 }
 
-Rules for replacements:
-- "from" must be an exact phrase copied from the output sentence.
-- "to" must be an exact phrase copied from the original sentence.
-- Use replacements only for wrongly replaced keywords/topic terms.
-- Do not propose replacements for style.
-- Do not return any rewritten full sentence.
+Rules for fixed_sentence:
+- Use the output sentence as the base.
+- Change only the wrongly replaced keywords/topic terms.
+- Every inserted term must come from the original sentence.
+- Do not propose style improvements.
+- Do not reorder clauses.
+- Do not shorten or expand the sentence beyond keyword restoration.
 - If you are unsure, use action="reject".
 - Respond with valid JSON only.`,
         },
@@ -212,45 +220,65 @@ Rules for replacements:
   return Array.isArray(parsed?.decisions) ? parsed.decisions : [];
 }
 
-function includesPhrase(text: string, phrase: string): boolean {
-  return normalizeWhitespace(text).toLowerCase().includes(normalizeWhitespace(phrase).toLowerCase());
+function tokenizeWords(text: string): string[] {
+  return normalizeWhitespace(text)
+    .toLowerCase()
+    .replace(/[^a-z0-9\s-]/g, ' ')
+    .split(/\s+/)
+    .filter(Boolean);
 }
 
-function replaceOnceCaseInsensitive(text: string, from: string, to: string): string | null {
-  const normalizedFrom = normalizeWhitespace(from);
-  if (!normalizedFrom) return null;
+function longestCommonSubsequenceLength(a: string[], b: string[]): number {
+  const rows = a.length + 1;
+  const cols = b.length + 1;
+  const dp: number[][] = Array.from({ length: rows }, () => Array<number>(cols).fill(0));
 
-  const regex = new RegExp(escapeRegex(normalizedFrom).replace(/\s+/g, '\\s+'), 'i');
-  if (!regex.test(text)) return null;
-  return text.replace(regex, to);
-}
-
-function applyValidatedReplacements(outputSentence: string, originalSentence: string, replacements: Array<{ from: string; to: string }>): string {
-  let nextSentence = outputSentence;
-  const ordered = replacements
-    .map((replacement) => ({
-      from: normalizeWhitespace(replacement.from),
-      to: normalizeWhitespace(replacement.to),
-    }))
-    .filter((replacement) => replacement.from && replacement.to)
-    .sort((a, b) => b.from.length - a.from.length);
-
-  for (const replacement of ordered) {
-    if (replacement.from.toLowerCase() === replacement.to.toLowerCase()) return outputSentence;
-    if (countWords(replacement.from) > 8 || countWords(replacement.to) > 8) return outputSentence;
-    if (!includesPhrase(outputSentence, replacement.from)) return outputSentence;
-    if (!includesPhrase(originalSentence, replacement.to)) return outputSentence;
-
-    const updated = replaceOnceCaseInsensitive(nextSentence, replacement.from, replacement.to);
-    if (!updated) return outputSentence;
-    nextSentence = updated;
+  for (let i = 1; i < rows; i += 1) {
+    for (let j = 1; j < cols; j += 1) {
+      if (a[i - 1] === b[j - 1]) {
+        dp[i][j] = dp[i - 1][j - 1] + 1;
+      } else {
+        dp[i][j] = Math.max(dp[i - 1][j], dp[i][j - 1]);
+      }
+    }
   }
 
-  const changedWords = Math.max(countWords(nextSentence), countWords(outputSentence)) - countSharedWords(nextSentence, outputSentence);
-  const budget = ordered.reduce((sum, replacement) => sum + Math.max(countWords(replacement.from), countWords(replacement.to)), 0);
-  if (changedWords > budget + 1) return outputSentence;
+  return dp[a.length][b.length];
+}
 
-  return nextSentence;
+function validateFixedSentence(outputSentence: string, originalSentence: string, fixedSentence: string, missingKeywords: string[]): string {
+  const normalizedFixed = normalizeWhitespace(fixedSentence);
+  if (!normalizedFixed || normalizedFixed.toLowerCase() === normalizeWhitespace(outputSentence).toLowerCase()) {
+    return outputSentence;
+  }
+
+  const outputWords = tokenizeWords(outputSentence);
+  const originalWords = tokenizeWords(originalSentence);
+  const fixedWords = tokenizeWords(normalizedFixed);
+  const originalWordSet = new Set(originalWords);
+  const outputWordSet = new Set(outputWords);
+
+  const fixedSharedWithOutput = countSharedWords(normalizedFixed, outputSentence);
+  const changedWords = Math.max(fixedWords.length, outputWords.length) - fixedSharedWithOutput;
+  const lcsLength = longestCommonSubsequenceLength(outputWords, fixedWords);
+  const lcsRatio = outputWords.length === 0 ? 1 : lcsLength / outputWords.length;
+  const insertedWords = fixedWords.filter((word) => !outputWordSet.has(word));
+  const invalidInsertedWord = insertedWords.some((word) => !originalWordSet.has(word));
+  const restoredKeywordCount = missingKeywords.filter((keyword) => new RegExp(`\\b${escapeRegex(keyword)}\\b`, 'i').test(normalizedFixed)).length;
+
+  if (invalidInsertedWord) return outputSentence;
+  if (restoredKeywordCount === 0) return outputSentence;
+  if (Math.abs(fixedWords.length - outputWords.length) > Math.max(6, missingKeywords.length * 3)) return outputSentence;
+  if (changedWords > Math.max(10, missingKeywords.length * 4)) return outputSentence;
+  if (lcsRatio < 0.72) return outputSentence;
+
+  const originalEnding = originalSentence.trim().slice(-1);
+  const fixedEnding = normalizedFixed.trim().slice(-1);
+  if (/[.!?]/.test(originalEnding) && fixedEnding !== originalEnding) {
+    return outputSentence;
+  }
+
+  return normalizedFixed;
 }
 
 function rebuildTextWithSentenceUpdates(text: string, originalSentences: string[], updatedSentences: string[]): string {
@@ -289,14 +317,14 @@ export async function restoreOzoneKeywords(originalText: string, outputText: str
     try {
       const decisions = await requestRestorePlan(chunk);
       for (const decision of decisions) {
-        if (decision.action !== 'replace' || !Array.isArray(decision.replacements) || decision.replacements.length === 0) continue;
+        if (decision.action !== 'replace' || typeof decision.fixed_sentence !== 'string') continue;
         if (decision.index < 0 || decision.index >= updatedSentences.length) continue;
 
         const currentSentence = updatedSentences[decision.index];
-        const originalSentence = chunk.find((candidate) => candidate.index === decision.index)?.original;
-        if (!originalSentence) continue;
+        const candidate = chunk.find((item) => item.index === decision.index);
+        if (!candidate) continue;
 
-        const restored = applyValidatedReplacements(currentSentence, originalSentence, decision.replacements);
+        const restored = validateFixedSentence(currentSentence, candidate.original, decision.fixed_sentence, candidate.missingKeywords);
         updatedSentences[decision.index] = restored;
       }
     } catch (error) {
