@@ -933,7 +933,7 @@ export async function POST(req: Request) {
       // Phase 2: Self-audit ("what makes this AI?")
       // Phase 3: Targeted revision (fix Phase 2 findings)
       const kingResult = await kingHumanize(normalizedText);
-      humanized = kingResult.humanized;
+      humanized = chainSync(runNuruSinglePass, kingResult.humanized, CHAIN_TS);
     } else if (engine === 'humara') {
       // Humara: Independent humanizer engine — phrase-level, strategy-diverse
       const humaraStrength: 'light' | 'medium' | 'heavy' =

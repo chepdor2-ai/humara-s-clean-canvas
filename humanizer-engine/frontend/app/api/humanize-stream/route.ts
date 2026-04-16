@@ -10,6 +10,7 @@ import { expandContractions } from '@/lib/humanize-transforms';
 import { removeEmDashes, fixOutOfContextSynonyms, validateCollocations, replaceCollocations, compressPhrases } from '@/lib/engine/v13-shared-techniques';
 import { humanize } from '@/lib/engine/humanizer';
 import { ghostProHumanize } from '@/lib/engine/ghost-pro';
+import { kingHumanize } from '@/lib/engine/king-humanizer';
 import { llmHumanize, deepAICleanOneSentence, restructureSentence } from '@/lib/engine/llm-humanizer';
 import { premiumHumanize } from '@/lib/engine/premium-humanizer';
 import { humanizeV11 } from '@/lib/engine/v11';
@@ -269,7 +270,7 @@ export async function POST(req: Request) {
           const engineDisplayName = ENGINE_DISPLAY[eng] || eng;
 
           // Fast-loop engine detection (used for phase labeling + pipeline selection)
-          const FAST_REHUMANIZE_ENGINES = new Set(['nuru_v2', 'ghost_pro_wiki', 'oxygen', 'humara_v3_3', 'ninja_1']);
+          const FAST_REHUMANIZE_ENGINES = new Set(['nuru_v2', 'ghost_pro_wiki', 'oxygen', 'humara_v3_3', 'ninja_1', 'king']);
 
           // Engines that use the phase pipeline (fast-loop + deep-kill)
           const PHASED_ENGINES = new Set([
@@ -681,13 +682,16 @@ export async function POST(req: Request) {
 
           // ── Full-text engines (Ozone / Humara 2.1, Easy / Humara 2.2) ──
           // These LLM APIs work best on the entire text, not sentence-by-sentence.
-          const FULL_TEXT_ENGINES = new Set(['easy', 'ozone']);
+          const FULL_TEXT_ENGINES = new Set(['easy', 'ozone', 'king']);
           let sentenceResults: string[];
 
           if (FULL_TEXT_ENGINES.has(eng)) {
             console.log(`[FullText] Processing entire text via '${eng}'`);
             let fullResult: string;
-            if (eng === 'easy') {
+            if (eng === 'king') {
+              const kingResult = await kingHumanize(normalizedText);
+              fullResult = kingResult.humanized;
+            } else if (eng === 'easy') {
               fullResult = (await runHumara22(normalizedText));
             } else {
               fullResult = (await runHumara21(normalizedText));
@@ -832,6 +836,13 @@ export async function POST(req: Request) {
                 phases = [
                   { name: 'Restructuring', type: 'async', fn: (s) => restructureSentence(s) },
                   { name: 'Deep Clean', type: 'nuru', passes: 9 },
+                  { name: 'Deep Non-LLM Clean', type: 'sync', fn: (s) => deepNonLLMClean(s) },
+                  { name: 'Final Smooth & Grammar', type: 'sync', fn: (s) => finalSmoothGrammar(s) },
+                ];
+                break;
+              case 'king':
+                phases = [
+                  { name: 'Nuru 2.0', type: 'nuru', passes: 10 },
                   { name: 'Deep Non-LLM Clean', type: 'sync', fn: (s) => deepNonLLMClean(s) },
                   { name: 'Final Smooth & Grammar', type: 'sync', fn: (s) => finalSmoothGrammar(s) },
                 ];
