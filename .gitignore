@@ -18,3 +18,5 @@ oxygen3-model/
 _humarin_ct2/model.bin
 *.safetensors
 __pycache__/
+.vercel
+.env*.local

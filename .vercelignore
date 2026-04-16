@@ -1,0 +1,15 @@
+*
+!package.json
+!package-lock.json
+!vercel.json
+!humanizer-engine/
+humanizer-engine/*
+!humanizer-engine/frontend/
+!humanizer-engine/frontend/**
+
+# Exclude local frontend artifacts even inside the allowlisted subtree.
+humanizer-engine/frontend/.next/
+humanizer-engine/frontend/node_modules/
+humanizer-engine/frontend/.vercel/
+humanizer-engine/frontend/.env.local
+humanizer-engine/frontend/*.log
