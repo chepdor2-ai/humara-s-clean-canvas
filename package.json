@@ -9,6 +9,7 @@
     "start": "cd humanizer-engine/frontend && npx next start --hostname 0.0.0.0 --port ${PORT:-10000}"
   },
   "dependencies": {
+    "next": "16.2.2",
     "compromise": "^14.15.0"
   }
 }
