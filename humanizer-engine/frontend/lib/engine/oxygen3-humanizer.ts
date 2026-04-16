@@ -8,7 +8,7 @@
  *  - Parallel chunk processing for large texts
  */
 
-let OXYGEN3_API_URL = process.env.OXYGEN3_API_URL || 'http://localhost:7860';
+let OXYGEN3_API_URL = process.env.OXYGEN3_API_URL || 'https://maguna956-oxygen3-humanizer.hf.space';
 if (OXYGEN3_API_URL && !OXYGEN3_API_URL.startsWith('http')) {
   OXYGEN3_API_URL = `https://${OXYGEN3_API_URL}`;
 }

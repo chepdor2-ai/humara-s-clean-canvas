@@ -5,7 +5,7 @@
  * Falls back to Cloud Run backup if primary fails.
  */
 
-const T5_API_URL = process.env.T5_API_URL || 'https://YOUR-HF-SPACE.hf.space';
+const T5_API_URL = process.env.T5_API_URL || 'https://maguna956-oxygent5.hf.space';
 const T5_BACKUP_URL = process.env.T5_API_URL_BACKUP || '';
 const T5_BACKUP_KEY = process.env.T5_API_KEY_BACKUP || '';
 

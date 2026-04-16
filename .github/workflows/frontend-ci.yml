@@ -35,7 +35,7 @@ jobs:
       NEXT_PUBLIC_ADMIN_EMAILS: ci@example.com
       EASY_API_KEY: ci-easy-key
       OZONE_API_KEY: ci-ozone-key
-      OXYGEN3_API_URL: http://127.0.0.1:7860
+      OXYGEN3_API_URL: https://maguna956-oxygen3-humanizer.hf.space
       HUMARAGPT_API_KEY: hum_ci_example_key
       NODE_ENV: production
     steps:
