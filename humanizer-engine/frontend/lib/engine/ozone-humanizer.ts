@@ -1,3 +1,5 @@
+import { restoreOzoneKeywords } from './ozone-keyword-restore';
+
 // Deduplicate repetitive AI sentences from the API
 export function deduplicateSentences(txt: string): string {
     const paragraphs = txt.split(/\n\n+/);
@@ -252,7 +254,7 @@ async function callOzoneAPI(text: string, apiKey: string): Promise<{ text: strin
     body: JSON.stringify({
       text,
     }),
-    signal: AbortSignal.timeout(60000),
+    signal: AbortSignal.timeout(10_000),
   });
 
   if (!response.ok) {
@@ -304,6 +306,8 @@ export async function ozoneHumanize(
     if (outputWords > inputWords * 1.4) {
       console.warn(`[Ozone] Output still ${outputWords} words vs ${inputWords} input after dedup — possible API issue`);
     }
+
+    humanized = await restoreOzoneKeywords(text, humanized);
 
     return {
       humanized,
@@ -407,6 +411,8 @@ export async function ozoneHumanize(
     if (outW > inW * 1.4) {
       console.warn(`[Ozone] Sentence-by-sentence output still ${outW} words vs ${inW} input after dedup — possible API issue`);
     }
+
+    humanized = await restoreOzoneKeywords(text, humanized);
 
     return {
       humanized,
