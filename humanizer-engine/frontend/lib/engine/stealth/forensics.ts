@@ -1,22 +1,6 @@
 import { getBestReplacement } from './dictionary-service';
 
-/**
- * Calculates sentence length variance (burstiness).
- */
-function getBurstiness(sentences: string[]): number {
-  if (sentences.length <= 1) return 1;
-  const lengths = sentences.map(s => s.split(' ').length);
-  const mean = lengths.reduce((a, b) => a + b, 0) / lengths.length;
-  const variance = lengths.reduce((acc, val) => acc + Math.pow(val - mean, 2), 0) / lengths.length;
-  return variance / mean; // Coefficient-like measure
-}
-
-/**
- * Helper to split sentences.
- */
-function splitSents(text: string): string[] {
-  return text.match(/[^.!?]+[.!?]+/g)?.map(s => s.trim()) || [text];
-}
+// splitSents removed because it destructively flattened paragraph formatting
 
 /* ─────────────────────────────────────────────────────────────────
  * 1. ZeroGPT
@@ -25,25 +9,17 @@ function splitSents(text: string): string[] {
 const ZEROGPT_TRANSITIONS = new Set(['furthermore', 'moreover', 'additionally', 'consequently', 'therefore', 'thus', 'hence', 'subsequently', 'in addition', 'as a result']);
 
 export function cleanZeroGPTPass(text: string): string {
-  let sentences = splitSents(text);
-  let changed = false;
-  sentences = sentences.map(s => {
-    const lower = s.toLowerCase();
-    for (const trans of ZEROGPT_TRANSITIONS) {
-      if (lower.startsWith(trans + ',') || lower.startsWith(trans + ' ')) {
-        const regex = new RegExp(`^${trans}[,]?\\s*`, 'i');
-        const replaced = s.replace(regex, '');
-        if (replaced.length > 0) {
-          changed = true;
-          return replaced.charAt(0).toUpperCase() + replaced.slice(1);
-        }
-      }
-    }
-    return s;
-  });
-  
-  if (!changed) return text;
-  return sentences.join(' ');
+  let cleaned = text;
+  for (const trans of ZEROGPT_TRANSITIONS) {
+    // Top of line or paragraph boundary
+    let regex = new RegExp(`(^|\\n\\s*\\n)\\s*${trans}[,]?\\s+([a-z])`, 'gi');
+    cleaned = cleaned.replace(regex, (match, p1, p2) => p1 + p2.toUpperCase());
+    
+    // Mid-text sentence boundary
+    regex = new RegExp(`([.!?]\\s+)${trans}[,]?\\s+([a-z])`, 'gi');
+    cleaned = cleaned.replace(regex, (match, p1, p2) => p1 + p2.toUpperCase());
+  }
+  return cleaned;
 }
 
 /* ─────────────────────────────────────────────────────────────────
@@ -86,23 +62,15 @@ export function cleanOriginalityAIPass(text: string): string {
  * Focus: Burstiness deficits, flat perplexity.
  * ───────────────────────────────────────────────────────────────── */
 export function cleanGPTZeroPass(text: string): string {
-  // To increase burstiness, we forcefully merge or split sentences
-  let sentences = splitSents(text);
-  if (sentences.length < 3) return text;
-  
-  const b = getBurstiness(sentences);
-  if (b < 1.0) { // low burstiness -> merge two sentences with "and"
-    for (let i = 0; i < sentences.length - 1; i++) {
-        if (sentences[i].length < 60 && sentences[i+1].length < 60) {
-            const first = sentences[i].replace(/[.!?]$/, '');
-            const second = sentences[i+1];
-            const merged = first + ', and ' + second.charAt(0).toLowerCase() + second.slice(1);
-            sentences.splice(i, 2, merged);
-            break;
-        }
-    }
-  }
-  return sentences.join(' ');
+  // To increase burstiness, forcefully merge two short sentences.
+  // Avoids destructive array/join mapping.
+  let mergedOnce = false;
+  let cleaned = text.replace(/([a-z]{3,50})\.\s+([A-Z][a-z]{2,50}\s)/g, (match, p1, p2) => {
+    if (mergedOnce) return match;
+    mergedOnce = true;
+    return p1 + ', and ' + p2.charAt(0).toLowerCase() + p2.slice(1);
+  });
+  return cleaned;
 }
 
 /* ─────────────────────────────────────────────────────────────────
@@ -110,19 +78,14 @@ export function cleanGPTZeroPass(text: string): string {
  * Focus: Deep structural markings, perfectly balanced punctuation.
  * ───────────────────────────────────────────────────────────────── */
 export function cleanPangramPass(text: string): string {
-  let sentences = splitSents(text);
-  sentences = sentences.map(s => {
-    const commaCount = (s.match(/,/g) || []).length;
-    if (commaCount === 1) {
-      // Remove comma if it follows a short introductory clause
-      s = s.replace(/^([a-zA-Z\s]{4,15}),\s/g, '$1 ');
-    } else if (commaCount === 2) {
-      // Flatten mid-sentence clause
-      s = s.replace(/,\s([^,]{5,20}),\s/g, ' ($1) ');
-    }
-    return s;
-  });
-  return sentences.join(' ');
+  let cleaned = text;
+  // Remove comma if it follows a short introductory clause safely
+  cleaned = cleaned.replace(/(^|[.!?]\s+)([A-Z][a-zA-Z\s]{4,15}),\s/g, '$1$2 ');
+  
+  // Flatten mid-sentence clause safely
+  cleaned = cleaned.replace(/,\s([^,]{5,20}),\s/g, ' ($1) ');
+  
+  return cleaned;
 }
 
 /* ─────────────────────────────────────────────────────────────────

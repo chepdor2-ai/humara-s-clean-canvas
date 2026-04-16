@@ -19,6 +19,7 @@ import { removeEmDashes } from '@/lib/engine/v13-shared-techniques';
 import { nuruHumanize } from '@/lib/engine/nuru-humanizer';
 import { stealthHumanize, stealthHumanizeTargeted } from '@/lib/engine/stealth';
 import OpenAI from 'openai';
+import { applySentenceStartersDistribution, applyNuruDocumentFlowCalibration } from '@/lib/engine/stealth/nuru-document-phases';
 import { omegaHumanize } from '@/lib/engine/omega-humanizer';
 import { easyHumanize } from '@/lib/engine/easy-humanizer';
 import { ozoneHumanize } from '@/lib/engine/ozone-humanizer';
@@ -1039,6 +1040,41 @@ export async function POST(req: Request) {
     if (engine !== 'ozone') {
       const nuruPostStart = Date.now();
       humanized = applySmartNuruPolish(humanized, 15);
+
+      const splitIntoIndexedSentences = (textStr: string): { sentences: string[]; paragraphBoundaries: number[] } => {
+        const paragraphs = textStr.split(/\n\s*\n/).filter(p => p.trim());
+        const S: string[] = [];
+        const B: number[] = [];
+        for (const para of paragraphs) {
+          B.push(S.length);
+          const trimmed = para.trim();
+          const isHeading = trimmed.length < 120 && !/[.!?]$/.test(trimmed) && trimmed.split(/\s+/).length <= 15;
+          if (isHeading) {
+            S.push(trimmed);
+          } else {
+            const sents = trimmed.match(/[^.!?]+[.!?]+/g)?.map(s => s.trim()) || [trimmed];
+            S.push(...sents);
+          }
+        }
+        return { sentences: S, paragraphBoundaries: B };
+      };
+
+      const reassembleText = (S: string[], B: number[]): string => {
+        const paragraphs: string[][] = [];
+        for (let i = 0; i < B.length; i++) {
+          const start = B[i];
+          const end = i < B.length - 1 ? B[i + 1] : S.length;
+          paragraphs.push(S.slice(start, end));
+        }
+        return paragraphs.map(p => p.join(' ')).join('\n\n');
+      };
+
+      const { sentences: nuruPostSents, paragraphBoundaries: sharedBounds } = splitIntoIndexedSentences(humanized);
+      const { sentences: sharedSource } = splitIntoIndexedSentences(normalizedText);
+      applySentenceStartersDistribution(nuruPostSents);
+      applyNuruDocumentFlowCalibration(nuruPostSents, sharedBounds, sharedSource);
+      humanized = reassembleText(nuruPostSents, sharedBounds.length ? sharedBounds : [0]);
+
       console.log(`[Nuru Post] Complete in ${Date.now() - nuruPostStart}ms`);
     }
 
@@ -1092,7 +1128,7 @@ export async function POST(req: Request) {
     // Restore the original title/paragraph layout for EVERY engine output.
     // Skip for nuru_v2: it preserves paragraph structure internally.
     // Skip for Deep Kill: Nuru V2 already preserves structure and this causes duplication.
-    if (engine !== 'nuru_v2' && !isDeepKill) {
+    if (!isDeepKill) {
       humanized = preserveInputStructure(normalizedText, humanized);
     }
 
