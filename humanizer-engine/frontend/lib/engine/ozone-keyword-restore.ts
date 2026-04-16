@@ -244,7 +244,7 @@ Rules for fixed_sentence:
       max_tokens: 1800,
     }),
     new Promise<never>((_, reject) => {
-      setTimeout(() => reject(new Error('Keyword restore timed out')), 5000);
+      setTimeout(() => reject(new Error('Keyword restore timed out')), 12000);
     }),
   ]);
 
@@ -353,29 +353,41 @@ export async function restoreOzoneKeywords(originalText: string, outputText: str
   const outputSentences = splitForRestoreReview(outputText);
   const updatedSentences = [...outputSentences];
 
+  // Run all chunks in parallel to minimize total latency
+  const chunkPromises = [];
   for (let start = 0; start < candidates.length; start += CHUNK_SIZE) {
     const chunk = candidates.slice(start, start + CHUNK_SIZE);
-    try {
-      const decisions = await requestRestorePlan(chunk);
-      for (const decision of decisions) {
-        if (decision.action !== 'replace' || typeof decision.fixed_sentence !== 'string') continue;
+    chunkPromises.push(
+      requestRestorePlan(chunk)
+        .then((decisions) => ({ chunk, decisions }))
+        .catch((error) => {
+          console.warn(`[Ozone Keyword Restore] Chunk failed: ${error instanceof Error ? error.message : error}`);
+          return null;
+        }),
+    );
+  }
 
-        // GPT returns chunk-relative indices (0..chunk.length-1).
-        // Map back to the absolute sentence index.
-        // Fall back to the first chunk candidate if GPT returns an invalid index.
-        const chunkCandidate = chunk[decision.index] ?? (chunk.length === 1 ? chunk[0] : undefined);
-        if (!chunkCandidate) continue;
-        const absoluteIndex = chunkCandidate.index;
+  const results = await Promise.all(chunkPromises);
 
-        if (absoluteIndex < 0 || absoluteIndex >= updatedSentences.length) continue;
+  for (const result of results) {
+    if (!result) continue;
+    const { chunk, decisions } = result;
+    for (const decision of decisions) {
+      if (decision.action !== 'replace' || typeof decision.fixed_sentence !== 'string') continue;
 
-        const currentSentence = updatedSentences[absoluteIndex];
+      // GPT returns chunk-relative indices (0..chunk.length-1).
+      // Map back to the absolute sentence index.
+      // Fall back to the first chunk candidate if GPT returns an invalid index.
+      const chunkCandidate = chunk[decision.index] ?? (chunk.length === 1 ? chunk[0] : undefined);
+      if (!chunkCandidate) continue;
+      const absoluteIndex = chunkCandidate.index;
 
-        const restored = validateFixedSentence(currentSentence, chunkCandidate.original, decision.fixed_sentence, chunkCandidate.missingKeywords);
-        updatedSentences[absoluteIndex] = restored;
-      }
-    } catch (error) {
-      console.warn(`[Ozone Keyword Restore] Chunk failed: ${error instanceof Error ? error.message : error}`);
+      if (absoluteIndex < 0 || absoluteIndex >= updatedSentences.length) continue;
+
+      const currentSentence = updatedSentences[absoluteIndex];
+
+      const restored = validateFixedSentence(currentSentence, chunkCandidate.original, decision.fixed_sentence, chunkCandidate.missingKeywords);
+      updatedSentences[absoluteIndex] = restored;
     }
   }
 
