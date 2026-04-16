@@ -1173,6 +1173,7 @@ export function stealthHumanize(
   _tone: string = 'academic',
   maxIterations: number = 15,
 ): string {
+  const enforcedMaxIterations = Math.max(10, maxIterations);
   console.log('[NURU_V2] === NEW ENGINE ACTIVE === Input length:', text.length);
   if (!text || text.trim().length === 0) return text;
 
@@ -1210,7 +1211,7 @@ export function stealthHumanize(
       // compounding garble. We keep the best result (highest change ratio).
       // Subsequent passes use sentenceIndex=0 to prevent duplicate starter injection.
       let iter = 1;
-        while (iter <= maxIterations) {
+        while (iter <= enforcedMaxIterations) {
           const iterStrength = iter > 5 ? 'strong' : strength;
           const next = processSentence(
             originalSent, hasFirstPerson, iter === 1 ? globalSentenceIdx : 0,

@@ -821,50 +821,15 @@ export async function POST(req: Request) {
     };
 
     const runNuru = (input: string): string => {
-      const output = stealthHumanize(input, strength ?? 'medium', tone ?? 'academic');
-      return output && output.trim().length > 0 ? output : input;
-    };
-
-    const runNuruSinglePass = (input: string): string => {
-      const output = stealthHumanize(input, strength ?? 'medium', tone ?? 'academic', 1);
+      const output = stealthHumanize(input, strength ?? 'medium', tone ?? 'academic', 15);
       return output && output.trim().length > 0 ? output : input;
     };
 
     const applySmartNuruPolish = (input: string, maxPasses = 15): string => {
-      let out = input;
-      let passesDone = 0;
-
-      // Initial 5 passes
-      for (let i = 0; i < 5 && passesDone < maxPasses; i++) {
-        out = runNuruSinglePass(out);
-        passesDone++;
-      }
-
-      // Check detector early exit
-      let currentScore = detector.analyze(out).summary.overall_ai_score;
-      if (currentScore < 15.0) {
-        console.log(`[Smart Nuru] Exiting early at pass ${passesDone} with score ${currentScore.toFixed(1)}%`);
-        return out;
-      }
-
-      // Loop by 2s up to maxPasses
-      while (passesDone < maxPasses) {
-        out = runNuruSinglePass(out);
-        passesDone++;
-        if (passesDone < maxPasses) {
-          out = runNuruSinglePass(out);
-          passesDone++;
-        }
-        
-        currentScore = detector.analyze(out).summary.overall_ai_score;
-        if (currentScore < 15.0) {
-          console.log(`[Smart Nuru] Exiting early at pass ${passesDone} with score ${currentScore.toFixed(1)}%`);
-          return out;
-        }
-      }
-
-      console.log(`[Smart Nuru] Finished all ${passesDone} passes, final score ${currentScore.toFixed(1)}%`);
-      return out;
+      // Delegate to stealthHumanize which now inherently guarantees min 10 loops
+      // and natively applies all our 6 detector specific non-LLM cleanups
+      const output = stealthHumanize(input, strength ?? 'medium', tone ?? 'academic', maxPasses);
+      return output && output.trim().length > 0 ? output : input;
     };
 
     // Deep Kill engine set — used to skip destructive post-processors
@@ -1068,7 +1033,7 @@ export async function POST(req: Request) {
     // ═══════════════════════════════════════════════════════════════
     if (engine !== 'ozone') {
       const nuruPostStart = Date.now();
-      humanized = applySmartNuruPolish(humanized, 1);
+      humanized = applySmartNuruPolish(humanized, 15);
       console.log(`[Nuru Post] Complete in ${Date.now() - nuruPostStart}ms`);
     }
 

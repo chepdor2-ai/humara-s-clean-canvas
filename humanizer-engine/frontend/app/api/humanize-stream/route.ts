@@ -446,15 +446,10 @@ export async function POST(req: Request) {
           };
 
           const applySmartNuruPolish = (input: string, maxPasses = 15): string => {
-            let out = input;
-            let passesDone = 0;
-            // Initial 5 passes
-            for (let i = 0; i < 5 && passesDone < maxPasses; i++) {
-              out = runNuruSinglePass(out);
-              passesDone++;
-            }
-            
-            return out; // Fast loop for streaming pipeline so it doesn't block (it has a detector loop externally)
+            // Delegate to stealthHumanize which now inherently guarantees min 10 loops
+            // and natively applies all our 6 detector specific non-LLM cleanups
+            const output = stealthHumanize(input, strength ?? 'medium', tone ?? 'academic', maxPasses);
+            return output && output.trim().length > 0 ? output : input;
           };
 
           const runWikipedia = async (input: string): Promise<string> => {
