@@ -23,6 +23,7 @@ const WaterJugProgress: React.FC<WaterJugProgressProps> = ({ percent, size = 224
   const glassGradientId = `glass_gradient_${uid}`;
   const waterGradientId = `water_gradient_${uid}`;
   const highlightGradientId = `highlight_gradient_${uid}`;
+  const surfaceGradientId = `surface_gradient_${uid}`;
 
   const innerTop = 30;
   const innerBottom = 190;
@@ -30,8 +31,11 @@ const WaterJugProgress: React.FC<WaterJugProgressProps> = ({ percent, size = 224
   const waterY = innerBottom - fillHeight;
 
   const waveAmplitude = Math.max(3, 10 - safePercent * 0.06);
+  const secondaryWaveAmplitude = Math.max(2, waveAmplitude * 0.62);
   const d1 = `M26 ${waterY} C 52 ${waterY - waveAmplitude}, 78 ${waterY + waveAmplitude}, 110 ${waterY} C 138 ${waterY - waveAmplitude}, 164 ${waterY + waveAmplitude}, 194 ${waterY} L194 198 L26 198 Z`;
   const d2 = `M26 ${waterY} C 52 ${waterY + waveAmplitude}, 78 ${waterY - waveAmplitude}, 110 ${waterY} C 138 ${waterY + waveAmplitude}, 164 ${waterY - waveAmplitude}, 194 ${waterY} L194 198 L26 198 Z`;
+  const d3 = `M26 ${waterY + 4} C 50 ${waterY - secondaryWaveAmplitude}, 86 ${waterY + secondaryWaveAmplitude}, 120 ${waterY + 4} C 148 ${waterY - secondaryWaveAmplitude}, 172 ${waterY + secondaryWaveAmplitude}, 194 ${waterY + 4} L194 198 L26 198 Z`;
+  const d4 = `M26 ${waterY + 4} C 50 ${waterY + secondaryWaveAmplitude}, 86 ${waterY - secondaryWaveAmplitude}, 120 ${waterY + 4} C 148 ${waterY + secondaryWaveAmplitude}, 172 ${waterY - secondaryWaveAmplitude}, 194 ${waterY + 4} L194 198 L26 198 Z`;
 
   const colors = useMemo(() => {
     const hue = Math.round((safePercent / 100) * 120); // 0:red -> 120:green
@@ -48,7 +52,9 @@ const WaterJugProgress: React.FC<WaterJugProgressProps> = ({ percent, size = 224
 
   return (
     <div className="relative flex items-center justify-center">
-      <svg width={size} height={size} viewBox="0 0 220 220" className="block drop-shadow-[0_20px_36px_rgba(2,8,23,0.34)]">
+      <div className="pointer-events-none absolute inset-[-22px] rounded-full bg-[radial-gradient(circle,rgba(34,211,238,0.22)_0%,rgba(45,212,191,0.12)_38%,transparent_72%)] blur-2xl animate-[glowPulse_4.2s_ease-in-out_infinite]" />
+      <div className="pointer-events-none absolute inset-[-10px] rounded-full border border-white/12 dark:border-cyan-300/12 animate-[spin_24s_linear_infinite]" />
+      <svg width={size} height={size} viewBox="0 0 220 220" className="relative z-10 block drop-shadow-[0_20px_36px_rgba(2,8,23,0.34)] animate-[float_6.5s_ease-in-out_infinite]">
         <defs>
           <clipPath id={clipId}>
             <circle cx="110" cy="110" r="84" />
@@ -67,6 +73,11 @@ const WaterJugProgress: React.FC<WaterJugProgressProps> = ({ percent, size = 224
             <stop offset="45%" stopColor="#ffffff" stopOpacity="0.2" />
             <stop offset="100%" stopColor="#ffffff" stopOpacity="0" />
           </radialGradient>
+          <linearGradient id={surfaceGradientId} x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0%" stopColor="#ffffff" stopOpacity="0.12" />
+            <stop offset="50%" stopColor="#ffffff" stopOpacity="0.7" />
+            <stop offset="100%" stopColor="#ffffff" stopOpacity="0.12" />
+          </linearGradient>
         </defs>
 
         <circle cx="110" cy="110" r="92" fill={`url(#${glassGradientId})`} stroke="#cbd5e1" strokeWidth="2.5" />
@@ -76,6 +87,12 @@ const WaterJugProgress: React.FC<WaterJugProgressProps> = ({ percent, size = 224
           <path d={d1} fill={`url(#${waterGradientId})`} opacity="0.97">
             <animate attributeName="d" dur="2.7s" repeatCount="indefinite" values={`${d1};${d2};${d1}`} />
           </path>
+          <path d={d3} fill={`url(#${surfaceGradientId})`} opacity="0.32">
+            <animate attributeName="d" dur="4.1s" repeatCount="indefinite" values={`${d3};${d4};${d3}`} />
+          </path>
+          <ellipse cx="110" cy={Math.max(innerTop + 8, waterY + 2)} rx="73" ry="7" fill={colors.foam} opacity="0.2">
+            <animate attributeName="opacity" dur="3.8s" repeatCount="indefinite" values="0.14;0.28;0.14" />
+          </ellipse>
 
           <circle cx="74" cy={bubbleStart} r="2.8" fill={colors.foam} opacity="0">
             <animate attributeName="cy" dur="2.5s" repeatCount="indefinite" values={`${bubbleStart};${bubblePeak};${bubbleStart}`} />
@@ -88,6 +105,14 @@ const WaterJugProgress: React.FC<WaterJugProgressProps> = ({ percent, size = 224
           <circle cx="148" cy={bubbleStart + 3} r="2.4" fill={colors.foam} opacity="0">
             <animate attributeName="cy" dur="2.2s" repeatCount="indefinite" values={`${bubbleStart + 3};${bubblePeak + 3};${bubbleStart + 3}`} />
             <animate attributeName="opacity" dur="2.2s" repeatCount="indefinite" values="0;0.75;0" />
+          </circle>
+          <circle cx="96" cy={bubbleStart + 14} r="2.1" fill={colors.foam} opacity="0">
+            <animate attributeName="cy" dur="3.2s" repeatCount="indefinite" values={`${bubbleStart + 14};${bubblePeak - 6};${bubbleStart + 14}`} />
+            <animate attributeName="opacity" dur="3.2s" repeatCount="indefinite" values="0;0.68;0" />
+          </circle>
+          <circle cx="132" cy={bubbleStart + 10} r="1.9" fill={colors.foam} opacity="0">
+            <animate attributeName="cy" dur="2.7s" repeatCount="indefinite" values={`${bubbleStart + 10};${bubblePeak - 10};${bubbleStart + 10}`} />
+            <animate attributeName="opacity" dur="2.7s" repeatCount="indefinite" values="0;0.7;0" />
           </circle>
         </g>
 

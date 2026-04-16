@@ -195,6 +195,67 @@ const ENGINE_GUIDES: Record<string, string> = {
   conscusion_12: 'Deep Signal Kill profile for aggressive suppression.',
 };
 
+const DEFAULT_PROCESSING_MESSAGES = [
+  'Breaking repetitive cadence while keeping the argument intact.',
+  'Streaming each completed operation into the live progress meter.',
+  'Letting the current stage finish cleanly instead of faking instant output.',
+];
+
+const PROCESSING_STAGE_COPY: Array<{ test: RegExp; messages: string[] }> = [
+  {
+    test: /initial|engine processing/i,
+    messages: [
+      'Queueing the selected engine and splitting the document into stable sentence blocks.',
+      'Preparing the stream so progress updates land faster and feel less sticky.',
+      'Locking in the active profile before the heavy lifting starts.',
+    ],
+  },
+  {
+    test: /restructur|rewrit|wikipedia|humara|ninja|oxygen|ghost|king/i,
+    messages: [
+      'Reshaping sentence rhythm so the draft stops sounding templated.',
+      'Pushing the active engine through its rewrite phase without stalling the UI.',
+      'Refreshing structure first, then handing the result to the clean-up stack.',
+    ],
+  },
+  {
+    test: /nuru|deep clean|cleanup|recheck/i,
+    messages: [
+      'Sweeping for leftover detector signals and flattening repeated phrasing.',
+      'Running targeted clean-up passes on the lines that still look synthetic.',
+      'Polishing the noisy edges before the final quality pass closes out.',
+    ],
+  },
+  {
+    test: /sentence processing|smooth|grammar|polish/i,
+    messages: [
+      'Smoothing awkward joins so the output reads like one continuous draft.',
+      'Tidying punctuation, grammar, and local flow before delivery.',
+      'Applying the final polish layer while keeping the rewritten meaning stable.',
+    ],
+  },
+  {
+    test: /analyzing|complete/i,
+    messages: [
+      'Wrapping up the stream and preparing the final text for editing.',
+      'Final checks are running now; the output panel will unlock immediately after.',
+      'The pipeline is closing out and handing the full draft back to the editor.',
+    ],
+  },
+];
+
+const normalizeProcessingStageLabel = (label: string) =>
+  label
+    .replace(/^Phase\s+\d+\/\d+\s*[–-]\s*/i, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+const getProcessingMessages = (label: string) => {
+  const normalized = normalizeProcessingStageLabel(label);
+  const matched = PROCESSING_STAGE_COPY.find(entry => entry.test.test(normalized));
+  return matched?.messages ?? DEFAULT_PROCESSING_MESSAGES;
+};
+
 const MAX_WORDS_PER_REQUEST = 2000;
 const RECOMMENDED_MIN_WORDS = 500;
 const RECOMMENDED_MAX_WORDS = 1500;
@@ -327,15 +388,13 @@ function EditorPageInner() {
 
   // Live streaming progress animation
   const [isAnimating, setIsAnimating] = useState(false);
-  const [streamSentences, setStreamSentences] = useState<{ text: string; stage: string }[]>([]);
-  const [streamParagraphBoundaries, setStreamParagraphBoundaries] = useState<number[]>([]);
   const [streamGlobalStage, setStreamGlobalStage] = useState('Initializing…');
-  const [streamDone, setStreamDone] = useState(false);
   const [streamProgress, setStreamProgress] = useState(0); // 0-100 within current phase
   const [streamProgressTarget, setStreamProgressTarget] = useState(0); // 0-100
   const [streamPhaseName, setStreamPhaseName] = useState('');
   const [streamPhaseIndex, setStreamPhaseIndex] = useState(0);
   const [streamTotalPhases, setStreamTotalPhases] = useState(1);
+  const [processingMessageIndex, setProcessingMessageIndex] = useState(0);
   const streamSentenceTotalRef = useRef(1);
   const streamPhaseSentenceRef = useRef(0);
   const streamPhaseOpsRef = useRef(1);
@@ -380,6 +439,32 @@ function EditorPageInner() {
     return outputDetection.overallAi;
   }, [outputDetection]);
 
+  const activeEngineLabel = useMemo(
+    () => ENGINES.find(entry => entry.id === engine)?.label ?? engine,
+    [ENGINES, engine],
+  );
+
+  const visibleProcessingStage = useMemo(() => {
+    const raw = streamPhaseName || streamGlobalStage || 'Initializing…';
+    return normalizeProcessingStageLabel(raw) || 'Initializing';
+  }, [streamGlobalStage, streamPhaseName]);
+
+  const processingMessages = useMemo(
+    () => getProcessingMessages(visibleProcessingStage),
+    [visibleProcessingStage],
+  );
+
+  const processingMessage = processingMessages[processingMessageIndex % processingMessages.length];
+
+  const processingStatusItems = useMemo(
+    () => [
+      { label: 'Engine', value: activeEngineLabel },
+      { label: 'Mode', value: MODE_LABELS[mode] },
+      { label: 'Live Fill', value: `${Math.round(streamProgress)}%` },
+    ],
+    [activeEngineLabel, mode, streamProgress],
+  );
+
   // Auto-expire history entries after TTL
   useEffect(() => {
     if (history.length === 0) return;
@@ -409,6 +494,21 @@ function EditorPageInner() {
     }, 16);
     return () => window.clearInterval(tick);
   }, [isAnimating, streamProgressTarget]);
+
+  useEffect(() => {
+    setProcessingMessageIndex(0);
+  }, [visibleProcessingStage]);
+
+  useEffect(() => {
+    if (!isAnimating) {
+      setProcessingMessageIndex(0);
+      return;
+    }
+    const timer = window.setInterval(() => {
+      setProcessingMessageIndex(prev => (prev + 1) % processingMessages.length);
+    }, 2200);
+    return () => window.clearInterval(timer);
+  }, [isAnimating, processingMessages.length]);
 
   const addToHistory = useCallback((input: string, output: string, eng: string, aiBefore: number, aiAfter: number, wc: number) => {
     const entry: HistoryEntry = {
@@ -508,6 +608,8 @@ function EditorPageInner() {
     let doneEventReceived = false;
     let streamedSentences: string[] = [];
     let streamedParagraphBoundaries: number[] = [];
+    let lastProgressUiCommit = 0;
+    let lastProgressUiValue = 0;
 
     const reassemblePartialText = (sentences: string[], paragraphBoundaries: number[]) => {
       if (!sentences.length) return '';
@@ -520,12 +622,6 @@ function EditorPageInner() {
       }
       return paragraphs.filter(Boolean).join('\n\n');
     };
-
-    const normalizeStageLabel = (label: string) =>
-      label
-        .replace(/^Phase\s+\d+\/\d+\s*[–-]\s*/i, '')
-        .replace(/\s+/g, ' ')
-        .trim();
 
     while (true) {
       const { done, value } = await reader.read();
@@ -545,9 +641,7 @@ function EditorPageInner() {
           const partialText = reassemblePartialText(streamedSentences, streamedParagraphBoundaries);
           if (partialText.trim()) {
             finalData = { type: 'done', humanized: partialText, partial: true, error: errorMessage };
-            setStreamSentences(prev => prev.map(s => ({ ...s, stage: 'done' })));
             setStreamGlobalStage('Complete');
-            setStreamDone(true);
             setStreamProgressTarget(100);
             setStreamPhaseName('Complete');
             doneEventReceived = true;
@@ -560,9 +654,6 @@ function EditorPageInner() {
           const rawSents = event.sentences as string[];
           streamedSentences = [...rawSents];
           streamedParagraphBoundaries = (event.paragraphBoundaries as number[]) ?? [];
-          const sents = rawSents.map(t => ({ text: t, stage: 'original' }));
-          setStreamSentences(sents);
-          setStreamParagraphBoundaries(event.paragraphBoundaries as number[]);
           streamSentenceTotalRef.current = Math.max(1, rawSents.length);
           streamPhaseSentenceRef.current = 0;
           streamPhaseOpsRef.current = rawSents.length;
@@ -594,8 +685,10 @@ function EditorPageInner() {
             } else {
               setStreamProgressTarget(2);
             }
+            lastProgressUiCommit = performance.now();
+            lastProgressUiValue = pi > 1 ? 0 : 2;
           } else {
-            const normalizedStage = normalizeStageLabel(stageLabel);
+            const normalizedStage = normalizeProcessingStageLabel(stageLabel);
             setStreamPhaseName(normalizedStage);
             setStreamPhaseIndex(0);
             setStreamTotalPhases(1);
@@ -603,33 +696,35 @@ function EditorPageInner() {
             streamPhaseOpsRef.current = (typeof event.phaseOps === 'number' && event.phaseOps > 0)
               ? event.phaseOps
               : streamSentenceTotalRef.current;
-            setStreamProgressTarget(/analyzing/i.test(stageLabel) ? 96 : 2);
+            lastProgressUiValue = /analyzing/i.test(stageLabel) ? 96 : 2;
+            lastProgressUiCommit = performance.now();
+            setStreamProgressTarget(lastProgressUiValue);
           }
         } else if (event.type === 'sentence') {
           const idx = event.index as number;
           const txt = event.text as string;
-          const stg = event.stage as string;
           if (idx >= streamedSentences.length) {
             streamedSentences.length = idx + 1;
           }
           streamedSentences[idx] = txt;
-          setStreamSentences(prev => {
-            const next = [...prev];
-            if (idx < next.length) {
-              next[idx] = { text: txt, stage: stg };
-            }
-            return next;
-          });
           streamPhaseSentenceRef.current += 1;
           const opsTotal = Math.max(1, streamPhaseOpsRef.current);
           // Progress within current phase: 0→99% based on ops count
-          const phaseProgress = (Math.min(streamPhaseSentenceRef.current, opsTotal) / opsTotal) * 99;
-          setStreamProgressTarget(Math.max(2, Math.min(99, phaseProgress)));
+          const phaseProgress = Math.max(2, Math.min(99, (Math.min(streamPhaseSentenceRef.current, opsTotal) / opsTotal) * 99));
+          const now = performance.now();
+          if (
+            phaseProgress >= 99 ||
+            phaseProgress < lastProgressUiValue ||
+            phaseProgress - lastProgressUiValue >= 1.2 ||
+            now - lastProgressUiCommit >= 48
+          ) {
+            lastProgressUiCommit = now;
+            lastProgressUiValue = phaseProgress;
+            setStreamProgressTarget(phaseProgress);
+          }
         } else if (event.type === 'done') {
           finalData = event as Record<string, unknown>;
-          setStreamSentences(prev => prev.map(s => ({ ...s, stage: 'done' })));
           setStreamGlobalStage('Complete');
-          setStreamDone(true);
           setStreamProgressTarget(100);
           setStreamPhaseName('Complete');
           doneEventReceived = true;
@@ -648,9 +743,7 @@ function EditorPageInner() {
         const trailingEvent = JSON.parse(buffer.trim().slice(6)) as Record<string, unknown>;
         if (trailingEvent.type === 'done') {
           finalData = trailingEvent;
-          setStreamSentences(prev => prev.map(s => ({ ...s, stage: 'done' })));
           setStreamGlobalStage('Complete');
-          setStreamDone(true);
           setStreamProgressTarget(100);
         }
       } catch {}
@@ -660,9 +753,7 @@ function EditorPageInner() {
       const partialText = reassemblePartialText(streamedSentences, streamedParagraphBoundaries);
       if (partialText.trim()) {
         finalData = { type: 'done', humanized: partialText, partial: true };
-        setStreamSentences(prev => prev.map(s => ({ ...s, stage: 'done' })));
         setStreamGlobalStage('Complete');
-        setStreamDone(true);
         setStreamProgressTarget(100);
       } else {
         throw new Error('Stream ended before completion');
@@ -688,15 +779,13 @@ function EditorPageInner() {
     }
     setLoading(true); setError(''); setResult(''); setOutputDetection(null); setMeaningScore(null); setIterationCount(0); setPreGeneratedAlts({});
     // Reset streaming state and start animation
-    setStreamSentences([]);
-    setStreamParagraphBoundaries([]);
     setStreamGlobalStage('Initializing…');
-    setStreamDone(false);
     setStreamProgress(0);
     setStreamProgressTarget(0);
     setStreamPhaseName('');
     setStreamPhaseIndex(0);
     setStreamTotalPhases(1);
+    setProcessingMessageIndex(0);
     setIsAnimating(true);
 
     // Abort any previous stream
@@ -736,9 +825,9 @@ function EditorPageInner() {
         refreshUsage();
 
         setStreamProgressTarget(100);
-        await new Promise(resolve => setTimeout(resolve, 280));
+        await new Promise(resolve => setTimeout(resolve, 110));
         setStreamProgress(100);
-        await new Promise(resolve => setTimeout(resolve, 80));
+        await new Promise(resolve => setTimeout(resolve, 24));
         setIsAnimating(false);
       }
     } catch (err) {
@@ -755,15 +844,13 @@ function EditorPageInner() {
     if (outputWords < 10) { setError('Output too short to rephrase.'); return; }
     setRephrasing(true); setError('');
     // Reset streaming state and start animation
-    setStreamSentences([]);
-    setStreamParagraphBoundaries([]);
     setStreamGlobalStage('Initializing…');
-    setStreamDone(false);
     setStreamProgress(0);
     setStreamProgressTarget(0);
     setStreamPhaseName('');
     setStreamPhaseIndex(0);
     setStreamTotalPhases(1);
+    setProcessingMessageIndex(0);
     setIsAnimating(true);
 
     if (abortRef.current) abortRef.current.abort();
@@ -790,9 +877,9 @@ function EditorPageInner() {
         refreshUsage();
 
         setStreamProgressTarget(100);
-        await new Promise(resolve => setTimeout(resolve, 280));
+        await new Promise(resolve => setTimeout(resolve, 110));
         setStreamProgress(100);
-        await new Promise(resolve => setTimeout(resolve, 80));
+        await new Promise(resolve => setTimeout(resolve, 24));
         setIsAnimating(false);
       }
     } catch (err) {
@@ -817,7 +904,7 @@ function EditorPageInner() {
     setSentenceScores([]); setMeaningScore(null);
     setPreGeneratedAlts({});
     setIsAnimating(false);
-    setStreamSentences([]); setStreamParagraphBoundaries([]); setStreamDone(false); setStreamGlobalStage('Initializing…'); setStreamProgress(0); setStreamProgressTarget(0);
+    setStreamGlobalStage('Initializing…'); setStreamProgress(0); setStreamProgressTarget(0); setStreamPhaseName(''); setStreamPhaseIndex(0); setStreamTotalPhases(1); setProcessingMessageIndex(0);
     if (abortRef.current) { abortRef.current.abort(); abortRef.current = null; }
     setError(''); closePopup();
   };
@@ -1370,13 +1457,63 @@ function EditorPageInner() {
           </div>
 
           {isAnimating ? (
-            <div className={`flex flex-col items-center justify-center ${EDITOR_HEIGHT_CLASS} overflow-hidden`}>
-              <WaterJugProgress
-                percent={streamProgress}
-                phaseName={streamPhaseName || undefined}
-                phaseIndex={streamPhaseIndex}
-                totalPhases={streamTotalPhases}
-              />
+            <div className={`relative flex flex-col items-center justify-center ${EDITOR_HEIGHT_CLASS} overflow-hidden px-4 py-6`}>
+              <div className="processing-water-panel absolute inset-0" />
+              <div className="processing-water-aura processing-water-aura-left" />
+              <div className="processing-water-aura processing-water-aura-right" />
+              <div className="processing-water-grid absolute inset-0" />
+
+              <div className="relative z-10 flex w-full max-w-[430px] flex-col items-center gap-5">
+                <div className="flex flex-wrap items-center justify-center gap-2">
+                  <span className="processing-pill processing-pill-strong">{activeEngineLabel}</span>
+                  <span className="processing-pill processing-pill-teal">Live stream</span>
+                  <span className="processing-pill processing-pill-soft">
+                    {streamPhaseIndex > 0 ? `Phase ${streamPhaseIndex}/${streamTotalPhases}` : MODE_LABELS[mode]}
+                  </span>
+                </div>
+
+                <div className="relative flex items-center justify-center">
+                  <span className="processing-ripple processing-ripple-one" />
+                  <span className="processing-ripple processing-ripple-two" />
+                  <span className="processing-ripple processing-ripple-three" />
+                  <WaterJugProgress
+                    percent={streamProgress}
+                    phaseName={streamPhaseName || undefined}
+                    phaseIndex={streamPhaseIndex}
+                    totalPhases={streamTotalPhases}
+                  />
+                </div>
+
+                <div className="processing-stage-card w-full">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-cyan-700/80 dark:text-cyan-300/75">
+                        Current stage
+                      </p>
+                      <p className="mt-1 truncate text-sm font-semibold text-slate-800 dark:text-zinc-100">
+                        {visibleProcessingStage}
+                      </p>
+                    </div>
+                    <div className="processing-meter-chip">
+                      <Clock className="h-3.5 w-3.5" />
+                      {Math.round(streamProgress)}%
+                    </div>
+                  </div>
+
+                  <p className="mt-3 text-[12px] leading-5 text-slate-600 dark:text-zinc-300">
+                    {processingMessage}
+                  </p>
+
+                  <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-3">
+                    {processingStatusItems.map(item => (
+                      <div key={item.label} className="processing-mini-stat">
+                        <span className="processing-mini-stat-label">{item.label}</span>
+                        <span className="processing-mini-stat-value">{item.value}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
             </div>
           ) : result ? (
             <div className={`relative flex-1 ${EDITOR_HEIGHT_CLASS} overflow-hidden`}>

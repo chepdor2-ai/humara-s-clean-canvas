@@ -52,8 +52,8 @@ function sendSSE(controller: ReadableStreamDefaultController, data: unknown) {
 }
 
 /** Small delay to allow the stream to flush so the browser can render intermediate states */
-function flushDelay(ms = 8): Promise<void> {
-  return new Promise(resolve => setTimeout(resolve, ms));
+function flushDelay(ms = 1): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, Math.max(0, Math.min(ms, 2))));
 }
 
 function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: string): Promise<T> {
@@ -71,7 +71,7 @@ async function emitSentencesStaggered(
   controller: ReadableStreamDefaultController,
   sentences: string[],
   stage: string,
-  delayMs = 10,
+  delayMs = 2,
 ) {
   for (let i = 0; i < sentences.length; i++) {
     sendSSE(controller, { type: 'sentence', index: i, text: sentences[i], stage });
