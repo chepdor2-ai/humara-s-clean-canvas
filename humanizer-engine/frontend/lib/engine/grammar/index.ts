@@ -17,7 +17,7 @@ export type {
 export { DEFAULT_CONFIG, type EngineConfig } from './core/config';
 
 // Rules
-export { ALL_RULES, getRulesByCategory, type Rule } from './rules';
+export { ALL_RULES, getRulesByCategory, type Rule, createDomainRule, allDomainRules, type Domain } from './rules';
 
 // Output
 export { applyFixes, applySingleFix, formatIssues, type FormattedIssue } from './output';

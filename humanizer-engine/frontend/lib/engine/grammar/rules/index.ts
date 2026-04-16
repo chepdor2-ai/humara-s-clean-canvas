@@ -30,7 +30,12 @@ import { extendedSpellingRule } from './spelling/extendedSpelling';
 // Usage rules
 import { confusionPairsRule } from './usage/confusionYourYoure';
 
+// Extended rules (ported from Python backend)
+import { commonErrorsRule } from './grammar/commonErrors';
+import { punctuationFixesRule } from './punctuation/punctuationFixes';
+
 export type { Rule } from './baseRule';
+export { createDomainRule, allDomainRules, type Domain } from './domain/domainRules';
 
 /**
  * All available rules, ordered by priority.
@@ -51,6 +56,9 @@ export const ALL_RULES: Rule[] = [
   confusionPairsRule,
   commaSpliceRule,
   missingIntroCommaRule,
+  // Extended rules (ported)
+  commonErrorsRule,
+  punctuationFixesRule,
   // Structural
   sentenceStructureRule,
   passiveVoiceRule,
