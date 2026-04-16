@@ -191,17 +191,20 @@ Your job is extremely narrow:
 - If anything beyond exact keyword restoration would be needed, return action="reject".
 - If the output sentence is already acceptable, return action="keep".
 - If a clinical, technical, domain, or topic term from the original was generalized or paraphrased in the output, restore the exact original term.
+- NEVER return the original sentence. The fixed_sentence must be the OUTPUT sentence with only specific terms swapped.
 
 Examples:
 - original: "...effective form of psychotherapy that focuses on the connection..."
-- output:   "...effective type of talk therapy that looks at how ..."
+- output:   "...successful type of talk therapy that looks at how ..."
 - correct action: replace
-- fixed_sentence: "...effective type of psychotherapy that looks at how ..."
+- fixed_sentence: "...successful type of psychotherapy that looks at the connection..."
+  (kept "successful" and "looks at" from output, restored "psychotherapy" and "connection" from original)
 
 - original: "...lead to emotional distress and unhealthy behaviors."
 - output:   "...cause emotional problems and bad habits."
 - correct action: replace
 - fixed_sentence: "...cause emotional distress and unhealthy behaviors."
+  (kept "cause" from output, restored "emotional distress" and "unhealthy behaviors" from original)
 
 Allowed output format only:
 {
@@ -209,14 +212,15 @@ Allowed output format only:
     {
       "index": 0,
       "action": "keep" | "replace" | "reject",
-      "fixed_sentence": "existing output sentence with only the restored original terms put back"
+      "fixed_sentence": "the OUTPUT sentence with only domain/topic terms swapped back from the original"
     }
   ]
 }
 
 Rules for fixed_sentence:
-- Use the output sentence as the base.
-- Change only the wrongly replaced keywords/topic terms.
+- Start from the output sentence. Keep its grammar, clause order, and style words.
+- Only swap back domain terms, topic terms, named entities, and technical vocabulary from the original.
+- Do NOT copy the original sentence wholesale.
 - Every inserted term must come from the original sentence.
 - Do not propose style improvements.
 - Do not reorder clauses.
@@ -299,7 +303,15 @@ function validateFixedSentence(outputSentence: string, originalSentence: string,
   if (restoredKeywordCount === 0) return outputSentence;
   if (Math.abs(fixedWords.length - outputWords.length) > Math.max(6, missingKeywords.length * 3)) return outputSentence;
   if (changedWords > Math.max(10, missingKeywords.length * 4)) return outputSentence;
-  if (lcsRatio < 0.72) return outputSentence;
+
+  // Scale the LCS threshold down when many keywords must be restored
+  const lcsThreshold = Math.max(0.50, 0.72 - missingKeywords.length * 0.03);
+  if (lcsRatio < lcsThreshold) return outputSentence;
+
+  // Reject if GPT just returned the original sentence verbatim
+  const fixedVsOriginalLcs = longestCommonSubsequenceLength(originalWords, fixedWords);
+  const fixedVsOriginalRatio = originalWords.length === 0 ? 0 : fixedVsOriginalLcs / Math.max(originalWords.length, fixedWords.length);
+  if (fixedVsOriginalRatio > 0.95) return outputSentence;
 
   const originalEnding = originalSentence.trim().slice(-1);
   const fixedEnding = normalizedFixed.trim().slice(-1);
@@ -347,14 +359,20 @@ export async function restoreOzoneKeywords(originalText: string, outputText: str
       const decisions = await requestRestorePlan(chunk);
       for (const decision of decisions) {
         if (decision.action !== 'replace' || typeof decision.fixed_sentence !== 'string') continue;
-        if (decision.index < 0 || decision.index >= updatedSentences.length) continue;
 
-        const currentSentence = updatedSentences[decision.index];
-        const candidate = chunk.find((item) => item.index === decision.index);
-        if (!candidate) continue;
+        // GPT returns chunk-relative indices (0..chunk.length-1).
+        // Map back to the absolute sentence index.
+        // Fall back to the first chunk candidate if GPT returns an invalid index.
+        const chunkCandidate = chunk[decision.index] ?? (chunk.length === 1 ? chunk[0] : undefined);
+        if (!chunkCandidate) continue;
+        const absoluteIndex = chunkCandidate.index;
 
-        const restored = validateFixedSentence(currentSentence, candidate.original, decision.fixed_sentence, candidate.missingKeywords);
-        updatedSentences[decision.index] = restored;
+        if (absoluteIndex < 0 || absoluteIndex >= updatedSentences.length) continue;
+
+        const currentSentence = updatedSentences[absoluteIndex];
+
+        const restored = validateFixedSentence(currentSentence, chunkCandidate.original, decision.fixed_sentence, chunkCandidate.missingKeywords);
+        updatedSentences[absoluteIndex] = restored;
       }
     } catch (error) {
       console.warn(`[Ozone Keyword Restore] Chunk failed: ${error instanceof Error ? error.message : error}`);
