@@ -4,11 +4,6 @@
   "installCommand": "cd humanizer-engine/frontend && npm install",
   "outputDirectory": "humanizer-engine/frontend/.next",
   "devCommand": "cd humanizer-engine/frontend && npm run dev",
-  "functions": {
-    "humanizer-engine/frontend/app/api/**/*.ts": {
-      "maxDuration": 120
-    }
-  },
   "headers": [
     {
       "source": "/(.*)",
