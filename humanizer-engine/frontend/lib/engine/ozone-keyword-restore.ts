@@ -123,11 +123,7 @@ function buildCandidates(originalText: string, outputText: string): CandidateSen
     if (keywordTokens.length < 2) continue;
 
     const missingKeywords = keywordTokens.filter((keyword) => !new RegExp(`\\b${escapeRegex(keyword)}\\b`, 'i').test(output));
-    const overlap = keywordTokens.length === 0 ? 1 : (keywordTokens.length - missingKeywords.length) / keywordTokens.length;
-    const wordOverlap = countSharedWords(original, output) / Math.max(countWords(original), countWords(output), 1);
-
     if (missingKeywords.length === 0) continue;
-    if (missingKeywords.length < 2 && overlap > 0.8 && wordOverlap > 0.75) continue;
 
     candidates.push({
       index,
