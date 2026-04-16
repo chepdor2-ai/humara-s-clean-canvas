@@ -1,0 +1,75 @@
+name: Frontend Automation
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - humanizer-engine/frontend/**
+      - .github/workflows/frontend-ci.yml
+  pull_request:
+    paths:
+      - humanizer-engine/frontend/**
+      - .github/workflows/frontend-ci.yml
+  workflow_dispatch:
+
+concurrency:
+  group: frontend-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  frontend-ci:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: humanizer-engine/frontend
+    env:
+      NEXT_PUBLIC_SUPABASE_URL: https://example.supabase.co
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: ci-anon-key
+      SUPABASE_SERVICE_ROLE_KEY: ci-service-role-key
+      OPENAI_API_KEY: ci-openai-key
+      NEXT_PUBLIC_SITE_URL: http://127.0.0.1:3000
+      NEXT_PUBLIC_PAYSTACK_CALLBACK_URL: http://127.0.0.1:3000/app/payment/verify
+      PAYSTACK_SECRET_KEY: ci-paystack-key
+      ADMIN_EMAILS: ci@example.com
+      NEXT_PUBLIC_ADMIN_EMAILS: ci@example.com
+      EASY_API_KEY: ci-easy-key
+      OZONE_API_KEY: ci-ozone-key
+      OXYGEN3_API_URL: http://127.0.0.1:7860
+      HUMARAGPT_API_KEY: hum_ci_example_key
+      NODE_ENV: production
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: humanizer-engine/frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run CI checks
+        run: npm run ci
+
+      - name: Start production server
+        run: |
+          npm run start -- --hostname 127.0.0.1 --port 3000 > /tmp/humara-frontend.log 2>&1 &
+          echo $! > /tmp/humara-frontend.pid
+
+      - name: Run smoke tests
+        run: npm run smoke -- --url http://127.0.0.1:3000 --timeout 60000
+
+      - name: Print server logs on failure
+        if: failure()
+        run: cat /tmp/humara-frontend.log
+
+      - name: Stop production server
+        if: always()
+        run: |
+          if [ -f /tmp/humara-frontend.pid ]; then
+            kill "$(cat /tmp/humara-frontend.pid)" || true
+          fi

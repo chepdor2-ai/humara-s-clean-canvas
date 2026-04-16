@@ -6,7 +6,13 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "lint:automation": "eslint \"app/api/health/route.ts\" \"app/api/v1/status/route.ts\" \"lib/ops/runtime-health.ts\" \"scripts/*.mjs\" \"deploy-helper.js\" \"deploy-all.js\"",
+    "check:env": "node scripts/check-env.mjs --profile=deploy",
+    "check:env:ci": "node scripts/check-env.mjs --profile=ci",
+    "check:deploy": "node scripts/deploy-readiness.mjs --profile=deploy",
+    "ci": "node scripts/deploy-readiness.mjs --profile=ci",
+    "smoke": "node scripts/smoke.mjs"
   },
   "dependencies": {
     "@tailwindcss/postcss": "^4",

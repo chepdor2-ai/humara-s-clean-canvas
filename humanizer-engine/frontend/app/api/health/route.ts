@@ -1,18 +1,27 @@
 ﻿import { NextResponse } from 'next/server';
+import { getRuntimeHealthReport } from '@/lib/ops/runtime-health';
 
-export async function GET() {
+export async function GET(request: Request) {
+  const url = new URL(request.url);
+  const deep = url.searchParams.get('deep') === '1';
+  const report = await getRuntimeHealthReport({ deep });
+
   return NextResponse.json({
-    status: 'healthy',
-    version: '3.0.0',
-    timestamp: new Date().toISOString(),
-    environment: process.env.NODE_ENV ?? 'development',
-    engines: ['ghost_mini', 'ghost_pro', 'ninja'],
-    features: {
-      dictionary: true,
-      multi_detector: true,
-      semantic_guard: true,
-      style_profiles: true,
-      post_processor: true,
-    },
+    status: report.status,
+    version: report.version,
+    timestamp: report.timestamp,
+    environment: report.environment,
+    deepChecks: report.deepChecks,
+    summary: report.summary,
+    checks: report.checks,
+    engines: report.engines.map(({ id, name, tier, status, detail }) => ({
+      id,
+      name,
+      tier,
+      status,
+      detail,
+    })),
+  }, {
+    status: report.status === 'unhealthy' ? 503 : 200,
   });
 }
