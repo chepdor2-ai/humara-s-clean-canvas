@@ -17,6 +17,7 @@
 
 import { AI_WORD_REPLACEMENTS } from '../shared-dictionaries';
 import { getBestReplacement } from './dictionary-service';
+import { runFullDetectorForensicsCleanup } from './forensics';
 
 /* ── Sentence Splitter ────────────────────────────────────────────── */
 
@@ -1170,7 +1171,7 @@ export function stealthHumanize(
   text: string,
   strength: string = 'medium',
   _tone: string = 'academic',
-  maxIterations: number = 10,
+  maxIterations: number = 15,
 ): string {
   console.log('[NURU_V2] === NEW ENGINE ACTIVE === Input length:', text.length);
   if (!text || text.trim().length === 0) return text;
@@ -1220,7 +1221,7 @@ export function stealthHumanize(
             best = next;
             bestChange = nextChange;
           }
-          if (iter >= 5 && bestChange >= 0.65) break;
+          if (iter >= 10 && bestChange >= 0.65) break;
           iter++;
         }
 
@@ -1235,6 +1236,10 @@ export function stealthHumanize(
   let result = outputParagraphs.join('\n\n');
   result = result.replace(/\bAi\b/g, 'AI');
   result = result.replace(/\bai\b/g, 'AI');
+  
+  // Independent detector specific deep cleaning phases
+  result = runFullDetectorForensicsCleanup(result);
+
   return result;
 }
 
