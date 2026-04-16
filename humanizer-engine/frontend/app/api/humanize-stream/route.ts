@@ -1004,9 +1004,9 @@ export async function POST(req: Request) {
                 // ═══════════════════════════════════════════════════════
                 const BASELINE_PASSES = 10;
                 const CLEANUP_PASSES = 5;
-                const FAST_RECHECK_PASSES = 2;
+                const FAST_RECHECK_PASSES = 5;
                 const TARGET_AI_SCORE = 5;
-                const MAX_FAST_LOOPS = 2;
+                const MAX_FAST_LOOPS = 5;
 
                 // ── Step 1: 10 baseline Nuru 2.0 passes on ALL sentences ──
                 for (let pass = 0; pass < BASELINE_PASSES; pass++) {
@@ -1017,7 +1017,7 @@ export async function POST(req: Request) {
                     sendSSE(controller, { type: 'sentence', index: i, text: currentSentences[i], stage: phaseLabel });
                   }
                   await flushDelay(10);
-                  if (deadlineReached || Date.now() - startTime > DEADLINE_MS - 15000) break;
+                  if (deadlineReached || Date.now() - startTime > DEADLINE_MS - 8000) break;
                 }
 
                 // ── Step 2: GPT-4o-mini forensic detection ──
@@ -1030,7 +1030,7 @@ export async function POST(req: Request) {
 
                 try {
                   const apiKey = process.env.OPENAI_API_KEY?.trim();
-                  if (apiKey && !(deadlineReached || Date.now() - startTime > DEADLINE_MS - 12000)) {
+                  if (apiKey && !(deadlineReached || Date.now() - startTime > DEADLINE_MS - 6000)) {
                     const oai = new OpenAI({ apiKey });
                     const sentenceList = currentSentences
                       .map((s, i) => isHeadingSentCheck(s) ? null : `[${i}] ${s}`)
@@ -1089,7 +1089,7 @@ List ALL suspicious words and phrases (up to 5 per sentence).`,
                 // ── Step 3: GPT-4o-mini STRICT replacement of flagged words/phrases ──
                 // STRICT RULES: GPT must ONLY replace the flagged words/phrases with human
                 // equivalents — NO sentence rewriting, NO restructuring, NO adding new words.
-                if (flaggedSentences.length > 0 && !(deadlineReached || Date.now() - startTime > DEADLINE_MS - 10000)) {
+                if (flaggedSentences.length > 0 && !(deadlineReached || Date.now() - startTime > DEADLINE_MS - 5000)) {
                   try {
                     const apiKey = process.env.OPENAI_API_KEY?.trim();
                     if (apiKey) {
@@ -1149,7 +1149,7 @@ Respond with ONLY a JSON array of objects: [{ "index": <int>, "fixed": "sentence
                 }
 
                 // ── Step 4: 5 final Nuru 2.0 cleanup passes to remove remaining traces ──
-                if (!(deadlineReached || Date.now() - startTime > DEADLINE_MS - 8000)) {
+                if (!(deadlineReached || Date.now() - startTime > DEADLINE_MS - 4000)) {
                   for (let pass = 0; pass < CLEANUP_PASSES; pass++) {
                     for (let i = 0; i < currentSentences.length; i++) {
                       if (!isHeadingSentCheck(currentSentences[i])) {
@@ -1158,7 +1158,7 @@ Respond with ONLY a JSON array of objects: [{ "index": <int>, "fixed": "sentence
                       sendSSE(controller, { type: 'sentence', index: i, text: currentSentences[i], stage: `${phaseLabel} (cleanup)` });
                     }
                     await flushDelay(10);
-                    if (deadlineReached || Date.now() - startTime > DEADLINE_MS - 6000) break;
+                    if (deadlineReached || Date.now() - startTime > DEADLINE_MS - 3500) break;
                   }
                 }
 
@@ -1168,7 +1168,7 @@ Respond with ONLY a JSON array of objects: [{ "index": <int>, "fixed": "sentence
                 while (
                   activeFlagged.length > 0 &&
                   fastLoop < MAX_FAST_LOOPS &&
-                  !(deadlineReached || Date.now() - startTime > DEADLINE_MS - 3500)
+                  !(deadlineReached || Date.now() - startTime > DEADLINE_MS - 2000)
                 ) {
                   fastLoop++;
                   try {
@@ -1336,14 +1336,14 @@ Respond with ONLY a JSON array: [{ "index": <int>, "fixed": "sentence with only 
           // ═══════════════════════════════════════════════════════════════
           if (eng !== 'ozone' && !(deadlineReached || Date.now() - startTime > DEADLINE_MS - 12000)) {
             const nuruPostStart = Date.now();
-            const NURU_POST_DEADLINE_MS = 10_000;
+            const NURU_POST_DEADLINE_MS = 55_000;
             const nuruPostTimeOk = () => Date.now() - nuruPostStart < NURU_POST_DEADLINE_MS && !(deadlineReached || Date.now() - startTime > DEADLINE_MS - 8000);
 
             const { sentences: postSentences, paragraphBoundaries: postParaBounds } = splitIntoIndexedSentences(humanized);
             const postSents = [...postSentences];
-            const FAST_RECHECK_PASSES = 2;
+            const FAST_RECHECK_PASSES = 5;
             const TARGET_AI_SCORE = 5;
-            const MAX_FAST_LOOPS = 2;
+            const MAX_FAST_LOOPS = 5;
 
             const nuruPostOps = (usePhasePipeline ? 5 : 15) * postSents.length;
             sendSSE(controller, { type: 'stage', stage: 'Nuru 2.0 Post-Processing', phaseOps: Math.max(1, nuruPostOps) });
@@ -1509,6 +1509,51 @@ If all sentences are below 5, return { "flagged": [] }.`,
                 if (reflagged.length === 0) {
                   activePostFlagged = [];
                   break;
+                }
+
+                // GPT strict replacement of flagged phrases before Nuru cleanup
+                try {
+                  const flaggedFixInput = reflagged
+                    .filter((f: any) => !isHeadingSentCheck(postSents[f.index]))
+                    .map((f: any) => ({
+                      index: f.index,
+                      sentence: postSents[f.index],
+                      replace_these: f.flagged_phrases,
+                    }));
+                  if (flaggedFixInput.length > 0) {
+                    const fixResp = await Promise.race([
+                      oai.chat.completions.create({
+                        model: 'gpt-4o-mini',
+                        messages: [
+                          {
+                            role: 'system',
+                            content: `You are a word/phrase replacement specialist. Replace ONLY the flagged words/phrases with natural human alternatives.\nSTRICT RULES:\n1. ONLY replace the exact flagged words/phrases\n2. DO NOT rewrite or restructure the sentence\n3. DO NOT add or remove words\n4. Keep everything else IDENTICAL\nRespond with ONLY a JSON array: [{ "index": <int>, "fixed": "sentence with only flagged words replaced" }]`,
+                          },
+                          { role: 'user', content: JSON.stringify(flaggedFixInput).slice(0, 3000) },
+                        ],
+                        temperature: 0.2,
+                        max_tokens: 1200,
+                      }),
+                      new Promise<never>((_, reject) =>
+                        setTimeout(() => reject(new Error('GPT loop fix timed out')), 2000)
+                      ),
+                    ]);
+                    const fixRaw = fixResp.choices[0]?.message?.content?.trim() ?? '';
+                    try {
+                      const cleaned = fixRaw.replace(/^```(?:json)?\s*\n?/i, '').replace(/\n?```\s*$/i, '').trim();
+                      const fixes = JSON.parse(cleaned);
+                      if (Array.isArray(fixes)) {
+                        for (const fix of fixes) {
+                          if (typeof fix.index === 'number' && typeof fix.fixed === 'string' && fix.index >= 0 && fix.index < postSents.length) {
+                            postSents[fix.index] = fix.fixed;
+                            sendSSE(controller, { type: 'sentence', index: fix.index, text: fix.fixed, stage: 'Nuru 2.0 (recheck fix)' });
+                          }
+                        }
+                      }
+                    } catch { /* ignore parse errors */ }
+                  }
+                } catch (fixErr: any) {
+                  console.warn(`[Nuru Post GPT Loop] Fix step failed: ${fixErr.message}`);
                 }
 
                 for (let pass = 0; pass < FAST_RECHECK_PASSES && nuruPostTimeOk(); pass++) {

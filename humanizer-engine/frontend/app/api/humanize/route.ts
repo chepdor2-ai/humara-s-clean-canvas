@@ -1046,11 +1046,11 @@ export async function POST(req: Request) {
     // ═══════════════════════════════════════════════════════════════
     if (engine !== 'ozone') {
       const nuruPostStart = Date.now();
-      const NURU_POST_DEADLINE_MS = 10_000;
+      const NURU_POST_DEADLINE_MS = 55_000;
       const nuruTimeOk = () => Date.now() - nuruPostStart < NURU_POST_DEADLINE_MS;
-      const FAST_RECHECK_PASSES = 2;
+      const FAST_RECHECK_PASSES = 5;
       const TARGET_AI_SCORE = 5;
-      const MAX_FAST_LOOPS = 2;
+      const MAX_FAST_LOOPS = 5;
 
       const postSents = robustSentenceSplit(humanized);
       const isHeadingSentPost = (s: string) => s.trim().length < 120 && !/[.!?]$/.test(s.trim()) && s.trim().split(/\s+/).length <= 15;
@@ -1197,6 +1197,50 @@ If all sentences are below 5, return { "flagged": [] }.`,
           if (reflagged.length === 0) {
             activePostFlagged = [];
             break;
+          }
+
+          // GPT strict replacement of flagged phrases before Nuru cleanup
+          try {
+            const flaggedInput = reflagged
+              .filter((f: any) => !isHeadingSentPost(postSents[f.index]))
+              .map((f: any) => ({
+                index: f.index,
+                sentence: postSents[f.index],
+                replace_these: f.flagged_phrases,
+              }));
+            if (flaggedInput.length > 0) {
+              const fixResp = await Promise.race([
+                oai.chat.completions.create({
+                  model: 'gpt-4o-mini',
+                  messages: [
+                    {
+                      role: 'system',
+                      content: `You are a word/phrase replacement specialist. Replace ONLY the flagged words/phrases with natural human alternatives.\nSTRICT RULES:\n1. ONLY replace the exact flagged words/phrases\n2. DO NOT rewrite or restructure the sentence\n3. DO NOT add or remove words\n4. Keep everything else IDENTICAL\nRespond with ONLY a JSON array: [{ "index": <int>, "fixed": "sentence with only flagged words replaced" }]`,
+                    },
+                    { role: 'user', content: JSON.stringify(flaggedInput).slice(0, 3000) },
+                  ],
+                  temperature: 0.2,
+                  max_tokens: 1200,
+                }),
+                new Promise<never>((_, reject) =>
+                  setTimeout(() => reject(new Error('GPT loop fix timed out')), 2000)
+                ),
+              ]);
+              const fixRaw = fixResp.choices[0]?.message?.content?.trim() ?? '';
+              try {
+                const cleaned = fixRaw.replace(/^```(?:json)?\s*\n?/i, '').replace(/\n?```\s*$/i, '').trim();
+                const fixes = JSON.parse(cleaned);
+                if (Array.isArray(fixes)) {
+                  for (const fix of fixes) {
+                    if (typeof fix.index === 'number' && typeof fix.fixed === 'string' && fix.index >= 0 && fix.index < postSents.length) {
+                      postSents[fix.index] = fix.fixed;
+                    }
+                  }
+                }
+              } catch { /* ignore parse errors */ }
+            }
+          } catch (fixErr: any) {
+            console.warn(`[Nuru Post GPT Loop] Fix step failed: ${fixErr.message}`);
           }
 
           for (let pass = 0; pass < FAST_RECHECK_PASSES && nuruTimeOk(); pass++) {
