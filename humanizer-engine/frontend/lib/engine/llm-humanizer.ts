@@ -418,7 +418,51 @@ const NINJA_STUDENT_PROMPTS: string[] = [
 // Counter for round-robin prompt selection
 let _ninjaPromptIndex = 0;
 
-function getNinjaSentenceSystemPrompt(features: InputFeatures): string {
+function normalizeNinjaTone(tone: string): "wikipedia" | "academic" | "seo" | "professional" | "simple" | "neutral" {
+  const normalized = tone.trim().toLowerCase();
+  if (normalized.includes("wiki")) return "wikipedia";
+  if (normalized.includes("academic")) return "academic";
+  if (normalized.includes("seo") || normalized.includes("blog")) return "seo";
+  if (normalized.includes("professional")) return "professional";
+  if (normalized.includes("simple")) return "simple";
+  return "neutral";
+}
+
+function getNinjaToneLabel(tone: string): string {
+  switch (normalizeNinjaTone(tone)) {
+    case "wikipedia":
+      return "a neutral encyclopedic reference work";
+    case "academic":
+      return "an academic article or research discussion";
+    case "seo":
+      return "a strong blog or SEO article";
+    case "professional":
+      return "a professional analysis or briefing";
+    case "simple":
+      return "a plain-language explainer";
+    default:
+      return "a clear human-written article";
+  }
+}
+
+function getNinjaToneDirective(tone: string): string {
+  switch (normalizeNinjaTone(tone)) {
+    case "wikipedia":
+      return "Use third-person, factual, reference-style prose. Keep the delivery dry, precise, and detached.";
+    case "academic":
+      return "Use a measured academic register. Keep the prose clear, evidence-led, and readable rather than stiff or over-formal.";
+    case "seo":
+      return "Write with smooth blog flow. Keep the topic terms and entities visible, explain points clearly, avoid hype, and make the sentence easy to continue reading.";
+    case "professional":
+      return "Write with direct professional clarity. Keep the sentence efficient, grounded, and free of padding.";
+    case "simple":
+      return "Use plain, highly readable wording. Prefer direct syntax and short concrete words where possible.";
+    default:
+      return "Write with natural article flow. Balance clarity, information density, and readable cadence without sounding scripted.";
+  }
+}
+
+function getNinjaSentenceSystemPrompt(features: InputFeatures, tone: string): string {
   const contractionConstraint = features.hasContractions
     ? "You MAY use contractions naturally."
     : "Do NOT use contractions. Write all words fully.";
@@ -435,7 +479,10 @@ function getNinjaSentenceSystemPrompt(features: InputFeatures): string {
 
   return `${studentPersona}
 
-You are rewriting a SINGLE sentence for an encyclopedic reference work. Your goal is objective excellence — the writing must be densely factual, informative, and structurally varied, like the best reference articles.
+You are rewriting a SINGLE sentence for ${getNinjaToneLabel(tone)}. Your goal is to sound unmistakably human while staying informative, smooth, and structurally varied.
+
+TONE TARGET:
+${getNinjaToneDirective(tone)}
 
 STRUCTURAL TECHNIQUES (apply at least one per sentence):
 - CLAUSE FRONTING: Move subordinate clauses to the beginning ("Because X, Y" ↔ "Y because X")
@@ -444,12 +491,12 @@ STRUCTURAL TECHNIQUES (apply at least one per sentence):
 - CONDITIONAL SWAPS: "if" → "when"/"provided that", "because" → "since"/"given that"
 - PHRASE EXPANSION/COMPRESSION: Adjust phrasing density for natural rhythm
 
-ACADEMIC TONE RULES:
-- Write as an objective encyclopedist or archivist, NOT as an AI or a corporate writer
-- Use precise factual vocabulary. Emphasize nouns and entities over flowery adjectives.
-- Let facts speak for themselves — avoid persuasive phrasing.
-- Vary your sentence length naturally: mix shorter observations with longer analytical sentences
-- Include appropriate hedging where honest ("suggests", "indicates", "appears to", "arguably")
+FLOW RULES:
+- Write as a human subject-matter writer, NOT as an AI or a corporate marketer.
+- Keep key entities, terms, and topic words present in natural positions so the paragraph stays informative.
+- Avoid fluff, sales phrasing, and generic transition padding.
+- Vary your sentence length naturally: mix shorter observations with longer analytical sentences.
+- If the tone is academic, use measured caution where honest. If the tone is blog/SEO, prefer clarity and forward movement over hedging.
 
 STRICT RULES:
 - Rewrite ONLY the sentence marked [TARGET]. [BEFORE] and [AFTER] are read-only context.
@@ -475,11 +522,33 @@ function buildNinjaSentenceUserPrompt(
   prevSentence: string | null,
   nextSentence: string | null,
   strength: string,
+  tone: string,
 ): string {
   let variationGuide = "";
   if (strength === "strong") variationGuide = "Rewrite aggressively — change structure and vocabulary substantially.";
   else if (strength === "medium") variationGuide = "Rewrite moderately — change phrasing and some structure.";
   else variationGuide = "Rewrite lightly — change vocabulary and minor phrasing.";
+
+  let toneGuide = "";
+  switch (normalizeNinjaTone(tone)) {
+    case "academic":
+      toneGuide = "Maintain an academic register with natural rhythm. Keep the reasoning careful and the wording readable.";
+      break;
+    case "seo":
+      toneGuide = "Keep the sentence smooth for blog readers. Preserve core entities and keywords naturally, but never stuff them or sound promotional.";
+      break;
+    case "wikipedia":
+      toneGuide = "Keep the sentence neutral, factual, and third-person. Avoid opinion, persuasion, or conversational asides.";
+      break;
+    case "professional":
+      toneGuide = "Keep the sentence direct, concise, and information-led.";
+      break;
+    case "simple":
+      toneGuide = "Keep the sentence plain, easy to follow, and concrete.";
+      break;
+    default:
+      toneGuide = "Keep the sentence natural, smooth, and informative.";
+  }
 
   const contextBefore = prevSentence ? `[BEFORE]: ${prevSentence}\n` : "";
   const contextAfter = nextSentence ? `\n[AFTER]: ${nextSentence}` : "";
@@ -489,11 +558,35 @@ function buildNinjaSentenceUserPrompt(
   const maxWords = Math.ceil(wordCount * 1.15);
 
   return `${variationGuide}
+TONE: ${toneGuide}
 WORD RANGE: The original is ${wordCount} words. Your output MUST be between ${minWords} and ${maxWords} words. Do NOT drastically shorten it.
 
 CRITICAL: Rewrite ONLY the [TARGET] sentence. Do NOT borrow, merge, or incorporate ANY content from [BEFORE] or [AFTER]. They are read-only context for tone continuity only. Your output must contain ONLY the meaning from [TARGET].
 
 ${contextBefore}[TARGET]: ${sentence}${contextAfter}`;
+}
+
+function smoothNinjaFlow(text: string, tone: string): string {
+  let result = text;
+
+  result = result.replace(/\bhow much \.\.\. matters\b/gi, "importance");
+  result = result.replace(/\b(when|since|though|although|because|while|if|unless|after|before|until|once)\s+\1\b/gi, "$1");
+  result = result.replace(/\b([A-Za-z]+)\s+\1\b/g, "$1");
+  result = result.replace(/\bthe the\b/gi, "the");
+  result = result.replace(/\bof of\b/gi, "of");
+  result = result.replace(/\bto to\b/gi, "to");
+  result = result.replace(/\s+,/g, ",");
+  result = result.replace(/,\s*,/g, ",");
+  result = result.replace(/\.\s*\./g, ".");
+
+  if (normalizeNinjaTone(tone) === "seo") {
+    result = result.replace(/\bIn conclusion,?\s+/gi, "");
+    result = result.replace(/\bOverall,?\s+/gi, "");
+    result = result.replace(/\bMoreover,?\s+/gi, "Also, ");
+    result = result.replace(/\bFurthermore,?\s+/gi, "Also, ");
+  }
+
+  return result.replace(/ {2,}/g, " ").trim();
 }
 
 // ══════════════════════════════════════════════════════════════════════════
@@ -1900,6 +1993,7 @@ export async function llmHumanize(
 
   console.log(`  [Ninja] Starting Ninja v2 pipeline...`);
   console.log(`  [Ninja] Input: ${features.wordCount} words, ${features.sentenceCount} sents, ${features.paragraphCount} paras`);
+  console.log(`  [Ninja] Tone profile: ${normalizeNinjaTone(tone)}`);
 
   // Rephrase ~30% of end-of-sentence citations for natural variation
   const citationText = rephraseCitations(original);
@@ -1939,7 +2033,7 @@ export async function llmHumanize(
   const tempBase: Record<string, number> = { light: 0.70, medium: 0.82, strong: 0.92 };
 
   console.log("  [Ninja] Sentence-by-sentence LLM rewrite (combined 3-phase)...");
-  const sentenceSystem = getNinjaSentenceSystemPrompt(features);
+  const sentenceSystem = getNinjaSentenceSystemPrompt(features, tone);
   const paragraphs = surgeryText.split(/\n\s*\n/).filter(p => p.trim());
   let totalSentencesProcessed = 0;
 
@@ -1979,6 +2073,7 @@ export async function llmHumanize(
         prevSent ? placeholdersToLLMFormat(prevSent) : null,
         nextSent ? placeholdersToLLMFormat(nextSent) : null,
         strength,
+        tone,
       );
 
       // Vary temperature per-sentence for maximum unpredictability
@@ -2130,25 +2225,10 @@ export async function llmHumanize(
   bestResult = bestResult.replace(/\b(when|since|though|although|because|while|if|unless|after|before|until|once)\s+\1\b/gi, "$1");
   bestResult = bestResult.replace(/\b(When|Since|Though|Although|Because|While|If|Unless|After|Before|Until|Once)\s+\1\b/gi, "$1");
 
-  // ── LLM phrasing validation — fix awkward dictionary swaps ──
-  console.log("  [Ninja] Running LLM phrasing validation...");
-  bestResult = await llmValidateNinjaPhrasing(bestResult);
-
-  // ── Strict LLM punctuation/capitalization cleanup with word-preservation loop ──
-  console.log("  [Ninja] Running strict LLM punctuation cleanup...");
-  for (let puncLoop = 0; puncLoop < 3; puncLoop++) {
-    const beforePunc = bestResult;
-    const puncResult = await llmFixNinjaPunctuation(bestResult);
-    const beforeWords = beforePunc.replace(/[^a-zA-Z\s]/g, "").toLowerCase().split(/\s+/).filter(w => w);
-    const afterWords = puncResult.replace(/[^a-zA-Z\s]/g, "").toLowerCase().split(/\s+/).filter(w => w);
-    if (Math.abs(beforeWords.length - afterWords.length) <= 2) {
-      bestResult = puncResult;
-      console.log(`  [Ninja] Punctuation pass ${puncLoop + 1}: accepted (${afterWords.length} words)`);
-      break;
-    } else {
-      console.warn(`  [Ninja] Punctuation pass ${puncLoop + 1}: rejected — word count changed (${beforeWords.length} → ${afterWords.length}), retrying...`);
-    }
-  }
+  // ── Deterministic flow cleanup — avoid extra document-level LLM passes ──
+  console.log("  [Ninja] Running deterministic flow cleanup...");
+  bestResult = smoothNinjaFlow(bestResult, tone);
+  bestResult = fixPunctuation(bestResult);
 
   // Final capitalization enforcement
   bestResult = enforceCapitalization(original, bestResult);

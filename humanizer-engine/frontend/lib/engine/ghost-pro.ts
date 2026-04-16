@@ -342,14 +342,27 @@ STRICT PRESERVATION RULES:
 - Return ONLY the rewritten text — no commentary, no labels, no meta-text`;
 }
 
+function normalizeGhostTone(tone: string): "wikipedia" | "academic" | "seo" | "professional" | "simple" | "neutral" {
+  const normalized = tone.trim().toLowerCase();
+  if (normalized.includes("wiki")) return "wikipedia";
+  if (normalized.includes("academic")) return "academic";
+  if (normalized.includes("seo") || normalized.includes("blog")) return "seo";
+  if (normalized.includes("professional")) return "professional";
+  if (normalized.includes("simple")) return "simple";
+  return "neutral";
+}
+
 function buildUserPrompt(text: string, features: InputFeatures, tone: string): string {
   let toneGuide = "";
-  switch (tone) {
+  switch (normalizeGhostTone(tone)) {
     case "wikipedia":
       toneGuide = "Rewrite this text in neutral encyclopedic Wikipedia style. Third person only. No thesis statements, no argumentation, no opinion. Present facts as established knowledge. Use domain-specific vocabulary naturally. Preserve all citations, dates, proper nouns, and reference markers exactly. Write as a real Wikipedia editor would — informative, precise, occasionally dry, with varied sentence structure.";
       break;
     case "academic":
       toneGuide = "Write like a sharp grad student — intellectual but grounded. Maintain academic register. Keep key terms (e.g., emotional intelligence, leadership foundations, empowerment) intact. Use semicolons and dashes for natural rhythm. Do NOT use slang or overly casual phrasing.";
+      break;
+    case "seo":
+      toneGuide = "Write like a skilled blog editor covering a topic clearly for human readers first. Keep the main entities and keyword phrases present in natural places, but never stuff them. Prioritize smooth sentence flow, useful information, and readable pacing over hype or marketing language.";
       break;
     case "professional":
       toneGuide = "Write like a senior analyst writing an internal memo — clear, direct, no fluff.";
@@ -362,7 +375,7 @@ function buildUserPrompt(text: string, features: InputFeatures, tone: string): s
   }
 
   // Wikipedia mode: always no contractions, no first person, no rhetorical questions
-  const isWiki = tone === "wikipedia";
+  const isWiki = normalizeGhostTone(tone) === "wikipedia";
 
   const contractionRule = isWiki
     ? "Do NOT use contractions. Write all words fully (do not, cannot, will not, etc.)."
@@ -431,13 +444,17 @@ ${text}`;
 // ══════════════════════════════════════════════════════════════════════════
 
 function getSentenceSystemPrompt(tone: string): string {
-  const isAcademic = tone === "academic";
-  const isWikipedia = tone === "wikipedia";
+  const normalizedTone = normalizeGhostTone(tone);
+  const isAcademic = normalizedTone === "academic";
+  const isWikipedia = normalizedTone === "wikipedia";
+  const isSeo = normalizedTone === "seo";
 
   const voiceInstruction = isWikipedia
     ? `You are AGGRESSIVELY rewriting a SINGLE sentence in neutral encyclopedic style. You MUST substantially change the wording, vocabulary, and sentence structure. Do NOT return the original with minor edits — that is a FAILURE. Third person, factual, informative. No opinion, no hedging, no persuasion. The goal is to convey the same facts using completely different words and clause arrangements.`
     : isAcademic
     ? `You are rewriting a SINGLE sentence as a real graduate student would write it — thoughtful, natural, not robotic. Direct and precise but never formulaic.`
+    : isSeo
+    ? `You are rewriting a SINGLE sentence for a human-first blog or SEO article. Keep it clear, smooth, and informative. Preserve the core entities and topic terms naturally, but avoid marketing fluff, keyword stuffing, and robotic transitions.`
     : `You are rewriting a SINGLE sentence as a real human author would write it — natural quirks, personal style. Think how a 1990s columnist or early-2000s blogger would phrase this.`;
 
   return `${voiceInstruction}

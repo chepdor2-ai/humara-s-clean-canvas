@@ -377,7 +377,31 @@ function getModeConfig(engine: string, strength: string): ModeConfig {
 // PHASE A: Deep Structural Rewrite + Humanization (per sentence)
 // ══════════════════════════════════════════════════════════════════════════
 
-function getPhaseASystemPrompt(features: InputFeatures, config: ModeConfig): string {
+function normalizePremiumTone(tone: string): "academic" | "seo" | "professional" | "simple" | "neutral" {
+  const normalized = tone.trim().toLowerCase();
+  if (normalized.includes("academic")) return "academic";
+  if (normalized.includes("seo") || normalized.includes("blog")) return "seo";
+  if (normalized.includes("professional")) return "professional";
+  if (normalized.includes("simple")) return "simple";
+  return "neutral";
+}
+
+function getPremiumToneInstruction(tone: string): string {
+  switch (normalizePremiumTone(tone)) {
+    case "academic":
+      return "Use a measured academic register. Keep the sentence evidence-led, readable, and careful rather than stiff or inflated.";
+    case "seo":
+      return "Use smooth blog/SEO flow. Keep the main entities and keyword phrases present in natural positions, but never stuff them or sound promotional.";
+    case "professional":
+      return "Use direct professional clarity. Keep the sentence compact, useful, and free of filler.";
+    case "simple":
+      return "Use plain, highly readable wording with direct syntax and concrete nouns.";
+    default:
+      return "Use natural article flow. Balance clarity, information density, and a human cadence without sounding scripted.";
+  }
+}
+
+function getPhaseASystemPrompt(features: InputFeatures, config: ModeConfig, tone: string): string {
   const contractionRule = features.hasContractions
     ? "You MAY use contractions naturally."
     : "STRICT: Do NOT use ANY contractions. Write all words fully (do not, cannot, will not, it is, that is, etc.). This is non-negotiable.";
@@ -390,7 +414,10 @@ function getPhaseASystemPrompt(features: InputFeatures, config: ModeConfig): str
     ? "Rhetorical questions OK sparingly."
     : "STRICT: Do NOT add ANY sentences ending with question marks. Use declarative statements ONLY. This is non-negotiable.";
 
-  return `You are rewriting a SINGLE sentence to make it sound like a real human from the mid-1990s wrote it — before AI existed. You are performing a deep structural rewrite combined with humanization in one pass.
+  return `You are rewriting a SINGLE sentence to make it sound like a real human wrote it. You are performing a deep structural rewrite combined with humanization in one pass.
+
+TONE TARGET:
+${getPremiumToneInstruction(tone)}
 
 ABSOLUTE RULES (violation = failure):
 
@@ -446,11 +473,14 @@ function buildPhaseAUserPrompt(
   sentence: string,
   prevSentence: string | null,
   nextSentence: string | null,
+  tone: string,
 ): string {
   const contextBefore = prevSentence ? `[BEFORE]: ${prevSentence}\n` : "";
   const contextAfter = nextSentence ? `\n[AFTER]: ${nextSentence}` : "";
+  const toneLine = `TONE: ${getPremiumToneInstruction(tone)}`;
 
-  return `Rewrite ONLY the [TARGET] sentence. [BEFORE] and [AFTER] are read-only context for tone continuity only.
+  return `${toneLine}
+Rewrite ONLY the [TARGET] sentence. [BEFORE] and [AFTER] are read-only context for tone continuity only.
 
 ${contextBefore}[TARGET]: ${sentence}${contextAfter}`;
 }
@@ -488,7 +518,7 @@ SENTENCE: ${sentence}`;
 // Connector naturalization, starter fix, rhythm adjustment
 // ══════════════════════════════════════════════════════════════════════════
 
-function getPhaseCSystemPrompt(features: InputFeatures): string {
+function getPhaseCSystemPrompt(features: InputFeatures, tone: string): string {
   const contractionRule = features.hasContractions
     ? "Contractions are OK."
     : "STRICT: NO contractions allowed.";
@@ -497,7 +527,12 @@ function getPhaseCSystemPrompt(features: InputFeatures): string {
     ? "First-person OK."
     : "STRICT: NO first-person pronouns.";
 
-  return `You are doing a FINAL stealth polish on a single sentence. Your job is ONLY to:
+  return `You are doing a FINAL stealth polish on a single sentence.
+
+TONE TARGET:
+${getPremiumToneInstruction(tone)}
+
+Your job is ONLY to:
 
 1. If the sentence starts with a formal connector (Furthermore, Moreover, Additionally, However, Nevertheless, Consequently, Subsequently, Thus, Hence, Indeed, Accordingly, Notably, Specifically, Therefore), replace it with a natural alternative:
    Furthermore/Moreover/Additionally → Also/On top of that/Beyond this
@@ -754,7 +789,7 @@ export async function premiumHumanize(
   // ═══════════════════════════════════════════
   console.log("  [Premium] Phase A: Per-sentence deep rewrite...");
 
-  const phaseASystem = getPhaseASystemPrompt(features, config);
+  const phaseASystem = getPhaseASystemPrompt(features, config, tone);
   const paragraphs = surgeryText
     .split(/\n\s*\n/)
     .filter((p) => p.trim());
@@ -783,6 +818,7 @@ export async function premiumHumanize(
             placeholdersToLLMFormat(trimmed),
             prevSent ? placeholdersToLLMFormat(prevSent) : null,
             nextSent ? placeholdersToLLMFormat(nextSent) : null,
+            tone,
           );
 
           // Vary temperature per-sentence for unpredictability
@@ -932,7 +968,7 @@ export async function premiumHumanize(
   // ═══════════════════════════════════════════
   console.log("  [Premium] Phase C: Per-sentence stealth polish...");
 
-  const phaseCSystem = getPhaseCSystemPrompt(features);
+  const phaseCSystem = getPhaseCSystemPrompt(features, tone);
   const phaseCParagraphs = result
     .split(/\n\s*\n/)
     .filter((p) => p.trim());

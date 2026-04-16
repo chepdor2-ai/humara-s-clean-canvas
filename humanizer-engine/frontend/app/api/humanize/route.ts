@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { humanize } from '@/lib/engine/humanizer';
 import { ghostProHumanize } from '@/lib/engine/ghost-pro';
-import { llmHumanize, restructureSentence } from '@/lib/engine/llm-humanizer';
+import { llmHumanize } from '@/lib/engine/llm-humanizer';
 import { premiumHumanize } from '@/lib/engine/premium-humanizer';
 import { humanizeV11 } from '@/lib/engine/v11';
 import { humaraHumanize } from '@/lib/humara';
@@ -760,14 +760,6 @@ export async function POST(req: Request) {
         : '';
       output = breakRepetitiveTemplates(output);
       output = fixHyphenSpacing(output);
-      // Restructure each sentence for deep structural rewriting
-      const wikiSents = robustSentenceSplit(output);
-      for (let i = 0; i < wikiSents.length; i++) {
-        try {
-          wikiSents[i] = await restructureSentence(wikiSents[i]);
-        } catch { /* keep original on failure */ }
-      }
-      output = wikiSents.join(' ');
       // Single oxygen polish
       output = runHumara20(output);
       // Nuru 2.0 Smart Passes (up to 15)
