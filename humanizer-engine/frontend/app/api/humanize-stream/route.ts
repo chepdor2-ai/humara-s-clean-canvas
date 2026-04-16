@@ -1,5 +1,6 @@
 import { robustSentenceSplit } from '@/lib/engine/content-protection';
 import { getDetector } from '@/lib/engine/multi-detector';
+import OpenAI from 'openai';
 import { isMeaningPreserved, isMeaningPreservedSync } from '@/lib/engine/semantic-guard';
 import { fixCapitalization, applyPhrasePatterns, fixPunctuation, expandAllContractions } from '@/lib/engine/shared-dictionaries';
 import { deduplicateRepeatedPhrases } from '@/lib/engine/premium-deep-clean';
@@ -1006,16 +1007,37 @@ export async function POST(req: Request) {
                   await flushDelay(10);
                 }
 
-                // After minimum passes, assess remaining AI signal and decide extra passes
+                // After minimum passes, assess remaining AI signal via OpenAI and decide extra passes
                 if (maxNuruPasses > MIN_NURU_PASSES) {
                   const midText = reassembleText(currentSentences, inputParaBounds.length ? inputParaBounds : [0]);
-                  const midAiScore = getDetector().analyze(midText).summary.overall_ai_score;
+                  let midAiScore = 50; // default if LLM call fails
+                  try {
+                    const apiKey = process.env.OPENAI_API_KEY?.trim();
+                    if (apiKey) {
+                      const oai = new OpenAI({ apiKey });
+                      const resp = await oai.chat.completions.create({
+                        model: 'gpt-4o-mini',
+                        messages: [
+                          { role: 'system', content: 'You are an AI content detector. Analyze the text and respond with ONLY a single integer from 0 to 100 representing the likelihood the text was written by AI. 0 = definitely human, 100 = definitely AI. No explanation, just the number.' },
+                          { role: 'user', content: midText.slice(0, 3000) },
+                        ],
+                        temperature: 0,
+                        max_tokens: 5,
+                      });
+                      const raw = resp.choices[0]?.message?.content?.trim() ?? '';
+                      const parsed = parseInt(raw, 10);
+                      if (!isNaN(parsed) && parsed >= 0 && parsed <= 100) midAiScore = parsed;
+                      console.log(`[Nuru Adaptive] OpenAI AI score: ${midAiScore} (raw: "${raw}")`);
+                    }
+                  } catch (e: any) {
+                    console.warn(`[Nuru Adaptive] OpenAI assessment failed, using default: ${e.message}`);
+                  }
                   // Linear scale: aiScore <=30 → 0 extra, >=80 → full extra (up to maxNuruPasses - 5)
                   const extraPasses = Math.round(
                     Math.max(0, Math.min(maxNuruPasses - MIN_NURU_PASSES,
                       ((midAiScore - 30) / 50) * (maxNuruPasses - MIN_NURU_PASSES)))
                   );
-                  console.log(`[Nuru Adaptive] AI score after ${initialPasses} passes: ${midAiScore.toFixed(1)} → +${extraPasses} passes (total ${initialPasses + extraPasses}/${maxNuruPasses})`);
+                  console.log(`[Nuru Adaptive] AI score after ${initialPasses} passes: ${midAiScore} → +${extraPasses} passes (total ${initialPasses + extraPasses}/${maxNuruPasses})`);
 
                   for (let pass = 0; pass < extraPasses; pass++) {
                     for (let i = 0; i < currentSentences.length; i++) {
