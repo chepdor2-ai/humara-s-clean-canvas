@@ -842,6 +842,13 @@ class DetectorProfile {
     this.description = config.description ?? "";
   }
 
+  private classifyScore(aiScore: number): { verdict: string; confidence: string } {
+    if (aiScore >= 80) return { verdict: "AI-Generated", confidence: "High" };
+    if (aiScore >= 58) return { verdict: "Likely AI", confidence: "Medium" };
+    if (aiScore >= 35) return { verdict: "Mixed / Uncertain", confidence: "Low" };
+    return { verdict: "Human-Written", confidence: "High" };
+  }
+
   score(signals: Record<string, number>, calibration?: Record<string, { a: number; b: number }>): Record<string, any> {
     const GLOBAL_BIAS = 0.03;
     const GLOBAL_TEMP_MULT = 2.0;
@@ -869,18 +876,10 @@ class DetectorProfile {
       aiProb = plattCalibrate(aiProb, c.a, c.b);
     }
 
-    // Confidence threshold: scores below 3% are within noise margin
-    // Real detectors do not distinguish sub-3% from 0% — GPTZero/Turnitin
-    // report "Human" for anything below 5%
     let aiScore = Math.round(clamp(aiProb) * 10) / 10;
-    if (aiScore < 3.0) aiScore = 0;
     const humanScore = Math.round((100 - aiScore) * 10) / 10;
 
-    let verdict: string, confidence: string;
-    if (aiScore >= 80) { verdict = "AI-Generated"; confidence = "High"; }
-    else if (aiScore >= 58) { verdict = "Likely AI"; confidence = "Medium"; }
-    else if (aiScore >= 35) { verdict = "Mixed / Uncertain"; confidence = "Low"; }
-    else { verdict = "Human-Written"; confidence = "High"; }
+    const { verdict, confidence } = this.classifyScore(aiScore);
 
     return { detector: this.displayName, ai_score: aiScore, human_score: humanScore, verdict, confidence, category: this.category };
   }
@@ -998,16 +997,45 @@ export class MultiDetector {
       p.score(signals, this.calibration) as DetectorResult,
     );
 
+    const classifyScore = (aiScore: number): { verdict: string; confidence: string } => {
+      if (aiScore >= 80) return { verdict: "AI-Generated", confidence: "High" };
+      if (aiScore >= 58) return { verdict: "Likely AI", confidence: "Medium" };
+      if (aiScore >= 35) return { verdict: "Mixed / Uncertain", confidence: "Low" };
+      return { verdict: "Human-Written", confidence: "High" };
+    };
+
     // Length-reliability damping
     const lengthFactor = Math.max(0.05, Math.min(1.0, (sigObj.wordCount - 20) / 100.0));
     if (lengthFactor < 1.0) {
       for (const d of detectorResults) {
         d.ai_score = Math.round(clamp(d.ai_score * lengthFactor + 50.0 * (1.0 - lengthFactor)) * 10) / 10;
         d.human_score = Math.round((100 - d.ai_score) * 10) / 10;
-        if (d.ai_score >= 80) { d.verdict = "AI-Generated"; d.confidence = "High"; }
-        else if (d.ai_score >= 58) { d.verdict = "Likely AI"; d.confidence = "Medium"; }
-        else if (d.ai_score >= 35) { d.verdict = "Mixed / Uncertain"; d.confidence = "Low"; }
-        else { d.verdict = "Human-Written"; d.confidence = "High"; }
+        const cls = classifyScore(d.ai_score);
+        d.verdict = cls.verdict;
+        d.confidence = cls.confidence;
+      }
+    }
+
+    // Consistency floor: when core AI signals are strong, avoid per-detector 0-1% collapse.
+    // This keeps detector outputs aligned on clearly AI-written inputs.
+    const aiPressure = (
+      (signals.ai_pattern_score ?? 50) * 0.34 +
+      (signals.per_sentence_ai_ratio ?? 50) * 0.28 +
+      (signals.sentence_uniformity ?? 50) * 0.20 +
+      (signals.token_predictability ?? 50) * 0.18
+    );
+    const simpleAvgPreFloor = mean(detectorResults.map((d) => d.ai_score));
+    const strongAiConsensus = aiPressure >= 62 || simpleAvgPreFloor >= 45;
+    if (strongAiConsensus) {
+      const floor = Math.min(22, Math.max(2.5, simpleAvgPreFloor * 0.18));
+      for (const d of detectorResults) {
+        if (d.ai_score < floor) {
+          d.ai_score = Math.round(floor * 10) / 10;
+          d.human_score = Math.round((100 - d.ai_score) * 10) / 10;
+          const cls = classifyScore(d.ai_score);
+          d.verdict = cls.verdict;
+          d.confidence = cls.confidence;
+        }
       }
     }
 

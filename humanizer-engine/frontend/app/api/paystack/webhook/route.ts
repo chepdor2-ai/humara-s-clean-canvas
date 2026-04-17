@@ -2,22 +2,63 @@ import { NextResponse } from 'next/server';
 import crypto from 'crypto';
 import { createClient } from '@supabase/supabase-js';
 
-const PAYSTACK_SECRET_KEY = process.env.PAYSTACK_SECRET_KEY!;
+const PLAN_ALIASES: Record<string, string[]> = {
+  starter: ['starter'],
+  creator: ['creator'],
+  professional: ['professional', 'pro'],
+  business: ['business'],
+};
+
+function resolvePaystackSecret(): string | null {
+  const key = process.env.PAYSTACK_SECRET_KEY?.trim();
+  return key || null;
+}
 
 function createServiceClient() {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim();
+  const serviceRole = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
+
+  if (!supabaseUrl || !serviceRole) {
+    throw new Error('Supabase service credentials are not configured.');
+  }
+
   return createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    supabaseUrl,
+    serviceRole,
   );
+}
+
+async function findPlanIdByName(supabase: ReturnType<typeof createServiceClient>, rawPlan: string) {
+  const normalized = rawPlan.trim().toLowerCase();
+  const aliases = PLAN_ALIASES[normalized] ?? [normalized];
+
+  for (const candidate of aliases) {
+    const { data } = await supabase
+      .from('plans')
+      .select('id, name')
+      .eq('name', candidate)
+      .maybeSingle();
+
+    if (data) {
+      return data;
+    }
+  }
+
+  return null;
 }
 
 export async function POST(request: Request) {
   try {
+    const paystackSecret = resolvePaystackSecret();
+    if (!paystackSecret) {
+      return NextResponse.json({ error: 'PAYSTACK_SECRET_KEY is not configured' }, { status: 500 });
+    }
+
     const body = await request.text();
     const signature = request.headers.get('x-paystack-signature');
 
     // Verify webhook signature
-    const hash = crypto.createHmac('sha512', PAYSTACK_SECRET_KEY).update(body).digest('hex');
+    const hash = crypto.createHmac('sha512', paystackSecret).update(body).digest('hex');
     if (hash !== signature) {
       return NextResponse.json({ error: 'Invalid signature' }, { status: 401 });
     }
@@ -59,11 +100,7 @@ export async function POST(request: Request) {
       }
 
       // Find the plan
-      const { data: planRow } = await supabase
-        .from('plans')
-        .select('id, name')
-        .eq('name', plan)
-        .single();
+      const planRow = await findPlanIdByName(supabase, plan);
 
       if (!planRow) {
         console.error('No plan found for name:', plan);

@@ -6,6 +6,7 @@ type EnvKey =
   | 'ADMIN_EMAILS'
   | 'EASY_API_KEY'
   | 'NEXT_PUBLIC_ADMIN_EMAILS'
+  | 'NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY'
   | 'NEXT_PUBLIC_PAYSTACK_CALLBACK_URL'
   | 'NEXT_PUBLIC_SITE_URL'
   | 'NEXT_PUBLIC_SUPABASE_ANON_KEY'
@@ -48,6 +49,7 @@ const REQUIRED_ENV_KEYS: EnvKey[] = [
 const OPTIONAL_ENV_KEYS: EnvKey[] = [
   'NEXT_PUBLIC_SITE_URL',
   'PAYSTACK_SECRET_KEY',
+  'NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY',
   'NEXT_PUBLIC_PAYSTACK_CALLBACK_URL',
   'ADMIN_EMAILS',
   'NEXT_PUBLIC_ADMIN_EMAILS',
@@ -208,7 +210,11 @@ export async function getRuntimeHealthReport({ deep = false }: { deep?: boolean 
   const requiredEnv = summarizeEnv(REQUIRED_ENV_KEYS);
   const optionalEnv = summarizeEnv(OPTIONAL_ENV_KEYS);
   const engines = buildEngineHealth();
-  const paymentsReady = Boolean(readConfiguredEnv('PAYSTACK_SECRET_KEY') && readConfiguredEnv('NEXT_PUBLIC_PAYSTACK_CALLBACK_URL'));
+  const paymentsReady = Boolean(
+    readConfiguredEnv('PAYSTACK_SECRET_KEY')
+    && readConfiguredEnv('NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY')
+    && readConfiguredEnv('NEXT_PUBLIC_PAYSTACK_CALLBACK_URL'),
+  );
   const adminConfigured = Boolean(readConfiguredEnv('ADMIN_EMAILS') || readConfiguredEnv('NEXT_PUBLIC_ADMIN_EMAILS'));
   const siteConfigured = Boolean(readConfiguredEnv('NEXT_PUBLIC_SITE_URL'));
   const supabaseCheck = deep

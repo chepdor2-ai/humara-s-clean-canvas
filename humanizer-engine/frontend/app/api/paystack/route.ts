@@ -1,10 +1,34 @@
 import { NextResponse } from 'next/server';
 
-const PAYSTACK_SECRET_KEY = process.env.PAYSTACK_SECRET_KEY!;
 const KSH_RATE = 125; // $1 = 125 KSH
+
+function resolvePaystackConfig(request: Request) {
+  const secretKey = process.env.PAYSTACK_SECRET_KEY?.trim();
+  if (!secretKey) {
+    return { error: 'PAYSTACK_SECRET_KEY is not configured.' } as const;
+  }
+
+  const configuredCallback = process.env.NEXT_PUBLIC_PAYSTACK_CALLBACK_URL?.trim();
+  if (configuredCallback) {
+    try {
+      // Validate callback URL shape so broken envs fail fast.
+      new URL(configuredCallback);
+    } catch {
+      return { error: 'NEXT_PUBLIC_PAYSTACK_CALLBACK_URL is invalid.' } as const;
+    }
+  }
+
+  const callbackUrl = configuredCallback || `${new URL(request.url).origin}/app/payment/verify`;
+  return { secretKey, callbackUrl } as const;
+}
 
 export async function POST(request: Request) {
   try {
+    const config = resolvePaystackConfig(request);
+    if ('error' in config) {
+      return NextResponse.json({ error: config.error }, { status: 500 });
+    }
+
     const body = await request.json();
     const { email, plan, currency, billing } = body;
 
@@ -48,14 +72,10 @@ export async function POST(request: Request) {
       paystackCurrency = 'USD';
     }
 
-    // Use env-configured callback URL, fallback to request origin
-    const callbackUrl = process.env.NEXT_PUBLIC_PAYSTACK_CALLBACK_URL
-      || `${new URL(request.url).origin}/app/payment/verify`;
-
     const res = await fetch('https://api.paystack.co/transaction/initialize', {
       method: 'POST',
       headers: {
-        Authorization: `Bearer ${PAYSTACK_SECRET_KEY}`,
+        Authorization: `Bearer ${config.secretKey}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
@@ -68,7 +88,7 @@ export async function POST(request: Request) {
           currency,
           usd_amount: usdAmount,
         },
-        callback_url: callbackUrl,
+        callback_url: config.callbackUrl,
       }),
     });
 

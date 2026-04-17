@@ -1,13 +1,49 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
-const PAYSTACK_SECRET_KEY = process.env.PAYSTACK_SECRET_KEY!;
+const PLAN_ALIASES: Record<string, string[]> = {
+  starter: ['starter'],
+  creator: ['creator'],
+  professional: ['professional', 'pro'],
+  business: ['business'],
+};
+
+function resolvePaystackSecret(): string | null {
+  const key = process.env.PAYSTACK_SECRET_KEY?.trim();
+  return key || null;
+}
 
 function createServiceClient() {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim();
+  const serviceRole = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
+
+  if (!supabaseUrl || !serviceRole) {
+    throw new Error('Supabase service credentials are not configured.');
+  }
+
   return createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    supabaseUrl,
+    serviceRole,
   );
+}
+
+async function findPlanIdByName(supabase: ReturnType<typeof createServiceClient>, rawPlan: string) {
+  const normalized = rawPlan.trim().toLowerCase();
+  const aliases = PLAN_ALIASES[normalized] ?? [normalized];
+
+  for (const candidate of aliases) {
+    const { data } = await supabase
+      .from('plans')
+      .select('id, name')
+      .eq('name', candidate)
+      .maybeSingle();
+
+    if (data) {
+      return data;
+    }
+  }
+
+  return null;
 }
 
 export async function GET(request: Request) {
@@ -19,8 +55,13 @@ export async function GET(request: Request) {
   }
 
   try {
+    const paystackSecret = resolvePaystackSecret();
+    if (!paystackSecret) {
+      return NextResponse.json({ status: 'failed', message: 'PAYSTACK_SECRET_KEY is not configured' }, { status: 500 });
+    }
+
     const res = await fetch(`https://api.paystack.co/transaction/verify/${encodeURIComponent(reference)}`, {
-      headers: { Authorization: `Bearer ${PAYSTACK_SECRET_KEY}` },
+      headers: { Authorization: `Bearer ${paystackSecret}` },
     });
 
     const data = await res.json();
@@ -52,11 +93,7 @@ export async function GET(request: Request) {
 
         if (userId) {
           // Find the plan
-          const { data: planRow } = await supabase
-            .from('plans')
-            .select('id, name')
-            .eq('name', plan)
-            .single();
+          const planRow = await findPlanIdByName(supabase, plan);
 
           if (planRow) {
             const periodMonths = billing === 'yearly' ? 12 : 1;

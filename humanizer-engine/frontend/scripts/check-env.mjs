@@ -42,6 +42,7 @@ const PROFILES = {
     recommended: [
       'NEXT_PUBLIC_SITE_URL',
       'PAYSTACK_SECRET_KEY',
+      'NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY',
       'NEXT_PUBLIC_PAYSTACK_CALLBACK_URL',
       'ADMIN_EMAILS',
       'NEXT_PUBLIC_ADMIN_EMAILS',
@@ -61,6 +62,7 @@ const PROFILES = {
     ],
     recommended: [
       'PAYSTACK_SECRET_KEY',
+      'NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY',
       'NEXT_PUBLIC_PAYSTACK_CALLBACK_URL',
       'ADMIN_EMAILS',
       'NEXT_PUBLIC_ADMIN_EMAILS',
@@ -80,7 +82,7 @@ const PROFILES = {
 const FEATURE_GROUPS = [
   {
     label: 'Payments',
-    keys: ['PAYSTACK_SECRET_KEY', 'NEXT_PUBLIC_PAYSTACK_CALLBACK_URL'],
+    keys: ['PAYSTACK_SECRET_KEY', 'NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY', 'NEXT_PUBLIC_PAYSTACK_CALLBACK_URL'],
   },
   {
     label: 'Admin access',

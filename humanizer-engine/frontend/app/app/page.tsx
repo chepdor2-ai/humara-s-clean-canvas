@@ -85,7 +85,7 @@ const AI_PHRASE_PATTERNS_CLIENT = [
 const FUNCTION_WORDS_CLIENT = new Set(['the','a','an','in','on','at','to','for','of','with','by','from','is','are','was','were','be','been','being','have','has','had','do','does','did','will','would','shall','should','may','might','can','could','must','that','this','these','those','it','its','and','but','or','nor','not','no','so','if','as','than','into','about','up','out','them','they','their','we','our','he','she','his','her']);
 
 const scoreSentence = (sentence: string, overallAi: number): number => {
-  if (overallAi <= 5) return 0;
+  if (overallAi <= 1) return 0;
   const trimmed = sentence.trim();
   if (!trimmed) return 0;
   const words = trimmed.toLowerCase().split(/\s+/).filter(Boolean);
@@ -121,6 +121,7 @@ const scoreSentence = (sentence: string, overallAi: number): number => {
   if (/\b(is|are|was|were|been|being)\s+(being\s+)?\w+ed\b/i.test(trimmed)) miniScore += 0.06;
   // Combine: if sentence scores above threshold, blend with overall
   const sentenceAi = miniScore >= 0.28 ? Math.min(100, overallAi * 0.5 + miniScore * 120) : Math.max(0, overallAi * 0.3 + miniScore * 60);
+  if (miniScore >= 0.28) return Math.min(100, Math.max(2, sentenceAi));
   return Math.min(100, Math.max(0, sentenceAi));
 };
 
@@ -541,8 +542,27 @@ function EditorPageInner() {
 
   /* ── Handlers ───────────────────────────────────────────────────────── */
   /** Clean input text — strip emoji, bullets, line artifacts, numbering */
+  const stripLeadLabelLines = (raw: string): string => {
+    if (!raw) return raw;
+    const lines = raw.split('\n');
+    let start = 0;
+    while (start < lines.length) {
+      const candidate = lines[start].trim();
+      if (/^(INPUT|OUTPUT)\s*:?$/i.test(candidate)) {
+        start += 1;
+        continue;
+      }
+      if (!candidate) {
+        start += 1;
+        continue;
+      }
+      break;
+    }
+    return lines.slice(start).join('\n');
+  };
+
   const cleanInputText = (raw: string): string => {
-    let cleaned = raw;
+    let cleaned = stripLeadLabelLines(raw);
     // Remove emoji (Unicode emoji ranges)
     cleaned = cleaned.replace(/[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F1E0}-\u{1F1FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{FE00}-\u{FE0F}\u{1F900}-\u{1F9FF}\u{1FA00}-\u{1FA6F}\u{1FA70}-\u{1FAFF}\u{200D}\u{20E3}\u{E0020}-\u{E007F}]/gu, '');
     // Remove bullet points and list markers
@@ -820,7 +840,7 @@ function EditorPageInner() {
       const finalData = await runStreamingHumanize(text, controller.signal);
 
       if (finalData) {
-        let currentResult = finalData.humanized as string;
+        let currentResult = stripLeadLabelLines(finalData.humanized as string);
 
         // Grammar correction pass — always fix capitalization, punctuation, spelling etc.
         // Runs on every output like Microsoft Word autocorrect.
@@ -888,7 +908,7 @@ function EditorPageInner() {
       const finalData = await runStreamingHumanize(result, controller.signal);
 
       if (finalData) {
-        let rephrased = finalData.humanized as string;
+        let rephrased = stripLeadLabelLines(finalData.humanized as string);
         // Always apply grammar correction (spelling, punctuation, capitalization)
         {
           const checker = new GrammarChecker();
@@ -1428,13 +1448,13 @@ function EditorPageInner() {
           {/* Input textarea */}
           <div className="flex-1 relative">
             <textarea ref={inputRef} value={text}
-              onChange={(e) => setText(e.target.value)}
+              onChange={(e) => setText(stripLeadLabelLines(e.target.value))}
               className={`w-full ${EDITOR_HEIGHT_CLASS} bg-transparent outline-none resize-y overflow-y-auto text-[14px] leading-[1.8] text-slate-800 dark:text-zinc-200 p-5 placeholder:text-slate-400 dark:placeholder:text-zinc-600`}
               placeholder="Paste text you want to humanize..." />
             {!text && (
               <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                 <button
-                  onClick={async () => { try { const t = await navigator.clipboard.readText(); if (t) setText(t); } catch {} }}
+                  onClick={async () => { try { const t = await navigator.clipboard.readText(); if (t) setText(stripLeadLabelLines(t)); } catch {} }}
                   className="pointer-events-auto flex items-center gap-2 px-5 py-3 rounded-xl bg-cyan-50 dark:bg-cyan-950/35 border border-cyan-200 dark:border-cyan-900/50 text-cyan-700 dark:text-cyan-200 hover:bg-cyan-100 dark:hover:bg-cyan-900/35 hover:border-cyan-300 dark:hover:border-cyan-700/60 transition-all text-sm font-medium"
                 >
                   <ClipboardPaste className="w-4 h-4" />
@@ -1666,7 +1686,7 @@ function EditorPageInner() {
                 return (
                   <button
                     key={h.id}
-                    onClick={() => { setText(h.fullInput); setResult(h.fullOutput); }}
+                    onClick={() => { setText(stripLeadLabelLines(h.fullInput)); setResult(stripLeadLabelLines(h.fullOutput)); }}
                     className="w-full text-left px-4 py-2.5 hover:bg-slate-50 dark:hover:bg-zinc-800/30 transition-colors group"
                   >
                     <div className="flex items-center justify-between mb-1">
