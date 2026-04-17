@@ -18,7 +18,7 @@ export default function Onboarding() {
   return (
     <div className="min-h-screen bg-white dark:bg-[#05050A] flex flex-col items-center justify-center p-6">
       <div className="w-full max-w-4xl text-center mb-12">
-        <h1 className="text-4xl font-semibold text-slate-900 dark:text-white mb-4">Welcome to HumaraGPT</h1>
+        <h1 className="text-4xl font-semibold text-slate-900 dark:text-white mb-4">Welcome to <span className="brand-wordmark"><span className="brand-humara">Humara</span><span className="brand-gpt">GPT</span></span></h1>
         <p className="text-lg text-slate-500 dark:text-zinc-400">How will you be using our humanization engine?</p>
       </div>
 

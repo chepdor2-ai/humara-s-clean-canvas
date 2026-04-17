@@ -185,10 +185,10 @@
   border-color: #e2e8f0 !important;
 }
 [data-theme="light"] [class~="border-cyan-500/10"] {
-  border-color: rgba(168, 85, 247, 0.08) !important;
+  border-color: rgba(6, 182, 212, 0.08) !important;
 }
 [data-theme="light"] [class~="border-cyan-800/60"] {
-  border-color: rgba(168, 85, 247, 0.15) !important;
+  border-color: rgba(6, 182, 212, 0.15) !important;
 }
 [data-theme="light"] [class~="border-cyan-900/30"],
 [data-theme="light"] [class~="border-cyan-900/40"],
@@ -204,10 +204,10 @@
 
 /* ── 9. Shadow Normalization ─────────────────────────────────── */
 [data-theme="light"] [class~="shadow-cyan-900/10"] {
-  --tw-shadow-color: rgba(168, 85, 247, 0.06) !important;
+  --tw-shadow-color: rgba(6, 182, 212, 0.06) !important;
 }
 [data-theme="light"] [class~="shadow-cyan-900/20"] {
-  --tw-shadow-color: rgba(168, 85, 247, 0.08) !important;
+  --tw-shadow-color: rgba(6, 182, 212, 0.08) !important;
 }
 [data-theme="light"] [class~="shadow-black/60"] {
   --tw-shadow-color: rgba(148, 163, 184, 0.2) !important;
@@ -237,7 +237,7 @@
 
 /* ── 12. Premium Dots Light Mode ─────────────────────────────── */
 [data-theme="light"] .premium-dots {
-  background-image: radial-gradient(circle, rgba(147, 51, 234, 0.04) 1px, transparent 1px) !important;
+  background-image: radial-gradient(circle, rgba(8, 145, 178, 0.04) 1px, transparent 1px) !important;
   background-color: #ffffff !important;
 }
 
@@ -248,13 +248,13 @@
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06) !important;
 }
 [data-theme="light"] .ref-card:hover {
-  box-shadow: 0 10px 30px -8px rgba(147, 51, 234, 0.12) !important;
-  border-color: rgba(168, 85, 247, 0.2) !important;
+  box-shadow: 0 10px 30px -8px rgba(8, 145, 178, 0.12) !important;
+  border-color: rgba(6, 182, 212, 0.2) !important;
 }
 
 /* ── 14. Auth Logo Gradient Text Fix ─────────────────────────── */
 [data-theme="light"] [class*="bg-clip-text"][class*="from-white"] {
-  background-image: linear-gradient(to right, #6b21a8, #9333ea, #c084fc) !important;
+  background-image: linear-gradient(to right, #155e75, #0891b2, #67e8f9) !important;
 }
 
 /* ── 15. Radial Gradient Glow → Softer in Light ──────────────── */
@@ -343,7 +343,7 @@
   background-color: rgba(204, 251, 241, 0.78) !important;
 }
 :root:not(.dark) .stealth-shell .bg-fuchsia-950\/30 {
-  background-color: rgba(250, 232, 255, 0.78) !important;
+  background-color: rgba(236, 254, 255, 0.78) !important;
 }
 :root:not(.dark) .stealth-shell .bg-red-950\/30 {
   background-color: rgba(254, 226, 226, 0.78) !important;
@@ -372,7 +372,7 @@
 :root:not(.dark) .dashboard-plan-badge {
   background: #eef2ff !important;
   border-color: #c7d2fe !important;
-  color: #5b21b6 !important;
+  color: #0e7490 !important;
 }
 :root:not(.dark) .dashboard-shell .bg-\[\#0c0c14\],
 :root:not(.dark) .dashboard-shell .bg-\[\#12121a\],
@@ -411,7 +411,7 @@
 
 /* Auth-page logo gradient text */
 :root:not(.dark) .bg-gradient-to-r.from-white.via-cyan-200.to-cyan-400 {
-  background-image: linear-gradient(to right, #1e1b4b, #7c3aed, #a855f7) !important;
+  background-image: linear-gradient(to right, #083344, #0e7490, #06b6d4) !important;
 }
 
 /* Dark shadows → soft light */
@@ -433,7 +433,7 @@
 /* Hero section overrides */
 :root:not(.dark) .container-snap > section:first-of-type {
   background:
-    radial-gradient(900px 420px at 15% -5%, rgba(147, 51, 234, 0.08), transparent 65%),
+    radial-gradient(900px 420px at 15% -5%, rgba(8, 145, 178, 0.08), transparent 65%),
     radial-gradient(700px 360px at 85% -15%, rgba(56, 189, 248, 0.08), transparent 60%),
     linear-gradient(180deg, #ffffff 0%, #fafbff 55%, #f5f7ff 100%);
 }
@@ -661,7 +661,7 @@
   color: #4b5563 !important;
 }
 [data-theme="light"] .force-dark [class~="text-cyan-400"] {
-  color: #c084fc !important;
+  color: #67e8f9 !important;
 }
 [data-theme="light"] .force-dark [class~="text-emerald-400"] {
   color: #34d399 !important;

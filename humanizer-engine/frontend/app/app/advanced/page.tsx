@@ -18,7 +18,7 @@ export default function AdvancedPage() {
   const [batchResults, setBatchResults] = useState<string[]>([]);
   const [batchProcessing, setBatchProcessing] = useState(false);
   const [batchProgress, setBatchProgress] = useState(0);
-  const [batchEngine, setBatchEngine] = useState('ghost_pro');
+  const [batchEngine, setBatchEngine] = useState('ninja_4');
 
   const headers = useCallback((): HeadersInit => {
     if (!session?.access_token) return {};
@@ -163,11 +163,14 @@ export default function AdvancedPage() {
             <h2 className="text-sm font-semibold text-slate-900 dark:text-white">Upload Documents</h2>
             <div className="flex items-center gap-4">
               <select value={batchEngine} onChange={e => setBatchEngine(e.target.value)} title="Select engine" className="px-3 py-2.5 text-sm border border-slate-300 dark:border-zinc-700 rounded-lg bg-slate-100 dark:bg-zinc-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500">
-                <option value="humara_v1_3">Humara v1.3 (Stealth)</option>
-                <option value="ghost_pro">Ghost Pro (Hybrid)</option>
-                <option value="ghost_mini">Ghost Mini (Fast)</option>
-                <option value="ninja">Ninja (4-Layer)</option>
-                <option value="fast_v11">V1.1 (15-Phase)</option>
+                <option value="ninja_4">Stealth Pro</option>
+                <option value="easy">Stealth Quick</option>
+                <option value="ozone">Stealth Shield</option>
+                <option value="humara_v3_3">GPTZero Killer</option>
+                <option value="oxygen">GPTZero Shield</option>
+                <option value="ghost_pro_wiki">Academic Shield</option>
+                <option value="nuru_v2">Nuru Pure</option>
+                <option value="king">Stealth King</option>
               </select>
               <label className="flex items-center gap-2 px-4 py-2.5 bg-slate-100 dark:bg-zinc-800 border border-slate-300 dark:border-zinc-700 rounded-lg text-sm font-medium text-slate-600 dark:text-zinc-300 hover:bg-zinc-700 cursor-pointer transition-colors">
                 <Upload className="w-4 h-4" /> Upload .txt files

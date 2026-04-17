@@ -90,7 +90,7 @@ export function TopBar({ onMenuToggle }: { onMenuToggle?: () => void }) {
   const handleSignOut = async () => {
     setDropdownOpen(false)
     await supabase.auth.signOut()
-    router.push("/auth")
+    router.push("/login")
   }
 
   const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {

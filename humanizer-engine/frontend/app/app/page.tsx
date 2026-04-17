@@ -1,13 +1,19 @@
 'use client';
 import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
+import { motion } from 'framer-motion';
 
-import { Copy, Check, Zap, Eraser, RotateCcw, Type, AlignLeft, RefreshCw, AlertTriangle, Clock, ChevronDown, ChevronUp, Shield, Settings, ClipboardPaste, SpellCheck } from 'lucide-react';
+import { Copy, Check, Zap, Eraser, RotateCcw, Type, AlignLeft, RefreshCw, AlertTriangle, Clock, ChevronDown, ChevronUp, Shield, Settings, ClipboardPaste, SpellCheck, GitCompare, ShieldCheck, Text, Download, Sparkles } from 'lucide-react';
 import { GrammarChecker } from '@/lib/engine/grammar-corrector';
 import UsageBar, { useUsage, UsageProvider } from './UsageBar';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../AuthProvider';
 import Link from 'next/link';
 import WaterJugProgress from '../components/WaterJugProgress';
+import { DiffView } from '@/components/humanizer/diff-view';
+import { MetricsStrip } from '@/components/humanizer/metrics-strip';
+import { SentenceMeter } from '@/components/humanizer/sentence-meter';
+import { ExportMenu } from '@/components/humanizer/export-menu';
+import { toSentenceCase } from '@/lib/text-format';
 
 const ADMIN_EMAILS = ['maguna956@gmail.com', 'maxwellotieno11@gmail.com'];
 
@@ -405,6 +411,16 @@ function EditorPageInner() {
   const streamLastActivityAtRef = useRef(0);
   const abortRef = useRef<AbortController | null>(null);
 
+  // Output view switcher: result | diff | confidence
+  type OutputView = 'result' | 'diff' | 'confidence';
+  const [outputView, setOutputView] = useState<OutputView>('result');
+  const [runSalt, setRunSalt] = useState(0);
+
+  // Typewriter animation state
+  const [typewriterSource, setTypewriterSource] = useState('');
+  const [typewriterActive, setTypewriterActive] = useState(false);
+  const [typewriterRendered, setTypewriterRendered] = useState('');
+
   // Temporary history (auto-expires)
   const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -485,6 +501,31 @@ function EditorPageInner() {
       streamStageStartedAtRef.current = now;
     }
   }, []);
+
+  // Typewriter effect: animate output text character by character
+  useEffect(() => {
+    if (!typewriterActive || !typewriterSource) return;
+    let idx = 0;
+    const cps = 55; // characters per frame tick (~55 chars/sec)
+    let raf: number;
+    let last = 0;
+    const step = (ts: number) => {
+      if (!last) last = ts;
+      const delta = ts - last;
+      if (delta >= 1000 / cps) {
+        last = ts;
+        idx = Math.min(idx + Math.max(1, Math.floor(delta / (1000 / cps))), typewriterSource.length);
+        setTypewriterRendered(toSentenceCase(typewriterSource.slice(0, idx)));
+      }
+      if (idx < typewriterSource.length) {
+        raf = requestAnimationFrame(step);
+      } else {
+        setTypewriterActive(false);
+      }
+    };
+    raf = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(raf);
+  }, [typewriterActive, typewriterSource]);
 
   // Auto-expire history entries after TTL
   useEffect(() => {
@@ -882,6 +923,10 @@ function EditorPageInner() {
         }
 
         setResult(currentResult);
+        setTypewriterSource(currentResult);
+        setTypewriterRendered('');
+        setTypewriterActive(true);
+        setRunSalt(prev => prev + 1);
         setMeaningScore(finalData.meaning_similarity as number);
 
         // Detection disabled — coming soon
@@ -947,6 +992,10 @@ function EditorPageInner() {
           rephrased = checker.correctAll(rephrased);
         }
         setResult(rephrased);
+        setTypewriterSource(rephrased);
+        setTypewriterRendered('');
+        setTypewriterActive(true);
+        setRunSalt(prev => prev + 1);
         setMeaningScore(finalData.meaning_similarity as number);
         // Detection disabled — coming soon
 
@@ -1308,11 +1357,14 @@ function EditorPageInner() {
               className="w-16 h-1.5 accent-cyan-500 cursor-pointer" title={`Humanization rate: ${humanizationRate} (${humanizationRate * 10}% min change)`} />
             <span className="text-[10px] font-bold text-cyan-600 dark:text-cyan-400 min-w-[14px] text-center">{humanizationRate}</span>
           </div>
-          <button onClick={handleHumanize} disabled={!text.trim() || loading || rephrasing}
-            className="w-full sm:w-auto sm:ml-auto bg-gradient-to-r from-cyan-600 to-teal-500 dark:from-cyan-700 dark:to-teal-600 hover:from-cyan-500 hover:to-teal-400 dark:hover:from-cyan-600 dark:hover:to-teal-500 text-white text-[11px] font-bold rounded-lg px-4 py-2 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-1.5 shadow-md hover:shadow-lg active:scale-[0.97]">
-            {loading ? <RotateCcw className="w-3 h-3 animate-spin" /> : <Zap className="w-3 h-3" />}
+          <motion.button onClick={handleHumanize} disabled={!text.trim() || loading || rephrasing}
+            whileHover={{ scale: 1.02, boxShadow: '0 8px 25px -5px rgba(8,145,178,0.4)' }}
+            whileTap={{ scale: 0.97 }}
+            transition={{ type: 'spring', stiffness: 400, damping: 17 }}
+            className="w-full sm:w-auto sm:ml-auto bg-gradient-to-r from-cyan-600 to-teal-500 dark:from-cyan-700 dark:to-teal-600 hover:from-cyan-500 hover:to-teal-400 dark:hover:from-cyan-600 dark:hover:to-teal-500 text-white text-[11px] font-bold rounded-lg px-4 py-2 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-1.5 shadow-md hover:shadow-lg">
+            {loading ? <RotateCcw className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />}
             {loading ? 'Humanizing…' : 'Humanize'}
-          </button>
+          </motion.button>
         </div>
       </div>
 
@@ -1479,11 +1531,19 @@ function EditorPageInner() {
             </div>
           </div>
 
+          {/* Input MetricsStrip */}
+          {text.trim() && (
+            <div className="border-b border-slate-100 dark:border-cyan-900/25">
+              <MetricsStrip text={text} label="Input" />
+            </div>
+          )}
+
           {/* Input textarea */}
           <div className="flex-1 relative">
+            <div className="absolute inset-0 bg-red-50/60 dark:bg-red-950/15 pointer-events-none rounded-b-2xl" />
             <textarea ref={inputRef} value={text}
               onChange={(e) => setText(e.target.value)}
-              className={`w-full ${EDITOR_HEIGHT_CLASS} bg-transparent outline-none resize-y overflow-y-auto text-[14px] leading-[1.8] text-slate-800 dark:text-zinc-200 p-5 placeholder:text-slate-400 dark:placeholder:text-zinc-600`}
+              className={`relative z-10 w-full ${EDITOR_HEIGHT_CLASS} bg-transparent outline-none resize-y overflow-y-auto text-[14px] leading-[1.8] text-slate-800 dark:text-zinc-200 p-5 placeholder:text-slate-400 dark:placeholder:text-zinc-600`}
               placeholder="Paste text you want to humanize..." />
             {!text && (
               <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
@@ -1518,6 +1578,17 @@ function EditorPageInner() {
               <span className="text-[11px] text-slate-500 dark:text-zinc-500 tabular-nums font-medium hidden sm:inline">{outputWords} words</span>
               {result && !isAnimating && (
                 <>
+                  {/* View Switcher */}
+                  <div className="flex items-center rounded-lg bg-slate-100 dark:bg-zinc-800/60 p-0.5 gap-0.5">
+                    {(['result', 'diff', 'confidence'] as const).map(v => (
+                      <button key={v} onClick={() => setOutputView(v)}
+                        className={`px-2 py-0.5 rounded-md text-[10px] font-semibold capitalize transition-all ${outputView === v
+                          ? 'bg-white dark:bg-zinc-700 text-slate-800 dark:text-zinc-100 shadow-sm'
+                          : 'text-slate-500 dark:text-zinc-400 hover:text-slate-700 dark:hover:text-zinc-300'}`}>
+                        {v === 'result' ? <><Text className="w-3 h-3 inline mr-0.5" />Result</> : v === 'diff' ? <><GitCompare className="w-3 h-3 inline mr-0.5" />Diff</> : <><ShieldCheck className="w-3 h-3 inline mr-0.5" />Risk</>}
+                      </button>
+                    ))}
+                  </div>
                   <button onClick={handleRehumanizeFlagged} disabled={rehumanizing || loading}
                     className="text-[11px] font-semibold text-amber-600 dark:text-amber-500 hover:text-amber-700 dark:hover:text-amber-300 px-1.5 sm:px-2 py-1 rounded-lg hover:bg-amber-50 dark:hover:bg-amber-950/30 transition-all flex items-center gap-1 disabled:opacity-50"
                     title="Fix flagged AI sentences">
@@ -1533,6 +1604,7 @@ function EditorPageInner() {
                   <button onClick={handleCopy} className="p-1.5 text-slate-500 dark:text-brand-400 hover:text-slate-700 hover:bg-slate-100 dark:hover:bg-brand-950 rounded-md transition-colors" title="Copy">
                     {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
                   </button>
+                  <ExportMenu text={result} />
                 </>
               )}
             </div>
@@ -1611,12 +1683,28 @@ function EditorPageInner() {
             </div>
           ) : result ? (
             <div className={`relative flex-1 ${EDITOR_HEIGHT_CLASS} overflow-hidden`}>
-              <div className="absolute inset-0 bg-emerald-50 dark:bg-emerald-950/10 pointer-events-none rounded-b-2xl" />
-              <textarea ref={outputRef} value={result}
-                onChange={(e) => setResult(e.target.value)} onSelect={handleOutputSelect}
-                className={`relative z-10 flex-1 w-full ${EDITOR_HEIGHT_CLASS} bg-transparent outline-none resize-y overflow-y-auto text-[14px] leading-[1.8] text-slate-800 dark:text-zinc-200 p-5 cursor-text`}
-                style={{ fontFamily: 'inherit' }}
-                placeholder="Output appears here…" />
+              <div className="absolute inset-0 bg-green-50/60 dark:bg-green-950/15 pointer-events-none rounded-b-2xl" />
+              {/* MetricsStrip for output */}
+              <div className="relative z-10 border-b border-emerald-100 dark:border-emerald-900/30">
+                <MetricsStrip text={result} label="Output" />
+              </div>
+              {outputView === 'result' && (
+                <textarea ref={outputRef} value={typewriterActive ? typewriterRendered : result}
+                  onChange={(e) => { setResult(e.target.value); setTypewriterActive(false); }} onSelect={handleOutputSelect}
+                  className={`relative z-10 flex-1 w-full h-[calc(100%-2.5rem)] bg-transparent outline-none resize-y overflow-y-auto text-[14px] leading-[1.8] text-slate-800 dark:text-zinc-200 p-5 cursor-text ${typewriterActive ? 'caret-transparent' : ''}`}
+                  style={{ fontFamily: 'inherit' }}
+                  placeholder="Output appears here…" />
+              )}
+              {outputView === 'diff' && (
+                <div className="relative z-10 h-[calc(100%-2.5rem)] overflow-y-auto p-5">
+                  <DiffView original={text} humanized={result} />
+                </div>
+              )}
+              {outputView === 'confidence' && (
+                <div className="relative z-10 h-[calc(100%-2.5rem)] overflow-y-auto p-5">
+                  <SentenceMeter text={result} salt={runSalt} key={`sm-${runSalt}`} />
+                </div>
+              )}
             </div>
           ) : (
             <div className="flex flex-col items-center justify-center min-h-[260px] text-slate-400 dark:text-zinc-700 gap-4 px-8 text-center">

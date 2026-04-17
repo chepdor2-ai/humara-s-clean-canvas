@@ -33,6 +33,7 @@ import {
   CommandShortcut,
 } from "@/components/ui/command"
 import { emit, useKeyboardShortcut } from "@/lib/hooks"
+import { supabase } from "@/lib/supabase"
 
 type Ctx = {
   open: boolean
@@ -138,11 +139,11 @@ function CommandPalette({ open, setOpen }: { open: boolean; setOpen: (v: boolean
             <SlidersHorizontal />
             <span>Grammar</span>
           </CommandItem>
-          <CommandItem onSelect={run(() => toast.info("API console coming soon"))}>
+          <CommandItem onSelect={run(() => router.push("/app/api-dashboard"))}>
             <Code2 />
             <span>API</span>
           </CommandItem>
-          <CommandItem onSelect={run(() => toast.info("Docs coming soon"))}>
+          <CommandItem onSelect={run(() => router.push("/app/docs"))}>
             <BookOpen />
             <span>Docs</span>
           </CommandItem>
@@ -166,11 +167,14 @@ function CommandPalette({ open, setOpen }: { open: boolean; setOpen: (v: boolean
             <span>Keyboard shortcuts</span>
             <CommandShortcut>?</CommandShortcut>
           </CommandItem>
-          <CommandItem onSelect={run(() => toast.info("Settings coming soon"))}>
+          <CommandItem onSelect={run(() => router.push("/app/settings"))}>
             <Settings />
             <span>Settings</span>
           </CommandItem>
-          <CommandItem onSelect={run(() => toast.message("Signed out (demo)"))}>
+          <CommandItem onSelect={run(async () => {
+            await supabase.auth.signOut()
+            router.push("/login")
+          })}>
             <LogOut />
             <span>Sign out</span>
           </CommandItem>

@@ -25,6 +25,7 @@ import { cn } from "@/lib/utils"
 import { ThemeToggle } from "./theme-toggle"
 import { useAuth } from "@/app/AuthProvider"
 import { supabase } from "@/lib/supabase"
+import { useUsage } from "@/app/app/UsageBar"
 
 const ADMIN_EMAILS = ['maguna956@gmail.com', 'maxwellotieno11@gmail.com']
 
@@ -40,7 +41,7 @@ const primary: NavItem[] = [
   { label: "Dashboard", icon: LayoutDashboard, href: "/app/dashboard" },
   { label: "Humanizer", icon: Wand2, href: "/app" },
   { label: "Documents", icon: FileText, href: "/app/documents" },
-  { label: "AI Detector", icon: ShieldCheck, href: "/app/detector", soon: true },
+  { label: "AI Detector", icon: ShieldCheck, href: "/app/detector" },
   { label: "Style Profiles", icon: Palette, href: "/app/style" },
   { label: "Grammar", icon: SpellCheck, href: "/app/grammar" },
   { label: "Advanced", icon: SlidersHorizontal, href: "/app/advanced" },
@@ -98,6 +99,7 @@ export function Sidebar({ open, onClose }: { open?: boolean; onClose?: () => voi
   const pathname = usePathname()
   const router = useRouter()
   const { user } = useAuth()
+  const { usage, loading: usageLoading } = useUsage()
   const isAdmin = user?.email && ADMIN_EMAILS.includes(user.email)
 
   const navItems: NavItem[] = [
@@ -114,7 +116,7 @@ export function Sidebar({ open, onClose }: { open?: boolean; onClose?: () => voi
 
   const handleSignOut = async () => {
     await supabase.auth.signOut()
-    router.push('/auth')
+    router.push('/login')
   }
 
   return (
@@ -131,12 +133,12 @@ export function Sidebar({ open, onClose }: { open?: boolean; onClose?: () => voi
         {/* Header */}
         <div className="flex items-center gap-3 px-5 py-5">
           <Link href="/" className="flex items-center gap-3 group">
-            <div className="relative">
-              <Image src="/logo.png" alt="HumaraGPT" width={36} height={36} className="w-9 h-9 relative z-10 drop-shadow-[0_0_10px_rgba(147,51,234,0.6)]" />
+            <div className="relative logo-shine">
+              <Image src="/logo.png" alt="HumaraGPT" width={36} height={36} className="w-9 h-9 relative z-10 drop-shadow-[0_0_10px_rgba(6,182,212,0.6)]" />
               <div className="absolute -inset-1 rounded-full bg-cyan-500/25 animate-[logoPulse_2.5s_ease-in-out_infinite] blur-md" />
             </div>
             <div className="flex flex-col">
-              <span className="text-base font-semibold tracking-tight text-sidebar-foreground">HumaraGPT</span>
+              <span className="brand-wordmark text-base font-semibold tracking-tight"><span className="brand-humara">Humara</span><span className="brand-gpt">GPT</span></span>
               <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Stealth Suite</span>
             </div>
           </Link>
@@ -167,18 +169,19 @@ export function Sidebar({ open, onClose }: { open?: boolean; onClose?: () => voi
         <div className="relative overflow-hidden rounded-xl border border-sidebar-border bg-gradient-to-br from-sidebar-accent/60 to-transparent p-4">
           <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Monthly Usage</div>
           <div className="mt-2 flex items-baseline gap-1">
-            <span className="text-xl font-semibold text-sidebar-foreground tabular-nums">12,480</span>
-            <span className="text-xs text-muted-foreground">/ 80,000</span>
+            <span className="text-xl font-semibold text-sidebar-foreground tabular-nums">{usageLoading ? '—' : (usage?.wordsUsed ?? 0).toLocaleString()}</span>
+            <span className="text-xs text-muted-foreground">/ {usageLoading ? '—' : (usage?.wordsLimit ?? 0).toLocaleString()}</span>
           </div>
           <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-muted">
-            <div className="h-full w-[16%] rounded-full bg-gradient-to-r from-primary to-cyan-500" />
+            <div className="h-full rounded-full bg-gradient-to-r from-primary to-cyan-500 transition-all" style={{ width: `${usage ? Math.min(100, Math.round((usage.wordsUsed / Math.max(1, usage.wordsLimit)) * 100)) : 0}%` }} />
           </div>
-          <button
-            onClick={() => toast.info("Upgrade flow coming soon")}
-            className="mt-3 w-full rounded-lg border border-primary/30 bg-primary/10 px-3 py-1.5 text-xs font-semibold text-primary transition-colors hover:bg-primary/15"
+          <Link
+            href="/pricing"
+            onClick={onClose}
+            className="mt-3 block w-full rounded-lg border border-primary/30 bg-primary/10 px-3 py-1.5 text-center text-xs font-semibold text-primary transition-colors hover:bg-primary/15"
           >
             Upgrade Plan
-          </button>
+          </Link>
         </div>
       </nav>
 

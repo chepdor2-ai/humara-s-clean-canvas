@@ -263,18 +263,79 @@
   }
 
   .brand-wordmark {
-    background: linear-gradient(90deg, #0f172a, #0891b2, #06b6d4);
-    -webkit-background-clip: text;
-    background-clip: text;
-    color: transparent;
-    text-shadow: 0 0 10px rgba(8, 145, 178, 0.14);
+    display: inline-flex;
+    align-items: baseline;
+    gap: 0;
   }
-  .dark .brand-wordmark {
-    background: linear-gradient(90deg, #ffffff, #cffafe, #22d3ee);
+  .brand-wordmark .brand-humara {
+    color: #0f172a;
+    font-weight: 800;
+  }
+  .dark .brand-wordmark .brand-humara {
+    color: #ffffff;
+  }
+  .brand-wordmark .brand-gpt {
+    background: linear-gradient(135deg, #06b6d4, #0891b2, #22d3ee, #06b6d4);
+    background-size: 300% 100%;
     -webkit-background-clip: text;
     background-clip: text;
     color: transparent;
-    text-shadow: 0 0 20px rgba(6, 182, 212, 0.4);
+    animation: gptShine 3s ease-in-out infinite;
+    filter: drop-shadow(0 0 8px rgba(6, 182, 212, 0.5));
+  }
+  .dark .brand-wordmark .brand-gpt {
+    background: linear-gradient(135deg, #67e8f9, #22d3ee, #a5f3fc, #06b6d4);
+    background-size: 300% 100%;
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    animation: gptShine 3s ease-in-out infinite;
+    filter: drop-shadow(0 0 14px rgba(34, 211, 238, 0.6)) drop-shadow(0 0 28px rgba(6, 182, 212, 0.3));
+  }
+  @keyframes gptShine {
+    0% { background-position: 0% 50%; filter: drop-shadow(0 0 6px rgba(6, 182, 212, 0.3)); }
+    50% { background-position: 100% 50%; filter: drop-shadow(0 0 18px rgba(34, 211, 238, 0.7)) drop-shadow(0 0 36px rgba(6, 182, 212, 0.3)); }
+    100% { background-position: 0% 50%; filter: drop-shadow(0 0 6px rgba(6, 182, 212, 0.3)); }
+  }
+
+  /* ── Logo shine sweep ─────────────────────────────────── */
+  .logo-shine {
+    position: relative;
+    overflow: hidden;
+    border-radius: 9999px;
+  }
+  .logo-shine::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: 20;
+    border-radius: 9999px;
+    background: linear-gradient(
+      105deg,
+      transparent 40%,
+      rgba(255, 255, 255, 0.45) 45%,
+      rgba(255, 255, 255, 0.7) 50%,
+      rgba(255, 255, 255, 0.45) 55%,
+      transparent 60%
+    );
+    background-size: 250% 100%;
+    animation: logoShineSweep 4s ease-in-out infinite;
+    pointer-events: none;
+  }
+  .dark .logo-shine::after {
+    background: linear-gradient(
+      105deg,
+      transparent 40%,
+      rgba(6, 182, 212, 0.25) 45%,
+      rgba(34, 211, 238, 0.5) 50%,
+      rgba(6, 182, 212, 0.25) 55%,
+      transparent 60%
+    );
+    background-size: 250% 100%;
+  }
+  @keyframes logoShineSweep {
+    0%, 100% { background-position: 200% 0; }
+    50% { background-position: -50% 0; }
   }
 
   .glass-nav {
@@ -2002,7 +2063,7 @@
 
 :root:not(.dark) .bg-violet-950\/30,
 :root:not(.dark) .bg-violet-950 {
-  background-color: rgba(245, 243, 255, 0.6) !important;
+  background-color: rgba(236, 254, 255, 0.6) !important;
 }
 
 :root:not(.dark) .bg-blue-900\/30 {
@@ -2078,11 +2139,11 @@
 }
 
 :root:not(.dark) .border-l-4.border-cyan-500 {
-  border-left-color: #a855f7 !important;
+  border-left-color: #06b6d4 !important;
 }
 
 :root:not(.dark) .border-b-4.border-cyan-500 {
-  border-bottom-color: #a855f7 !important;
+  border-bottom-color: #06b6d4 !important;
 }
 
 :root:not(.dark) .text-zinc-500,
@@ -2124,12 +2185,12 @@
 
 :root:not(.dark) .text-cyan-300,
 :root:not(.dark) .text-cyan-400 {
-  color: #7c3aed !important;
+  color: #0e7490 !important;
 }
 
 :root:not(.dark) .text-brand-300,
 :root:not(.dark) .text-brand-400 {
-  color: #7c3aed !important;
+  color: #0e7490 !important;
 }
 
 :root:not(.dark) .text-emerald-400,
@@ -2203,10 +2264,10 @@
   box-shadow: 0 20px 60px -15px rgba(15, 23, 42, 0.12) !important;
 }
 :root:not(.dark) .shadow-2xl.shadow-cyan-900\/20 {
-  box-shadow: 0 25px 50px -12px rgba(147, 51, 234, 0.06) !important;
+  box-shadow: 0 25px 50px -12px rgba(8, 145, 178, 0.06) !important;
 }
 :root:not(.dark) .shadow-2xl.shadow-cyan-900\/40 {
-  box-shadow: 0 25px 50px -12px rgba(147, 51, 234, 0.08) !important;
+  box-shadow: 0 25px 50px -12px rgba(8, 145, 178, 0.08) !important;
 }
 
 /* ── Dark inline CSS function gradients → light ──────── */
@@ -2219,7 +2280,7 @@
 
 /* ── Auth-page logo gradient text (from-white invisible on light) ── */
 :root:not(.dark) .bg-gradient-to-r.from-white.via-cyan-200.to-cyan-400 {
-  background-image: linear-gradient(to right, #1e1b4b, #7c3aed, #a855f7) !important;
+  background-image: linear-gradient(to right, #083344, #0e7490, #06b6d4) !important;
 }
 
 /* ── App Workspace Light Theme (Deep) ────────────────── */
@@ -2282,7 +2343,7 @@
 }
 
 :root:not(.dark) .stealth-shell .bg-fuchsia-950\/30 {
-  background-color: rgba(250, 232, 255, 0.78) !important;
+  background-color: rgba(236, 254, 255, 0.78) !important;
 }
 
 :root:not(.dark) .stealth-shell .bg-red-950\/30 {
@@ -2308,7 +2369,7 @@
 :root:not(.dark) .dashboard-plan-badge {
   background: #eef2ff !important;
   border-color: #c7d2fe !important;
-  color: #5b21b6 !important;
+  color: #0e7490 !important;
 }
 
 :root:not(.dark) .dashboard-shell .bg-\[\#0c0c14\],
@@ -2346,7 +2407,7 @@
 /* ── Light mode hero overrides ────────────────────────── */
 :root:not(.dark) .container-snap > section:first-of-type {
   background:
-    radial-gradient(900px 420px at 15% -5%, rgba(147, 51, 234, 0.08), transparent 65%),
+    radial-gradient(900px 420px at 15% -5%, rgba(8, 145, 178, 0.08), transparent 65%),
     radial-gradient(700px 360px at 85% -15%, rgba(56, 189, 248, 0.08), transparent 60%),
     linear-gradient(180deg, #ffffff 0%, #fafbff 55%, #f5f7ff 100%);
 }
@@ -2402,10 +2463,10 @@
 }
 :root:not(.dark) .hover\:bg-cyan-800:hover,
 :root:not(.dark) .hover\:border-cyan-800:hover {
-  border-color: #c084fc !important;
+  border-color: #67e8f9 !important;
 }
 :root:not(.dark) .hover\:border-cyan-700\/50:hover {
-  border-color: rgba(168, 85, 247, 0.5) !important;
+  border-color: rgba(6, 182, 212, 0.5) !important;
 }
 :root:not(.dark) .hover\:bg-zinc-900\/80:hover {
   background-color: #f1f5f9 !important;
@@ -2413,7 +2474,7 @@
 
 /* ── Radial glow backgrounds → subtle light versions ── */
 :root:not(.dark) .bg-\[radial-gradient\(at_center\,\#9333ea15_0\%\,transparent_70\%\)\] {
-  background: radial-gradient(at center, rgba(147, 51, 234, 0.06) 0%, transparent 70%) !important;
+  background: radial-gradient(at center, rgba(8, 145, 178, 0.06) 0%, transparent 70%) !important;
 }
 
 /* ── Category color badges (blog, etc.) in light mode ── */
@@ -2422,7 +2483,7 @@
 :root:not(.dark) .border-blue-700 { border-color: #93c5fd !important; }
 
 :root:not(.dark) .bg-cyan-900\/30 { background-color: rgba(243, 232, 255, 0.8) !important; }
-:root:not(.dark) .text-cyan-300 { color: #7c3aed !important; }
+:root:not(.dark) .text-cyan-300 { color: #0e7490 !important; }
 :root:not(.dark) .border-cyan-700 { border-color: #c4b5fd !important; }
 
 :root:not(.dark) .bg-emerald-900\/30 { background-color: rgba(209, 250, 229, 0.8) !important; }
@@ -2497,7 +2558,7 @@
 }
 
 :root:not(.dark) .border-cyan-500\/30 {
-  border-color: rgba(168, 85, 247, 0.35) !important;
+  border-color: rgba(6, 182, 212, 0.35) !important;
 }
 
 /* ── Additional text colors ──────────────────────────── */
@@ -2506,7 +2567,7 @@
 }
 
 :root:not(.dark) .text-cyan-500 {
-  color: #7c3aed !important;
+  color: #0e7490 !important;
 }
 
 :root:not(.dark) .text-red-400\/60 {
@@ -2530,24 +2591,24 @@
 }
 
 :root:not(.dark) .group:hover .group-hover\:text-cyan-300 {
-  color: #7c3aed !important;
+  color: #0e7490 !important;
 }
 
 :root:not(.dark) .hover\:text-cyan-400:hover {
-  color: #7c3aed !important;
+  color: #0e7490 !important;
 }
 
 :root:not(.dark) .hover\:border-cyan-700\/50:hover {
-  border-color: rgba(168, 85, 247, 0.5) !important;
+  border-color: rgba(6, 182, 212, 0.5) !important;
 }
 
 /* ── Shadow adjustments for light mode ───────────────── */
 :root:not(.dark) .shadow-2xl.shadow-cyan-900\/10 {
-  box-shadow: 0 25px 50px -12px rgba(147, 51, 234, 0.08) !important;
+  box-shadow: 0 25px 50px -12px rgba(8, 145, 178, 0.08) !important;
 }
 
 :root:not(.dark) .shadow-2xl.shadow-brand-500\/15 {
-  box-shadow: 0 25px 50px -12px rgba(147, 51, 234, 0.1) !important;
+  box-shadow: 0 25px 50px -12px rgba(8, 145, 178, 0.1) !important;
 }
 
 /* ── HeroVideo gradient overlays in light mode ───────── */
@@ -2582,8 +2643,8 @@
 }
 :root:not(.dark) input.bg-zinc-950\/80:focus,
 :root:not(.dark) input.bg-zinc-950\/60:focus {
-  border-color: #a855f7 !important;
-  box-shadow: 0 0 0 3px rgba(168, 85, 247, 0.1) !important;
+  border-color: #06b6d4 !important;
+  box-shadow: 0 0 0 3px rgba(6, 182, 212, 0.1) !important;
 }
 :root:not(.dark) .bg-zinc-950\/80::placeholder,
 :root:not(.dark) .bg-zinc-950\/60::placeholder {
@@ -2613,15 +2674,15 @@
 /* ── Logo glow rings \u2192 lighter in light mode ─────────── */
 :root:not(.dark) .bg-cyan-500\/25,
 :root:not(.dark) .bg-cyan-400\/15 {
-  background-color: rgba(168, 85, 247, 0.1) !important;
+  background-color: rgba(6, 182, 212, 0.1) !important;
 }
 
 /* ── Drop shadow normalization for light mode ──────────── */
 :root:not(.dark) [class~="drop-shadow-[0_0_14px_rgba(147,51,234,0.7)]"] {
-  filter: drop-shadow(0 0 10px rgba(147, 51, 234, 0.3)) !important;
+  filter: drop-shadow(0 0 10px rgba(8, 145, 178, 0.3)) !important;
 }
 :root:not(.dark) [class~="drop-shadow-[0_0_20px_rgba(168,85,247,0.4)]"] {
-  filter: drop-shadow(0 0 14px rgba(168, 85, 247, 0.2)) !important;
+  filter: drop-shadow(0 0 14px rgba(6, 182, 212, 0.2)) !important;
 }
 
 /* ── Hover states for auth/light mode buttons ────────── */
@@ -2644,16 +2705,16 @@
 
 /* ── Focus ring for inputs in light mode ──────────────── */
 :root:not(.dark) [class~="focus:ring-cyan-500/20"]:focus {
-  --tw-ring-color: rgba(168, 85, 247, 0.15) !important;
+  --tw-ring-color: rgba(6, 182, 212, 0.15) !important;
 }
 :root:not(.dark) [class~="focus:ring-cyan-500/10"]:focus {
-  --tw-ring-color: rgba(168, 85, 247, 0.1) !important;
+  --tw-ring-color: rgba(6, 182, 212, 0.1) !important;
 }
 :root:not(.dark) [class~="focus:border-cyan-500"]:focus {
-  border-color: #a855f7 !important;
+  border-color: #06b6d4 !important;
 }
 :root:not(.dark) [class~="focus:border-cyan-500/60"]:focus {
-  border-color: rgba(168, 85, 247, 0.6) !important;
+  border-color: rgba(6, 182, 212, 0.6) !important;
 }
 
 /* ── Checkbox styling in light mode ──────────────────── */
@@ -2824,10 +2885,10 @@
 }
 
 :root:not(.dark) .force-dark .text-cyan-400 {
-  color: #c084fc !important;
+  color: #67e8f9 !important;
 }
 :root:not(.dark) .force-dark .text-cyan-500 {
-  color: #a855f7 !important;
+  color: #06b6d4 !important;
 }
 :root:not(.dark) .force-dark .text-emerald-400 {
   color: #34d399 !important;

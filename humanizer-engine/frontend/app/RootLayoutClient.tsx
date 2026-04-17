@@ -11,14 +11,14 @@ const ADMIN_EMAILS = ['maguna956@gmail.com', 'maxwellotieno11@gmail.com'];
 
 const Logo = () => (
   <Link href="/" className="flex items-center space-x-3 group">
-    <div className="relative">
-      <Image src="/logo.png" alt="HumaraGPT" width={56} height={56} className="w-14 h-14 relative z-10 drop-shadow-[0_0_14px_rgba(147,51,234,0.7)]" />
+    <div className="relative logo-shine">
+      <Image src="/logo.png" alt="HumaraGPT" width={56} height={56} className="w-14 h-14 relative z-10 drop-shadow-[0_0_14px_rgba(6,182,212,0.7)]" />
       {/* Layered cyan glow rings */}
       <div className="absolute -inset-1 rounded-full bg-cyan-500/25 animate-[logoPulse_2.5s_ease-in-out_infinite] blur-md" />
       <div className="absolute -inset-2.5 rounded-full bg-cyan-400/15 animate-[logoPulse_2.5s_ease-in-out_infinite_0.6s] blur-lg" />
       <div className="absolute -inset-4 rounded-full bg-cyan-600/8 animate-[logoPulse_2.5s_ease-in-out_infinite_1.2s] blur-xl" />
     </div>
-    <span className="brand-wordmark text-xl font-bold tracking-tight">HumaraGPT</span>
+    <span className="brand-wordmark text-xl font-bold tracking-tight"><span className="brand-humara">Humara</span><span className="brand-gpt">GPT</span></span>
   </Link>
 );
 

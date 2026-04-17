@@ -17,6 +17,13 @@ function LoginForm() {
   const [error, setError] = useState('');
   const [googleLoading, setGoogleLoading] = useState(false);
 
+  // Redirect already-authenticated users to /app
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session) router.push('/app');
+    });
+  }, [router]);
+
   // Handle OAuth tokens in URL hash (implicit flow fallback)
   useEffect(() => {
     if (typeof window !== 'undefined' && window.location.hash.includes('access_token')) {
@@ -77,12 +84,12 @@ function LoginForm() {
             <div className="flex justify-center mb-8">
               <Link href="/" className="flex items-center gap-3 group">
                 <div className="relative">
-                  <Image src="/logo.png" alt="HumaraGPT" width={56} height={56} className="w-14 h-14 relative z-10 drop-shadow-[0_0_14px_rgba(147,51,234,0.7)]" />
+                  <Image src="/logo.png" alt="HumaraGPT" width={56} height={56} className="w-14 h-14 relative z-10 drop-shadow-[0_0_14px_rgba(6,182,212,0.7)]" />
                   <div className="absolute -inset-1 rounded-full bg-cyan-500/25 animate-[logoPulse_2.5s_ease-in-out_infinite] blur-md" />
                   <div className="absolute -inset-2.5 rounded-full bg-cyan-400/15 animate-[logoPulse_2.5s_ease-in-out_infinite_0.6s] blur-lg" />
                   <div className="absolute -inset-4 rounded-full bg-cyan-600/8 animate-[logoPulse_2.5s_ease-in-out_infinite_1.2s] blur-xl" />
                 </div>
-                <span className="text-2xl font-bold bg-gradient-to-r from-white via-cyan-200 to-cyan-400 bg-clip-text text-transparent drop-shadow-[0_0_20px_rgba(168,85,247,0.4)]">HumaraGPT</span>
+                <span className="text-2xl font-bold tracking-tight brand-wordmark"><span className="brand-humara !text-white">Humara</span><span className="brand-gpt">GPT</span></span>
               </Link>
             </div>
 
