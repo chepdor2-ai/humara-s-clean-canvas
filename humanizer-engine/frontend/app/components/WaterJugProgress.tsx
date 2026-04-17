@@ -16,138 +16,98 @@ const WaterJugProgress: React.FC<WaterJugProgressProps> = ({ percent, size = 224
   const displayPhaseName = useMemo(() => {
     if (phaseName === 'Complete') return 'Complete';
     if (!phaseName) return 'Processing';
-    return phaseName.replace(/^Phase\s+\d+\/\d+\s*[–-]\s*/i, '').trim();
+    return phaseName.replace(/^Phase\s+\d+\/\d+\s*-\s*/i, '').trim();
   }, [phaseName]);
 
-  const clipId = `water_clip_${uid}`;
-  const glassGradientId = `glass_gradient_${uid}`;
-  const waterGradientId = `water_gradient_${uid}`;
-  const highlightGradientId = `highlight_gradient_${uid}`;
-  const surfaceGradientId = `surface_gradient_${uid}`;
+  const trackGradientId = `processing_track_${uid}`;
+  const progressGradientId = `processing_progress_${uid}`;
+  const glowFilterId = `processing_glow_${uid}`;
 
-  const innerTop = 30;
-  const innerBottom = 190;
-  const fillHeight = ((innerBottom - innerTop) * safePercent) / 100;
-  const waterY = innerBottom - fillHeight;
+  const progressRadius = 78;
+  const orbitOneRadius = 62;
+  const orbitTwoRadius = 92;
+  const progressCircumference = 2 * Math.PI * progressRadius;
+  const strokeOffset = progressCircumference * (1 - safePercent / 100);
+  const indicatorAngle = safePercent * 3.6 - 90;
 
-  const waveAmplitude = Math.max(3, 10 - safePercent * 0.06);
-  const secondaryWaveAmplitude = Math.max(2, waveAmplitude * 0.62);
-  const tertiaryWaveAmplitude = Math.max(4, waveAmplitude * 0.85);
-
-  const d1 = `M26 ${waterY} C 52 ${waterY - waveAmplitude}, 78 ${waterY + waveAmplitude}, 110 ${waterY} C 138 ${waterY - waveAmplitude}, 164 ${waterY + waveAmplitude}, 194 ${waterY} L194 198 L26 198 Z`;
-  const d2 = `M26 ${waterY} C 52 ${waterY + waveAmplitude}, 78 ${waterY - waveAmplitude}, 110 ${waterY} C 138 ${waterY + waveAmplitude}, 164 ${waterY - waveAmplitude}, 194 ${waterY} L194 198 L26 198 Z`;
-  const d3 = `M26 ${waterY + 4} C 50 ${waterY - secondaryWaveAmplitude}, 86 ${waterY + secondaryWaveAmplitude}, 120 ${waterY + 4} C 148 ${waterY - secondaryWaveAmplitude}, 172 ${waterY + secondaryWaveAmplitude}, 194 ${waterY + 4} L194 198 L26 198 Z`;
-  const d4 = `M26 ${waterY + 4} C 50 ${waterY + secondaryWaveAmplitude}, 86 ${waterY - secondaryWaveAmplitude}, 120 ${waterY + 4} C 148 ${waterY + secondaryWaveAmplitude}, 172 ${waterY - secondaryWaveAmplitude}, 194 ${waterY + 4} L194 198 L26 198 Z`;
-  const d5 = `M26 ${waterY - 2} C 60 ${waterY + tertiaryWaveAmplitude}, 90 ${waterY - tertiaryWaveAmplitude}, 130 ${waterY - 2} C 160 ${waterY + tertiaryWaveAmplitude}, 180 ${waterY - tertiaryWaveAmplitude}, 194 ${waterY - 2} L194 198 L26 198 Z`;
-  const d6 = `M26 ${waterY - 2} C 60 ${waterY - tertiaryWaveAmplitude}, 90 ${waterY + tertiaryWaveAmplitude}, 130 ${waterY - 2} C 160 ${waterY - tertiaryWaveAmplitude}, 180 ${waterY + tertiaryWaveAmplitude}, 194 ${waterY - 2} L194 198 L26 198 Z`;
-
-  const colors = useMemo(() => {
-    const hue = Math.round((safePercent / 100) * 120); // 0:red -> 120:green
+  const palette = useMemo(() => {
+    const hue = Math.round(188 + safePercent * 0.33);
     return {
-      top: `hsl(${hue}, 92%, 58%)`,
-      bottom: `hsl(${Math.max(0, hue - 10)}, 90%, 43%)`,
-      foam: `hsl(${Math.max(0, hue - 4)}, 100%, 92%)`,
-      glow: `hsla(${hue}, 95%, 56%, 0.42)`,
+      trackStart: `hsla(${hue}, 70%, 86%, 0.56)`,
+      trackEnd: `hsla(${hue + 24}, 64%, 70%, 0.2)`,
+      arcStart: `hsl(${Math.max(176, hue - 12)}, 90%, 56%)`,
+      arcEnd: `hsl(${Math.min(224, hue + 8)}, 88%, 66%)`,
+      frameStroke: `hsla(${hue + 16}, 82%, 88%, 0.55)`,
+      indicator: `hsl(${Math.min(226, hue + 6)}, 92%, 72%)`,
+      innerCore: 'rgba(4, 14, 26, 0.56)',
     };
   }, [safePercent]);
 
-  const bubbleStart = Math.min(innerBottom - 8, waterY + 26);
-  const bubblePeak = Math.max(innerTop + 10, waterY - 26);
-
   return (
     <div className="relative flex items-center justify-center">
-      <div className="pointer-events-none absolute inset-[-22px] rounded-full bg-[radial-gradient(circle,rgba(34,211,238,0.22)_0%,rgba(45,212,191,0.12)_38%,transparent_72%)] blur-2xl animate-[glowPulse_4.2s_ease-in-out_infinite]" />
-      <div className="pointer-events-none absolute inset-[-10px] rounded-full border border-white/12 dark:border-cyan-300/12 animate-[spin_24s_linear_infinite]" />
-      <svg width={size} height={size} viewBox="0 0 220 220" className="relative z-10 block drop-shadow-[0_20px_36px_rgba(2,8,23,0.34)] animate-[float_6.5s_ease-in-out_infinite]">
+      <div className="pointer-events-none absolute inset-[-24px] rounded-full bg-[radial-gradient(circle,rgba(34,211,238,0.28)_0%,rgba(14,165,233,0.16)_40%,transparent_72%)] blur-3xl animate-[glowPulse_3.9s_ease-in-out_infinite]" />
+      <svg width={size} height={size} viewBox="0 0 220 220" className="relative z-10 block drop-shadow-[0_22px_36px_rgba(2,8,23,0.34)]">
         <defs>
-          <clipPath id={clipId}>
-            <circle cx="110" cy="110" r="84" />
-          </clipPath>
-          <linearGradient id={glassGradientId} x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#ffffff" stopOpacity="0.85" />
-            <stop offset="35%" stopColor="#e2e8f0" stopOpacity="0.55" />
-            <stop offset="100%" stopColor="#94a3b8" stopOpacity="0.25" />
+          <linearGradient id={trackGradientId} x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0%" stopColor={palette.trackStart} />
+            <stop offset="100%" stopColor={palette.trackEnd} />
           </linearGradient>
-          <linearGradient id={waterGradientId} x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor={colors.top} />
-            <stop offset="100%" stopColor={colors.bottom} />
+          <linearGradient id={progressGradientId} x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0%" stopColor={palette.arcStart} />
+            <stop offset="100%" stopColor={palette.arcEnd} />
           </linearGradient>
-          <radialGradient id={highlightGradientId} cx="30%" cy="20%" r="65%">
-            <stop offset="0%" stopColor="#ffffff" stopOpacity="0.86" />
-            <stop offset="45%" stopColor="#ffffff" stopOpacity="0.2" />
-            <stop offset="100%" stopColor="#ffffff" stopOpacity="0" />
-          </radialGradient>
-          <linearGradient id={surfaceGradientId} x1="0" y1="0" x2="1" y2="0">
-            <stop offset="0%" stopColor="#ffffff" stopOpacity="0.12" />
-            <stop offset="50%" stopColor="#ffffff" stopOpacity="0.7" />
-            <stop offset="100%" stopColor="#ffffff" stopOpacity="0.12" />
-          </linearGradient>
+          <filter id={glowFilterId} x="-80%" y="-80%" width="260%" height="260%">
+            <feGaussianBlur stdDeviation="3.6" result="blur" />
+            <feMerge>
+              <feMergeNode in="blur" />
+              <feMergeNode in="SourceGraphic" />
+            </feMerge>
+          </filter>
         </defs>
 
-        <circle cx="110" cy="110" r="92" fill={`url(#${glassGradientId})`} stroke="#cbd5e1" strokeWidth="2.5" />
+        <circle cx="110" cy="110" r="94" fill="rgba(255,255,255,0.12)" stroke={palette.frameStroke} strokeWidth="1.3" />
+        <circle cx="110" cy="110" r={progressRadius} fill="none" stroke={`url(#${trackGradientId})`} strokeWidth="12" />
+        <circle
+          cx="110"
+          cy="110"
+          r={progressRadius}
+          fill="none"
+          stroke={`url(#${progressGradientId})`}
+          strokeWidth="12"
+          strokeLinecap="round"
+          strokeDasharray={progressCircumference}
+          strokeDashoffset={strokeOffset}
+          transform="rotate(-90 110 110)"
+          className="transition-[stroke-dashoffset] duration-200 ease-out"
+          filter={`url(#${glowFilterId})`}
+        />
 
-        <g clipPath={`url(#${clipId})`}>
-          <rect x="26" y={waterY + 4} width="168" height={194 - waterY} fill={`url(#${waterGradientId})`} />
-          
-          {/* Deepest BG Wave */}
-          <path d={d5} fill={`url(#${waterGradientId})`} opacity="0.45">
-            <animate attributeName="d" dur="5.3s" repeatCount="indefinite" values={`${d5};${d6};${d5}`} />
-          </path>
-          
-          {/* Middle Surface Wave */}
-          <path d={d3} fill={`url(#${surfaceGradientId})`} opacity="0.65">
-            <animate attributeName="d" dur="4.1s" repeatCount="indefinite" values={`${d3};${d4};${d3}`} />
-          </path>
-          
-          {/* Front Active Wave */}
-          <path d={d1} fill={`url(#${waterGradientId})`} opacity="0.95">
-            <animate attributeName="d" dur="2.7s" repeatCount="indefinite" values={`${d1};${d2};${d1}`} />
-          </path>
-          
-          <ellipse cx="110" cy={Math.max(innerTop + 8, waterY + 4)} rx="80" ry="10" fill={colors.foam} opacity="0.25">
-            <animate attributeName="opacity" dur="3.8s" repeatCount="indefinite" values="0.18;0.35;0.18" />
-          </ellipse>
+        <circle cx="110" cy="110" r={orbitOneRadius} fill="none" stroke="rgba(125,211,252,0.48)" strokeDasharray="2 8" strokeWidth="1.2" opacity="0.75">
+          <animateTransform attributeName="transform" type="rotate" from="0 110 110" to="360 110 110" dur="13s" repeatCount="indefinite" />
+        </circle>
+        <circle cx="110" cy="110" r={orbitTwoRadius} fill="none" stroke="rgba(45,212,191,0.3)" strokeDasharray="3 10" strokeWidth="1" opacity="0.64">
+          <animateTransform attributeName="transform" type="rotate" from="360 110 110" to="0 110 110" dur="17s" repeatCount="indefinite" />
+        </circle>
 
-          <circle cx="74" cy={bubbleStart} r="2.8" fill={colors.foam} opacity="0">
-            <animate attributeName="cy" dur="2.5s" repeatCount="indefinite" values={`${bubbleStart};${bubblePeak};${bubbleStart}`} />
-            <animate attributeName="opacity" dur="2.5s" repeatCount="indefinite" values="0;0.9;0" />
-          </circle>
-          <circle cx="112" cy={bubbleStart + 8} r="3.5" fill={colors.foam} opacity="0">
-            <animate attributeName="cy" dur="2.9s" repeatCount="indefinite" values={`${bubbleStart + 8};${bubblePeak - 2};${bubbleStart + 8}`} />
-            <animate attributeName="opacity" dur="2.9s" repeatCount="indefinite" values="0;0.8;0" />
-          </circle>
-          <circle cx="148" cy={bubbleStart + 3} r="2.4" fill={colors.foam} opacity="0">
-            <animate attributeName="cy" dur="2.2s" repeatCount="indefinite" values={`${bubbleStart + 3};${bubblePeak + 3};${bubbleStart + 3}`} />
-            <animate attributeName="opacity" dur="2.2s" repeatCount="indefinite" values="0;0.85;0" />
-          </circle>
-          <circle cx="96" cy={bubbleStart + 14} r="2.1" fill={colors.foam} opacity="0">
-            <animate attributeName="cy" dur="3.2s" repeatCount="indefinite" values={`${bubbleStart + 14};${bubblePeak - 6};${bubbleStart + 14}`} />
-            <animate attributeName="opacity" dur="3.2s" repeatCount="indefinite" values="0;0.7;0" />
-          </circle>
-          <circle cx="132" cy={bubbleStart + 10} r="1.9" fill={colors.foam} opacity="0">
-            <animate attributeName="cy" dur="2.7s" repeatCount="indefinite" values={`${bubbleStart + 10};${bubblePeak - 10};${bubbleStart + 10}`} />
-            <animate attributeName="opacity" dur="2.7s" repeatCount="indefinite" values="0;0.75;0" />
-          </circle>
-          <circle cx="56" cy={bubbleStart + 6} r="1.5" fill={colors.foam} opacity="0">
-            <animate attributeName="cy" dur="1.8s" repeatCount="indefinite" values={`${bubbleStart + 6};${bubblePeak + 8};${bubbleStart + 6}`} />
-            <animate attributeName="opacity" dur="1.8s" repeatCount="indefinite" values="0;0.6;0" />
-          </circle>
-          <circle cx="168" cy={bubbleStart + 18} r="2.2" fill={colors.foam} opacity="0">
-            <animate attributeName="cy" dur="3.4s" repeatCount="indefinite" values={`${bubbleStart + 18};${bubblePeak - 4};${bubbleStart + 18}`} />
-            <animate attributeName="opacity" dur="3.4s" repeatCount="indefinite" values="0;0.8;0" />
-          </circle>
+        <g transform={`rotate(${indicatorAngle} 110 110)`}>
+          <circle cx="110" cy="32" r="5.5" fill={palette.indicator} filter={`url(#${glowFilterId})`} />
+          <circle cx="110" cy="32" r="2.1" fill="rgba(255,255,255,0.95)" />
         </g>
 
-        <circle cx="110" cy="110" r="84" fill="none" stroke="#ffffff" strokeOpacity="0.65" strokeWidth="1.3" />
-        <ellipse cx="92" cy="78" rx="58" ry="42" fill={`url(#${highlightGradientId})`} />
-        <circle cx="110" cy="110" r="95" fill={colors.glow} opacity={safePercent > 2 ? 0.26 : 0} />
+        <polygon
+          points="110,72 145,92 145,128 110,148 75,128 75,92"
+          fill="rgba(8, 20, 34, 0.4)"
+          stroke={palette.frameStroke}
+          strokeWidth="1.1"
+        />
+        <circle cx="110" cy="110" r="21" fill={palette.innerCore} stroke="rgba(186,230,253,0.28)" strokeWidth="1.2" />
       </svg>
 
       <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
-        <span className="text-[44px] font-black leading-none tracking-tight text-white drop-shadow-[0_3px_10px_rgba(0,0,0,0.45)]">
+        <span className="text-[42px] font-black leading-none tracking-tight text-white drop-shadow-[0_3px_10px_rgba(0,0,0,0.45)]">
           {Math.round(safePercent)}%
         </span>
-        <span className={`mt-1 max-w-[180px] text-center text-white/95 drop-shadow-[0_2px_8px_rgba(0,0,0,0.42)] ${displayPhaseName === 'Complete' ? 'truncate text-[11px] font-bold uppercase tracking-[0.18em]' : 'line-clamp-2 text-[10px] font-semibold tracking-[0.08em]'}`}>
+        <span className={`mt-1 max-w-[182px] text-center text-white/95 drop-shadow-[0_2px_8px_rgba(0,0,0,0.42)] ${displayPhaseName === 'Complete' ? 'truncate text-[11px] font-bold uppercase tracking-[0.18em]' : 'line-clamp-2 text-[10px] font-semibold tracking-[0.08em]'}`}>
           {displayPhaseName}
         </span>
         {totalPhases && totalPhases > 1 && phaseIndex ? (
@@ -156,7 +116,9 @@ const WaterJugProgress: React.FC<WaterJugProgressProps> = ({ percent, size = 224
               <div
                 key={i}
                 className={`h-1.5 w-1.5 rounded-full transition-all duration-300 ${
-                  i + 1 <= phaseIndex ? 'bg-white scale-110' : 'bg-white/30'
+                  i + 1 <= phaseIndex
+                    ? 'scale-110 bg-cyan-100 shadow-[0_0_8px_rgba(224,255,255,0.8)]'
+                    : 'bg-white/35'
                 }`}
               />
             ))}

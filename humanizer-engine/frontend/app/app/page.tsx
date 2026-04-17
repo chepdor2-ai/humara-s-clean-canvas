@@ -13,7 +13,7 @@ import { DiffView } from '@/components/humanizer/diff-view';
 import { MetricsStrip } from '@/components/humanizer/metrics-strip';
 import { SentenceMeter } from '@/components/humanizer/sentence-meter';
 import { ExportMenu } from '@/components/humanizer/export-menu';
-import { toSentenceCase } from '@/lib/text-format';
+import { toLowerSentenceStyle } from '@/lib/text-format';
 
 const ADMIN_EMAILS = ['maguna956@gmail.com', 'maxwellotieno11@gmail.com'];
 
@@ -447,6 +447,7 @@ function EditorPageInner() {
 
   const inputWords = useMemo(() => (text.trim() ? text.trim().split(/\s+/).length : 0), [text]);
   const outputWords = useMemo(() => (result.trim() ? result.trim().split(/\s+/).length : 0), [result]);
+  const normalizeTypedInput = useCallback((value: string) => toLowerSentenceStyle(value), []);
 
   const inputAvgAi = useMemo(() => {
     if (!inputDetection) return 0;
@@ -506,7 +507,7 @@ function EditorPageInner() {
   useEffect(() => {
     if (!typewriterActive || !typewriterSource) return;
     let idx = 0;
-    const cps = 55; // characters per frame tick (~55 chars/sec)
+    const cps = 1200; // superfast reveal while preserving progressive typing
     let raf: number;
     let last = 0;
     const step = (ts: number) => {
@@ -515,7 +516,7 @@ function EditorPageInner() {
       if (delta >= 1000 / cps) {
         last = ts;
         idx = Math.min(idx + Math.max(1, Math.floor(delta / (1000 / cps))), typewriterSource.length);
-        setTypewriterRendered(toSentenceCase(typewriterSource.slice(0, idx)));
+        setTypewriterRendered(toLowerSentenceStyle(typewriterSource.slice(0, idx)));
       }
       if (idx < typewriterSource.length) {
         raf = requestAnimationFrame(step);
@@ -1026,6 +1027,33 @@ function EditorPageInner() {
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
+
+  const handlePasteFromClipboard = useCallback(async () => {
+    const applyPastedText = (candidate: string) => {
+      const normalized = normalizeTypedInput(candidate);
+      if (!normalized.trim()) {
+        setError('Clipboard is empty.');
+        return false;
+      }
+      setText(normalized);
+      setError('');
+      return true;
+    };
+
+    try {
+      if (navigator.clipboard?.readText) {
+        const clipboardText = await navigator.clipboard.readText();
+        if (applyPastedText(clipboardText)) return;
+      }
+    } catch {
+      // Fall through to manual paste fallback.
+    }
+
+    const manualText = window.prompt('Clipboard read is blocked. Paste your text (Ctrl+V) and press OK:', '');
+    if (manualText !== null && applyPastedText(manualText)) return;
+
+    setError('Could not read clipboard automatically. Use Ctrl+V in the input box.');
+  }, [normalizeTypedInput]);
 
   const handleClear = () => {
     setText(''); setResult('');
@@ -1542,13 +1570,13 @@ function EditorPageInner() {
           <div className="flex-1 relative">
             <div className="absolute inset-0 bg-red-50/60 dark:bg-red-950/15 pointer-events-none rounded-b-2xl" />
             <textarea ref={inputRef} value={text}
-              onChange={(e) => setText(e.target.value)}
+              onChange={(e) => setText(normalizeTypedInput(e.target.value))}
               className={`relative z-10 w-full ${EDITOR_HEIGHT_CLASS} bg-transparent outline-none resize-y overflow-y-auto text-[14px] leading-[1.8] text-slate-800 dark:text-zinc-200 p-5 placeholder:text-slate-400 dark:placeholder:text-zinc-600`}
               placeholder="Paste text you want to humanize..." />
             {!text && (
               <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                 <button
-                  onClick={async () => { try { const t = await navigator.clipboard.readText(); if (t) setText(t); } catch {} }}
+                  onClick={handlePasteFromClipboard}
                   className="pointer-events-auto flex items-center gap-2 px-5 py-3 rounded-xl bg-cyan-50 dark:bg-cyan-950/35 border border-cyan-200 dark:border-cyan-900/50 text-cyan-700 dark:text-cyan-200 hover:bg-cyan-100 dark:hover:bg-cyan-900/35 hover:border-cyan-300 dark:hover:border-cyan-700/60 transition-all text-sm font-medium"
                 >
                   <ClipboardPaste className="w-4 h-4" />

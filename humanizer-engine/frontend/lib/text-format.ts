@@ -8,12 +8,57 @@ const PROPER_NOUNS: Record<string, string> = {
   september: "September", october: "October", november: "November", december: "December",
 }
 
-function fixProperNouns(text: string) {
-  return text.replace(/\b([a-z]+)([''][a-z]+)?\b/g, (match, base: string, suffix?: string) => {
+const PRESERVED_ABBREVIATIONS: Record<string, string> = {
+  i: "I",
+  ai: "AI",
+  api: "API",
+  apis: "APIs",
+  llm: "LLM",
+  llms: "LLMs",
+  nlp: "NLP",
+  seo: "SEO",
+  gpt: "GPT",
+  gptzero: "GPTZero",
+  chatgpt: "ChatGPT",
+  openai: "OpenAI",
+  humaragpt: "HumaraGPT",
+  ui: "UI",
+  ux: "UX",
+  cpu: "CPU",
+  gpu: "GPU",
+  json: "JSON",
+  html: "HTML",
+  css: "CSS",
+  js: "JS",
+  ts: "TS",
+  sql: "SQL",
+  faq: "FAQ",
+  url: "URL",
+  http: "HTTP",
+  https: "HTTPS",
+  usa: "USA",
+  uk: "UK",
+  eu: "EU",
+  un: "UN",
+}
+
+function applyCaseMap(text: string, caseMap: Record<string, string>) {
+  return text.replace(/\b([a-z][a-z0-9]*)(?:'([a-z]+))?\b/g, (match, base: string, suffix?: string) => {
     const key = base.toLowerCase()
-    if (PROPER_NOUNS[key]) return PROPER_NOUNS[key] + (suffix ?? "")
-    return match
+    if (!caseMap[key]) return match
+    if (suffix) return `${caseMap[key]}'${suffix}`
+    return caseMap[key]
   })
+}
+
+function fixProperNouns(text: string) {
+  return applyCaseMap(text, PROPER_NOUNS)
+}
+
+export function toLowerSentenceStyle(raw: string): string {
+  if (!raw) return ""
+  const lower = raw.toLowerCase()
+  return applyCaseMap(lower, PRESERVED_ABBREVIATIONS)
 }
 
 export function toSentenceCase(raw: string): string {

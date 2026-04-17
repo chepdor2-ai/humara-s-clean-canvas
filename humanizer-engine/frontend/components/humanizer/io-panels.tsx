@@ -4,7 +4,7 @@ import { AnimatePresence, motion } from "framer-motion"
 import { Check, ClipboardPaste, Copy, Eraser, GitCompare, ShieldCheck, Sparkles, Text } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
 import { toast } from "sonner"
-import { toSentenceCase } from "@/lib/text-format"
+import { toLowerSentenceStyle } from "@/lib/text-format"
 import { DiffView } from "./diff-view"
 import { ExportMenu } from "./export-menu"
 import { MetricsStrip } from "./metrics-strip"
@@ -19,17 +19,14 @@ function wordCount(s: string) {
 }
 
 /**
- * Word-processor style typewriter. Re-applies sentence-case each tick so the
- * stream looks like a word document auto-correcting as you type.
+ * Word-processor style typewriter. Re-applies lowercase-with-acronyms each tick
+ * so in-flight text stays consistent while preserving abbreviations.
  */
-function useTypewriter(source: string, active: boolean, cps = 55) {
+function useTypewriter(source: string, active: boolean, cps = 1200) {
   const [rendered, setRendered] = useState("")
 
   useEffect(() => {
-    if (!active || !source) {
-      setRendered("")
-      return
-    }
+    if (!active || !source) return
     let frame = 0
     let cancelled = false
     let start: number | null = null
@@ -39,7 +36,7 @@ function useTypewriter(source: string, active: boolean, cps = 55) {
       if (start === null) start = ts
       const elapsed = ts - start
       const target = Math.min(source.length, Math.floor((elapsed / 1000) * cps))
-      const formatted = toSentenceCase(source.slice(0, target))
+      const formatted = toLowerSentenceStyle(source.slice(0, target))
       setRendered(formatted)
       if (target < source.length) {
         frame = requestAnimationFrame(step)
@@ -89,7 +86,7 @@ export function IOPanels({
 }) {
   const [copied, setCopied] = useState(false)
   const [view, setView] = useState<View>("result")
-  const typed = useTypewriter(sourceText, animating, 60)
+  const typed = useTypewriter(sourceText, animating, 1200)
   const didFinish = useRef(false)
 
   useEffect(() => {
@@ -116,13 +113,30 @@ export function IOPanels({
   }
 
   const handlePaste = async () => {
-    try {
-      const t = await navigator.clipboard.readText()
-      setInput(t)
+    const applyPastedInput = (candidate: string) => {
+      const normalized = toLowerSentenceStyle(candidate)
+      if (!normalized.trim()) {
+        toast.error("Clipboard is empty")
+        return false
+      }
+      setInput(normalized)
       toast.success("Pasted from clipboard")
-    } catch {
-      toast.error("Clipboard read blocked")
+      return true
     }
+
+    try {
+      if (navigator.clipboard?.readText) {
+        const t = await navigator.clipboard.readText()
+        if (applyPastedInput(t)) return
+      }
+    } catch {
+      // Fall through to manual paste fallback.
+    }
+
+    const manualText = window.prompt("Clipboard read is blocked. Paste your text (Ctrl+V) and press OK:", "")
+    if (manualText !== null && applyPastedInput(manualText)) return
+
+    toast.error("Could not read clipboard. Use Ctrl+V in the text box")
   }
 
   const liveDisplayed = animating ? typed : output
@@ -158,7 +172,7 @@ export function IOPanels({
         <div className="relative flex-1">
           <textarea
             value={input}
-            onChange={(e) => setInput(e.target.value)}
+            onChange={(e) => setInput(toLowerSentenceStyle(e.target.value))}
             placeholder="Paste text you want to humanize…"
             className="doc-text h-[440px] w-full resize-none bg-transparent px-6 py-5 text-[15px] leading-relaxed text-foreground outline-none placeholder:text-muted-foreground/70 premium-scroll"
           />
