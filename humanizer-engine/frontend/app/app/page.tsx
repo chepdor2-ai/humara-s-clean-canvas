@@ -1488,18 +1488,26 @@ function EditorPageInner() {
           </div>
 
           {isAnimating ? (
-            <div className={`relative flex flex-col items-center justify-center ${EDITOR_HEIGHT_CLASS} overflow-hidden px-4 py-6`}>
+            <div className={`relative flex flex-col items-center justify-center ${EDITOR_HEIGHT_CLASS} overflow-hidden px-3 py-5 sm:px-4 sm:py-6`}>
               <div className="processing-water-panel absolute inset-0" />
               <div className="processing-water-aura processing-water-aura-left" />
               <div className="processing-water-aura processing-water-aura-right" />
               <div className="processing-water-grid absolute inset-0" />
+              <div className="processing-sheen processing-sheen-top" />
+              <div className="processing-sheen processing-sheen-bottom" />
 
-              <div className="relative z-10 flex w-full max-w-[430px] flex-col items-center gap-5">
-                <div className="flex flex-wrap items-center justify-center gap-2">
-                  <span className="processing-pill processing-pill-strong">{activeEngineLabel}</span>
-                  <span className="processing-pill processing-pill-teal">Live stream</span>
-                  <span className="processing-pill processing-pill-soft">
-                    {streamPhaseIndex > 0 ? `Phase ${streamPhaseIndex}/${streamTotalPhases}` : MODE_LABELS[mode]}
+              <div className="relative z-10 flex w-full max-w-[560px] flex-col items-center gap-4 sm:gap-5">
+                <div className="processing-headline-row">
+                  <div className="flex flex-wrap items-center justify-center gap-2">
+                    <span className="processing-pill processing-pill-strong">{activeEngineLabel}</span>
+                    <span className="processing-pill processing-pill-teal">Live stream</span>
+                    <span className="processing-pill processing-pill-soft">
+                      {streamPhaseIndex > 0 ? `Phase ${streamPhaseIndex}/${streamTotalPhases}` : MODE_LABELS[mode]}
+                    </span>
+                  </div>
+                  <span className="processing-live-chip">
+                    <span className="processing-live-dot" />
+                    Rendering
                   </span>
                 </div>
 
@@ -1507,6 +1515,10 @@ function EditorPageInner() {
                   <span className="processing-ripple processing-ripple-one" />
                   <span className="processing-ripple processing-ripple-two" />
                   <span className="processing-ripple processing-ripple-three" />
+                  <span className="processing-orbit processing-orbit-one" />
+                  <span className="processing-orbit processing-orbit-two" />
+                  <span className="processing-orbit processing-orbit-three" />
+                  <span className="processing-beam" />
                   <WaterJugProgress
                     percent={streamProgress}
                     phaseName={streamPhaseName || undefined}

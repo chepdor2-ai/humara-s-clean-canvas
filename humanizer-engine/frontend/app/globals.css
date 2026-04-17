@@ -841,103 +841,167 @@
     box-shadow: 0 25px 50px -12px rgba(168, 85, 247, 0.25);
   }
 
-  /* ── Processing water deck ────────────────────────────── */
+  /* -- Processing animation deck -- */
   @keyframes processingDrift {
     0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
-    50% { transform: translate3d(0, -12px, 0) scale(1.04); }
+    50% { transform: translate3d(0, -14px, 0) scale(1.05); }
   }
   @keyframes processingRipple {
-    0% { transform: translate(-50%, -50%) scale(0.78); opacity: 0.7; }
-    100% { transform: translate(-50%, -50%) scale(1.08); opacity: 0; }
+    0% { transform: translate(-50%, -50%) scale(0.66); opacity: 0.75; }
+    100% { transform: translate(-50%, -50%) scale(1.24); opacity: 0; }
   }
   @keyframes processingGridShift {
     0% { transform: translate3d(0, 0, 0); }
-    100% { transform: translate3d(0, 18px, 0); }
+    100% { transform: translate3d(0, 24px, 0); }
+  }
+  @keyframes processingSheenSweep {
+    0% { transform: translateX(-40%) rotate(4deg); opacity: 0; }
+    16% { opacity: 0.42; }
+    52% { transform: translateX(40%) rotate(4deg); opacity: 0.15; }
+    100% { transform: translateX(90%) rotate(4deg); opacity: 0; }
+  }
+  @keyframes processingOrbit {
+    0% { transform: translate(-50%, -50%) rotate(0deg); }
+    100% { transform: translate(-50%, -50%) rotate(360deg); }
+  }
+  @keyframes processingOrbitReverse {
+    0% { transform: translate(-50%, -50%) rotate(360deg); }
+    100% { transform: translate(-50%, -50%) rotate(0deg); }
+  }
+  @keyframes processingBeamSweep {
+    0%, 100% { transform: translateX(-46%) scaleX(0.92); opacity: 0; }
+    18% { opacity: 0.55; }
+    52% { transform: translateX(0) scaleX(1); opacity: 0.6; }
+    84% { opacity: 0.28; }
+  }
+  @keyframes processingLivePulse {
+    0%, 100% { transform: scale(1); opacity: 0.95; }
+    50% { transform: scale(0.72); opacity: 0.45; }
   }
 
   .processing-water-panel {
     background:
-      radial-gradient(120% 90% at 50% 0%, rgba(34, 211, 238, 0.25), transparent 60%),
-      radial-gradient(80% 70% at 12% 82%, rgba(16, 185, 129, 0.18), transparent 62%),
-      linear-gradient(180deg, rgba(255, 255, 255, 0.65) 0%, rgba(240, 249, 255, 0.5) 52%, rgba(255, 255, 255, 0.75) 100%);
-    backdrop-filter: blur(20px) saturate(160%);
-    -webkit-backdrop-filter: blur(20px) saturate(160%);
-    border: 1px solid rgba(255, 255, 255, 0.85);
-    box-shadow: inset 0 2px 10px rgba(255, 255, 255, 0.9), 0 20px 40px rgba(0,0,0,0.06);
+      radial-gradient(120% 90% at 50% 0%, rgba(56, 189, 248, 0.3), transparent 62%),
+      radial-gradient(90% 75% at 16% 88%, rgba(20, 184, 166, 0.2), transparent 65%),
+      radial-gradient(100% 85% at 84% 82%, rgba(14, 116, 144, 0.12), transparent 68%),
+      linear-gradient(166deg, rgba(255, 255, 255, 0.84) 0%, rgba(240, 249, 255, 0.68) 52%, rgba(255, 255, 255, 0.86) 100%);
+    border: 1px solid rgba(255, 255, 255, 0.86);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.9),
+      inset 0 -1px 0 rgba(186, 230, 253, 0.42),
+      0 26px 54px -34px rgba(14, 116, 144, 0.42);
+    -webkit-backdrop-filter: blur(24px) saturate(165%);
+    backdrop-filter: blur(24px) saturate(165%);
+    overflow: hidden;
   }
   .dark .processing-water-panel {
     background:
-      radial-gradient(120% 90% at 50% 0%, rgba(34, 211, 238, 0.18), transparent 60%),
-      radial-gradient(80% 70% at 12% 82%, rgba(20, 184, 166, 0.15), transparent 62%),
-      linear-gradient(180deg, rgba(6, 18, 29, 0.65) 0%, rgba(8, 30, 42, 0.5) 52%, rgba(6, 20, 27, 0.75) 100%);
-    backdrop-filter: blur(24px) saturate(180%);
-    -webkit-backdrop-filter: blur(24px) saturate(180%);
-    border: 1px solid rgba(34, 211, 238, 0.25);
-    box-shadow: inset 0 2px 10px rgba(34, 211, 238, 0.15), 0 20px 40px rgba(0,0,0,0.4);
+      radial-gradient(120% 90% at 50% 0%, rgba(45, 212, 191, 0.24), transparent 62%),
+      radial-gradient(90% 75% at 16% 88%, rgba(6, 182, 212, 0.2), transparent 65%),
+      radial-gradient(100% 85% at 84% 82%, rgba(15, 118, 110, 0.14), transparent 68%),
+      linear-gradient(166deg, rgba(7, 21, 31, 0.88) 0%, rgba(8, 27, 39, 0.74) 52%, rgba(5, 17, 28, 0.9) 100%);
+    border-color: rgba(34, 211, 238, 0.24);
+    box-shadow:
+      inset 0 1px 0 rgba(103, 232, 249, 0.16),
+      inset 0 -1px 0 rgba(20, 184, 166, 0.28),
+      0 30px 56px -30px rgba(0, 0, 0, 0.62);
+    -webkit-backdrop-filter: blur(28px) saturate(180%);
+    backdrop-filter: blur(28px) saturate(180%);
   }
   .processing-water-panel::before,
   .processing-water-panel::after {
     content: '';
     position: absolute;
-    inset: auto;
-    pointer-events: none;
     border-radius: 9999px;
-    filter: blur(54px);
-    animation: processingDrift 9s ease-in-out infinite;
+    pointer-events: none;
+    filter: blur(58px);
+    animation: processingDrift 10s ease-in-out infinite;
   }
   .processing-water-panel::before {
-    width: 220px;
-    height: 220px;
-    left: -56px;
-    top: 18%;
-    background: rgba(34, 211, 238, 0.18);
+    width: 230px;
+    height: 230px;
+    left: -70px;
+    top: 12%;
+    background: rgba(56, 189, 248, 0.22);
   }
   .processing-water-panel::after {
-    width: 260px;
-    height: 260px;
-    right: -72px;
-    bottom: -8%;
-    background: rgba(16, 185, 129, 0.16);
-    animation-delay: -3s;
+    width: 276px;
+    height: 276px;
+    right: -76px;
+    bottom: -12%;
+    background: rgba(20, 184, 166, 0.18);
+    animation-delay: -3.5s;
   }
 
   .processing-water-grid {
     pointer-events: none;
     opacity: 0.34;
     background-image:
-      linear-gradient(to right, rgba(14, 165, 233, 0.08) 1px, transparent 1px),
-      linear-gradient(to bottom, rgba(14, 165, 233, 0.08) 1px, transparent 1px);
-    background-size: 28px 28px;
-    mask-image: linear-gradient(180deg, transparent 0%, rgba(0, 0, 0, 0.9) 28%, rgba(0, 0, 0, 0.9) 72%, transparent 100%);
-    animation: processingGridShift 14s linear infinite;
+      linear-gradient(to right, rgba(2, 132, 199, 0.14) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(2, 132, 199, 0.12) 1px, transparent 1px);
+    background-size: 30px 30px;
+    -webkit-mask-image: linear-gradient(180deg, transparent 0%, rgba(0, 0, 0, 0.9) 26%, rgba(0, 0, 0, 0.9) 74%, transparent 100%);
+    mask-image: linear-gradient(180deg, transparent 0%, rgba(0, 0, 0, 0.9) 26%, rgba(0, 0, 0, 0.9) 74%, transparent 100%);
+    animation: processingGridShift 16s linear infinite;
   }
   .dark .processing-water-grid {
-    opacity: 0.22;
+    opacity: 0.26;
     background-image:
-      linear-gradient(to right, rgba(103, 232, 249, 0.08) 1px, transparent 1px),
-      linear-gradient(to bottom, rgba(103, 232, 249, 0.08) 1px, transparent 1px);
+      linear-gradient(to right, rgba(103, 232, 249, 0.11) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(103, 232, 249, 0.09) 1px, transparent 1px);
   }
 
   .processing-water-aura {
     position: absolute;
-    width: 230px;
-    height: 230px;
+    width: 250px;
+    height: 250px;
     border-radius: 9999px;
-    filter: blur(60px);
+    filter: blur(68px);
     pointer-events: none;
-    opacity: 0.45;
-    animation: processingDrift 10s ease-in-out infinite;
+    opacity: 0.52;
+    animation: processingDrift 11s ease-in-out infinite;
   }
   .processing-water-aura-left {
-    left: -72px;
-    top: 20%;
-    background: rgba(14, 165, 233, 0.2);
+    left: -84px;
+    top: 18%;
+    background: rgba(56, 189, 248, 0.24);
   }
   .processing-water-aura-right {
-    right: -64px;
+    right: -72px;
     bottom: 10%;
-    background: rgba(20, 184, 166, 0.18);
-    animation-delay: -4s;
+    background: rgba(20, 184, 166, 0.2);
+    animation-delay: -4.4s;
+  }
+
+  .processing-sheen {
+    position: absolute;
+    pointer-events: none;
+    width: 68%;
+    height: 120px;
+    border-radius: 9999px;
+    background: linear-gradient(90deg, rgba(255, 255, 255, 0), rgba(236, 254, 255, 0.55), rgba(255, 255, 255, 0));
+    filter: blur(14px);
+    mix-blend-mode: screen;
+    animation: processingSheenSweep 7.4s ease-in-out infinite;
+  }
+  .processing-sheen-top {
+    top: -54px;
+    left: -15%;
+  }
+  .processing-sheen-bottom {
+    bottom: -76px;
+    left: -22%;
+    animation-delay: -3.3s;
+    opacity: 0.68;
+  }
+
+  .processing-headline-row {
+    display: flex;
+    width: 100%;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: 0.55rem;
   }
 
   .processing-pill {
@@ -945,29 +1009,29 @@
     align-items: center;
     gap: 0.35rem;
     border-radius: 9999px;
-    border: 1px solid rgba(186, 230, 253, 0.85);
-    background: rgba(255, 255, 255, 0.72);
-    padding: 0.38rem 0.72rem;
-    font-size: 0.68rem;
-    font-weight: 700;
+    border: 1px solid rgba(186, 230, 253, 0.78);
+    background: rgba(255, 255, 255, 0.75);
+    padding: 0.42rem 0.78rem;
+    font-size: 0.66rem;
+    font-weight: 800;
     letter-spacing: 0.08em;
     text-transform: uppercase;
     color: #0f766e;
-    box-shadow: 0 10px 30px -18px rgba(8, 145, 178, 0.38);
-    backdrop-filter: blur(10px);
+    box-shadow: 0 12px 26px -18px rgba(8, 145, 178, 0.48);
+    -webkit-backdrop-filter: blur(12px);
+    backdrop-filter: blur(12px);
   }
   .dark .processing-pill {
-    border-color: rgba(34, 211, 238, 0.18);
-    background: rgba(8, 23, 35, 0.72);
+    border-color: rgba(34, 211, 238, 0.22);
+    background: rgba(8, 24, 36, 0.8);
     color: #a5f3fc;
   }
   .processing-pill-strong {
-    color: #0f766e;
-    background: rgba(204, 251, 241, 0.9);
+    background: linear-gradient(120deg, rgba(204, 251, 241, 0.92), rgba(236, 254, 255, 0.9));
   }
   .processing-pill-teal {
+    background: linear-gradient(120deg, rgba(186, 230, 253, 0.9), rgba(224, 242, 254, 0.84));
     color: #155e75;
-    background: rgba(186, 230, 253, 0.82);
   }
   .processing-pill-soft {
     color: #475569;
@@ -976,27 +1040,62 @@
     color: #cbd5e1;
   }
 
+  .processing-live-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    border-radius: 9999px;
+    border: 1px solid rgba(186, 230, 253, 0.7);
+    background: rgba(255, 255, 255, 0.66);
+    color: #0f766e;
+    padding: 0.38rem 0.68rem;
+    font-size: 0.66rem;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    -webkit-backdrop-filter: blur(10px);
+    backdrop-filter: blur(10px);
+  }
+  .dark .processing-live-chip {
+    border-color: rgba(34, 211, 238, 0.25);
+    background: rgba(8, 24, 36, 0.7);
+    color: #a5f3fc;
+  }
+  .processing-live-dot {
+    display: inline-flex;
+    width: 0.5rem;
+    height: 0.5rem;
+    border-radius: 9999px;
+    background: #14b8a6;
+    box-shadow: 0 0 0 0.35rem rgba(20, 184, 166, 0.18);
+    animation: processingLivePulse 1.8s ease-in-out infinite;
+  }
+
   .processing-stage-card {
     position: relative;
     overflow: hidden;
     border-radius: 1.2rem;
-    border: 1px solid rgba(186, 230, 253, 0.9);
-    background: linear-gradient(180deg, rgba(255, 255, 255, 0.82) 0%, rgba(240, 249, 255, 0.72) 100%);
-    padding: 1rem;
-    box-shadow: 0 18px 48px -28px rgba(8, 145, 178, 0.42);
-    backdrop-filter: blur(16px);
+    border: 1px solid rgba(186, 230, 253, 0.92);
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.84) 0%, rgba(240, 249, 255, 0.76) 100%);
+    padding: 0.92rem;
+    box-shadow: 0 24px 44px -30px rgba(6, 182, 212, 0.45);
+    -webkit-backdrop-filter: blur(18px);
+    backdrop-filter: blur(18px);
   }
   .processing-stage-card::before {
     content: '';
     position: absolute;
-    inset: 0 0 auto 0;
-    height: 2px;
-    background: linear-gradient(90deg, rgba(6, 182, 212, 0), rgba(6, 182, 212, 0.8), rgba(16, 185, 129, 0));
+    inset: 0 auto 0 -40%;
+    width: 32%;
+    background: linear-gradient(90deg, rgba(255, 255, 255, 0), rgba(103, 232, 249, 0.28), rgba(255, 255, 255, 0));
+    transform: skewX(-16deg);
+    animation: processingSheenSweep 8.2s ease-in-out infinite;
+    pointer-events: none;
   }
   .dark .processing-stage-card {
-    border-color: rgba(34, 211, 238, 0.18);
-    background: linear-gradient(180deg, rgba(6, 22, 31, 0.82) 0%, rgba(8, 28, 38, 0.72) 100%);
-    box-shadow: 0 20px 48px -28px rgba(8, 145, 178, 0.34);
+    border-color: rgba(34, 211, 238, 0.22);
+    background: linear-gradient(180deg, rgba(7, 24, 34, 0.84) 0%, rgba(8, 29, 40, 0.76) 100%);
+    box-shadow: 0 24px 44px -28px rgba(8, 145, 178, 0.36);
   }
 
   .processing-meter-chip {
@@ -1004,30 +1103,34 @@
     align-items: center;
     gap: 0.35rem;
     border-radius: 9999px;
-    background: rgba(8, 145, 178, 0.1);
+    background: rgba(8, 145, 178, 0.12);
     color: #0f766e;
-    padding: 0.42rem 0.7rem;
+    padding: 0.42rem 0.72rem;
     font-size: 0.72rem;
     font-weight: 800;
+    box-shadow: inset 0 0 0 1px rgba(103, 232, 249, 0.3);
   }
   .dark .processing-meter-chip {
-    background: rgba(34, 211, 238, 0.12);
+    background: rgba(34, 211, 238, 0.14);
     color: #a5f3fc;
+    box-shadow: inset 0 0 0 1px rgba(103, 232, 249, 0.24);
   }
 
   .processing-mini-stat {
     display: flex;
     min-width: 0;
     flex-direction: column;
-    gap: 0.15rem;
+    gap: 0.16rem;
     border-radius: 0.9rem;
-    border: 1px solid rgba(226, 232, 240, 0.9);
-    background: rgba(255, 255, 255, 0.72);
-    padding: 0.7rem 0.8rem;
+    border: 1px solid rgba(226, 232, 240, 0.92);
+    background: rgba(255, 255, 255, 0.74);
+    padding: 0.68rem 0.8rem;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.72);
   }
   .dark .processing-mini-stat {
-    border-color: rgba(34, 211, 238, 0.14);
-    background: rgba(7, 20, 28, 0.68);
+    border-color: rgba(34, 211, 238, 0.18);
+    background: rgba(7, 20, 28, 0.72);
+    box-shadow: inset 0 1px 0 rgba(103, 232, 249, 0.06);
   }
   .processing-mini-stat-label {
     font-size: 0.64rem;
@@ -1043,7 +1146,7 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    font-size: 0.78rem;
+    font-size: 0.79rem;
     font-weight: 700;
     color: #0f172a;
   }
@@ -1056,27 +1159,115 @@
     left: 50%;
     top: 50%;
     border-radius: 9999px;
-    border: 1px solid rgba(125, 211, 252, 0.48);
-    transform: translate(-50%, -50%) scale(0.78);
+    border: 1px solid rgba(56, 189, 248, 0.45);
+    transform: translate(-50%, -50%) scale(0.66);
     pointer-events: none;
-    animation: processingRipple 3.6s ease-out infinite;
+    animation: processingRipple 4.1s cubic-bezier(0.18, 0.68, 0.12, 1) infinite;
   }
   .dark .processing-ripple {
-    border-color: rgba(103, 232, 249, 0.2);
+    border-color: rgba(103, 232, 249, 0.24);
   }
   .processing-ripple-one {
-    width: 236px;
-    height: 236px;
+    width: clamp(220px, 44vw, 256px);
+    height: clamp(220px, 44vw, 256px);
   }
   .processing-ripple-two {
-    width: 278px;
-    height: 278px;
-    animation-delay: -1.15s;
+    width: clamp(260px, 52vw, 300px);
+    height: clamp(260px, 52vw, 300px);
+    animation-delay: -1.36s;
   }
   .processing-ripple-three {
-    width: 320px;
-    height: 320px;
-    animation-delay: -2.3s;
+    width: clamp(300px, 60vw, 348px);
+    height: clamp(300px, 60vw, 348px);
+    animation-delay: -2.7s;
+  }
+
+  .processing-orbit {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    border-radius: 9999px;
+    pointer-events: none;
+    border: 1px dashed rgba(125, 211, 252, 0.4);
+    transform: translate(-50%, -50%);
+  }
+  .dark .processing-orbit {
+    border-color: rgba(103, 232, 249, 0.2);
+  }
+  .processing-orbit::after {
+    content: '';
+    position: absolute;
+    left: 50%;
+    top: -4px;
+    width: 7px;
+    height: 7px;
+    margin-left: -3.5px;
+    border-radius: 9999px;
+    background: rgba(20, 184, 166, 0.9);
+    box-shadow: 0 0 18px rgba(20, 184, 166, 0.7);
+  }
+  .processing-orbit-one {
+    width: clamp(246px, 50vw, 284px);
+    height: clamp(246px, 50vw, 284px);
+    animation: processingOrbit 11s linear infinite;
+  }
+  .processing-orbit-two {
+    width: clamp(286px, 58vw, 328px);
+    height: clamp(286px, 58vw, 328px);
+    animation: processingOrbitReverse 14s linear infinite;
+  }
+  .processing-orbit-three {
+    width: clamp(326px, 66vw, 372px);
+    height: clamp(326px, 66vw, 372px);
+    animation: processingOrbit 17s linear infinite;
+    opacity: 0.65;
+  }
+
+  .processing-beam {
+    position: absolute;
+    width: min(72vw, 332px);
+    height: min(72vw, 332px);
+    border-radius: 9999px;
+    pointer-events: none;
+    background: linear-gradient(90deg, rgba(34, 211, 238, 0), rgba(34, 211, 238, 0.28), rgba(34, 211, 238, 0));
+    filter: blur(8px);
+    mix-blend-mode: screen;
+    animation: processingBeamSweep 5.2s ease-in-out infinite;
+  }
+
+  @media (max-width: 640px) {
+    .processing-pill,
+    .processing-live-chip {
+      padding: 0.34rem 0.62rem;
+      font-size: 0.62rem;
+    }
+    .processing-stage-card {
+      padding: 0.82rem;
+      border-radius: 1.05rem;
+    }
+    .processing-mini-stat {
+      padding: 0.6rem 0.72rem;
+    }
+    .processing-meter-chip {
+      font-size: 0.67rem;
+      padding: 0.34rem 0.58rem;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .processing-water-panel::before,
+    .processing-water-panel::after,
+    .processing-water-grid,
+    .processing-water-aura,
+    .processing-sheen,
+    .processing-ripple,
+    .processing-orbit,
+    .processing-beam,
+    .processing-live-dot,
+    .processing-stage-card::before {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+    }
   }
 }
 
