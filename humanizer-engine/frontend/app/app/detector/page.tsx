@@ -12,16 +12,18 @@ import { useAuth } from '../../AuthProvider';
 
 const SAMPLE_HUMAN = `I still remember the sound my grandfather's radio made on quiet Sunday mornings — a low hum before the news, the kind of static that felt like the house itself was breathing. Mom would pour coffee, he'd read the paper backwards, and nothing ever needed to happen quickly.`;
 
-const LOGO_MAP: Record<string, string> = {
-  gptzero: 'GZ',
-  originality: 'OA',
-  turnitin: 'TI',
-  copyleaks: 'CL',
-  zerogpt: 'ZG',
-  sapling: 'SA',
-  'writer.com': 'WR',
-  crossplag: 'CP',
-  contentatscale: 'CS',
+type ApiDetectorRow = {
+  detector?: string;
+  ai_score?: number;
+  verdict?: string;
+};
+
+type DetectApiResponse = {
+  detectors?: ApiDetectorRow[];
+  summary?: {
+    overall_ai_score?: number;
+  };
+  error?: string;
 };
 
 export default function DetectorPage() {
@@ -47,23 +49,28 @@ export default function DetectorPage() {
         headers,
         body: JSON.stringify({ text: input.trim() }),
       });
-      const data = await res.json();
+      const data: DetectApiResponse = await res.json();
       if (!res.ok) throw new Error(data.error || 'Detection failed');
 
       const elapsed = Date.now() - startMs;
-      const rows: DetectorResult[] = (data.detectors || []).map((d: any) => ({
-        name: d.detector,
-        logo: LOGO_MAP[d.detector.toLowerCase()] || d.detector.slice(0, 2).toUpperCase(),
-        score: Math.round(d.ai_score),
-        verdict: d.verdict === 'ai' ? 'ai' : d.verdict === 'human' ? 'human' : 'mixed',
-        latencyMs: Math.round(elapsed / Math.max(1, data.detectors.length)),
+      const detectorRows = data.detectors ?? [];
+      const rows: DetectorResult[] = detectorRows.map((d) => ({
+        name: d.detector ?? 'Unknown Detector',
+        score: Math.round(d.ai_score ?? 0),
+        verdict: String(d.verdict || '').toLowerCase().includes('human')
+          ? 'human'
+          : String(d.verdict || '').toLowerCase().includes('ai') || String(d.verdict || '').toLowerCase().includes('likely')
+            ? 'ai'
+            : 'mixed',
+        latencyMs: Math.round(elapsed / Math.max(1, detectorRows.length)),
       }));
 
       const overallScore = Math.round(data.summary?.overall_ai_score ?? 0);
       setResults({ score: overallScore, rows });
       toast.success(`Scan complete across ${rows.length} detectors`);
-    } catch (err: any) {
-      toast.error(err.message || 'Detection failed');
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Detection failed';
+      toast.error(message);
     } finally {
       setScanning(false);
     }

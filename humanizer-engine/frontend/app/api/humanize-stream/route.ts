@@ -1613,6 +1613,29 @@ export async function POST(req: Request) {
           // 14. Meaning check (detection disabled — coming soon)
           // Final cleanup: collapse double spaces
           humanized = humanized.replace(/ {2,}/g, ' ');
+
+          // ── FINAL OUTPUT CAP: hard-trim to 1.5× input word count ──────
+          {
+            const _capInputWC = text.trim().split(/\s+/).filter(Boolean).length;
+            const _capOutputWC = humanized.trim().split(/\s+/).filter(Boolean).length;
+            const _capLimit = Math.max(300, Math.ceil(_capInputWC * 1.5));
+            if (_capOutputWC > _capLimit) {
+              console.warn(`[OutputCap] Trimming ${eng} output from ${_capOutputWC} to ~${_capLimit} words (input: ${_capInputWC})`);
+              // Trim to the cap limit, ending at a sentence boundary
+              const words = humanized.split(/\s+/);
+              const trimmed = words.slice(0, _capLimit).join(' ');
+              // Find the last sentence-ending punctuation
+              const lastSentEnd = Math.max(trimmed.lastIndexOf('. '), trimmed.lastIndexOf('.\n'), trimmed.lastIndexOf('? '), trimmed.lastIndexOf('! '));
+              if (lastSentEnd > trimmed.length * 0.6) {
+                humanized = trimmed.slice(0, lastSentEnd + 1).trim();
+              } else {
+                // No good sentence boundary — just trim at word boundary
+                humanized = trimmed.trim();
+                if (!/[.!?]$/.test(humanized)) humanized += '.';
+              }
+            }
+          }
+
           if (!usePhasePipeline) {
             sendSSE(controller, { type: 'stage', stage: 'Analyzing' });
             await flushDelay(10);

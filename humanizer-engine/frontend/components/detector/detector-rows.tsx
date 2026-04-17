@@ -2,10 +2,10 @@
 
 import { motion } from "framer-motion"
 import { cn } from "@/lib/utils"
+import { DetectorBrandIcon } from "@/components/detector/detector-brand-icon"
 
 export type DetectorResult = {
   name: string
-  logo: string
   score: number // 0-100
   verdict: "human" | "mixed" | "ai"
   latencyMs: number
@@ -30,9 +30,12 @@ export function DetectorRows({ rows }: { rows: DetectorResult[] }) {
           className="grid grid-cols-12 items-center gap-3 px-4 py-3.5 hover:bg-accent/40 transition-colors"
         >
           <div className="col-span-4 flex items-center gap-3">
-            <div className="grid h-9 w-9 place-items-center rounded-lg bg-accent text-xs font-bold text-accent-foreground">
-              {r.logo}
-            </div>
+            <DetectorBrandIcon
+              name={r.name}
+              size={36}
+              className="h-9 w-9 rounded-lg border border-border/40"
+              imageClassName="rounded-lg"
+            />
             <div className="flex flex-col">
               <span className="text-sm font-medium">{r.name}</span>
               <span className="text-xs text-muted-foreground">{r.latencyMs}ms</span>

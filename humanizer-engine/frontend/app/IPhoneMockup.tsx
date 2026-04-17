@@ -2,11 +2,12 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { Zap, CheckCircle2 } from 'lucide-react';
+import { DetectorBrandIcon } from '@/components/detector/detector-brand-icon';
 
 const DETECTORS = [
   { name: 'GPTZero', beforeAi: 96, afterAi: 3 },
   { name: 'Turnitin', beforeAi: 92, afterAi: 0 },
-  { name: 'Originality', beforeAi: 98, afterAi: 2 },
+  { name: 'Originality.AI', beforeAi: 98, afterAi: 2 },
   { name: 'Copyleaks', beforeAi: 89, afterAi: 0 },
 ];
 
@@ -157,7 +158,15 @@ export default function IPhoneMockup() {
                       const val = isDone ? d.afterAi : d.beforeAi;
                       return (
                         <div key={d.name} className="flex items-center gap-1.5">
-                          <span className="text-[8px] text-gray-500 w-[60px] truncate">{d.name}</span>
+                          <div className="flex w-[78px] min-w-[78px] items-center gap-1">
+                            <DetectorBrandIcon
+                              name={d.name}
+                              size={10}
+                              className="rounded-sm border border-white/15"
+                              imageClassName="rounded-sm"
+                            />
+                            <span className="text-[8px] text-gray-500 flex-1 truncate">{d.name}</span>
+                          </div>
                           <div className="flex-1 h-1 bg-white/5 rounded-full overflow-hidden">
                             <div className={`h-full rounded-full transition-all duration-1000 ${val > 10 ? 'bg-red-400' : 'bg-emerald-400'}`} style={{ width: `${val}%` }} />
                           </div>

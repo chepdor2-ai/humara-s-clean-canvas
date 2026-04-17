@@ -7,6 +7,7 @@ import PricingSection from './PricingSection';
 import IPhoneMockup from './IPhoneMockup';
 import HeroVideo from './HeroVideo';
 import { FadeInUp, StaggerContainer, StaggerItem, ScaleIn } from './components/animations/ScrollReveal';
+import { DetectorBrandIcon } from '@/components/detector/detector-brand-icon';
 
 export const metadata: Metadata = {
   title: 'HumaraGPT — Best AI Text Humanizer 2026 | 16+ Engines | Bypass Turnitin & GPTZero',
@@ -123,7 +124,15 @@ export default function Home() {
           <p className="text-[10px] sm:text-xs font-medium text-gray-500 uppercase tracking-wider mb-3">Bypasses leading AI detectors</p>
           <div className="flex flex-wrap justify-center items-center gap-4 sm:gap-10 text-slate-500 dark:text-gray-500">
             {['Turnitin', 'GPTZero', 'Originality.AI', 'Copyleaks', 'Winston AI'].map(name => (
-              <span key={name} className="text-xs sm:text-sm font-semibold hover:text-slate-700 dark:hover:text-gray-300 transition-colors cursor-default">{name}</span>
+              <span key={name} className="inline-flex items-center gap-2 text-xs sm:text-sm font-semibold hover:text-slate-700 dark:hover:text-gray-300 transition-colors cursor-default">
+                <DetectorBrandIcon
+                  name={name}
+                  size={16}
+                  className="rounded-sm border border-slate-300/80 dark:border-white/15"
+                  imageClassName="rounded-sm"
+                />
+                <span>{name}</span>
+              </span>
             ))}
           </div>
         </FadeInUp>
@@ -555,7 +564,15 @@ export default function Home() {
               { name: 'Copyleaks', before: '96%', after: '3%' },
             ].map((d) => (
               <StaggerItem key={d.name} className="ref-card p-4 bg-white dark:bg-[#0F0F17] rounded-2xl border border-slate-200 dark:border-white/10 text-center hover:scale-[1.03] transition-transform duration-300">
-                <p className="text-xs font-medium text-slate-600 dark:text-slate-600 dark:text-gray-500 mb-2">{d.name}</p>
+                <div className="mb-2 flex items-center justify-center gap-1.5">
+                  <DetectorBrandIcon
+                    name={d.name}
+                    size={14}
+                    className="rounded-sm border border-slate-300/80 dark:border-white/15"
+                    imageClassName="rounded-sm"
+                  />
+                  <p className="text-xs font-medium text-slate-600 dark:text-gray-500">{d.name}</p>
+                </div>
                 <div className="flex items-center justify-center gap-2">
                   <span className="text-sm font-bold text-red-500 line-through">{d.before}</span>
                   <ArrowRight className="w-3 h-3 text-gray-600" />

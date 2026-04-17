@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { Zap, CheckCircle2 } from 'lucide-react';
+import { DetectorBrandIcon } from '@/components/detector/detector-brand-icon';
 
 /* ── Simulated detector data ─────────────────────────────────────────── */
 const DETECTORS = [
@@ -25,7 +26,15 @@ const AnimBar = ({ name, aiScore, animate }: { name: string; aiScore: number; an
   const humanScore = 100 - val;
   return (
     <div className="flex items-center gap-2">
-      <span className="text-[11px] font-medium text-gray-400 w-[85px] truncate">{name}</span>
+      <div className="flex w-[122px] min-w-[122px] items-center gap-1.5">
+        <DetectorBrandIcon
+          name={name}
+          size={14}
+          className="rounded-sm border border-white/15"
+          imageClassName="rounded-sm"
+        />
+        <span className="text-[11px] font-medium text-gray-400 flex-1 truncate">{name}</span>
+      </div>
       <div className="flex-1 h-2 bg-emerald-400/20 rounded-full overflow-hidden flex">
         <div className="h-full bg-red-400 rounded-l-full" style={{ width: `${val}%`, transition: 'width 1.2s cubic-bezier(.4,0,.2,1)' }} />
       </div>

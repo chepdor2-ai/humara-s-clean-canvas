@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import { Zap, CheckCircle2, ShieldCheck } from 'lucide-react';
 import Image from 'next/image';
 import { motion } from 'framer-motion';
+import { DetectorBrandIcon } from '@/components/detector/detector-brand-icon';
 
 const DETECTORS = [
   { name: 'GPTZero', beforeAi: 94, afterAi: 1 },
@@ -155,7 +156,15 @@ export default function MacBookMockup() {
                   <div className="mt-2 pt-2 border-t border-white/5 space-y-0.5 hidden sm:block">
                     {DETECTORS.map(d => (
                       <div key={d.name} className="flex items-center gap-1">
-                        <span className="text-[7px] text-gray-500 w-[60px] truncate">{d.name}</span>
+                        <div className="flex w-[82px] min-w-[82px] items-center gap-1">
+                          <DetectorBrandIcon
+                            name={d.name}
+                            size={10}
+                            className="rounded-sm border border-white/15"
+                            imageClassName="rounded-sm"
+                          />
+                          <span className="text-[7px] text-gray-500 flex-1 truncate">{d.name}</span>
+                        </div>
                         <div className="flex-1 h-0.5 bg-white/5 rounded-full overflow-hidden">
                           <div className="h-full bg-red-400 rounded-full" style={{ width: `${d.beforeAi}%`, transition: 'width 1s ease' }} />
                         </div>
@@ -186,7 +195,15 @@ export default function MacBookMockup() {
                   <div className="mt-2 pt-2 border-t border-emerald-500/10 space-y-0.5 hidden sm:block">
                     {DETECTORS.map(d => (
                       <div key={d.name} className="flex items-center gap-1">
-                        <span className="text-[7px] text-gray-500 w-[60px] truncate">{d.name}</span>
+                        <div className="flex w-[82px] min-w-[82px] items-center gap-1">
+                          <DetectorBrandIcon
+                            name={d.name}
+                            size={10}
+                            className="rounded-sm border border-white/15"
+                            imageClassName="rounded-sm"
+                          />
+                          <span className="text-[7px] text-gray-500 flex-1 truncate">{d.name}</span>
+                        </div>
                         <div className="flex-1 h-0.5 bg-white/5 rounded-full overflow-hidden">
                           <div className={`h-full rounded-full ${d.afterAi > 5 ? 'bg-red-400' : 'bg-emerald-400'}`} style={{ width: `${Math.max(d.afterAi, 1)}%`, transition: 'width 1s ease' }} />
                         </div>

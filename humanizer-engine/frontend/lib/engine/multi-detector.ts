@@ -196,6 +196,36 @@ const HUMAN_POSITIVE_SIGNALS = new Set([
   "spectral_flatness", "lexical_density_var", "dependency_depth",
 ]);
 
+const STRICT_AI_SIGNALS = [
+  "ai_pattern_score",
+  "per_sentence_ai_ratio",
+  "token_predictability",
+  "ngram_repetition",
+  "sentence_uniformity",
+  "paragraph_uniformity",
+  "function_word_freq",
+  "avg_word_commonality",
+];
+
+const DETECTOR_VERDICT_THRESHOLDS = {
+  aiGenerated: 74,
+  likelyAi: 52,
+  mixed: 28,
+};
+
+function classifyAiScore(aiScore: number): { verdict: string; confidence: string } {
+  if (aiScore >= DETECTOR_VERDICT_THRESHOLDS.aiGenerated) {
+    return { verdict: "AI-Generated", confidence: "High" };
+  }
+  if (aiScore >= DETECTOR_VERDICT_THRESHOLDS.likelyAi) {
+    return { verdict: "Likely AI", confidence: "Medium" };
+  }
+  if (aiScore >= DETECTOR_VERDICT_THRESHOLDS.mixed) {
+    return { verdict: "Mixed / Uncertain", confidence: "Low" };
+  }
+  return { verdict: "Human-Written", confidence: aiScore <= 16 ? "High" : "Medium" };
+}
+
 // ── Text Signals ──
 
 export class TextSignals {
@@ -607,7 +637,7 @@ export class TextSignals {
     const logRanks = sorted.map((_, i) => Math.log(i + 1));
     const logFreqs = sorted.map((f) => f > 0 ? Math.log(f) : 0);
     const { rSquared } = linearRegression(logRanks, logFreqs);
-    let raw = sigNorm(rSquared, 0.90, 25.0);
+    const raw = sigNorm(rSquared, 0.90, 25.0);
     if (this.wordCount < 150) {
       const factor = Math.max(0, this.wordCount - 40) / 110.0;
       return clamp(raw * factor + 50.0 * (1 - factor));
@@ -880,6 +910,15 @@ interface DetectorConfig {
   description?: string;
 }
 
+type DetectorScoreOutput = {
+  detector: string;
+  ai_score: number;
+  human_score: number;
+  verdict: string;
+  confidence: string;
+  category: string;
+};
+
 class DetectorProfile {
   name: string;
   displayName: string;
@@ -901,9 +940,9 @@ class DetectorProfile {
     this.description = config.description ?? "";
   }
 
-  score(signals: Record<string, number>, calibration?: Record<string, { a: number; b: number }>): Record<string, any> {
-    const GLOBAL_BIAS = 0.03;
-    const GLOBAL_TEMP_MULT = 2.0;
+  score(signals: Record<string, number>, calibration?: Record<string, { a: number; b: number }>): DetectorScoreOutput {
+    const GLOBAL_BIAS = 0.09;
+    const GLOBAL_TEMP_MULT = 2.35;
 
     const normalized: Record<string, number> = {};
     for (const [sigName, sigVal] of Object.entries(signals)) {
@@ -922,24 +961,43 @@ class DetectorProfile {
       }
     }
 
+    // Strict AI signature uplift: if multiple high-risk micro-signals align,
+    // increase probability aggressively to reduce false negatives on real AI text.
+    const strictVector = STRICT_AI_SIGNALS.map((sig) => {
+      const raw = ((signals[sig] ?? 50) - 50) / 50;
+      return Math.max(raw, 0);
+    });
+    const strictComposite = strictVector.length > 0 ? mean(strictVector) : 0;
+    const strictTriggerCount = strictVector.filter((v) => v >= 0.24).length;
+
+    if (strictComposite > 0.16) z += strictComposite * 1.05;
+    if (strictTriggerCount >= 3) z += 0.22;
+
+    if ((signals.ai_pattern_score ?? 0) >= 70 && (signals.per_sentence_ai_ratio ?? 0) >= 42) z += 0.30;
+    if ((signals.token_predictability ?? 0) >= 64 && (signals.sentence_uniformity ?? 0) >= 66) z += 0.18;
+    if ((signals.function_word_freq ?? 0) >= 62 && (signals.ngram_repetition ?? 0) >= 60) z += 0.14;
+
     let aiProb = sigmoid(z * this.temperature * GLOBAL_TEMP_MULT) * 100.0;
     if (calibration?.[this.name]) {
       const c = calibration[this.name];
       aiProb = plattCalibrate(aiProb, c.a, c.b);
     }
 
+    // Hard floors when strongest AI signatures co-occur.
+    if ((signals.ai_pattern_score ?? 0) >= 82 && (signals.per_sentence_ai_ratio ?? 0) >= 58) {
+      aiProb = Math.max(aiProb, 78);
+    } else if ((signals.ai_pattern_score ?? 0) >= 70 && (signals.per_sentence_ai_ratio ?? 0) >= 42 && (signals.token_predictability ?? 0) >= 64) {
+      aiProb = Math.max(aiProb, 66);
+    }
+
     // Confidence threshold: scores below 3% are within noise margin
     // Real detectors do not distinguish sub-3% from 0% — GPTZero/Turnitin
     // report "Human" for anything below 5%
     let aiScore = Math.round(clamp(aiProb) * 10) / 10;
-    if (aiScore < 3.0) aiScore = 0;
+    if (aiScore < 2.5) aiScore = 0;
     const humanScore = Math.round((100 - aiScore) * 10) / 10;
 
-    let verdict: string, confidence: string;
-    if (aiScore >= 80) { verdict = "AI-Generated"; confidence = "High"; }
-    else if (aiScore >= 58) { verdict = "Likely AI"; confidence = "Medium"; }
-    else if (aiScore >= 35) { verdict = "Mixed / Uncertain"; confidence = "Low"; }
-    else { verdict = "Human-Written"; confidence = "High"; }
+    const { verdict, confidence } = classifyAiScore(aiScore);
 
     return { detector: this.displayName, ai_score: aiScore, human_score: humanScore, verdict, confidence, category: this.category };
   }
@@ -1006,7 +1064,7 @@ const DETECTOR_PROFILES: DetectorProfile[] = [
 // ── Multi-Detector Orchestrator ──
 
 const TIER_WEIGHTS: Record<string, number> = {
-  academic: 2.5, "mid-tier": 1.6, "lower-tier": 0.7, research: 1.2, custom: 3.0,
+  academic: 3.2, "mid-tier": 1.9, "lower-tier": 0.8, research: 1.5, custom: 3.6,
 };
 
 export interface DetectorResult {
@@ -1057,16 +1115,16 @@ export class MultiDetector {
       p.score(signals, this.calibration) as DetectorResult,
     );
 
-    // Length-reliability damping
-    const lengthFactor = Math.max(0.05, Math.min(1.0, (sigObj.wordCount - 20) / 100.0));
+    // Length reliability: still damp short text, but less aggressively than before.
+    const lengthFactor = Math.max(0.15, Math.min(1.0, (sigObj.wordCount - 12) / 70.0));
+    const shortTextAnchor = 62.0;
     if (lengthFactor < 1.0) {
       for (const d of detectorResults) {
-        d.ai_score = Math.round(clamp(d.ai_score * lengthFactor + 50.0 * (1.0 - lengthFactor)) * 10) / 10;
+        d.ai_score = Math.round(clamp(d.ai_score * lengthFactor + shortTextAnchor * (1.0 - lengthFactor)) * 10) / 10;
         d.human_score = Math.round((100 - d.ai_score) * 10) / 10;
-        if (d.ai_score >= 80) { d.verdict = "AI-Generated"; d.confidence = "High"; }
-        else if (d.ai_score >= 58) { d.verdict = "Likely AI"; d.confidence = "Medium"; }
-        else if (d.ai_score >= 35) { d.verdict = "Mixed / Uncertain"; d.confidence = "Low"; }
-        else { d.verdict = "Human-Written"; d.confidence = "High"; }
+        const classified = classifyAiScore(d.ai_score);
+        d.verdict = classified.verdict;
+        d.confidence = classified.confidence;
       }
     }
 
@@ -1081,17 +1139,38 @@ export class MultiDetector {
     }
     let weightedAvg = weightTotal > 0 ? weightedSum / weightTotal : 50;
 
+    // Global strict-signal boost across the document.
+    const strictSignalBoost =
+      Math.max(0, ((signals.ai_pattern_score ?? 0) - 58) * 0.10) +
+      Math.max(0, ((signals.per_sentence_ai_ratio ?? 0) - 42) * 0.08) +
+      Math.max(0, ((signals.token_predictability ?? 0) - 58) * 0.05);
+    weightedAvg += Math.min(strictSignalBoost, 14);
+
+    // Consensus lift: many detectors firing together should lift final score.
+    const highRiskCount = detectorResults.filter((d) => d.ai_score >= 70).length;
+    const mediumRiskCount = detectorResults.filter((d) => d.ai_score >= DETECTOR_VERDICT_THRESHOLDS.likelyAi).length;
+    weightedAvg += highRiskCount * 0.9 + mediumRiskCount * 0.25;
+    weightedAvg = clamp(weightedAvg);
+
+    if (highRiskCount >= Math.ceil(detectorResults.length * 0.45)) {
+      weightedAvg = Math.max(weightedAvg, 72);
+    }
+    if (mediumRiskCount >= Math.ceil(detectorResults.length * 0.55)) {
+      weightedAvg = Math.max(weightedAvg, 56);
+    }
+
     // Contrast amplification
     const p = weightedAvg / 100;
-    weightedAvg = sigmoid((p - 0.5) * 6.0) * 100;
+    weightedAvg = sigmoid((p - 0.46) * 7.6) * 100;
+    weightedAvg = clamp(weightedAvg);
 
     const aiCount = detectorResults.filter((d) => ["AI-Generated", "Likely AI"].includes(d.verdict)).length;
     const humanCount = detectorResults.filter((d) => d.verdict === "Human-Written").length;
 
-    // Length-adaptive thresholds
-    const aiThreshold = 75 + (1 - lengthFactor) * 10;
-    const likelyThreshold = 50 + (1 - lengthFactor) * 10;
-    const mixedThreshold = 30 + (1 - lengthFactor) * 5;
+    // Length-adaptive thresholds (strict mode).
+    const aiThreshold = 68 + (1 - lengthFactor) * 6;
+    const likelyThreshold = 46 + (1 - lengthFactor) * 8;
+    const mixedThreshold = 24 + (1 - lengthFactor) * 5;
 
     let overall: string;
     if (weightedAvg >= aiThreshold) overall = "AI-Generated";
