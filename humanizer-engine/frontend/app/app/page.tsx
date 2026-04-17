@@ -8,7 +8,6 @@ import UsageBar, { useUsage, UsageProvider } from './UsageBar';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../AuthProvider';
 import Link from 'next/link';
-import WaterJugProgress from '../components/WaterJugProgress';
 import { DiffView } from '@/components/humanizer/diff-view';
 import { MetricsStrip } from '@/components/humanizer/metrics-strip';
 import { SentenceMeter } from '@/components/humanizer/sentence-meter';
@@ -416,11 +415,6 @@ function EditorPageInner() {
   const [outputView, setOutputView] = useState<OutputView>('result');
   const [runSalt, setRunSalt] = useState(0);
 
-  // Typewriter animation state
-  const [typewriterSource, setTypewriterSource] = useState('');
-  const [typewriterActive, setTypewriterActive] = useState(false);
-  const [typewriterRendered, setTypewriterRendered] = useState('');
-
   // Temporary history (auto-expires)
   const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -503,31 +497,6 @@ function EditorPageInner() {
     }
   }, []);
 
-  // Typewriter effect: animate output text character by character
-  useEffect(() => {
-    if (!typewriterActive || !typewriterSource) return;
-    let idx = 0;
-    const cps = 1200; // superfast reveal while preserving progressive typing
-    let raf: number;
-    let last = 0;
-    const step = (ts: number) => {
-      if (!last) last = ts;
-      const delta = ts - last;
-      if (delta >= 1000 / cps) {
-        last = ts;
-        idx = Math.min(idx + Math.max(1, Math.floor(delta / (1000 / cps))), typewriterSource.length);
-        setTypewriterRendered(toLowerSentenceStyle(typewriterSource.slice(0, idx)));
-      }
-      if (idx < typewriterSource.length) {
-        raf = requestAnimationFrame(step);
-      } else {
-        setTypewriterActive(false);
-      }
-    };
-    raf = requestAnimationFrame(step);
-    return () => cancelAnimationFrame(raf);
-  }, [typewriterActive, typewriterSource]);
-
   // Auto-expire history entries after TTL
   useEffect(() => {
     if (history.length === 0) return;
@@ -538,71 +507,19 @@ function EditorPageInner() {
     return () => clearInterval(interval);
   }, [history.length]);
 
-  // Ease visible progress toward real streamed updates, but keep filling between sparse
-  // server events so full-text engines do not appear stuck at 0%.
+  // Keep processing progress updates static (no motion interpolation).
   useEffect(() => {
     if (!isAnimating) return;
-    if (!streamStageStartedAtRef.current || !streamLastActivityAtRef.current) {
-      resetStreamActivityClock();
-    }
-    const tick = window.setInterval(() => {
-      setStreamProgress(prev => {
-        const now = typeof performance !== 'undefined' ? performance.now() : Date.now();
-        const stageAge = Math.max(0, now - streamStageStartedAtRef.current);
-        const quietAge = Math.max(0, now - streamLastActivityAtRef.current);
-
-        if (streamProgressTarget < prev && streamProgressTarget <= 2) {
-          const drained = Math.max(streamProgressTarget, prev - 5.25);
-          if (stageAge < 260 || drained > streamProgressTarget + 1.5) {
-            return drained;
-          }
-        }
-
-        let resolvedTarget = streamProgressTarget;
-        if (resolvedTarget < 99) {
-          const stageCap = /analyzing/i.test(visibleProcessingStage)
-            ? 96
-            : /initializing|engine processing/i.test(visibleProcessingStage)
-              ? 62
-              : 84;
-          const warmupTarget = Math.min(stageCap, 6 + stageAge / 150);
-          resolvedTarget = Math.max(resolvedTarget, warmupTarget);
-
-          if (quietAge > 480) {
-            const quietFillTarget = Math.min(stageCap, warmupTarget + (quietAge - 480) / 115);
-            resolvedTarget = Math.max(resolvedTarget, quietFillTarget);
-          }
-        }
-
-        if (streamProgressTarget >= 100) {
-          resolvedTarget = 100;
-        }
-
-        const delta = resolvedTarget - prev;
-        if (Math.abs(delta) < 0.25) return resolvedTarget;
-        const step = delta > 0
-          ? Math.max(0.5, Math.min(2.6, Math.abs(delta) * 0.09))
-          : Math.max(0.8, Math.min(5.2, Math.abs(delta) * 0.24));
-        return prev + Math.sign(delta) * Math.min(step, Math.abs(delta));
-      });
-    }, 16);
-    return () => window.clearInterval(tick);
-  }, [isAnimating, resetStreamActivityClock, streamProgressTarget, visibleProcessingStage]);
+    setStreamProgress(streamProgressTarget);
+  }, [isAnimating, streamProgressTarget]);
 
   useEffect(() => {
     setProcessingMessageIndex(0);
   }, [visibleProcessingStage]);
 
   useEffect(() => {
-    if (!isAnimating) {
-      setProcessingMessageIndex(0);
-      return;
-    }
-    const timer = window.setInterval(() => {
-      setProcessingMessageIndex(prev => (prev + 1) % processingMessages.length);
-    }, 2200);
-    return () => window.clearInterval(timer);
-  }, [isAnimating, processingMessages.length]);
+    if (!isAnimating) setProcessingMessageIndex(0);
+  }, [isAnimating]);
 
   const addToHistory = useCallback((input: string, output: string, eng: string, aiBefore: number, aiAfter: number, wc: number) => {
     const entry: HistoryEntry = {
@@ -924,9 +841,6 @@ function EditorPageInner() {
         }
 
         setResult(currentResult);
-        setTypewriterSource(currentResult);
-        setTypewriterRendered('');
-        setTypewriterActive(true);
         setRunSalt(prev => prev + 1);
         setMeaningScore(finalData.meaning_similarity as number);
 
@@ -947,9 +861,7 @@ function EditorPageInner() {
         refreshUsage();
 
         setStreamProgressTarget(100);
-        await new Promise(resolve => setTimeout(resolve, 110));
         setStreamProgress(100);
-        await new Promise(resolve => setTimeout(resolve, 24));
         setIsAnimating(false);
       }
     } catch (err) {
@@ -993,9 +905,6 @@ function EditorPageInner() {
           rephrased = checker.correctAll(rephrased);
         }
         setResult(rephrased);
-        setTypewriterSource(rephrased);
-        setTypewriterRendered('');
-        setTypewriterActive(true);
         setRunSalt(prev => prev + 1);
         setMeaningScore(finalData.meaning_similarity as number);
         // Detection disabled — coming soon
@@ -1007,9 +916,7 @@ function EditorPageInner() {
         refreshUsage();
 
         setStreamProgressTarget(100);
-        await new Promise(resolve => setTimeout(resolve, 110));
         setStreamProgress(100);
-        await new Promise(resolve => setTimeout(resolve, 24));
         setIsAnimating(false);
       }
     } catch (err) {
@@ -1390,7 +1297,7 @@ function EditorPageInner() {
             whileTap={{ scale: 0.97 }}
             transition={{ type: 'spring', stiffness: 400, damping: 17 }}
             className="w-full sm:w-auto sm:ml-auto bg-gradient-to-r from-cyan-600 to-teal-500 dark:from-cyan-700 dark:to-teal-600 hover:from-cyan-500 hover:to-teal-400 dark:hover:from-cyan-600 dark:hover:to-teal-500 text-white text-[11px] font-bold rounded-lg px-4 py-2 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-1.5 shadow-md hover:shadow-lg">
-            {loading ? <RotateCcw className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />}
+            {loading ? <RotateCcw className="w-3 h-3" /> : <Sparkles className="w-3 h-3" />}
             {loading ? 'Humanizing…' : 'Humanize'}
           </motion.button>
         </div>
@@ -1447,7 +1354,7 @@ function EditorPageInner() {
         </div>
       )}
       {ozoneUndetectWarning && (
-        <div className="flex items-center gap-1.5 px-1 animate-pulse">
+        <div className="flex items-center gap-1.5 px-1">
           <span className="text-amber-500 text-[9px]">⚠️</span>
           <p className="text-[9px] text-amber-600 dark:text-amber-400 font-medium">Undetectability always enabled for Humara 2.1</p>
         </div>
@@ -1548,7 +1455,7 @@ function EditorPageInner() {
         <div className="stealth-editor-panel bg-[linear-gradient(145deg,rgba(255,255,255,.95),rgba(255,255,255,.94))] dark:bg-[linear-gradient(145deg,rgba(9,14,22,.95),rgba(9,12,19,.94))] border border-slate-200 dark:border-cyan-900/30 rounded-2xl overflow-hidden flex flex-col hover:border-slate-300 dark:hover:border-cyan-800/40 transition-all shadow-sm dark:shadow-[0_20px_40px_-28px_rgba(8,145,178,.5)]">
           <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100 dark:border-cyan-900/25 gap-3">
             <div className="flex items-center gap-2.5">
-              <div className="w-2 h-2 rounded-full bg-cyan-500 dark:bg-cyan-400 animate-pulse" />
+              <div className="w-2 h-2 rounded-full bg-cyan-500 dark:bg-cyan-400" />
               <span className="text-sm font-semibold text-slate-800 dark:text-zinc-100 tracking-tight">Input</span>
             </div>
             <div className="flex items-center gap-2.5 shrink-0">
@@ -1620,13 +1527,13 @@ function EditorPageInner() {
                   <button onClick={handleRehumanizeFlagged} disabled={rehumanizing || loading}
                     className="text-[11px] font-semibold text-amber-600 dark:text-amber-500 hover:text-amber-700 dark:hover:text-amber-300 px-1.5 sm:px-2 py-1 rounded-lg hover:bg-amber-50 dark:hover:bg-amber-950/30 transition-all flex items-center gap-1 disabled:opacity-50"
                     title="Fix flagged AI sentences">
-                    <AlertTriangle className={`w-3 h-3 ${rehumanizing ? 'animate-pulse' : ''}`} />
+                    <AlertTriangle className="w-3 h-3" />
                     {rehumanizing ? 'Fixing…' : 'Fix AI'}
                   </button>
                   <button onClick={handleRephrase} disabled={rephrasing || loading}
                     className="text-[11px] font-semibold text-cyan-600 dark:text-cyan-400 hover:text-cyan-700 dark:hover:text-cyan-300 px-1.5 sm:px-2 py-1 rounded-lg hover:bg-cyan-50 dark:hover:bg-cyan-950/30 transition-all flex items-center gap-1 disabled:opacity-50"
                     title="Rephrase output">
-                    <RefreshCw className={`w-3 h-3 ${rephrasing ? 'animate-spin' : ''}`} />
+                    <RefreshCw className="w-3 h-3" />
                     {rephrasing ? 'Rephrasing…' : 'Rephrase'}
                   </button>
                   <button onClick={handleCopy} className="p-1.5 text-slate-500 dark:text-brand-400 hover:text-slate-700 hover:bg-slate-100 dark:hover:bg-brand-950 rounded-md transition-colors" title="Copy">
@@ -1639,73 +1546,24 @@ function EditorPageInner() {
           </div>
 
           {isAnimating ? (
-            <div className={`relative flex flex-col items-center justify-center ${EDITOR_HEIGHT_CLASS} overflow-hidden px-3 py-5 sm:px-4 sm:py-6`}>
-              <div className="processing-water-panel absolute inset-0" />
-              <div className="processing-water-aura processing-water-aura-left" />
-              <div className="processing-water-aura processing-water-aura-right" />
-              <div className="processing-water-grid absolute inset-0" />
-              <div className="processing-sheen processing-sheen-top" />
-              <div className="processing-sheen processing-sheen-bottom" />
+            <div className={`relative flex flex-col items-center justify-center ${EDITOR_HEIGHT_CLASS} px-4 py-6 sm:px-5`}>
+              <div className="w-full max-w-[560px] rounded-xl border border-slate-200 dark:border-zinc-800 bg-slate-50 dark:bg-zinc-900/40 p-4 sm:p-5">
+                <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-cyan-700 dark:text-cyan-300">Humanizing</p>
+                <p className="mt-1 truncate text-sm font-semibold text-slate-800 dark:text-zinc-100">{visibleProcessingStage}</p>
+                <p className="mt-2 text-xs leading-5 text-slate-600 dark:text-zinc-300">{processingMessage}</p>
 
-              <div className="relative z-10 flex w-full max-w-[560px] flex-col items-center gap-4 sm:gap-5">
-                <div className="processing-headline-row">
-                  <div className="flex flex-wrap items-center justify-center gap-2">
-                    <span className="processing-pill processing-pill-strong">{activeEngineLabel}</span>
-                    <span className="processing-pill processing-pill-teal">Live stream</span>
-                    <span className="processing-pill processing-pill-soft">
-                      {streamPhaseIndex > 0 ? `Phase ${streamPhaseIndex}/${streamTotalPhases}` : MODE_LABELS[mode]}
-                    </span>
-                  </div>
-                  <span className="processing-live-chip">
-                    <span className="processing-live-dot" />
-                    Rendering
-                  </span>
+                <div className="mt-3 flex items-center justify-between text-xs font-semibold text-slate-600 dark:text-zinc-300">
+                  <span>{activeEngineLabel}</span>
+                  <span>{Math.round(streamProgress)}%</span>
                 </div>
 
-                <div className="relative flex items-center justify-center">
-                  <span className="processing-ripple processing-ripple-one" />
-                  <span className="processing-ripple processing-ripple-two" />
-                  <span className="processing-ripple processing-ripple-three" />
-                  <span className="processing-orbit processing-orbit-one" />
-                  <span className="processing-orbit processing-orbit-two" />
-                  <span className="processing-orbit processing-orbit-three" />
-                  <span className="processing-beam" />
-                  <WaterJugProgress
-                    percent={streamProgress}
-                    phaseName={streamPhaseName || undefined}
-                    phaseIndex={streamPhaseIndex}
-                    totalPhases={streamTotalPhases}
-                  />
-                </div>
-
-                <div className="processing-stage-card w-full">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-cyan-700/80 dark:text-cyan-300/75">
-                        Current stage
-                      </p>
-                      <p className="mt-1 truncate text-sm font-semibold text-slate-800 dark:text-zinc-100">
-                        {visibleProcessingStage}
-                      </p>
+                <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
+                  {processingStatusItems.map(item => (
+                    <div key={item.label} className="rounded-lg border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900/70 px-2 py-2">
+                      <p className="text-[10px] uppercase tracking-wide text-slate-500 dark:text-zinc-400">{item.label}</p>
+                      <p className="mt-0.5 truncate text-xs font-semibold text-slate-700 dark:text-zinc-200">{item.value}</p>
                     </div>
-                    <div className="processing-meter-chip">
-                      <Clock className="h-3.5 w-3.5" />
-                      {Math.round(streamProgress)}%
-                    </div>
-                  </div>
-
-                  <p className="mt-3 text-[12px] leading-5 text-slate-600 dark:text-zinc-300">
-                    {processingMessage}
-                  </p>
-
-                  <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-3">
-                    {processingStatusItems.map(item => (
-                      <div key={item.label} className="processing-mini-stat">
-                        <span className="processing-mini-stat-label">{item.label}</span>
-                        <span className="processing-mini-stat-value">{item.value}</span>
-                      </div>
-                    ))}
-                  </div>
+                  ))}
                 </div>
               </div>
             </div>
@@ -1717,9 +1575,9 @@ function EditorPageInner() {
                 <MetricsStrip text={result} label="Output" />
               </div>
               {outputView === 'result' && (
-                <textarea ref={outputRef} value={typewriterActive ? typewriterRendered : result}
-                  onChange={(e) => { setResult(e.target.value); setTypewriterActive(false); }} onSelect={handleOutputSelect}
-                  className={`relative z-10 flex-1 w-full h-[calc(100%-2.5rem)] bg-transparent outline-none resize-y overflow-y-auto text-[14px] leading-[1.8] text-slate-800 dark:text-zinc-200 p-5 cursor-text ${typewriterActive ? 'caret-transparent' : ''}`}
+                <textarea ref={outputRef} value={result}
+                  onChange={(e) => { setResult(e.target.value); }} onSelect={handleOutputSelect}
+                  className="relative z-10 flex-1 w-full h-[calc(100%-2.5rem)] bg-transparent outline-none resize-y overflow-y-auto text-[14px] leading-[1.8] text-slate-800 dark:text-zinc-200 p-5 cursor-text"
                   style={{ fontFamily: 'inherit' }}
                   placeholder="Output appears here…" />
               )}
@@ -1756,7 +1614,7 @@ function EditorPageInner() {
               <div className="max-h-56 overflow-y-auto">
                 {loadingPopup ? (
                   <div className="px-3 py-4 text-xs text-slate-400 dark:text-zinc-500 text-center flex items-center justify-center gap-1.5">
-                    <RotateCcw className="w-3 h-3 animate-spin" /> Finding…
+                    <RotateCcw className="w-3 h-3" /> Finding…
                   </div>
                 ) : synonyms.length > 0 ? (
                   synonyms.map((syn, idx) => (
@@ -1796,7 +1654,7 @@ function EditorPageInner() {
               <div className="max-h-[350px] overflow-y-auto">
                 {loadingPopup ? (
                   <div className="px-3 py-5 text-xs text-slate-500 dark:text-zinc-500 text-center flex flex-col items-center gap-2">
-                    <RotateCcw className="w-4 h-4 animate-spin" /> Generating…
+                    <RotateCcw className="w-4 h-4" /> Generating…
                   </div>
                 ) : sentenceAlternatives.length > 0 ? (
                   sentenceAlternatives.map((alt, idx) => (
