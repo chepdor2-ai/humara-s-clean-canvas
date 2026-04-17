@@ -182,6 +182,19 @@ const PROTECTED = new Set([
   'vital', 'monitoring', 'clinical', 'intervention', 'patient',
   'medication', 'chronic', 'diagnosis', 'therapeutic',
   'impacted', 'interaction', 'delivery',
+  // Common words that garble when replaced across iterations
+  'collection', 'collections', 'approach', 'approaches',
+  'process', 'processes', 'level', 'levels',
+  'opportunities', 'opportunity', 'produced', 'producing',
+  'shifted', 'shifting', 'conversations', 'conversation',
+  'education', 'educational', 'learning', 'teaching',
+  'students', 'student', 'teachers', 'teacher',
+  'pose', 'poses', 'posed', 'posing',
+  'raise', 'raises', 'raised', 'raising',
+  'change', 'changes', 'changed', 'changing',
+  'focus', 'focused', 'focusing',
+  'provide', 'provides', 'provided', 'providing',
+  'concerns', 'concern', 'create', 'creates', 'created',
 ]);
 
 /* ── Helper: check if a token is a proper noun (capitalized, non-sentence-start) ── */
@@ -189,6 +202,16 @@ const PROTECTED = new Set([
 function isProperNoun(token: string, index: number, tokens: string[]): boolean {
   // If it starts with uppercase and is not just a normal word
   if (!/^[A-Z]/.test(token)) return false;
+  // Citation names: word followed by "et" (as in "et al.") — look far ahead due to \b boundary tokens
+  const ahead = tokens.slice(index + 1, Math.min(tokens.length, index + 12)).join('').trim().toLowerCase();
+  if (ahead.startsWith('et al') || ahead.startsWith('et. al')) return true;
+  // Preceded by "(" — likely citation
+  for (let j = index - 1; j >= 0; j--) {
+    const prev = tokens[j];
+    if (prev === '' || /^\s+$/.test(prev)) continue;
+    if (prev === '(') return true; // parenthetical citation
+    break;
+  }
   // Check if it's at sentence start (after period, start of string, or after sentence boundary)
   if (index === 0) return false; // first token — likely sentence start
   // Look backward for sentence boundary
@@ -285,6 +308,21 @@ const REPLACEMENT_BLACKLIST = new Set([
   'deficit', 'deficits', 'scarcity', 'shortage', 'absence', // noun-only, wrong when replacing verb "lack"
   // affect/effect confusion prevention
   'effected', 'effecting', // almost always wrong (should be "affected"/"affecting")
+  // Extended dict wrong-sense outputs (found in nuru testing)
+  'wrongdoer', 'wrongdoers', 'apiece', 'didactics', 'pedagogics',
+  'procession', 'processions', 'dispute', 'disputes',
+  'person', // wrong sense for "machine"
+  'rattling', // wrong register for academic
+  'anticipate', 'anticipated', // wrong when replacing nouns like "potential"
+  'frightful', 'awful', 'terrible', 'howling', // wrong register for "tremendous"
+  'penury', 'indigence', 'impoverishment', // wrong for "needs"
+  'plow', 'plowed', 'plowing', // wrong sense for "discuss"/"address"
+  'treat', 'treated', // ambiguous sense
+  'demand', 'demands', // wrong sense for "needs" (too aggressive)
+  'foul', 'fouls', // wrong sense for "technical"
+  'latest', // causes "more latest" double comparative
+  'built', // wrong sense for "emerged/established"
+  'raiss', 'holmed', 'poss', // known garbled morphology outputs
 ]);
 
 /* ── Stopwords (skip for synonym replacement) ─────────────────────── */
@@ -338,7 +376,7 @@ const EXTRA_REPLACEMENTS: Record<string, string[]> = {
   information: ['data', 'details', 'facts', 'intelligence'],
   opportunity: ['prospect', 'opening', 'possibility', 'occasion'],
   community: ['group', 'network', 'collective', 'population'],
-  individual: ['person', 'single', 'distinct', 'separate'],
+  individual: ['particular', 'distinct', 'specific', 'separate'],
   organization: ['structure', 'arrangement', 'framework', 'body'],
   program: ['initiative', 'plan', 'project', 'effort'],
   activity: ['task', 'endeavor', 'undertaking', 'pursuit'],
@@ -368,7 +406,7 @@ const EXTRA_REPLACEMENTS: Record<string, string[]> = {
   vast: ['large', 'extensive', 'broad', 'sweeping'],
   observer: ['reviewer', 'analyst', 'examiner', 'assessor'],
   integration: ['incorporation', 'blending', 'merging', 'unification'],
-  potential: ['possible', 'probable', 'expected', 'likely'],
+  potential: ['capacity', 'promise', 'capability', 'prospect'],
   adoption: ['uptake', 'acceptance', 'incorporation', 'implementation'],
   // ── Words that produce catastrophic WordNet garble ──
   federal: ['national', 'governmental', 'central', 'public'],
@@ -410,7 +448,7 @@ const EXTRA_REPLACEMENTS: Record<string, string[]> = {
   urban: ['metropolitan', 'municipal', 'civic', 'city-based'],
   demographic: ['population', 'societal', 'communal'],
   transformation: ['shift', 'overhaul', 'conversion', 'evolution'],
-  change: ['shift', 'alteration', 'modification', 'adjustment'],
+  change: ['shift', 'alteration', 'adjustment', 'variation'],
   changes: ['shifts', 'alterations', 'modifications', 'adjustments'],
   growth: ['expansion', 'progress', 'development', 'advance'],
   level: ['degree', 'extent', 'measure', 'scale'],
@@ -486,7 +524,7 @@ const EXTRA_REPLACEMENTS: Record<string, string[]> = {
   common: ['frequent', 'typical', 'usual', 'routine'],
   entire: ['whole', 'complete', 'full', 'total'],
   obvious: ['clear', 'apparent', 'plain', 'evident'],
-  recent: ['latest', 'new', 'current', 'fresh'],
+  recent: ['new', 'current', 'fresh'],
   major: ['chief', 'principal', 'leading', 'primary'],
   numerous: ['many', 'several', 'multiple', 'abundant'],
   distinct: ['separate', 'unique', 'individual', 'different'],
@@ -605,7 +643,7 @@ const EXTRA_REPLACEMENTS: Record<string, string[]> = {
   action: ['step', 'measure', 'move', 'initiative'],
   // "lack" removed — verb/noun ambiguity causes POS mismatches
   amount: ['volume', 'quantity', 'total', 'sum'],
-  scholar: ['academic', 'researcher', 'expert', 'specialist'],
+  scholar: ['academic', 'intellectual', 'expert', 'specialist'],
   practitioner: ['professional', 'specialist', 'operator', 'expert'],
   expertise: ['skill', 'proficiency', 'competence', 'mastery'],
   question: ['inquiry', 'issue', 'matter', 'concern'],
@@ -647,8 +685,8 @@ const EXTRA_REPLACEMENTS: Record<string, string[]> = {
   application: ['use', 'exercise', 'deployment', 'practice'],
   remedy: ['solution', 'fix', 'cure', 'answer'],
   attention: ['focus', 'notice', 'regard', 'awareness'],
-  content: ['substance', 'material', 'body', 'subject'],
-  debate: ['discussion', 'discourse', 'dispute', 'dialogue'],
+  content: ['material', 'subject matter', 'information', 'subject'],
+  debate: ['discussion', 'discourse', 'dialogue', 'deliberation'],
   field: ['area', 'domain', 'sector', 'discipline'],
   work: ['research', 'effort', 'study', 'contribution'],
   trust: ['confidence', 'faith', 'belief', 'reliance'],
@@ -757,6 +795,13 @@ function transferMorphology(original: string, replacement: string): string {
     return replacement + 'ing';
   }
 
+  // 3rd person singular present: -s / -es (e.g. "examines" + "judge" → "judges")
+  if ((orig.endsWith('es') || (orig.endsWith('s') && !orig.endsWith('ss'))) && !rep.endsWith('s') && orig.length > 4) {
+    if (/(?:ch|sh|s|x|z)$/.test(rep)) return replacement + 'es';
+    if (rep.endsWith('y') && !'aeiou'.includes(rep[rep.length - 2] || '')) return replacement.slice(0, -1) + 'ies';
+    return replacement + 's';
+  }
+
   return replacement;
 }
 
@@ -793,7 +838,12 @@ function naiveStem(word: string): string {
     return base;
   }
   if (w.endsWith('ies') && w.length > 4) return w.slice(0, -3) + 'y';
-  if (w.endsWith('es') && w.length > 4) return w.slice(0, -2);
+  if (w.endsWith('es') && w.length > 4) {
+    // Try dropping -s first (e.g. "poses" → "pose", "raises" → "raise")
+    const dropS = w.slice(0, -1);
+    if (EXTRA_REPLACEMENTS[dropS] || AI_WORD_REPLACEMENTS[dropS]) return dropS;
+    return w.slice(0, -2);
+  }
   if (w.endsWith('s') && !w.endsWith('ss') && w.length > 3) return w.slice(0, -1);
   return w;
 }
@@ -1051,7 +1101,7 @@ function processSentence(
   // ─── Step 3b: Clause reordering ──────────────────────────────
   // Swap independent clauses around ", and ", ", but ", ", which " etc.
   // This adds structural change without changing any words.
-  if (Math.random() < 0.60 && text.length > 40) {
+  if (Math.random() < 0.25 && text.length > 40) {
     // Try swapping clauses around ", and " or ", but "
     const clauseSwapRe = /^(.{15,}?),\s+(and|but|yet)\s+(.{15,})$/i;
     const clauseMatch = text.match(clauseSwapRe);
@@ -1071,7 +1121,7 @@ function processSentence(
 
   // ─── Step 3c: Passive ↔ Active voice toggle ─────────────────
   // ~20% chance: convert "X is/was Yed by Z" → "Z Yed X" or vice versa
-  if (Math.random() < 0.45 && text.length > 30) {
+  if (Math.random() < 0.15 && text.length > 30) {
     // Passive → Active: "X is/was <verb>ed by Y" → "Y <verb>s X"
     const passiveRe = /\b(\w[\w\s]{2,30}?)\s+(is|are|was|were)\s+(\w+ed)\s+by\s+(\w[\w\s]{2,30}?)([.,;])/i;
     const pm = text.match(passiveRe);
@@ -1292,27 +1342,37 @@ export function stealthHumanizeTargeted(
     }
     const lower = token.toLowerCase();
 
+    // Skip proper nouns (capitalized mid-sentence words like citations)
+    if (isProperNoun(token, i, tokens)) {
+      resultTokens.push(token);
+      continue;
+    }
+
     // If this word is part of a flagged phrase, prioritize replacement
     if (flaggedWords.has(lower)) {
+      // Still skip stopwords and protected words even for flagged phrases
+      if (PROTECTED.has(lower) || STOPWORDS.has(lower)) {
+        resultTokens.push(token);
+        continue;
+      }
       const stemmed = naiveStem(lower);
       const rep = EXTRA_REPLACEMENTS[lower] || EXTRA_REPLACEMENTS[stemmed]
                 || AI_WORD_REPLACEMENTS[lower] || AI_WORD_REPLACEMENTS[stemmed];
       if (rep) {
-        const chosen = Array.isArray(rep) ? rep[Math.floor(Math.random() * rep.length)] : rep;
-        // Preserve capitalization
-        const final = /^[A-Z]/.test(token) ? chosen.charAt(0).toUpperCase() + chosen.slice(1) : chosen;
-        resultTokens.push(final);
-        replacements++;
-        continue;
+        const candidates = (Array.isArray(rep) ? rep : [rep])
+          .filter(r => /^[a-zA-Z]+$/.test(r) && r.length >= 2
+            && !REPLACEMENT_BLACKLIST.has(r.toLowerCase()) && r.toLowerCase() !== lower);
+        if (candidates.length > 0) {
+          const chosen = candidates[Math.floor(Math.random() * candidates.length)];
+          const final = /^[A-Z]/.test(token) ? chosen.charAt(0).toUpperCase() + chosen.slice(1) : chosen;
+          resultTokens.push(final);
+          replacements++;
+          continue;
+        }
       }
-      // Try dictionary service as last resort for flagged words
-      const dictRep = getBestReplacement(lower, 'noun');
-      if (dictRep && dictRep !== lower) {
-        const final = /^[A-Z]/.test(token) ? dictRep.charAt(0).toUpperCase() + dictRep.slice(1) : dictRep;
-        resultTokens.push(final);
-        replacements++;
-        continue;
-      }
+      // Skip extended dictionary fallback — it produces too many wrong-sense synonyms
+      resultTokens.push(token);
+      continue;
     }
 
     // Non-flagged words: standard replacement logic (lighter touch)
@@ -1324,10 +1384,17 @@ export function stealthHumanizeTargeted(
     const aiRep = EXTRA_REPLACEMENTS[lower] || EXTRA_REPLACEMENTS[stemmed]
                || AI_WORD_REPLACEMENTS[lower] || AI_WORD_REPLACEMENTS[stemmed];
     if (aiRep && Math.random() < 0.3) { // 30% chance for non-flagged words
-      const chosen = Array.isArray(aiRep) ? aiRep[Math.floor(Math.random() * aiRep.length)] : aiRep;
-      const final = /^[A-Z]/.test(token) ? chosen.charAt(0).toUpperCase() + chosen.slice(1) : chosen;
-      resultTokens.push(final);
-      replacements++;
+      const candidates = (Array.isArray(aiRep) ? aiRep : [aiRep])
+        .filter(r => /^[a-zA-Z]+$/.test(r) && r.length >= 2
+          && !REPLACEMENT_BLACKLIST.has(r.toLowerCase()) && r.toLowerCase() !== lower);
+      if (candidates.length > 0) {
+        const chosen = candidates[Math.floor(Math.random() * candidates.length)];
+        const final = /^[A-Z]/.test(token) ? chosen.charAt(0).toUpperCase() + chosen.slice(1) : chosen;
+        resultTokens.push(final);
+        replacements++;
+      } else {
+        resultTokens.push(token);
+      }
     } else {
       resultTokens.push(token);
     }

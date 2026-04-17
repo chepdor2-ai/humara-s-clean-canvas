@@ -1,5 +1,5 @@
 import { robustSentenceSplit } from '@/lib/engine/content-protection';
-import { getDetector } from '@/lib/engine/multi-detector';
+import { getDetector, TextSignals } from '@/lib/engine/multi-detector';
 import OpenAI from 'openai';
 import { isMeaningPreserved, isMeaningPreservedSync } from '@/lib/engine/semantic-guard';
 import { fixCapitalization, applyPhrasePatterns, fixPunctuation, expandAllContractions } from '@/lib/engine/shared-dictionaries';
@@ -312,7 +312,7 @@ export async function POST(req: Request) {
           const engineDisplayName = ENGINE_DISPLAY[eng] || eng;
 
           // Fast-loop engine detection (used for phase labeling + pipeline selection)
-          const FAST_REHUMANIZE_ENGINES = new Set(['nuru_v2', 'ghost_pro_wiki', 'oxygen', 'humara_v3_3', 'ninja_1', 'king']);
+          const FAST_REHUMANIZE_ENGINES = new Set(['nuru_v2', 'ghost_pro_wiki', 'oxygen', 'humara_v3_3', 'ninja_1', 'king', 'easy']);
 
           // Engines that use the phase pipeline (fast-loop + deep-kill)
           const PHASED_ENGINES = new Set([
@@ -874,70 +874,93 @@ export async function POST(req: Request) {
                   { name: 'Final Smooth & Grammar', type: 'sync', fn: (s) => finalSmoothGrammar(s) },
                 ];
                 break;
+              case 'easy':
+                phases = [
+                  { name: 'Nuru 2.0', type: 'nuru', passes: 10 },
+                  { name: 'Deep Non-LLM Clean', type: 'sync', fn: (s) => deepNonLLMClean(s) },
+                  { name: 'Final Smooth & Grammar', type: 'sync', fn: (s) => finalSmoothGrammar(s) },
+                ];
+                break;
               // Deep Kill engines — multi-step pipelines with visible phases
               case 'ninja_2':
-                // Humara 2.1 → Wikipedia → Nuru 2.0
+                // Humara 2.1 → Wikipedia → Nuru 2.0 → Deep Non-LLM Clean → Final Smooth
                 phases = [
                   { name: 'Humara 2.1', type: 'emit' },
                   { name: 'Wikipedia', type: 'async', fn: (s) => runWikipediaClean(s) },
                   { name: 'Nuru 2.0', type: 'nuru', passes: CHAIN_TS },
+                  { name: 'Deep Non-LLM Clean', type: 'sync', fn: (s) => deepNonLLMClean(s) },
+                  { name: 'Final Smooth & Grammar', type: 'sync', fn: (s) => finalSmoothGrammar(s) },
                 ];
                 break;
               case 'ninja_3':
-                // Humara 2.0 → Wikipedia → Nuru 2.0
+                // Humara 2.0 → Wikipedia → Nuru 2.0 → Deep Non-LLM Clean → Final Smooth
                 phases = [
                   { name: 'Humara 2.0', type: 'emit' },
                   { name: 'Wikipedia', type: 'async', fn: (s) => runWikipediaClean(s) },
                   { name: 'Nuru 2.0', type: 'nuru', passes: CHAIN_TS },
+                  { name: 'Deep Non-LLM Clean', type: 'sync', fn: (s) => deepNonLLMClean(s) },
+                  { name: 'Final Smooth & Grammar', type: 'sync', fn: (s) => finalSmoothGrammar(s) },
                 ];
                 break;
               case 'ninja_4':
-                // Humara 2.1 → Humara 2.4 (Full) → Nuru 2.0
+                // Humara 2.1 → Humara 2.4 (Full) → Nuru 2.0 → Deep Non-LLM Clean → Final Smooth
                 phases = [
                   { name: 'Humara 2.1', type: 'emit' },
                   { name: 'Humara 2.4 (Full)', type: 'async', fn: (s) => runHumara24Full(s) },
                   { name: 'Nuru 2.0', type: 'nuru', passes: CHAIN_TS },
+                  { name: 'Deep Non-LLM Clean', type: 'sync', fn: (s) => deepNonLLMClean(s) },
+                  { name: 'Final Smooth & Grammar', type: 'sync', fn: (s) => finalSmoothGrammar(s) },
                 ];
                 break;
               case 'ninja_5':
-                // Humara 2.2 → Humara 2.4 (Full) → Nuru 2.0
+                // Humara 2.2 → Humara 2.4 (Full) → Nuru 2.0 → Deep Non-LLM Clean → Final Smooth
                 phases = [
                   { name: 'Humara 2.2', type: 'emit' },
                   { name: 'Humara 2.4 (Full)', type: 'async', fn: (s) => runHumara24Full(s) },
                   { name: 'Nuru 2.0', type: 'nuru', passes: CHAIN_TS },
+                  { name: 'Deep Non-LLM Clean', type: 'sync', fn: (s) => deepNonLLMClean(s) },
+                  { name: 'Final Smooth & Grammar', type: 'sync', fn: (s) => finalSmoothGrammar(s) },
                 ];
                 break;
               case 'ghost_trial_2':
-                // Wikipedia → Humara 2.4 (Full) → Nuru 2.0
+                // Wikipedia → Humara 2.4 (Full) → Nuru 2.0 → Deep Non-LLM Clean → Final Smooth
                 phases = [
                   { name: 'Wikipedia', type: 'emit' },
                   { name: 'Humara 2.4 (Full)', type: 'async', fn: (s) => runHumara24Full(s) },
                   { name: 'Nuru 2.0', type: 'nuru', passes: CHAIN_TS },
+                  { name: 'Deep Non-LLM Clean', type: 'sync', fn: (s) => deepNonLLMClean(s) },
+                  { name: 'Final Smooth & Grammar', type: 'sync', fn: (s) => finalSmoothGrammar(s) },
                 ];
                 break;
               case 'ghost_trial_2_alt':
-                // Wikipedia → Humara 2.0 (Full) → Nuru 2.0
+                // Wikipedia → Humara 2.0 (Full) → Nuru 2.0 → Deep Non-LLM Clean → Final Smooth
                 phases = [
                   { name: 'Wikipedia', type: 'emit' },
                   { name: 'Humara 2.0 (Full)', type: 'async', fn: (s) => runHumara20Full(s) },
                   { name: 'Nuru 2.0', type: 'nuru', passes: CHAIN_TS },
+                  { name: 'Deep Non-LLM Clean', type: 'sync', fn: (s) => deepNonLLMClean(s) },
+                  { name: 'Final Smooth & Grammar', type: 'sync', fn: (s) => finalSmoothGrammar(s) },
                 ];
                 break;
               case 'conscusion_1':
-                // Humara 2.2 → Wikipedia → Nuru 2.0
+                // Humara 2.2 → Wikipedia → Nuru 2.0 → Deep Non-LLM Clean → Final Smooth
                 phases = [
                   { name: 'Humara 2.2', type: 'emit' },
                   { name: 'Wikipedia', type: 'async', fn: (s) => runWikipediaClean(s) },
                   { name: 'Nuru 2.0', type: 'nuru', passes: CHAIN_TS },
+                  { name: 'Deep Non-LLM Clean', type: 'sync', fn: (s) => deepNonLLMClean(s) },
+                  { name: 'Final Smooth & Grammar', type: 'sync', fn: (s) => finalSmoothGrammar(s) },
                 ];
                 break;
               case 'conscusion_12':
-                // Humara 2.1 → Humara 2.4 (Full) → Wikipedia → Nuru 2.0
+                // Humara 2.1 → Humara 2.4 (Full) → Wikipedia → Nuru 2.0 → Deep Non-LLM Clean → Final Smooth
                 phases = [
                   { name: 'Humara 2.1', type: 'emit' },
                   { name: 'Humara 2.4 (Full)', type: 'async', fn: (s) => runHumara24Full(s) },
                   { name: 'Wikipedia', type: 'async', fn: (s) => runWikipediaClean(s) },
                   { name: 'Nuru 2.0', type: 'nuru', passes: CHAIN_TS },
+                  { name: 'Deep Non-LLM Clean', type: 'sync', fn: (s) => deepNonLLMClean(s) },
+                  { name: 'Final Smooth & Grammar', type: 'sync', fn: (s) => finalSmoothGrammar(s) },
                 ];
                 break;
               default:
@@ -1005,9 +1028,9 @@ export async function POST(req: Request) {
                 }
               } else if (phase.type === 'nuru') {
                 // ═══════════════════════════════════════════════════════
-                // ADAPTIVE NURU WITH GPT-4o-mini FORENSIC AI DETECTION
+                // ADAPTIVE NURU WITH NON-LLM FORENSIC AI DETECTION
                 // Phase 1: 5 baseline passes (minimum for ALL engines)
-                // Phase 2: GPT-4o-mini sentence-level forensic analysis
+                // Phase 2: Non-LLM sentence-level forensic analysis
                 // Phase 3: Score-based extra bulk passes (0-5 more)
                 // Phase 4: 5 targeted passes on flagged sentences ONLY
                 // ═══════════════════════════════════════════════════════
@@ -1025,7 +1048,7 @@ export async function POST(req: Request) {
                   await flushDelay(10);
                 }
 
-                // ── Phase 2: GPT-4o-mini forensic sentence-level AI detection ──
+                // ── Phase 2: Non-LLM forensic sentence-level AI detection ──
                 interface FlaggedSentence {
                   index: number;
                   ai_score: number;
@@ -1035,70 +1058,28 @@ export async function POST(req: Request) {
                 let flaggedSentences: FlaggedSentence[] = [];
 
                 try {
-                  const apiKey = process.env.OPENAI_API_KEY?.trim();
-                  if (apiKey && !(deadlineReached || Date.now() - startTime > DEADLINE_MS - 15000)) {
-                    const oai = new OpenAI({ apiKey });
-                    // Build numbered sentence list for the prompt
-                    const sentenceList = currentSentences
-                      .map((s, i) => isHeadingSentCheck(s) ? null : `[${i}] ${s}`)
-                      .filter(Boolean)
-                      .join('\n');
+                  const fullText = currentSentences.filter(s => !isHeadingSentCheck(s)).join(' ');
+                  const sigObj = new TextSignals(fullText);
+                  const allSignals = sigObj.getAllSignals();
+                  overallAiScore = Math.round(allSignals.per_sentence_ai_ratio ?? 50);
 
-                    const resp = await oai.chat.completions.create({
-                      model: 'gpt-4o-mini',
-                      messages: [
-                        {
-                          role: 'system',
-                          content: `You are a forensic AI text analyzer. Analyze EACH sentence for AI generation signals.
-
-For each sentence:
-- Assign AI likelihood (0-100%)
-- Identify exact phrases (3-10 words) that indicate AI generation
-- Detect unnatural phrasing, generic academic filler, repetition, predictability
-
-Be strict and critical. Do not assume the text is human.
-
-Respond with ONLY valid JSON, no markdown:
-{
-  "overall_ai_score": <number 0-100>,
-  "flagged": [
-    { "index": <sentence_index>, "ai_score": <0-100>, "phrases": ["phrase1", "phrase2"] }
-  ]
-}
-
-Only include sentences with ai_score >= 60 in the flagged array.
-Keep phrases to the most suspicious 1-3 per sentence.`,
-                        },
-                        { role: 'user', content: sentenceList.slice(0, 4000) },
-                      ],
-                      temperature: 0,
-                      max_tokens: 1500,
-                    });
-
-                    const raw = resp.choices[0]?.message?.content?.trim() ?? '';
-                    try {
-                      const parsed = JSON.parse(raw);
-                      if (typeof parsed.overall_ai_score === 'number') {
-                        overallAiScore = Math.max(0, Math.min(100, parsed.overall_ai_score));
-                      }
-                      if (Array.isArray(parsed.flagged)) {
-                        flaggedSentences = parsed.flagged
-                          .filter((f: any) => typeof f.index === 'number' && f.index >= 0 && f.index < currentSentences.length)
-                          .map((f: any) => ({
-                            index: f.index,
-                            ai_score: typeof f.ai_score === 'number' ? f.ai_score : 80,
-                            flagged_phrases: Array.isArray(f.phrases) ? f.phrases.filter((p: any) => typeof p === 'string') : [],
-                          }));
-                      }
-                    } catch {
-                      // If JSON parse fails, try to extract just the overall score
-                      const scoreMatch = raw.match(/(\d{1,3})/);
-                      if (scoreMatch) overallAiScore = Math.max(0, Math.min(100, parseInt(scoreMatch[1], 10)));
-                    }
-                    console.log(`[Nuru GPT Forensic] Overall AI score: ${overallAiScore}, flagged sentences: ${flaggedSentences.length}/${currentSentences.length}`);
+                  // Get per-sentence details for targeted passes
+                  // Build a TextSignals from the joined non-heading sentences, then map back
+                  const nonHeadingIndices: number[] = [];
+                  for (let i = 0; i < currentSentences.length; i++) {
+                    if (!isHeadingSentCheck(currentSentences[i])) nonHeadingIndices.push(i);
                   }
+                  const perSentDetails = sigObj.perSentenceDetails();
+                  // Map internal sentence indices back to currentSentences indices
+                  flaggedSentences = perSentDetails.map(d => ({
+                    index: nonHeadingIndices[d.index] ?? d.index,
+                    ai_score: d.ai_score,
+                    flagged_phrases: d.flagged_phrases,
+                  })).filter(d => d.index >= 0 && d.index < currentSentences.length);
+
+                  console.log(`[Nuru Non-LLM Forensic] Overall AI score: ${overallAiScore}, flagged sentences: ${flaggedSentences.length}/${currentSentences.length}`);
                 } catch (e: any) {
-                  console.warn(`[Nuru GPT Forensic] OpenAI call failed, using defaults: ${e.message}`);
+                  console.warn(`[Nuru Non-LLM Forensic] Detection failed, using defaults: ${e.message}`);
                 }
 
                 // ── Phase 3: Score-based extra bulk Nuru passes (0-5 more) ──
@@ -1216,58 +1197,27 @@ Keep phrases to the most suspicious 1-3 per sentence.`,
               console.log(`[Nuru Post] 5 baseline passes done (${Date.now() - nuruPostStart}ms)`);
             }
 
-            // ── Phase B: GPT-4o-mini forensic detection ──
+            // ── Phase B: Non-LLM forensic detection ──
             interface PostFlagged { index: number; ai_score: number; flagged_phrases: string[]; }
             let postFlagged: PostFlagged[] = [];
 
             if (nuruPostTimeOk()) {
               try {
-                const gptApiKey = process.env.OPENAI_API_KEY?.trim();
-                if (gptApiKey) {
-                  const oai = new OpenAI({ apiKey: gptApiKey });
-                  const sentList = postSents
-                    .map((s, i) => isHeadingSentCheck(s) ? null : `[${i}] ${s}`)
-                    .filter(Boolean)
-                    .join('\n');
-
-                  const gptResp = await Promise.race([
-                    oai.chat.completions.create({
-                      model: 'gpt-4o-mini',
-                      messages: [
-                        {
-                          role: 'system',
-                          content: `You are a forensic AI text analyzer. Analyze EACH sentence for AI generation signals.
-For each sentence: assign AI likelihood (0-100%), identify 1-3 suspicious phrases (3-10 words).
-Respond with ONLY valid JSON: { "flagged": [{ "index": <int>, "ai_score": <0-100>, "phrases": ["phrase1"] }] }
-Only include sentences with ai_score >= 60.`,
-                        },
-                        { role: 'user', content: sentList.slice(0, 4000) },
-                      ],
-                      temperature: 0,
-                      max_tokens: 1200,
-                    }),
-                    new Promise<never>((_, reject) =>
-                      setTimeout(() => reject(new Error('GPT detection timed out')), 4000)
-                    ),
-                  ]);
-
-                  const raw = gptResp.choices[0]?.message?.content?.trim() ?? '';
-                  try {
-                    const parsed = JSON.parse(raw);
-                    if (Array.isArray(parsed.flagged)) {
-                      postFlagged = parsed.flagged
-                        .filter((f: any) => typeof f.index === 'number' && f.index >= 0 && f.index < postSents.length)
-                        .map((f: any) => ({
-                          index: f.index,
-                          ai_score: typeof f.ai_score === 'number' ? f.ai_score : 80,
-                          flagged_phrases: Array.isArray(f.phrases) ? f.phrases.filter((p: any) => typeof p === 'string') : [],
-                        }));
-                    }
-                  } catch { /* ignore parse errors */ }
-                  console.log(`[Nuru Post GPT] Flagged ${postFlagged.length}/${postSents.length} sentences (${Date.now() - nuruPostStart}ms)`);
+                const postFullText = postSents.filter(s => !isHeadingSentCheck(s)).join(' ');
+                const postSigObj = new TextSignals(postFullText);
+                const postNonHeadingIndices: number[] = [];
+                for (let i = 0; i < postSents.length; i++) {
+                  if (!isHeadingSentCheck(postSents[i])) postNonHeadingIndices.push(i);
                 }
+                const postDetails = postSigObj.perSentenceDetails();
+                postFlagged = postDetails.map(d => ({
+                  index: postNonHeadingIndices[d.index] ?? d.index,
+                  ai_score: d.ai_score,
+                  flagged_phrases: d.flagged_phrases,
+                })).filter(d => d.index >= 0 && d.index < postSents.length);
+                console.log(`[Nuru Post Non-LLM] Flagged ${postFlagged.length}/${postSents.length} sentences (${Date.now() - nuruPostStart}ms)`);
               } catch (e: any) {
-                console.warn(`[Nuru Post GPT] Detection failed: ${e.message}`);
+                console.warn(`[Nuru Post Non-LLM] Detection failed: ${e.message}`);
               }
             }
 

@@ -70,7 +70,7 @@ export const AI_WORD_REPLACEMENTS: Record<string, string[]> = {
   vital: ["key", "important", "essential"], imperative: ["necessary", "essential", "urgent"],
   notable: ["interesting", "striking"], significant: ["important", "major"],
   substantial: ["large", "big", "real", "major"], remarkable: ["striking", "unusual", "surprising"],
-  considerable: ["large", "a good deal of"], unprecedented: ["never-before-seen", "first-ever"],
+  considerable: ["large", "a good deal of"], unprecedented: ["unmatched", "remarkable", "extraordinary"],
   methodology: ["method", "approach", "process"], framework: ["structure", "setup", "system"],
   implication: ["effect", "result", "what this means"], implications: ["effects", "results", "consequences"],
   notably: ["especially", "in particular"], specifically: ["in particular", "especially"],

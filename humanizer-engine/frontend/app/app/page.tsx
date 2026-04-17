@@ -168,6 +168,11 @@ const MODE_ENGINES: Record<ModeId, Set<string>> = {
     'ninja_2',
     'ninja_3',
     'ninja_4',
+    'ninja_5',
+    'ghost_trial_2',
+    'ghost_trial_2_alt',
+    'conscusion_1',
+    'conscusion_12',
   ]),
 };
 const MODE_LABELS: Record<ModeId, string> = {

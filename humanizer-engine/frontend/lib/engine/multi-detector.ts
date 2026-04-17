@@ -701,6 +701,65 @@ export class TextSignals {
     return scored === 0 ? 50 : clamp((aiCount / scored) * 100);
   }
 
+  /** Return per-sentence AI scores + flagged marker phrases (non-LLM detection) */
+  perSentenceDetails(): { index: number; ai_score: number; flagged_phrases: string[] }[] {
+    const results: { index: number; ai_score: number; flagged_phrases: string[] }[] = [];
+    const formalLinks = new Set(["however", "therefore", "furthermore", "moreover", "consequently", "additionally", "conversely", "similarly", "specifically", "particularly", "notably", "indeed", "essentially", "fundamentally", "accordingly", "thus"]);
+
+    for (let i = 0; i < this.sentWords.length; i++) {
+      const ws = this.sentWords[i];
+      if (ws.length < 4) continue;
+      let miniScore = 0;
+      const sentText = (this.sentences[i] ?? "").trim().toLowerCase();
+      const flagged: string[] = [];
+
+      // Collect AI marker words as flagged phrases
+      for (const w of ws) {
+        if (AI_MARKER_WORDS.has(w)) flagged.push(w);
+      }
+      // Collect formal link words
+      for (const w of ws) {
+        if (formalLinks.has(w)) flagged.push(w);
+      }
+
+      // Score signals (same as perSentenceAiRatio)
+      if (AI_SENTENCE_STARTERS.some((s) => sentText.startsWith(s))) miniScore += 0.20;
+      const markerD = ws.filter((w) => AI_MARKER_WORDS.has(w)).length / ws.length;
+      miniScore += Math.min(markerD * 5.0, 0.20);
+      if (cv(ws.map((w) => w.length)) < 0.35) miniScore += 0.12;
+      if (ws.length >= 13 && ws.length <= 30) miniScore += 0.10;
+      const fwR = ws.filter((w) => FUNCTION_WORDS.has(w)).length / ws.length;
+      if (fwR >= 0.35 && fwR <= 0.55) miniScore += 0.10;
+      if (AI_PHRASE_PATTERNS.slice(0, 15).some((p) => p.test(sentText))) miniScore += 0.12;
+      if (!ws.some((w) => w.includes("'"))) miniScore += 0.03;
+      if (ws.some((w) => formalLinks.has(w))) miniScore += 0.10;
+      if (!ws.some((w) => new Set(["i", "we", "you", "my", "me", "your", "our", "us"]).has(w))) miniScore += 0.02;
+      const sentBigrams = new Set<string>();
+      let bigramRepeats = 0;
+      for (let j = 0; j < ws.length - 1; j++) {
+        const bi = ws[j] + " " + ws[j + 1];
+        if (sentBigrams.has(bi)) bigramRepeats++;
+        sentBigrams.add(bi);
+      }
+      if (bigramRepeats > 0) miniScore += 0.08;
+      const avgWL = ws.reduce((s, w) => s + w.length, 0) / ws.length;
+      if (avgWL >= 4.5 && avgWL <= 6.0) miniScore += 0.06;
+      if (/^[a-z]+ly,/i.test(sentText)) miniScore += 0.05;
+
+      // Convert miniScore to 0-100
+      const aiScore = clamp(miniScore * 100);
+      if (aiScore >= 28) {
+        // Also collect AI phrase pattern matches as flagged phrases
+        for (const p of AI_PHRASE_PATTERNS.slice(0, 15)) {
+          const m = sentText.match(p);
+          if (m) flagged.push(m[0]);
+        }
+        results.push({ index: i, ai_score: aiScore, flagged_phrases: [...new Set(flagged)].slice(0, 5) });
+      }
+    }
+    return results;
+  }
+
   spectralFlatness(): number {
     if (this.sentenceCount < 6) return 45;
     const signal = this.sentWords.filter((ws) => ws.length > 0).map((ws) => ws.length);
