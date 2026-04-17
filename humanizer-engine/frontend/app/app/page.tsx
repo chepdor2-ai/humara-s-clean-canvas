@@ -822,8 +822,9 @@ function EditorPageInner() {
       if (finalData) {
         let currentResult = finalData.humanized as string;
 
-        // Grammar correction pass — fix capitalization, punctuation, agreement etc.
-        if (grammarCorrection) {
+        // Grammar correction pass — always fix capitalization, punctuation, spelling etc.
+        // Runs on every output like Microsoft Word autocorrect.
+        {
           const checker = new GrammarChecker();
           currentResult = checker.correctAll(currentResult);
         }
@@ -888,7 +889,8 @@ function EditorPageInner() {
 
       if (finalData) {
         let rephrased = finalData.humanized as string;
-        if (grammarCorrection) {
+        // Always apply grammar correction (spelling, punctuation, capitalization)
+        {
           const checker = new GrammarChecker();
           rephrased = checker.correctAll(rephrased);
         }
@@ -1007,8 +1009,8 @@ function EditorPageInner() {
         setOutputDetection({ overallAi: finalData.summary.overall_ai_score, overallHuman: finalData.summary.overall_human_score, detectors: finalData.detectors });
       }
 
-      // Apply grammar correction to final output
-      if (grammarCorrection) {
+      // Apply grammar correction to final output (always — like Word autocorrect)
+      {
         const checker = new GrammarChecker();
         currentText = checker.correctAll(currentText);
         setResult(currentText);

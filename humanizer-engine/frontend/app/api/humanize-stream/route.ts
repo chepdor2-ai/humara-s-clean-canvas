@@ -1338,7 +1338,8 @@ export async function POST(req: Request) {
           // Each sentence goes through the engine independently in parallel,
           // then results are reassembled preserving paragraph structure.
           // ═══════════════════════════════════════════════════════════════
-          const { sentences: inputSentences, paragraphBoundaries: inputParaBounds } = splitIntoIndexedSentences(normalizedText);
+          const { sentences: inputSentences, paragraphBoundaries: inputParaBounds_ } = splitIntoIndexedSentences(normalizedText);
+          let inputParaBounds = inputParaBounds_;
           const isHeadingSentCheck = (s: string) => {
             const t = s.trim();
             if (t.length < 120 && !/[.!?]$/.test(t) && t.split(/\s+/).length <= 15) return true;
@@ -1448,8 +1449,12 @@ export async function POST(req: Request) {
               fullResult = (await runHumara21(normalizedText));
             }
             if (!fullResult || fullResult.trim().length === 0) fullResult = normalizedText;
+            // Apply structure preservation to restore original paragraph/heading layout
+            fullResult = preserveInputStructure(normalizedText, fullResult);
             const { sentences: resultSents, paragraphBoundaries: resultBounds } = splitIntoIndexedSentences(fullResult);
             sentenceResults = resultSents;
+            // Update paragraph boundaries to match the new sentence structure
+            inputParaBounds = resultBounds;
             // Stream each sentence to the client
             for (let i = 0; i < sentenceResults.length; i++) {
               sendSSE(controller, { type: 'sentence', index: i, text: sentenceResults[i], stage: 'Engine' });
