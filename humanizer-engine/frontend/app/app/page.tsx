@@ -147,10 +147,10 @@ const ALL_ENGINES: EngineConfig[] = [
   { id: 'easy', label: 'Stealth Quick' },
   { id: 'ozone', label: 'Stealth Shield' },
   { id: 'ninja_1', label: 'Stealth Ninja' },
-  { id: 'king', label: 'Stealth King' },
   // Anti GPTZero
   { id: 'humara_v3_3', label: 'GPTZero Killer' },
   { id: 'oxygen', label: 'GPTZero Shield' },
+  { id: 'king', label: 'Stealth King' },
   { id: 'nuru_v2', label: 'Nuru Pure' },
   { id: 'ghost_pro_wiki', label: 'Academic Shield' },
   // Deep Signal Kill
@@ -162,8 +162,8 @@ const ALL_ENGINES: EngineConfig[] = [
 
 type ModeId = 'stealth_mode' | 'anti_gptzero' | 'deep_signal_kill';
 const MODE_ENGINES: Record<ModeId, Set<string>> = {
-  stealth_mode: new Set(['ninja_4', 'easy', 'ozone', 'ninja_1', 'king']),
-  anti_gptzero: new Set(['humara_v3_3', 'oxygen', 'nuru_v2', 'ghost_pro_wiki']),
+  stealth_mode: new Set(['ninja_4', 'easy', 'ozone', 'ninja_1']),
+  anti_gptzero: new Set(['humara_v3_3', 'oxygen', 'king', 'nuru_v2', 'ghost_pro_wiki']),
   deep_signal_kill: new Set([
     'ninja_3',
     'ninja_2',
@@ -182,10 +182,10 @@ const ENGINE_GUIDES: Record<string, string> = {
   easy: 'Fast stealth engine. Quick rewrites with balanced, natural-sounding output.',
   ozone: 'Stealth engine for detector cleaning. Best for ZeroGPT and Surfer cleanup.',
   ninja_1: 'LLM-powered stealth rewrite followed by 10 Nuru passes for maximum detector evasion.',
-  king: 'Pure LLM humanizer (GPT-4o-mini). 3-phase pipeline: deep rewrite, self-audit, targeted revision.',
 
   humara_v3_3: 'High-power Anti GPTZero engine for stubborn GPTZero flags.',
   oxygen: 'Anti GPTZero engine tuned for GPTZero signal suppression.',
+  king: 'Pure LLM humanizer (GPT-4o-mini). 3-phase pipeline: deep rewrite, self-audit, targeted revision.',
   nuru_v2: 'Purely non-LLM stealth engine. 10 iterative passes — no AI calls, no external APIs.',
   ghost_pro_wiki: 'Academic-style rewrite that sounds like encyclopedic human writing.',
 
@@ -356,7 +356,7 @@ function EditorPageInner() {
     const fallbackByMode: Record<ModeId, string> = {
       stealth_mode: 'ninja_4',
       anti_gptzero: 'humara_v3_3',
-      deep_signal_kill: 'ninja_3',
+      deep_signal_kill: 'ninja_5',
     };
     if (!MODE_ENGINES[mode].has(engine)) setEngine(fallbackByMode[mode]);
   }, [mode]); // eslint-disable-line react-hooks/exhaustive-deps

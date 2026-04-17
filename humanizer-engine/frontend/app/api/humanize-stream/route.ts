@@ -349,16 +349,10 @@ export async function POST(req: Request) {
           };
 
           const runHumara21 = async (input: string): Promise<string> => {
-            const ozoneSBS = (body as Record<string, unknown>).ozone_sentence_by_sentence === true;
-            const ozoneResult = await ozoneHumanize(input, ozoneSBS);
-            let output = ozoneResult.humanized;
-            try {
-              const easyPolish = await easyHumanize(output, effectiveStrength, tone ?? 'academic', false);
-              output = easyPolish.humanized;
-            } catch (easyErr) {
-              console.warn('[Ozone] EssayWritingSupport polish failed, using raw Ozone output:', easyErr);
-            }
-            return output;
+            // Always use sentence-by-sentence mode to prevent the API from
+            // rewriting the entire paper into unrelated content.
+            const ozoneResult = await ozoneHumanize(input, true);
+            return ozoneResult.humanized;
           };
 
           // ── Sentence-level change measurement ──
@@ -1171,7 +1165,7 @@ export async function POST(req: Request) {
           // 5 baseline passes but still get GPT detection + targeted cleanup.
           // Hard time budget: 10 seconds max.
           // ═══════════════════════════════════════════════════════════════
-          if (eng !== 'ozone' && !(deadlineReached || Date.now() - startTime > DEADLINE_MS - 12000)) {
+          if (!(deadlineReached || Date.now() - startTime > DEADLINE_MS - 12000)) {
             const nuruPostStart = Date.now();
             const NURU_POST_DEADLINE_MS = 10_000; // 10s hard budget
             const nuruPostTimeOk = () => Date.now() - nuruPostStart < NURU_POST_DEADLINE_MS && !(deadlineReached || Date.now() - startTime > DEADLINE_MS - 8000);
@@ -1247,8 +1241,8 @@ export async function POST(req: Request) {
             console.log(`[Nuru Post] Complete in ${Date.now() - nuruPostStart}ms`);
           }
 
-          // ── POST-PROCESSING (skip for ozone — it handles its own full pipeline) ──
-          if (eng !== 'ozone') {
+          // ── POST-PROCESSING ──
+          {
 
           // 4. Unified Sentence Process
           const FIRST_PERSON_RE_EARLY = /\b(I|me|my|mine|myself|we|us|our|ours|ourselves)\b/i;
@@ -1435,12 +1429,10 @@ export async function POST(req: Request) {
           humanized = humanized.replace(/(^|[.!?]\s+)([a-z])/g, (_m: string, pre: string, ch: string) => pre + ch.toUpperCase());
           humanized = fixMidSentenceCapitalization(humanized, text);
 
-          } // end: if (eng !== 'ozone') post-processing block
+          } // end: post-processing block
 
-          // Structure preservation for ozone (runs after ozone's own dedup, restores heading placement)
-          if (eng === 'ozone') {
-            humanized = preserveInputStructure(normalizedText, humanized);
-          }
+          // Structure preservation (restores heading placement from original)
+          humanized = preserveInputStructure(normalizedText, humanized);
 
           // ── EXTERNAL API SANITIZATION (ozone, easy, etc.) ─────────────
           // External APIs can return LLM refusals, garbled phrases, and bad synonyms.

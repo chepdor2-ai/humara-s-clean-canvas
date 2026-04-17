@@ -1,4 +1,5 @@
 ﻿import AuthGuard from './AuthGuard';
+import { AppShell } from './AppShell';
 
 export const metadata = {
   title: "HumaraGPT App - Best AI Text Converter",
@@ -6,6 +7,10 @@ export const metadata = {
 };
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
-  return <AuthGuard>{children}</AuthGuard>;
+  return (
+    <AuthGuard>
+      <AppShell>{children}</AppShell>
+    </AuthGuard>
+  );
 }
 

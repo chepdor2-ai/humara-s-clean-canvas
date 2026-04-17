@@ -92,7 +92,7 @@ export default function DashboardHome() {
   const wordsPct = wordsLimit > 0 ? Math.min(100, (wordsUsed / wordsLimit) * 100) : 0;
 
   return (
-    <div className="dashboard-shell space-y-6 relative z-10">
+    <div className="dashboard-shell space-y-6 relative z-10 p-6 lg:p-10 max-w-[1400px] mx-auto w-full">
 
       {/* Header */}
       <header className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">

@@ -343,15 +343,28 @@ export async function ozoneHumanize(
     }
   }
 
-  // Apply results back to segments
+  // Apply results back to segments — with content-drift guard.
+  // If a sentence comes back with < 15% word overlap vs the original,
+  // the API rewrote it into unrelated content → keep the original sentence.
   let totalInputWords = 0;
   let totalOutputWords = 0;
   let totalLatency = 0;
   let lastQuota = { used: 0, limit: 0, remaining: 0 };
 
+  const wordSet = (s: string) => new Set(s.toLowerCase().replace(/[^a-z0-9\s]/g, '').split(/\s+/).filter(w => w.length > 2));
+
   for (const r of results) {
     if (r.data) {
-      sentenceSegments[r.index].text = r.data.text;
+      const origWords = wordSet(sentenceSegments[r.index].text);
+      const outWords = wordSet(r.data.text);
+      const overlap = origWords.size > 0
+        ? [...origWords].filter(w => outWords.has(w)).length / origWords.size
+        : 1;
+      if (overlap >= 0.15) {
+        sentenceSegments[r.index].text = r.data.text;
+      } else {
+        console.warn(`[Ozone SBS] Sentence ${r.index} drifted (${(overlap * 100).toFixed(0)}% overlap) — keeping original`);
+      }
       totalInputWords += r.data.input_words;
       totalOutputWords += r.data.output_words;
       totalLatency += r.data.latency_ms;
