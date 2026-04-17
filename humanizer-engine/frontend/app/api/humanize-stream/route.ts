@@ -199,6 +199,9 @@ export async function POST(req: Request) {
     const adminEmails = (process.env.ADMIN_EMAILS || '').split(',').map(e => e.trim().toLowerCase()).filter(Boolean);
     const isAdmin = userEmail ? adminEmails.includes(userEmail.toLowerCase()) : false;
 
+    // Detect premium plan — premium users skip quota checks and usage deduction
+    let isPremiumPlan = false;
+
     if (userId && !isAdmin) {
       try {
         const supa = createServiceClient();
@@ -209,23 +212,31 @@ export async function POST(req: Request) {
           console.error('get_usage_stats RPC failed:', statsError.message, statsError.details);
         }
 
-        // Default free-tier limits when RPC fails or missing
-        let totalUsed = 0;
-        let totalLimit = 1000;
-
         if (!statsError && stats) {
-          totalUsed = (stats.words_used_fast || 0) + (stats.words_used_stealth || 0);
-          const rawLimit = (stats.words_limit_fast || 0) + (stats.words_limit_stealth || 0);
-          // Use DB limit if user has active subscription, otherwise free tier (1000)
-          totalLimit = rawLimit > 0 ? rawLimit : 1000;
+          const planName = String(stats.plan_name || 'Free');
+          isPremiumPlan = planName.trim().toLowerCase() !== 'free';
         }
 
-        const remaining = Math.max(0, totalLimit - totalUsed);
-        if (remaining < inputWordCount) {
-          return new Response(
-            'data: ' + JSON.stringify({ type: 'error', error: `Word limit reached. ${remaining} words remaining of ${totalLimit} daily words.` }) + '\n\n',
-            { status: 200, headers: { 'Content-Type': 'text/event-stream' } }
-          );
+        // Premium plans skip quota checks entirely
+        if (!isPremiumPlan) {
+          // Default free-tier limits when RPC fails or missing
+          let totalUsed = 0;
+          let totalLimit = 1000;
+
+          if (!statsError && stats) {
+            totalUsed = (stats.words_used_fast || 0) + (stats.words_used_stealth || 0);
+            const rawLimit = (stats.words_limit_fast || 0) + (stats.words_limit_stealth || 0);
+            // Use DB limit if user has active subscription, otherwise free tier (1000)
+            totalLimit = rawLimit > 0 ? rawLimit : 1000;
+          }
+
+          const remaining = Math.max(0, totalLimit - totalUsed);
+          if (remaining < inputWordCount) {
+            return new Response(
+              'data: ' + JSON.stringify({ type: 'error', error: `Word limit reached. ${remaining} words remaining of ${totalLimit} daily words.` }) + '\n\n',
+              { status: 200, headers: { 'Content-Type': 'text/event-stream' } }
+            );
+          }
         }
       } catch (err) {
         console.error('Quota pre-check error:', err);
@@ -1622,18 +1633,26 @@ export async function POST(req: Request) {
               const engineType = 'fast'; // unified — all engines deduct from one pool
               const toneDb = ({ neutral: 'natural', academic: 'academic', professional: 'business', simple: 'direct' } as Record<string, string>)[tone ?? 'neutral'] ?? 'natural';
 
-              const [usageResult, docResult] = await Promise.all([
-                supa.rpc('increment_usage', { p_user_id: userId, p_words: inputWords, p_engine_type: engineType }),
-                supa.from('documents').insert({
-                  user_id: userId, title: text.slice(0, 60).replace(/\n/g, ' ').trim() + (text.length > 60 ? '…' : ''),
-                  input_text: text, output_text: humanized,
-                  input_word_count: inputWords, output_word_count: outputWords,
-                  engine_used: eng, strength: effectiveStrength, tone: toneDb,
-                  meaning_preserved: meaningCheck.isSafe, meaning_similarity: meaningCheck.similarity,
-                  input_ai_score: 0,
-                  output_ai_score: 0,
-                }),
-              ]);
+              // Always save document for all users
+              const docPromise = supa.from('documents').insert({
+                user_id: userId, title: text.slice(0, 60).replace(/\n/g, ' ').trim() + (text.length > 60 ? '…' : ''),
+                input_text: text, output_text: humanized,
+                input_word_count: inputWords, output_word_count: outputWords,
+                engine_used: eng, strength: effectiveStrength, tone: toneDb,
+                meaning_preserved: meaningCheck.isSafe, meaning_similarity: meaningCheck.similarity,
+                input_ai_score: 0,
+                output_ai_score: 0,
+              });
+
+              // Premium/admin users skip usage deduction
+              if (isAdmin || isPremiumPlan) {
+                const docResult = await docPromise;
+                if (docResult.error) console.error('Document insert failed:', docResult.error.message, docResult.error.details);
+              } else {
+                const [usageResult, docResult] = await Promise.all([
+                  supa.rpc('increment_usage', { p_user_id: userId, p_words: inputWords, p_engine_type: engineType }),
+                  docPromise,
+                ]);
 
               if (usageResult.error) {
                 console.error('increment_usage RPC failed:', usageResult.error.message, usageResult.error.details);
@@ -1697,6 +1716,7 @@ export async function POST(req: Request) {
                 };
               }
               if (docResult.error) console.error('Document insert failed:', docResult.error.message, docResult.error.details);
+              } // end else (non-premium usage tracking)
             } catch (e) {
               console.error('Usage tracking error:', e);
             }

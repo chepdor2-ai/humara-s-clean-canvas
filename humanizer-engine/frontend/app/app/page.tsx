@@ -506,10 +506,23 @@ function EditorPageInner() {
     return () => clearInterval(interval);
   }, [history.length]);
 
-  // Keep processing progress updates static (no motion interpolation).
+  // Smooth simulated progress animation that rises gradually
   useEffect(() => {
     if (!isAnimating) return;
-    setStreamProgress(streamProgressTarget);
+    // When done event received (target=100), snap to 100
+    if (streamProgressTarget >= 100) {
+      setStreamProgress(100);
+      return;
+    }
+    // Smooth rise toward 92% — fast early, slowing as it approaches cap
+    const timer = setInterval(() => {
+      setStreamProgress(prev => {
+        if (prev >= 92) return prev;
+        const increment = Math.max(0.3, (92 - prev) * 0.035);
+        return Math.min(92, prev + increment);
+      });
+    }, 150);
+    return () => clearInterval(timer);
   }, [isAnimating, streamProgressTarget]);
 
   useEffect(() => {
@@ -875,7 +888,8 @@ function EditorPageInner() {
       setError(`Maximum ${MAX_WORDS_PER_REQUEST.toLocaleString()} words per request. You have ${inputWords.toLocaleString()} words. Split your text into smaller sections.`);
       return;
     }
-    if (usage) {
+    const isPremiumPlan = usage?.planName && usage.planName.trim().toLowerCase() !== 'free';
+    if (usage && !isPremiumPlan) {
       const remaining = usage.wordsLimit - usage.wordsUsed;
       if (remaining < inputWords) {
         setError(`Word limit reached. ${Math.max(0, remaining).toLocaleString()} words remaining of your daily ${usage.wordsLimit.toLocaleString()} words.`);
@@ -926,13 +940,15 @@ function EditorPageInner() {
         addToHistory(text, currentResult, (finalData.engine_used as string) || engine, 0, 0, (finalData.word_count as number) || outputWords);
 
         // Update usage: if backend returned updated counts, use them; otherwise optimistic + refresh
-        if (typeof finalData.usage_words_used === 'number') {
-          // Backend gave us exact counts — handled by refresh below
-        } else {
-          // Optimistic: add input word count immediately
-          addWords((finalData.input_word_count as number) || inputWords);
+        if (!isPremiumPlan) {
+          if (typeof finalData.usage_words_used === 'number') {
+            // Backend gave us exact counts — handled by refresh below
+          } else {
+            // Optimistic: add input word count immediately
+            addWords((finalData.input_word_count as number) || inputWords);
+          }
+          refreshUsage();
         }
-        refreshUsage();
 
         setStreamProgressTarget(100);
         setStreamProgress(100);
@@ -983,11 +999,14 @@ function EditorPageInner() {
         setMeaningScore(finalData.meaning_similarity as number);
         // Detection disabled — coming soon
 
-        // Update usage: optimistic + server refresh
-        if (typeof finalData.usage_words_used !== 'number') {
-          addWords((finalData.input_word_count as number) || outputWords);
+        // Update usage: optimistic + server refresh (skip for premium)
+        const isRephrasePremium = usage?.planName && usage.planName.trim().toLowerCase() !== 'free';
+        if (!isRephrasePremium) {
+          if (typeof finalData.usage_words_used !== 'number') {
+            addWords((finalData.input_word_count as number) || outputWords);
+          }
+          refreshUsage();
         }
-        refreshUsage();
 
         setStreamProgressTarget(100);
         setStreamProgress(100);
@@ -1552,10 +1571,11 @@ function EditorPageInner() {
               className={`relative z-10 w-full ${EDITOR_HEIGHT_CLASS} bg-transparent outline-none resize-y overflow-y-auto text-[14px] leading-[1.8] text-slate-800 dark:text-zinc-200 p-5 placeholder:text-slate-400 dark:placeholder:text-zinc-600`}
               placeholder="Paste text you want to humanize..." />
             {!text && (
-              <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+              <div className="absolute inset-0 flex items-center justify-center z-20">
                 <button
+                  type="button"
                   onClick={handlePasteFromClipboard}
-                  className="pointer-events-auto flex items-center gap-2 px-5 py-3 rounded-xl bg-cyan-50 dark:bg-cyan-950/35 border border-cyan-200 dark:border-cyan-900/50 text-cyan-700 dark:text-cyan-200 hover:bg-cyan-100 dark:hover:bg-cyan-900/35 hover:border-cyan-300 dark:hover:border-cyan-700/60 transition-all text-sm font-medium"
+                  className="pointer-events-auto flex items-center gap-2 px-5 py-3 rounded-xl bg-cyan-50 dark:bg-cyan-950/35 border border-cyan-200 dark:border-cyan-900/50 text-cyan-700 dark:text-cyan-200 hover:bg-cyan-100 dark:hover:bg-cyan-900/35 hover:border-cyan-300 dark:hover:border-cyan-700/60 transition-all text-sm font-medium cursor-pointer"
                 >
                   <ClipboardPaste className="w-4 h-4" />
                   Paste from clipboard
@@ -1603,9 +1623,9 @@ function EditorPageInner() {
                   </button>
                   <button onClick={handleRephrase} disabled={rephrasing || loading}
                     className="text-[11px] font-semibold text-cyan-600 dark:text-cyan-400 hover:text-cyan-700 dark:hover:text-cyan-300 px-1.5 sm:px-2 py-1 rounded-lg hover:bg-cyan-50 dark:hover:bg-cyan-950/30 transition-all flex items-center gap-1 disabled:opacity-50"
-                    title="Rephrase output">
-                    <RefreshCw className="w-3 h-3" />
-                    {rephrasing ? 'Rephrasing…' : 'Rephrase'}
+                    title="Rehumanize output">
+                    <RotateCcw className="w-3 h-3" />
+                    {rephrasing ? 'Rehumanizing…' : 'Rehumanize'}
                   </button>
                   <button onClick={handleCopy} className="p-1.5 text-slate-500 dark:text-brand-400 hover:text-slate-700 hover:bg-slate-100 dark:hover:bg-brand-950 rounded-md transition-colors" title="Copy">
                     {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
