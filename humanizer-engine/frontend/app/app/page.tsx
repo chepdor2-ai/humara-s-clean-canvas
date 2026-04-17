@@ -142,37 +142,33 @@ const splitSentences = (text: string): { text: string; start: number; end: numbe
 /* ── Constants ──────────────────────────────────────────────────────────── */
 // Full engine registry — admin controls which are visible/premium via Supabase engine_config
 const ALL_ENGINES: EngineConfig[] = [
-  { id: 'ozone', label: 'Humara 2.1' },
-  { id: 'easy', label: 'Humara 2.2' },
-  { id: 'oxygen', label: 'Humara 2.0' },
-  { id: 'humara_v3_3', label: 'Humara 2.4' },
-  { id: 'ninja_3', label: 'Ninja 3' },
-  { id: 'ninja_2', label: 'Ninja 2' },
-  { id: 'ninja_4', label: 'Ninja 4' },
-  { id: 'ninja_5', label: 'Ninja 5' },
-  { id: 'ghost_trial_2', label: 'Ghost Trial 2' },
-  { id: 'ghost_trial_2_alt', label: 'Ghost Trial 2 Alt' },
-  { id: 'conscusion_1', label: 'Conscusion 1' },
-  { id: 'conscusion_12', label: 'Conscusion 12' },
-  { id: 'nuru_v2', label: 'Nuru 2.0' },
-  { id: 'king', label: 'King' },
-  { id: 'ninja_1', label: 'Ninja 1' },
-  { id: 'ghost_pro_wiki', label: 'Wikipedia' },
+  // Stealth Mode
+  { id: 'ninja_4', label: 'Stealth Pro' },
+  { id: 'easy', label: 'Stealth Quick' },
+  { id: 'ozone', label: 'Stealth Shield' },
+  { id: 'ninja_1', label: 'Stealth Ninja' },
+  { id: 'king', label: 'Stealth King' },
+  // Anti GPTZero
+  { id: 'humara_v3_3', label: 'GPTZero Killer' },
+  { id: 'oxygen', label: 'GPTZero Shield' },
+  { id: 'nuru_v2', label: 'Nuru Pure' },
+  { id: 'ghost_pro_wiki', label: 'Academic Shield' },
+  // Deep Signal Kill
+  { id: 'ninja_3', label: 'Deep Kill Alpha' },
+  { id: 'ninja_2', label: 'Deep Kill Beta' },
+  { id: 'ninja_5', label: 'Deep Kill Omega' },
+  { id: 'ghost_trial_2', label: 'Deep Kill Ghost' },
 ];
 
 type ModeId = 'stealth_mode' | 'anti_gptzero' | 'deep_signal_kill';
 const MODE_ENGINES: Record<ModeId, Set<string>> = {
-  stealth_mode: new Set(['ozone', 'easy', 'ninja_1', 'king']),
-  anti_gptzero: new Set(['oxygen', 'humara_v3_3', 'nuru_v2', 'ghost_pro_wiki']),
+  stealth_mode: new Set(['ninja_4', 'easy', 'ozone', 'ninja_1', 'king']),
+  anti_gptzero: new Set(['humara_v3_3', 'oxygen', 'nuru_v2', 'ghost_pro_wiki']),
   deep_signal_kill: new Set([
-    'ninja_2',
     'ninja_3',
-    'ninja_4',
+    'ninja_2',
     'ninja_5',
     'ghost_trial_2',
-    'ghost_trial_2_alt',
-    'conscusion_1',
-    'conscusion_12',
   ]),
 };
 const MODE_LABELS: Record<ModeId, string> = {
@@ -182,22 +178,21 @@ const MODE_LABELS: Record<ModeId, string> = {
 };
 
 const ENGINE_GUIDES: Record<string, string> = {
-  ozone: 'Stealth Mode base engine for detector cleaning. Best for ZeroGPT and Surfer cleanup.',
-  easy: 'Stealth Mode wide-coverage engine for balanced, natural sounding rewrites.',
-  nuru_v2: 'Purely non-LLM stealth engine. Runs 10 iterative passes for deep transformation without any AI calls.',
-  ninja_1: 'LLM-powered Ninja rewrite followed by 10 Nuru stealth passes for maximum detector evasion.',
-  king: 'Pure LLM humanizer (GPT-4o-mini). 3-phase sentence-by-sentence pipeline: deep rewrite, self-audit, targeted revision. Removes all 29 Wikipedia AI writing patterns.',
+  ninja_4: 'Top-tier stealth engine. Chains Humara 2.1 + Humara 2.4 + full Nuru pipeline for the cleanest output.',
+  easy: 'Fast stealth engine. Quick rewrites with balanced, natural-sounding output.',
+  ozone: 'Stealth engine for detector cleaning. Best for ZeroGPT and Surfer cleanup.',
+  ninja_1: 'LLM-powered stealth rewrite followed by 10 Nuru passes for maximum detector evasion.',
+  king: 'Pure LLM humanizer (GPT-4o-mini). 3-phase pipeline: deep rewrite, self-audit, targeted revision.',
 
+  humara_v3_3: 'High-power Anti GPTZero engine for stubborn GPTZero flags.',
   oxygen: 'Anti GPTZero engine tuned for GPTZero signal suppression.',
-  humara_v3_3: 'Anti GPTZero high-power engine (2.4) for stubborn GPTZero flags.',
-  ninja_3: 'Deep Signal Kill profile for aggressive suppression.',
-  ninja_2: 'Deep Signal Kill profile for aggressive suppression.',
-  ninja_4: 'Deep Signal Kill profile for aggressive suppression.',
-  ninja_5: 'Deep Signal Kill profile for aggressive suppression.',
-  ghost_trial_2: 'Deep Signal Kill profile for aggressive suppression.',
-  ghost_trial_2_alt: 'Deep Signal Kill profile for aggressive suppression.',
-  conscusion_1: 'Deep Signal Kill profile for aggressive suppression.',
-  conscusion_12: 'Deep Signal Kill profile for aggressive suppression.',
+  nuru_v2: 'Purely non-LLM stealth engine. 10 iterative passes — no AI calls, no external APIs.',
+  ghost_pro_wiki: 'Academic-style rewrite that sounds like encyclopedic human writing.',
+
+  ninja_3: 'Deep Kill: Humara 2.0 → Wikipedia → full Nuru. Aggressive AI signal suppression.',
+  ninja_2: 'Deep Kill: Humara 2.1 → Wikipedia → full Nuru. Multi-API chain for deep cleaning.',
+  ninja_5: 'Deep Kill: Humara 2.2 → Humara 2.4 → full Nuru. Maximum transformation depth.',
+  ghost_trial_2: 'Deep Kill: Wikipedia → Humara 2.4 → full Nuru. Ghost-grade signal removal.',
 };
 
 const DEFAULT_PROCESSING_MESSAGES = [
@@ -359,9 +354,9 @@ function EditorPageInner() {
   // Auto-switch engine when mode changes
   useEffect(() => {
     const fallbackByMode: Record<ModeId, string> = {
-      stealth_mode: 'ozone',
+      stealth_mode: 'ninja_4',
       anti_gptzero: 'humara_v3_3',
-      deep_signal_kill: 'ninja_4',
+      deep_signal_kill: 'ninja_3',
     };
     if (!MODE_ENGINES[mode].has(engine)) setEngine(fallbackByMode[mode]);
   }, [mode]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -406,6 +401,8 @@ function EditorPageInner() {
   const streamSentenceTotalRef = useRef(1);
   const streamPhaseSentenceRef = useRef(0);
   const streamPhaseOpsRef = useRef(1);
+  const streamStageStartedAtRef = useRef(0);
+  const streamLastActivityAtRef = useRef(0);
   const abortRef = useRef<AbortController | null>(null);
 
   // Temporary history (auto-expires)
@@ -475,6 +472,20 @@ function EditorPageInner() {
     [activeEngineLabel, mode, streamCycleCurrent, streamCycleLabel, streamCycleTotal, streamProgress],
   );
 
+  const resetStreamActivityClock = useCallback(() => {
+    const now = typeof performance !== 'undefined' ? performance.now() : Date.now();
+    streamStageStartedAtRef.current = now;
+    streamLastActivityAtRef.current = now;
+  }, []);
+
+  const markStreamActivity = useCallback((kind: 'stage' | 'activity' = 'activity') => {
+    const now = typeof performance !== 'undefined' ? performance.now() : Date.now();
+    streamLastActivityAtRef.current = now;
+    if (kind === 'stage') {
+      streamStageStartedAtRef.current = now;
+    }
+  }, []);
+
   // Auto-expire history entries after TTL
   useEffect(() => {
     if (history.length === 0) return;
@@ -485,25 +496,56 @@ function EditorPageInner() {
     return () => clearInterval(interval);
   }, [history.length]);
 
-  // Smoothly ease visible progress toward target for a natural water-fill motion.
-  // When target drops to 0 (new phase), drain quickly then allow fill.
+  // Ease visible progress toward real streamed updates, but keep filling between sparse
+  // server events so full-text engines do not appear stuck at 0%.
   useEffect(() => {
     if (!isAnimating) return;
+    if (!streamStageStartedAtRef.current || !streamLastActivityAtRef.current) {
+      resetStreamActivityClock();
+    }
     const tick = window.setInterval(() => {
       setStreamProgress(prev => {
-        const delta = streamProgressTarget - prev;
-        if (Math.abs(delta) < 0.3) return streamProgressTarget;
-        // Draining (new phase reset): fast drain
+        const now = typeof performance !== 'undefined' ? performance.now() : Date.now();
+        const stageAge = Math.max(0, now - streamStageStartedAtRef.current);
+        const quietAge = Math.max(0, now - streamLastActivityAtRef.current);
+
         if (streamProgressTarget < prev && streamProgressTarget <= 2) {
-          return Math.max(0, prev - 4);
+          const drained = Math.max(streamProgressTarget, prev - 5.25);
+          if (stageAge < 260 || drained > streamProgressTarget + 1.5) {
+            return drained;
+          }
         }
-        // Filling: smooth ease
-        const step = Math.max(0.3, Math.min(1.5, Math.abs(delta) * 0.09));
+
+        let resolvedTarget = streamProgressTarget;
+        if (resolvedTarget < 99) {
+          const stageCap = /analyzing/i.test(visibleProcessingStage)
+            ? 96
+            : /initializing|engine processing/i.test(visibleProcessingStage)
+              ? 62
+              : 84;
+          const warmupTarget = Math.min(stageCap, 6 + stageAge / 150);
+          resolvedTarget = Math.max(resolvedTarget, warmupTarget);
+
+          if (quietAge > 480) {
+            const quietFillTarget = Math.min(stageCap, warmupTarget + (quietAge - 480) / 115);
+            resolvedTarget = Math.max(resolvedTarget, quietFillTarget);
+          }
+        }
+
+        if (streamProgressTarget >= 100) {
+          resolvedTarget = 100;
+        }
+
+        const delta = resolvedTarget - prev;
+        if (Math.abs(delta) < 0.25) return resolvedTarget;
+        const step = delta > 0
+          ? Math.max(0.5, Math.min(2.6, Math.abs(delta) * 0.09))
+          : Math.max(0.8, Math.min(5.2, Math.abs(delta) * 0.24));
         return prev + Math.sign(delta) * Math.min(step, Math.abs(delta));
       });
     }, 16);
     return () => window.clearInterval(tick);
-  }, [isAnimating, streamProgressTarget]);
+  }, [isAnimating, resetStreamActivityClock, streamProgressTarget, visibleProcessingStage]);
 
   useEffect(() => {
     setProcessingMessageIndex(0);
@@ -647,6 +689,7 @@ function EditorPageInner() {
         try { event = JSON.parse(line.slice(6)); } catch { continue; }
 
         if (event.type === 'error') {
+          markStreamActivity();
           const errorMessage = typeof event.error === 'string' ? event.error : 'Processing failed';
           const partialText = reassemblePartialText(streamedSentences, streamedParagraphBoundaries);
           if (partialText.trim()) {
@@ -661,6 +704,7 @@ function EditorPageInner() {
         }
 
         if (event.type === 'init') {
+          markStreamActivity('stage');
           const rawSents = event.sentences as string[];
           streamedSentences = [...rawSents];
           streamedParagraphBoundaries = (event.paragraphBoundaries as number[]) ?? [];
@@ -676,6 +720,7 @@ function EditorPageInner() {
           setStreamCycleTotal(0);
           setStreamCycleLabel('');
         } else if (event.type === 'stage') {
+          markStreamActivity('stage');
           const stageLabel = event.stage as string;
           setStreamGlobalStage(stageLabel);
           const cycleCurrent = typeof event.cycleCurrent === 'number' ? event.cycleCurrent : 0;
@@ -723,6 +768,7 @@ function EditorPageInner() {
             setStreamProgressTarget(lastProgressUiValue);
           }
         } else if (event.type === 'sentence') {
+          markStreamActivity();
           const idx = event.index as number;
           const txt = event.text as string;
           if (idx >= streamedSentences.length) {
@@ -745,6 +791,7 @@ function EditorPageInner() {
             setStreamProgressTarget(phaseProgress);
           }
         } else if (event.type === 'done') {
+          markStreamActivity();
           finalData = event as Record<string, unknown>;
           setStreamGlobalStage('Complete');
           setStreamProgressTarget(100);
@@ -814,6 +861,7 @@ function EditorPageInner() {
     setStreamCycleTotal(0);
     setStreamCycleLabel('');
     setProcessingMessageIndex(0);
+    resetStreamActivityClock();
     setIsAnimating(true);
 
     // Abort any previous stream
@@ -882,6 +930,7 @@ function EditorPageInner() {
     setStreamCycleTotal(0);
     setStreamCycleLabel('');
     setProcessingMessageIndex(0);
+    resetStreamActivityClock();
     setIsAnimating(true);
 
     if (abortRef.current) abortRef.current.abort();
@@ -935,6 +984,8 @@ function EditorPageInner() {
     setSentenceScores([]); setMeaningScore(null);
     setPreGeneratedAlts({});
     setIsAnimating(false);
+    streamStageStartedAtRef.current = 0;
+    streamLastActivityAtRef.current = 0;
     setStreamGlobalStage('Initializing…'); setStreamProgress(0); setStreamProgressTarget(0); setStreamPhaseName(''); setStreamPhaseIndex(0); setStreamTotalPhases(1); setStreamCycleCurrent(0); setStreamCycleTotal(0); setStreamCycleLabel(''); setProcessingMessageIndex(0);
     if (abortRef.current) { abortRef.current.abort(); abortRef.current = null; }
     setError(''); closePopup();

@@ -40,9 +40,47 @@ export default function RootLayoutClient({ children }: { children: React.ReactNo
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
+  useEffect(() => {
+    setMobileMenuOpen(false);
+    setAppMenuOpen(false);
+  }, [pathname]);
+
+  const isRouteActive = (href: string, matchPaths: string[] = [], exact = false) => {
+    const candidates = [href, ...matchPaths];
+    return candidates.some((route) => {
+      if (route === '/') return pathname === '/';
+      if (exact) return pathname === route;
+      return pathname === route || pathname.startsWith(route + '/');
+    });
+  };
+
+  const publicLinks = [
+    { name: 'How it Works', href: '/how-it-works' },
+    { name: 'Pricing', href: '/pricing' },
+    { name: 'About', href: '/about' },
+    { name: 'Blog', href: '/blog' },
+    { name: 'AI Detector', href: '/detector', badge: 'Soon' },
+    { name: 'API', href: '/api-pricing' },
+    { name: 'Contact', href: '/contact' },
+  ];
+
+  const appExploreLinks = [
+    { name: 'Pricing', href: '/pricing' },
+    { name: 'Blog', href: '/blog', matchPaths: ['/blog'] },
+    { name: 'Contact', href: '/contact' },
+  ];
+
+  const primaryAction = user
+    ? { href: '/app', label: 'Open App', exact: true }
+    : { href: '/signup', label: 'Get Started', exact: true };
+
+  const secondaryAction = user
+    ? { href: '/app/dashboard', label: 'Dashboard' }
+    : { href: '/login', label: 'Log In', exact: true };
+
   const appLinks = [
-    { name: 'Dashboard', href: '/app/dashboard', icon: LayoutDashboard },
-    { name: 'Humanizer', href: '/app', icon: Edit3 },
+    { name: 'Dashboard', href: '/app/dashboard', icon: LayoutDashboard, matchPaths: ['/app/payment/verify'] },
+    { name: 'Humanizer', href: '/app', icon: Edit3, exact: true },
     { name: 'Documents', href: '/app/documents', icon: FileText },
     { name: 'AI Detector', href: '/app/detector', icon: ShieldCheck, badge: 'Soon' },
     { name: 'Style Profiles', href: '/app/style', icon: BrainCircuit },
@@ -62,14 +100,29 @@ export default function RootLayoutClient({ children }: { children: React.ReactNo
             <div className="flex justify-between items-center h-[72px]">
               <Logo />
 
-              <nav className="hidden md:flex items-center gap-9">
-                <Link href="/how-it-works" className="text-sm text-slate-600 dark:text-zinc-400 hover:text-purple-500 font-medium transition-colors">How it Works</Link>
-                <Link href="/pricing" className="text-sm text-slate-600 dark:text-zinc-400 hover:text-purple-500 font-medium transition-colors">Pricing</Link>
-                <Link href="/about" className="text-sm text-slate-600 dark:text-zinc-400 hover:text-purple-500 font-medium transition-colors">About</Link>
-                <Link href="/blog" className="text-sm text-slate-600 dark:text-zinc-400 hover:text-purple-500 font-medium transition-colors">Blog</Link>
-                <Link href="/detector" className="text-sm text-slate-600 dark:text-zinc-400 hover:text-purple-500 font-medium transition-colors inline-flex items-center gap-1.5">AI Detector <span className="text-[9px] font-bold text-amber-500 bg-amber-100 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800/40 px-1.5 py-0.5 rounded-full">Soon</span></Link>
-                <Link href="/api-pricing" className="text-sm text-slate-600 dark:text-zinc-400 hover:text-purple-500 font-medium transition-colors">API</Link>
-                <Link href="/contact" className="text-sm text-slate-600 dark:text-zinc-400 hover:text-purple-500 font-medium transition-colors">Contact</Link>
+              <nav className="hidden md:flex items-center gap-2">
+                {publicLinks.map((link) => {
+                  const isActive = isRouteActive(link.href);
+                  return (
+                    <Link
+                      key={link.name}
+                      href={link.href}
+                      aria-current={isActive ? 'page' : undefined}
+                      className={`inline-flex items-center gap-1.5 rounded-full px-3 py-2 text-sm font-medium transition-all ${
+                        isActive
+                          ? 'bg-white/90 text-slate-900 shadow-sm shadow-slate-200/80 dark:bg-white/10 dark:text-white dark:shadow-black/20'
+                          : 'text-slate-600 dark:text-zinc-400 hover:text-purple-500 hover:bg-white/70 dark:hover:bg-white/5'
+                      }`}
+                    >
+                      {link.name}
+                      {link.badge && (
+                        <span className="text-[9px] font-bold text-amber-500 bg-amber-100 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800/40 px-1.5 py-0.5 rounded-full">
+                          {link.badge}
+                        </span>
+                      )}
+                    </Link>
+                  );
+                })}
               </nav>
 
               <div className="hidden md:flex items-center gap-4">
@@ -82,8 +135,25 @@ export default function RootLayoutClient({ children }: { children: React.ReactNo
                   {theme === 'dark' ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
                   <span className="text-xs font-semibold">{theme === 'dark' ? 'Light' : 'Dark'}</span>
                 </button>
-                <Link href="/login" className="text-sm text-slate-600 dark:text-zinc-400 hover:text-purple-500 font-medium transition-colors">Log In</Link>
-                <Link href="/signup" className="bg-purple-600 hover:bg-purple-700 text-white px-6 py-3 rounded-2xl text-sm font-semibold transition-all hover:shadow-lg hover:shadow-purple-600/25">Get Started</Link>
+                <Link
+                  href={secondaryAction.href}
+                  aria-current={isRouteActive(secondaryAction.href, [], secondaryAction.exact) ? 'page' : undefined}
+                  className={`text-sm font-medium transition-colors ${
+                    isRouteActive(secondaryAction.href, [], secondaryAction.exact)
+                      ? 'text-slate-900 dark:text-white'
+                      : 'text-slate-600 dark:text-zinc-400 hover:text-purple-500'
+                  }`}
+                >
+                  {secondaryAction.label}
+                </Link>
+                <Link href={primaryAction.href} className="bg-purple-600 hover:bg-purple-700 text-white px-6 py-3 rounded-2xl text-sm font-semibold transition-all hover:shadow-lg hover:shadow-purple-600/25">
+                  {primaryAction.label}
+                </Link>
+                {user && (
+                  <button onClick={signOut} className="text-sm text-slate-600 dark:text-zinc-400 hover:text-red-500 dark:hover:text-red-400 font-medium transition-colors">
+                    Sign Out
+                  </button>
+                )}
               </div>
 
               <div className="md:hidden flex items-center gap-2">
@@ -103,16 +173,37 @@ export default function RootLayoutClient({ children }: { children: React.ReactNo
 
           {mobileMenuOpen && (
             <div className="md:hidden bg-white/95 dark:bg-[#0F0F17] border-b border-slate-200 dark:border-white/10 px-6 py-6 flex flex-col gap-4 absolute top-full left-0 w-full shadow-lg backdrop-blur-xl">
-              <Link href="/how-it-works" onClick={() => setMobileMenuOpen(false)} className="text-sm font-medium text-slate-700 dark:text-zinc-200 py-1">How it Works</Link>
-              <Link href="/pricing" onClick={() => setMobileMenuOpen(false)} className="text-sm font-medium text-slate-700 dark:text-zinc-200 py-1">Pricing</Link>
-              <Link href="/about" onClick={() => setMobileMenuOpen(false)} className="text-sm font-medium text-slate-700 dark:text-zinc-200 py-1">About</Link>
-              <Link href="/blog" onClick={() => setMobileMenuOpen(false)} className="text-sm font-medium text-slate-700 dark:text-zinc-200 py-1">Blog</Link>
-              <Link href="/detector" onClick={() => setMobileMenuOpen(false)} className="text-sm font-medium text-slate-700 dark:text-zinc-200 py-1 inline-flex items-center gap-1.5">AI Detector <span className="text-[9px] font-bold text-amber-500 bg-amber-100 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800/40 px-1.5 py-0.5 rounded-full">Soon</span></Link>
-              <Link href="/api-pricing" onClick={() => setMobileMenuOpen(false)} className="text-sm font-medium text-slate-700 dark:text-zinc-200 py-1">API</Link>
-              <Link href="/contact" onClick={() => setMobileMenuOpen(false)} className="text-sm font-medium text-slate-700 dark:text-zinc-200 py-1">Contact</Link>
+              {publicLinks.map((link) => {
+                const isActive = isRouteActive(link.href);
+                return (
+                  <Link
+                    key={link.name}
+                    href={link.href}
+                    onClick={() => setMobileMenuOpen(false)}
+                    aria-current={isActive ? 'page' : undefined}
+                    className={`inline-flex items-center gap-1.5 rounded-xl px-3 py-2 text-sm font-medium transition-colors ${
+                      isActive
+                        ? 'bg-slate-100 text-slate-900 dark:bg-zinc-800/80 dark:text-white'
+                        : 'text-slate-700 dark:text-zinc-200'
+                    }`}
+                  >
+                    {link.name}
+                    {link.badge && (
+                      <span className="text-[9px] font-bold text-amber-500 bg-amber-100 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800/40 px-1.5 py-0.5 rounded-full">
+                        {link.badge}
+                      </span>
+                    )}
+                  </Link>
+                );
+              })}
               <div className="h-px bg-slate-200 dark:bg-white/10 my-1"></div>
-              <Link href="/login" onClick={() => setMobileMenuOpen(false)} className="text-sm font-medium text-slate-700 dark:text-zinc-200 py-1">Log In</Link>
-              <Link href="/signup" onClick={() => setMobileMenuOpen(false)} className="text-sm font-medium text-purple-400 py-1">Get Started</Link>
+              <Link href={secondaryAction.href} onClick={() => setMobileMenuOpen(false)} className="text-sm font-medium text-slate-700 dark:text-zinc-200 py-1">{secondaryAction.label}</Link>
+              <Link href={primaryAction.href} onClick={() => setMobileMenuOpen(false)} className="text-sm font-medium text-purple-400 py-1">{primaryAction.label}</Link>
+              {user && (
+                <button onClick={signOut} className="text-left text-sm font-medium text-red-500 dark:text-red-400 py-1">
+                  Sign Out
+                </button>
+              )}
             </div>
           )}
         </header>
@@ -215,13 +306,14 @@ export default function RootLayoutClient({ children }: { children: React.ReactNo
         </div>
         <nav className="flex-1 px-3 space-y-0.5 overflow-y-auto">
           {appLinks.map((link) => {
-            const isActive = pathname === link.href;
+            const isActive = isRouteActive(link.href, 'matchPaths' in link && link.matchPaths ? link.matchPaths : [], 'exact' in link ? Boolean(link.exact) : false);
             const Icon = link.icon;
             return (
               <Link
                 key={link.name}
                 href={link.href}
                 onClick={() => setAppMenuOpen(false)}
+                aria-current={isActive ? 'page' : undefined}
                 className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
                   isActive
                     ? 'bg-purple-950 text-purple-300'
@@ -238,6 +330,19 @@ export default function RootLayoutClient({ children }: { children: React.ReactNo
           })}
         </nav>
         <div className="px-3 pt-4 mt-4 border-t border-slate-200 dark:border-zinc-800 space-y-0.5">
+          <p className="px-3 pb-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400 dark:text-zinc-500">Explore</p>
+          {appExploreLinks.map((link) => (
+            <Link
+              key={link.name}
+              href={link.href}
+              onClick={() => setAppMenuOpen(false)}
+              className="flex items-center justify-between px-3 py-2.5 rounded-lg text-sm font-medium text-slate-600 dark:text-zinc-400 hover:bg-slate-200 dark:hover:bg-zinc-800 hover:text-slate-900 dark:hover:text-white transition-colors group"
+            >
+              <span>{link.name}</span>
+              <ArrowRight className="w-4 h-4 opacity-0 group-hover:opacity-100 group-hover:translate-x-0.5 transition-all" />
+            </Link>
+          ))}
+          <div className="my-2 h-px bg-slate-200 dark:bg-zinc-800" />
           <Link href="/" className="flex items-center justify-between px-3 py-2.5 rounded-lg text-sm font-medium text-slate-600 dark:text-zinc-400 hover:bg-slate-200 dark:hover:bg-zinc-800 hover:text-slate-900 dark:hover:text-white transition-colors group">
             <span className="flex items-center gap-3">
               <LogOut className="w-[18px] h-[18px] rotate-180" /> Back to Home

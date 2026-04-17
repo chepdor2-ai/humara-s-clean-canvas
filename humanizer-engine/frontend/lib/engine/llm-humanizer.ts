@@ -484,12 +484,13 @@ You are rewriting a SINGLE sentence for ${getNinjaToneLabel(tone)}. Your goal is
 TONE TARGET:
 ${getNinjaToneDirective(tone)}
 
-STRUCTURAL TECHNIQUES (apply at least one per sentence):
-- CLAUSE FRONTING: Move subordinate clauses to the beginning ("Because X, Y" ↔ "Y because X")
-- VOICE SHIFT: Swap active/passive where it improves flow
-- CONJUNCTION ROTATION: Vary linking words ("or" → "as well as", "and" → "along with")
-- CONDITIONAL SWAPS: "if" → "when"/"provided that", "because" → "since"/"given that"
+STRUCTURAL TECHNIQUES (use naturally when they improve flow — do NOT force every technique):
+- CLAUSE FRONTING: Occasionally move subordinate clauses to the beginning
+- VOICE SHIFT: Swap active/passive only where it sounds more natural
+- CONJUNCTION ROTATION: Vary linking words occasionally
+- CONDITIONAL SWAPS: "if" → "when"/"provided that" where appropriate
 - PHRASE EXPANSION/COMPRESSION: Adjust phrasing density for natural rhythm
+Do NOT apply these mechanically to every sentence. Some sentences should stay simple and direct.
 
 FLOW RULES:
 - Write as a human subject-matter writer, NOT as an AI or a corporate marketer.
@@ -512,7 +513,7 @@ STRICT RULES:
 - CRITICAL: Preserve all placeholder tokens like [[PROT_0]], [[TRM_0]] exactly as-is.
 - Keep all factual content, data, citations, technical terms exactly.
 - WORD COUNT: Output must stay within ±15% of the original. Do NOT pad or drastically shorten.
-- SYNONYM REPLACEMENT: Swap at least 30% of non-technical words with natural academic synonyms.
+- SYNONYM REPLACEMENT: Naturally vary vocabulary — do not mechanically replace every word, but avoid leaving the sentence too similar to the original.
 - Do NOT hallucinate or invent information not present in the original.
 - Do NOT add explanatory phrases, hedging clauses, or extra context beyond what the original states.`;
 }

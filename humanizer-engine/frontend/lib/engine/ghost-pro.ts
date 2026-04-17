@@ -221,13 +221,11 @@ SHORT TEXT — EXTRA RULES (this text is under 300 words, so every sentence matt
 
   const burstinessRule = isWikipedia
     ? `1. SENTENCE LENGTH VARIATION (critical for bypassing AI detection):
-   Wikipedia articles have natural sentence length variation. Match these statistics:
-   - Average sentence length: 20-24 words
-   - Standard deviation: 8-10 words
+   Wikipedia articles have natural sentence length variation.
    - Include short factual sentences (8-14 words): "The treaty was signed in 1648." "Several species remain endangered."
    - Include longer compound sentences (30-45 words) with subordinate clauses, relative clauses, or appositives
    - NEVER write 3 consecutive sentences within 6 words of each other in length
-   - Target coefficient of variation between 0.35 and 0.50`
+   - Let the variation happen naturally — do NOT force every sentence to a target length`
     : isAcademic
     ? `1. SENTENCE LENGTH VARIATION (the single most important rule):
    You MUST create genuine variation in sentence lengths in EVERY paragraph.
@@ -258,9 +256,9 @@ SHORT TEXT — EXTRA RULES (this text is under 300 words, so every sentence matt
    - Use passive voice naturally where appropriate (15-25% of sentences): "The organization was founded in 1950" is natural in Wikipedia
    - State facts directly without qualification: "The population increased by 30%" not "The population saw a significant increase"
    - Use specific numbers, dates, and proper nouns from the original text wherever possible
-   - MANDATORY: Replace at least 30% of non-technical content words with natural academic synonyms. Do NOT leave most words unchanged — rewrite actively.
-   - STRUCTURAL VARIATION: Vary sentence structures aggressively. Use clause fronting, voice shifts (active/passive), nominalization, and reordering. Do NOT preserve the original sentence structure — transform it.
-   - BREAK TEMPLATE PATTERNS: If the original text has repetitive patterns (e.g. every paragraph starts with "This source is relevant because..."), break them. Use different formulations each time.`
+   - MANDATORY: Vary vocabulary naturally — do not leave most words unchanged, but avoid mechanical synonym replacement.
+   - STRUCTURAL VARIATION: Vary sentence structures naturally. Use clause fronting, voice shifts, and reordering where they improve flow. Do NOT preserve the original sentence structure.
+   - BREAK TEMPLATE PATTERNS: If the original text has repetitive patterns (e.g. every paragraph starts the same way), break them. Use different formulations each time.`
     : isAcademic
     ? `5. WORD CHOICE — sound like a real scholar, not an AI:
    - Keep appropriate academic vocabulary (analysis, framework, implications) — these are expected
@@ -286,7 +284,7 @@ ${isWikipedia ? `2. BANNED VOCABULARY — these are AI-detector markers, never u
 
    Also BANNED phrases: "it is important to note", "it should be noted", "plays a crucial role", "in today's world", "in today's society", "a wide range of", "due to the fact that", "first and foremost", "each and every", "not only...but also", "serves as a testament", "it is worth noting", "it is clear that", "moving forward", "when it comes to"
 
-   ALLOWED in Wikipedia context (do NOT replace these): significant, demonstrated, established, contributed, implemented, comprehensive, framework, methodology, fundamental, substantial, facilitate, prominent, notable, considerable, contemporary, subsequent, initial, primary, various, additional, specific, respectively, approximately` :
+   ALLOWED in Wikipedia context (do NOT replace these): significant, demonstrated, established, contributed, implemented, prominent, notable, considerable, contemporary, subsequent, initial, primary, various, additional, specific, respectively, approximately` :
 `2. ABSOLUTELY BANNED VOCABULARY — if you use ANY of these words, the output fails:
    utilize, facilitate, leverage, comprehensive, multifaceted, paramount, furthermore, moreover, additionally, consequently, subsequently, nevertheless, notwithstanding, aforementioned, paradigm, trajectory, discourse, dichotomy, conundrum, ramification, underpinning, synergy, robust, nuanced, salient, ubiquitous, pivotal, intricate, meticulous, profound, inherent, overarching, substantive, efficacious, holistic, transformative, innovative, groundbreaking, noteworthy, proliferate, exacerbate, ameliorate, engender, delineate, elucidate, illuminate, necessitate, perpetuate, underscore, exemplify, encompass, bolster, catalyze, streamline, optimize, mitigate, navigate, prioritize, articulate, substantiate, corroborate, disseminate, cultivate, ascertain, endeavor, delve, embark, foster, harness, spearhead, unravel, unveil, tapestry, cornerstone, bedrock, linchpin, nexus, spectrum, myriad, plethora, multitude, landscape, realm, culminate
 

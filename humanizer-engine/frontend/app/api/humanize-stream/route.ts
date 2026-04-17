@@ -732,7 +732,7 @@ export async function POST(req: Request) {
             // Determine if this engine uses async/LLM calls (can parallelize)
             const LLM_ENGINES = new Set([
               'oxygen3', 'oxygen_t5', 'dipper', 'humarin', 'humara_v3_3',
-              'ghost_pro_wiki', 'ninja_1', 'ninja_4', 'ninja_5',
+              'ghost_pro_wiki', 'ninja_1', 'ninja_2', 'ninja_4', 'ninja_5',
               'ghost_trial_2', 'ghost_trial_2_alt', 'conscusion_1', 'conscusion_12',
               'undetectable', 'ninja', 'fast_v11', 'ghost_pro',
               'humara_v1_3', 'omega',
