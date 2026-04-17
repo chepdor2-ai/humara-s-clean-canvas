@@ -1,5 +1,6 @@
 'use client'
 
+import { useState } from 'react'
 import { ThemeProvider } from '@/components/theme-provider'
 import { Sidebar } from '@/components/humanizer/sidebar'
 import { TopBar } from '@/components/humanizer/topbar'
@@ -10,15 +11,17 @@ import { OnboardingTour } from '@/components/onboarding-tour'
 import { Toaster } from '@/components/ui/sonner'
 
 export function AppShell({ children }: { children: React.ReactNode }) {
+  const [sidebarOpen, setSidebarOpen] = useState(false)
+
   return (
     <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
       <CommandPaletteProvider>
         <AmbientBackground />
         <div className="flex min-h-screen">
-          <Sidebar />
-          <div className="flex flex-1 flex-col">
-            <TopBar />
-            <main className="flex-1">{children}</main>
+          <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+          <div className="flex flex-1 flex-col min-w-0">
+            <TopBar onMenuToggle={() => setSidebarOpen(o => !o)} />
+            <main className="flex-1 overflow-y-auto">{children}</main>
           </div>
         </div>
         <ShortcutsOverlay />

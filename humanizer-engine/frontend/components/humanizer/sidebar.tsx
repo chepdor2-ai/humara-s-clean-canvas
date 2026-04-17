@@ -1,6 +1,7 @@
 "use client"
 
 import Link from "next/link"
+import Image from "next/image"
 import { usePathname, useRouter } from "next/navigation"
 import { motion } from "framer-motion"
 import {
@@ -12,16 +13,20 @@ import {
   LogOut,
   Palette,
   Settings,
+  Shield,
   ShieldCheck,
   SlidersHorizontal,
   SpellCheck,
   Wand2,
+  X,
 } from "lucide-react"
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
 import { ThemeToggle } from "./theme-toggle"
 import { useAuth } from "@/app/AuthProvider"
 import { supabase } from "@/lib/supabase"
+
+const ADMIN_EMAILS = ['maguna956@gmail.com', 'maxwellotieno11@gmail.com']
 
 type NavItem = {
   label: string
@@ -35,7 +40,7 @@ const primary: NavItem[] = [
   { label: "Dashboard", icon: LayoutDashboard, href: "/app/dashboard" },
   { label: "Humanizer", icon: Wand2, href: "/app" },
   { label: "Documents", icon: FileText, href: "/app/documents" },
-  { label: "AI Detector", icon: ShieldCheck, href: "/app/detector" },
+  { label: "AI Detector", icon: ShieldCheck, href: "/app/detector", soon: true },
   { label: "Style Profiles", icon: Palette, href: "/app/style" },
   { label: "Grammar", icon: SpellCheck, href: "/app/grammar" },
   { label: "Advanced", icon: SlidersHorizontal, href: "/app/advanced" },
@@ -49,7 +54,7 @@ const explore: NavItem[] = [
   { label: "Blog", icon: FileText, href: "/blog" },
 ]
 
-function NavRow({ item, active }: { item: NavItem; active: boolean }) {
+function NavRow({ item, active, onNavigate }: { item: NavItem; active: boolean; onNavigate?: () => void }) {
   const Icon = item.icon
   const baseClass = cn(
     "group relative flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors",
@@ -77,7 +82,7 @@ function NavRow({ item, active }: { item: NavItem; active: boolean }) {
   )
   if (item.href) {
     return (
-      <Link href={item.href} className={baseClass} prefetch>
+      <Link href={item.href} className={baseClass} prefetch onClick={onNavigate}>
         {body}
       </Link>
     )
@@ -89,16 +94,21 @@ function NavRow({ item, active }: { item: NavItem; active: boolean }) {
   )
 }
 
-export function Sidebar() {
+export function Sidebar({ open, onClose }: { open?: boolean; onClose?: () => void }) {
   const pathname = usePathname()
   const router = useRouter()
   const { user } = useAuth()
-  // supabase imported from lib/supabase
+  const isAdmin = user?.email && ADMIN_EMAILS.includes(user.email)
+
+  const navItems: NavItem[] = [
+    ...primary,
+    ...(isAdmin ? [{ label: "Admin", icon: Shield as React.ComponentType<{ className?: string }>, href: "/app/admin" }] : []),
+  ]
 
   const isActive = (href?: string) => {
     if (!href) return false
     if (href === "/app") return pathname === "/app"
-    if (href === "/app/dashboard") return pathname === "/app/dashboard"
+    if (href === "/app/dashboard") return pathname === "/app/dashboard" || pathname === "/app/payment/verify"
     return pathname.startsWith(href)
   }
 
@@ -108,34 +118,40 @@ export function Sidebar() {
   }
 
   return (
-    <aside className="sticky top-0 hidden h-screen w-64 shrink-0 flex-col border-r border-sidebar-border bg-sidebar/95 backdrop-blur-md lg:flex">
-      <div className="flex items-center gap-3 px-6 py-5">
-        <div className="relative flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-primary to-cyan-600 shadow-lg shadow-primary/25">
-          <span className="absolute inset-0 rounded-xl bg-gradient-to-br from-primary to-cyan-600 blur-md opacity-60 pulse-soft" />
-          <svg viewBox="0 0 24 24" className="relative h-5 w-5 text-white" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M12 2v4" />
-            <path d="m16.24 7.76 2.83-2.83" />
-            <path d="M18 12h4" />
-            <path d="m16.24 16.24 2.83 2.83" />
-            <path d="M12 18v4" />
-            <path d="m7.76 16.24-2.83 2.83" />
-            <path d="M6 12H2" />
-            <path d="m7.76 7.76-2.83-2.83" />
-            <circle cx="12" cy="12" r="3" />
-          </svg>
-        </div>
-        <div className="flex flex-col">
-          <span className="text-base font-semibold tracking-tight text-sidebar-foreground">HumaraGPT</span>
-          <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Stealth Suite</span>
-        </div>
-      </div>
+    <>
+      {/* Mobile overlay */}
+      {open && (
+        <div className="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm lg:hidden" onClick={onClose} />
+      )}
 
-      <nav className="flex-1 space-y-6 overflow-y-auto premium-scroll px-3 pb-4">
-        <div className="space-y-0.5">
-          {primary.map((item) => (
-            <NavRow key={item.label} item={item} active={isActive(item.href)} />
-          ))}
+      <aside className={cn(
+        "fixed top-0 left-0 z-50 h-screen w-64 shrink-0 flex-col border-r border-sidebar-border bg-sidebar/95 backdrop-blur-md transition-transform duration-200 lg:static lg:z-auto lg:flex",
+        open ? "flex translate-x-0" : "-translate-x-full lg:translate-x-0 lg:flex hidden"
+      )}>
+        {/* Header */}
+        <div className="flex items-center gap-3 px-5 py-5">
+          <Link href="/" className="flex items-center gap-3 group">
+            <div className="relative">
+              <Image src="/logo.png" alt="HumaraGPT" width={36} height={36} className="w-9 h-9 relative z-10 drop-shadow-[0_0_10px_rgba(147,51,234,0.6)]" />
+              <div className="absolute -inset-1 rounded-full bg-purple-500/25 animate-[logoPulse_2.5s_ease-in-out_infinite] blur-md" />
+            </div>
+            <div className="flex flex-col">
+              <span className="text-base font-semibold tracking-tight text-sidebar-foreground">HumaraGPT</span>
+              <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Stealth Suite</span>
+            </div>
+          </Link>
+          {/* Mobile close button */}
+          <button onClick={onClose} className="ml-auto p-1 rounded-md text-muted-foreground hover:text-foreground lg:hidden">
+            <X className="h-5 w-5" />
+          </button>
         </div>
+
+        <nav className="flex-1 space-y-6 overflow-y-auto premium-scroll px-3 pb-4">
+          <div className="space-y-0.5">
+            {navItems.map((item) => (
+              <NavRow key={item.label} item={item} active={isActive(item.href)} onNavigate={onClose} />
+            ))}
+          </div>
 
         <div>
           <div className="px-3 pb-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
@@ -169,6 +185,7 @@ export function Sidebar() {
       <div className="space-y-0.5 border-t border-sidebar-border p-3">
         <Link
           href="/"
+          onClick={onClose}
           className="group relative flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm text-sidebar-foreground/70 transition-colors hover:bg-sidebar-accent/60 hover:text-sidebar-foreground"
         >
           <ArrowLeft className="h-4 w-4 shrink-0" />
@@ -184,5 +201,6 @@ export function Sidebar() {
         </button>
       </div>
     </aside>
+    </>
   )
 }
