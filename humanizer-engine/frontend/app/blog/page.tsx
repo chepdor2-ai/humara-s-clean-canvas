@@ -22,7 +22,7 @@ export const metadata: Metadata = {
 
 const CATEGORY_COLORS: Record<string, string> = {
   Guides: 'bg-blue-900/30 text-blue-300 border-blue-700',
-  Comparisons: 'bg-purple-900/30 text-purple-300 border-purple-700',
+  Comparisons: 'bg-cyan-900/30 text-cyan-300 border-cyan-700',
   Technology: 'bg-emerald-900/30 text-emerald-300 border-emerald-700',
   SEO: 'bg-amber-900/30 text-amber-300 border-amber-700',
 };
@@ -53,7 +53,7 @@ export default function BlogPage() {
               <Link
                 key={post.slug}
                 href={`/blog/${post.slug}`}
-                className="group bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-2xl p-8 hover:border-purple-700/50 hover:bg-slate-50 dark:bg-zinc-900/80 transition-all duration-300 flex flex-col"
+                className="group bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-2xl p-8 hover:border-cyan-700/50 hover:bg-slate-50 dark:bg-zinc-900/80 transition-all duration-300 flex flex-col"
               >
                 <div className="flex items-center gap-3 mb-5">
                   <span className={`text-[10px] font-bold uppercase px-2.5 py-1 rounded-full border ${CATEGORY_COLORS[post.category] || 'bg-slate-200 dark:bg-zinc-800 text-slate-600 dark:text-zinc-300 border-slate-300 dark:border-zinc-700'}`}>
@@ -61,7 +61,7 @@ export default function BlogPage() {
                   </span>
                 </div>
 
-                <h2 className="text-xl font-bold text-slate-900 dark:text-white mb-3 group-hover:text-purple-300 transition-colors leading-tight">
+                <h2 className="text-xl font-bold text-slate-900 dark:text-white mb-3 group-hover:text-cyan-300 transition-colors leading-tight">
                   {post.title}
                 </h2>
 
@@ -80,7 +80,7 @@ export default function BlogPage() {
                       {post.readTime}
                     </span>
                   </div>
-                  <ArrowRight className="w-4 h-4 text-purple-400 opacity-0 group-hover:opacity-100 group-hover:translate-x-1 transition-all" />
+                  <ArrowRight className="w-4 h-4 text-cyan-400 opacity-0 group-hover:opacity-100 group-hover:translate-x-1 transition-all" />
                 </div>
               </Link>
             ))}
@@ -99,7 +99,7 @@ export default function BlogPage() {
           </p>
           <Link
             href="/signup"
-            className="inline-flex items-center gap-2 bg-purple-600 hover:bg-purple-700 text-white px-8 py-4 rounded-2xl text-sm font-semibold transition-all hover:shadow-lg hover:shadow-purple-600/25"
+            className="inline-flex items-center gap-2 bg-cyan-600 hover:bg-cyan-700 text-white px-8 py-4 rounded-2xl text-sm font-semibold transition-all hover:shadow-lg hover:shadow-cyan-600/25"
           >
             Get Started Free <ArrowRight className="w-4 h-4" />
           </Link>

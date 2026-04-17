@@ -70,13 +70,13 @@ export default function MacBookMockup() {
 
   return (
     <div className="relative">
-      {/* Purple glow behind */}
-      <div className="absolute -inset-20 bg-gradient-to-br from-purple-500/20 via-purple-600/10 to-transparent rounded-full blur-[100px] pointer-events-none" />
+      {/* cyan glow behind */}
+      <div className="absolute -inset-20 bg-gradient-to-br from-cyan-500/20 via-cyan-600/10 to-transparent rounded-full blur-[100px] pointer-events-none" />
 
       {/* MacBook photo + floating screen overlay */}
       <div className="relative max-w-4xl mx-auto">
         {/* Real MacBook image */}
-        <div className="relative rounded-2xl overflow-hidden shadow-2xl shadow-purple-900/30">
+        <div className="relative rounded-2xl overflow-hidden shadow-2xl shadow-cyan-900/30">
           <Image
             src="/macbook-frame.jpg"
             alt="MacBook Pro"
@@ -97,7 +97,7 @@ export default function MacBookMockup() {
           transition={{ duration: 7, ease: "easeInOut", repeat: Infinity }}
           whileHover={{ scale: 1.02, transition: { duration: 0.4 } }}
         >
-          <div className="w-full max-w-2xl bg-[#09090F]/95 backdrop-blur-xl rounded-xl overflow-hidden border border-white/10 shadow-2xl shadow-purple-500/10">
+          <div className="w-full max-w-2xl bg-[#09090F]/95 backdrop-blur-xl rounded-xl overflow-hidden border border-white/10 shadow-2xl shadow-cyan-500/10">
             {/* App chrome bar */}
             <div className="flex items-center gap-2 px-4 py-2 border-b border-white/5 bg-[#0A0A12]/90">
               <div className="flex gap-1.5">
@@ -116,19 +116,19 @@ export default function MacBookMockup() {
 
             {/* App header */}
             <div className="px-4 py-2 flex items-center gap-2 border-b border-white/5">
-              <div className="w-4 h-4 rounded-md bg-gradient-to-br from-purple-500 to-purple-700 flex items-center justify-center shadow-lg shadow-purple-500/20">
+              <div className="w-4 h-4 rounded-md bg-gradient-to-br from-cyan-500 to-cyan-700 flex items-center justify-center shadow-lg shadow-cyan-500/20">
                 <Zap className="w-2 h-2 text-white" />
               </div>
               <span className="text-[10px] sm:text-[11px] font-semibold text-white/90">HumaraGPT Humanizer</span>
-              <span className="text-[8px] text-purple-400 bg-purple-500/10 px-1.5 py-0.5 rounded-full font-medium">V3</span>
+              <span className="text-[8px] text-cyan-400 bg-cyan-500/10 px-1.5 py-0.5 rounded-full font-medium">V3</span>
               {isScanning && (
-                <span className="ml-auto text-[8px] sm:text-[9px] text-purple-400 flex items-center gap-1">
-                  <div className="w-1.5 h-1.5 border border-purple-400 border-t-transparent rounded-full animate-spin" />
+                <span className="ml-auto text-[8px] sm:text-[9px] text-cyan-400 flex items-center gap-1">
+                  <div className="w-1.5 h-1.5 border border-cyan-400 border-t-transparent rounded-full animate-spin" />
                   Scanning…
                 </span>
               )}
               {isHumanizing && (
-                <span className="ml-auto text-[8px] sm:text-[9px] text-purple-400 flex items-center gap-1">
+                <span className="ml-auto text-[8px] sm:text-[9px] text-cyan-400 flex items-center gap-1">
                   <Zap className="w-2.5 h-2.5" /> Humanizing…
                 </span>
               )}
@@ -169,14 +169,14 @@ export default function MacBookMockup() {
               {/* Output */}
               <div className={`p-3 sm:p-4 transition-all duration-700 ${isDone ? 'bg-emerald-500/[0.04]' : ''}`}>
                 <div className="flex items-center justify-between mb-1.5">
-                  <span className={`text-[7px] sm:text-[8px] uppercase tracking-wider font-semibold ${isDone ? 'text-emerald-400' : 'text-purple-400'}`}>Output</span>
+                  <span className={`text-[7px] sm:text-[8px] uppercase tracking-wider font-semibold ${isDone ? 'text-emerald-400' : 'text-cyan-400'}`}>Output</span>
                   {isDone && <span className="text-[7px] sm:text-[8px] font-bold text-emerald-400">2% AI</span>}
                 </div>
 
                 {isHumanizing || isDone ? (
                   <p className="text-[8px] sm:text-[10px] leading-relaxed text-gray-200 line-clamp-4 sm:line-clamp-6">
                     {outputText}
-                    {isHumanizing && <span className="inline-block w-px h-2.5 bg-purple-400 ml-0.5 animate-pulse align-text-bottom" />}
+                    {isHumanizing && <span className="inline-block w-px h-2.5 bg-cyan-400 ml-0.5 animate-pulse align-text-bottom" />}
                   </p>
                 ) : (
                   <p className="text-[8px] sm:text-[10px] leading-relaxed text-gray-600 italic">Output will appear here…</p>
@@ -204,7 +204,7 @@ export default function MacBookMockup() {
                 {isScanning ? 'Running 7 detectors…' : isHumanizing ? 'Mode: Standard • Preserving meaning…' : isDone ? 'Human score: 98% • Meaning: 97%' : 'Ready • Paste text to begin'}
               </span>
               <div className="flex items-center gap-1">
-                <div className={`w-1 h-1 sm:w-1.5 sm:h-1.5 rounded-full ${isDone ? 'bg-emerald-500 shadow-sm shadow-emerald-500/50' : isScanning || isHumanizing ? 'bg-purple-500 animate-pulse shadow-sm shadow-purple-500/50' : 'bg-gray-600'}`} />
+                <div className={`w-1 h-1 sm:w-1.5 sm:h-1.5 rounded-full ${isDone ? 'bg-emerald-500 shadow-sm shadow-emerald-500/50' : isScanning || isHumanizing ? 'bg-cyan-500 animate-pulse shadow-sm shadow-cyan-500/50' : 'bg-gray-600'}`} />
                 <span className="text-[7px] sm:text-[8px] text-gray-500">{isDone ? 'Human' : isScanning || isHumanizing ? 'Processing' : 'Idle'}</span>
               </div>
             </div>

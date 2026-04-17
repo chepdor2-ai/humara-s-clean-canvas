@@ -1238,8 +1238,8 @@ function EditorPageInner() {
                 <svg className={`ml-auto w-3 h-3 text-slate-400 dark:text-zinc-500 transition-transform ${engineDropdownOpen ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
               </button>
               {ENGINE_GUIDES[engine] && !engineDropdownOpen && (
-                <div className="absolute left-0 top-full mt-2 z-30 w-[260px] bg-white dark:bg-[#0c0c14] border border-slate-200 dark:border-purple-800/60 rounded-lg px-3 py-2 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none shadow-lg">
-                  <p className="text-[10px] text-slate-600 dark:text-zinc-400 leading-relaxed"><span className="font-bold text-purple-600 dark:text-purple-400">{ENGINES.find(e => e.id === engine)?.label}:</span> {ENGINE_GUIDES[engine]}</p>
+                <div className="absolute left-0 top-full mt-2 z-30 w-[260px] bg-white dark:bg-[#0c0c14] border border-slate-200 dark:border-cyan-800/60 rounded-lg px-3 py-2 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none shadow-lg">
+                  <p className="text-[10px] text-slate-600 dark:text-zinc-400 leading-relaxed"><span className="font-bold text-cyan-600 dark:text-cyan-400">{ENGINES.find(e => e.id === engine)?.label}:</span> {ENGINE_GUIDES[engine]}</p>
                 </div>
               )}
               {engineDropdownOpen && (
@@ -1350,7 +1350,7 @@ function EditorPageInner() {
             <button
               onClick={() => engine === 'easy' ? setEasySentenceBySentence(!easySentenceBySentence) : setOzoneSentenceBySentence(!ozoneSentenceBySentence)}
               className={`relative inline-flex h-4 w-7 items-center rounded-full transition-colors ${
-                (engine === 'easy' ? easySentenceBySentence : ozoneSentenceBySentence) ? 'bg-purple-500 dark:bg-purple-600' : 'bg-slate-300 dark:bg-zinc-700'
+                (engine === 'easy' ? easySentenceBySentence : ozoneSentenceBySentence) ? 'bg-cyan-500 dark:bg-cyan-600' : 'bg-slate-300 dark:bg-zinc-700'
               }`}
             >
               <span className={`inline-block h-2.5 w-2.5 transform rounded-full bg-white transition-transform ${
@@ -1420,7 +1420,7 @@ function EditorPageInner() {
       {engine === 'oxygen' && (
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-1">
           <div className="flex items-center gap-1.5">
-            <span className="text-[9px] font-bold text-purple-600 dark:text-purple-400 uppercase">Pipeline</span>
+            <span className="text-[9px] font-bold text-cyan-600 dark:text-cyan-400 uppercase">Pipeline</span>
             <div className="flex gap-1">
               {[
                 { id: 'quality', label: 'Quality' },
@@ -1429,7 +1429,7 @@ function EditorPageInner() {
               ].map(mode => (
                 <button key={mode.id} onClick={() => setOxygenMode(mode.id as typeof oxygenMode)}
                   className={`px-2 py-0.5 rounded text-[9px] font-semibold transition-all ${
-                    oxygenMode === mode.id ? 'bg-purple-600 text-white' : 'bg-slate-100 dark:bg-zinc-800/60 text-slate-500 dark:text-zinc-500 hover:text-slate-700 dark:hover:text-zinc-300'
+                    oxygenMode === mode.id ? 'bg-cyan-600 text-white' : 'bg-slate-100 dark:bg-zinc-800/60 text-slate-500 dark:text-zinc-500 hover:text-slate-700 dark:hover:text-zinc-300'
                   }`}>{mode.label}</button>
               ))}
             </div>
@@ -1438,26 +1438,26 @@ function EditorPageInner() {
           <label className="flex items-center gap-1.5 cursor-pointer">
             <span className="text-[9px] font-semibold text-slate-500 dark:text-zinc-500">Sentence</span>
             <button onClick={() => setOxygenSentenceBySentence(!oxygenSentenceBySentence)}
-              className={`relative inline-flex h-4 w-7 items-center rounded-full transition-colors ${oxygenSentenceBySentence ? 'bg-purple-600' : 'bg-slate-300 dark:bg-zinc-700'}`}>
+              className={`relative inline-flex h-4 w-7 items-center rounded-full transition-colors ${oxygenSentenceBySentence ? 'bg-cyan-600' : 'bg-slate-300 dark:bg-zinc-700'}`}>
               <span className={`inline-block h-2.5 w-2.5 transform rounded-full bg-white transition-transform ${oxygenSentenceBySentence ? 'translate-x-3.5' : 'translate-x-0.5'}`} />
             </button>
           </label>
           <div className="w-px h-3 bg-slate-200 dark:bg-zinc-800" />
           <div className="flex items-center gap-2">
-            <span className="text-[9px] text-purple-600 dark:text-purple-400">Threshold <span className="font-bold">{(oxygenMinChangeRatio * 100).toFixed(0)}%</span></span>
+            <span className="text-[9px] text-cyan-600 dark:text-cyan-400">Threshold <span className="font-bold">{(oxygenMinChangeRatio * 100).toFixed(0)}%</span></span>
             <input type="range" min="0.2" max="0.8" step="0.05" value={oxygenMinChangeRatio}
               onChange={(e) => setOxygenMinChangeRatio(parseFloat(e.target.value))}
               title="Oxygen threshold"
               aria-label="Oxygen threshold"
-              className="w-16 h-1 bg-purple-200 dark:bg-purple-900/50 rounded appearance-none cursor-pointer accent-purple-600" />
+              className="w-16 h-1 bg-cyan-200 dark:bg-cyan-900/50 rounded appearance-none cursor-pointer accent-cyan-600" />
           </div>
           <div className="flex items-center gap-2">
-            <span className="text-[9px] text-purple-600 dark:text-purple-400">Retries <span className="font-bold">{oxygenMaxRetries}</span></span>
+            <span className="text-[9px] text-cyan-600 dark:text-cyan-400">Retries <span className="font-bold">{oxygenMaxRetries}</span></span>
             <input type="range" min="1" max="15" step="1" value={oxygenMaxRetries}
               onChange={(e) => setOxygenMaxRetries(parseInt(e.target.value))}
               title="Oxygen retries"
               aria-label="Oxygen retries"
-              className="w-16 h-1 bg-purple-200 dark:bg-purple-900/50 rounded appearance-none cursor-pointer accent-purple-600" />
+              className="w-16 h-1 bg-cyan-200 dark:bg-cyan-900/50 rounded appearance-none cursor-pointer accent-cyan-600" />
           </div>
         </div>
       )}
@@ -1685,9 +1685,9 @@ function EditorPageInner() {
                 ) : sentenceAlternatives.length > 0 ? (
                   sentenceAlternatives.map((alt, idx) => (
                     <button key={idx} onClick={() => applyReplacement(alt.text)}
-                      className="w-full text-left px-3 py-2.5 text-sm border-b border-slate-100 dark:border-zinc-800/40 last:border-0 hover:bg-purple-50 dark:hover:bg-purple-900/20 transition-colors">
+                      className="w-full text-left px-3 py-2.5 text-sm border-b border-slate-100 dark:border-zinc-800/40 last:border-0 hover:bg-cyan-50 dark:hover:bg-cyan-900/20 transition-colors">
                       <div className="flex items-start gap-2.5">
-                        <span className="text-xs font-semibold text-purple-600 dark:text-purple-400 bg-purple-100 dark:bg-purple-900/30 px-1.5 py-0.5 rounded mt-0.5 shrink-0">{idx + 1}</span>
+                        <span className="text-xs font-semibold text-cyan-600 dark:text-cyan-400 bg-cyan-100 dark:bg-cyan-900/30 px-1.5 py-0.5 rounded mt-0.5 shrink-0">{idx + 1}</span>
                         <span className="flex-1 text-slate-800 dark:text-zinc-200 leading-relaxed">{alt.text}</span>
                         <span className="text-xs text-slate-500 dark:text-zinc-500 font-medium whitespace-nowrap mt-0.5">{Math.round(alt.score * 100)}%</span>
                       </div>

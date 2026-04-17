@@ -24,7 +24,7 @@ export default function ContactPage() {
       {/* Hero */}
       <section className="w-full pt-32 pb-16 bg-slate-50 dark:bg-zinc-900">
         <div className="max-w-4xl mx-auto px-6 text-center">
-          <div className="inline-flex items-center gap-2 py-1.5 px-3 rounded-full bg-slate-200 dark:bg-zinc-800 text-purple-400 text-xs font-medium mb-8 border border-slate-300 dark:border-zinc-700">
+          <div className="inline-flex items-center gap-2 py-1.5 px-3 rounded-full bg-slate-200 dark:bg-zinc-800 text-cyan-400 text-xs font-medium mb-8 border border-slate-300 dark:border-zinc-700">
             <Clock className="w-3.5 h-3.5" /> We reply within 24h
           </div>
           <h1 className="text-4xl md:text-6xl font-semibold text-slate-900 dark:text-white tracking-tight leading-[1.1] mb-6">
@@ -52,13 +52,13 @@ export default function ContactPage() {
             {channels.map((ch) => {
               const Icon = ch.icon;
               return (
-                <a key={ch.title} href={ch.href} target={ch.href.startsWith('https') ? '_blank' : undefined} rel={ch.href.startsWith('https') ? 'noopener noreferrer' : undefined} className={`bg-slate-50 dark:bg-zinc-900 rounded-xl border p-6 hover:shadow-md transition-all block ${ch.highlight ? 'border-[#25D366]/40 hover:border-[#25D366] ring-1 ring-[#25D366]/10' : 'border-slate-200 dark:border-zinc-800 hover:border-purple-800'}`}>
+                <a key={ch.title} href={ch.href} target={ch.href.startsWith('https') ? '_blank' : undefined} rel={ch.href.startsWith('https') ? 'noopener noreferrer' : undefined} className={`bg-slate-50 dark:bg-zinc-900 rounded-xl border p-6 hover:shadow-md transition-all block ${ch.highlight ? 'border-[#25D366]/40 hover:border-[#25D366] ring-1 ring-[#25D366]/10' : 'border-slate-200 dark:border-zinc-800 hover:border-cyan-800'}`}>
                   <div className={`w-10 h-10 rounded-lg flex items-center justify-center mb-4 ${ch.highlight ? 'bg-[#25D366]/10' : 'bg-slate-200 dark:bg-zinc-800'}`}>
-                    <Icon className={`w-5 h-5 ${ch.highlight ? 'text-[#25D366]' : 'text-purple-400'}`} />
+                    <Icon className={`w-5 h-5 ${ch.highlight ? 'text-[#25D366]' : 'text-cyan-400'}`} />
                   </div>
                   <h3 className="text-lg font-semibold text-slate-900 dark:text-white mb-1">{ch.title}</h3>
                   <p className="text-sm text-slate-500 dark:text-zinc-400 mb-4">{ch.desc}</p>
-                  <p className={`text-sm font-medium mb-1 ${ch.highlight ? 'text-[#25D366]' : 'text-purple-400'}`}>{ch.detail}</p>
+                  <p className={`text-sm font-medium mb-1 ${ch.highlight ? 'text-[#25D366]' : 'text-cyan-400'}`}>{ch.detail}</p>
                   <p className="text-xs text-slate-500 dark:text-zinc-500">{ch.sub}</p>
                 </a>
               );
@@ -108,7 +108,7 @@ export default function ContactPage() {
             >
               <MessageCircle className="w-5 h-5" /> WhatsApp Us
             </a>
-            <Link href="/app" className="bg-purple-600 hover:bg-purple-700 text-white px-7 py-3 rounded-xl text-sm font-medium transition-colors">
+            <Link href="/app" className="bg-cyan-600 hover:bg-cyan-700 text-white px-7 py-3 rounded-xl text-sm font-medium transition-colors">
               Try HumaraGPT Free
             </Link>
           </div>

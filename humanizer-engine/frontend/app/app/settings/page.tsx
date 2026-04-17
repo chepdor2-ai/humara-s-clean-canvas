@@ -261,14 +261,14 @@ export default function SettingsPage() {
               <div>
                 <h2 className="text-lg font-semibold text-slate-900 dark:text-white mb-1">Billing & Plans</h2>
                 <p className="text-sm text-slate-500 dark:text-zinc-400">
-                  {plan ? <>You are on the <strong className="text-purple-400">{plan.display_name} (${plan.price_monthly}/mo)</strong>.</> : 'Loading plan details...'}
+                  {plan ? <>You are on the <strong className="text-cyan-400">{plan.display_name} (${plan.price_monthly}/mo)</strong>.</> : 'Loading plan details...'}
                 </p>
               </div>
 
               {/* Subscription countdown */}
               {usage && usage.daysRemaining > 0 && (
-                <div className="flex items-center gap-3 p-4 bg-purple-950/20 border border-purple-800/30 rounded-xl">
-                  <Clock className="w-5 h-5 text-purple-400 shrink-0" />
+                <div className="flex items-center gap-3 p-4 bg-cyan-950/20 border border-cyan-800/30 rounded-xl">
+                  <Clock className="w-5 h-5 text-cyan-400 shrink-0" />
                   <div className="flex-1">
                     <p className="text-sm font-medium text-slate-900 dark:text-white">Subscription Active</p>
                     <p className={`text-xs mt-0.5 ${usage.daysRemaining <= 3 ? 'text-red-400' : usage.daysRemaining <= 7 ? 'text-amber-400' : 'text-slate-500 dark:text-zinc-400'}`}>
@@ -318,7 +318,7 @@ export default function SettingsPage() {
                 <div className="p-6 bg-slate-100 dark:bg-zinc-800 rounded-xl border border-slate-300 dark:border-zinc-700 text-center">
                   <Crown className="w-8 h-8 text-slate-500 dark:text-zinc-500 mx-auto mb-3" />
                   <p className="text-sm text-slate-500 dark:text-zinc-400 mb-3">You&apos;re on the Free plan</p>
-                  <a href="/pricing" className="inline-block px-6 py-2.5 bg-purple-600 hover:bg-purple-500 text-white text-sm font-semibold rounded-xl transition-colors">
+                  <a href="/pricing" className="inline-block px-6 py-2.5 bg-cyan-600 hover:bg-cyan-500 text-white text-sm font-semibold rounded-xl transition-colors">
                     Upgrade Now
                   </a>
                 </div>
@@ -327,7 +327,7 @@ export default function SettingsPage() {
               <div className="pt-6 border-t border-slate-200 dark:border-zinc-800 space-y-4">
                 <h3 className="text-sm font-semibold text-slate-900 dark:text-white">Payment History</h3>
                 <p className="text-xs text-slate-500 dark:text-zinc-500">Payments are processed securely via Paystack. View your transaction history on the Paystack dashboard.</p>
-                <a href="/pricing" className="text-purple-400 hover:text-purple-300 text-sm font-medium transition-colors">View Pricing Plans &rarr;</a>
+                <a href="/pricing" className="text-cyan-400 hover:text-cyan-300 text-sm font-medium transition-colors">View Pricing Plans &rarr;</a>
               </div>
             </div>
           )}
@@ -460,7 +460,7 @@ export default function SettingsPage() {
                 </a>
                 <a href="mailto:support@humaragpt.com" className="flex items-center justify-between p-5 bg-slate-100 dark:bg-zinc-800 border border-slate-300 dark:border-zinc-700 rounded-xl hover:border-brand-700 transition-colors group">
                   <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-purple-950 flex items-center justify-center rounded-lg"><Mail className="w-5 h-5 text-purple-600" /></div>
+                    <div className="w-10 h-10 bg-cyan-950 flex items-center justify-center rounded-lg"><Mail className="w-5 h-5 text-cyan-600" /></div>
                     <div>
                       <p className="text-sm font-medium text-slate-900 dark:text-white">Email Support</p>
                       <p className="text-xs text-slate-500 dark:text-zinc-500">support@humaragpt.com</p>

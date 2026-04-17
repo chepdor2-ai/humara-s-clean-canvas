@@ -48,7 +48,7 @@ function UserAvatar({ src, name, size = 32 }: { src?: string | null; name?: stri
 
   return (
     <div
-      className="flex items-center justify-center rounded-full bg-gradient-to-br from-purple-500 to-indigo-600 text-white font-semibold"
+      className="flex items-center justify-center rounded-full bg-gradient-to-br from-cyan-500 to-teal-600 text-white font-semibold"
       style={{ width: size, height: size, fontSize: size * 0.38 }}
     >
       {initials}

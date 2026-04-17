@@ -160,8 +160,8 @@ export default function PricingCards() {
                   disabled={loadingPlan === tier.name}
                   className={`w-full py-3 rounded-xl text-sm font-semibold text-center transition-all disabled:opacity-60 ${
                     tier.featured
-                      ? 'bg-gradient-to-r from-purple-600 to-purple-500 text-white hover:from-purple-700 hover:to-purple-600 shadow-lg shadow-purple-500/25'
-                      : 'bg-purple-600/10 text-purple-400 border border-purple-500/30 hover:bg-purple-600/20 hover:shadow-md hover:shadow-purple-500/10'
+                      ? 'bg-gradient-to-r from-cyan-600 to-cyan-500 text-white hover:from-cyan-700 hover:to-cyan-600 shadow-lg shadow-cyan-500/25'
+                      : 'bg-cyan-600/10 text-cyan-400 border border-cyan-500/30 hover:bg-cyan-600/20 hover:shadow-md hover:shadow-cyan-500/10'
                   }`}
                 >
                   {loadingPlan === tier.name ? 'Processing...' : tier.cta}

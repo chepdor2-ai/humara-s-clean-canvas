@@ -116,9 +116,9 @@ export default function ApiPricingPage() {
     <div className="min-h-screen bg-slate-50 dark:bg-[#05050A]">
       {/* Hero */}
       <section className="relative overflow-hidden py-20 lg:py-28">
-        <div className="absolute inset-0 bg-gradient-to-b from-purple-950/20 via-transparent to-transparent" />
+        <div className="absolute inset-0 bg-gradient-to-b from-cyan-950/20 via-transparent to-transparent" />
         <div className="max-w-5xl mx-auto px-6 text-center relative z-10">
-          <div className="inline-flex items-center gap-2 bg-purple-950/40 border border-purple-800/40 text-purple-300 text-xs font-semibold px-3 py-1.5 rounded-full mb-6">
+          <div className="inline-flex items-center gap-2 bg-cyan-950/40 border border-cyan-800/40 text-cyan-300 text-xs font-semibold px-3 py-1.5 rounded-full mb-6">
             <Code2 className="w-3.5 h-3.5" /> API Access
           </div>
           <h1 className="text-4xl lg:text-5xl font-bold text-slate-900 dark:text-white mb-4 tracking-tight">
@@ -133,14 +133,14 @@ export default function ApiPricingPage() {
             <span className="flex items-center gap-1.5"><Shield className="w-4 h-4 text-emerald-500" /> SHA-256 key hashing</span>
             <span className="flex items-center gap-1.5"><Globe className="w-4 h-4 text-blue-500" /> Global CDN</span>
             <span className="flex items-center gap-1.5"><Clock className="w-4 h-4 text-amber-500" /> &lt;2s avg response</span>
-            <span className="flex items-center gap-1.5"><BarChart3 className="w-4 h-4 text-purple-500" /> Real-time analytics</span>
+            <span className="flex items-center gap-1.5"><BarChart3 className="w-4 h-4 text-cyan-500" /> Real-time analytics</span>
           </div>
 
           {/* Billing toggle */}
           <div className="flex flex-col items-center gap-4 mb-12">
             <div className="flex items-center gap-3">
               <span className={`text-sm font-medium ${!yearly ? 'text-slate-900 dark:text-white' : 'text-slate-500 dark:text-zinc-400'}`}>Monthly</span>
-              <button onClick={() => setYearly(!yearly)} className={`relative w-12 h-6 rounded-full transition-colors ${yearly ? 'bg-purple-600' : 'bg-zinc-700'}`}>
+              <button onClick={() => setYearly(!yearly)} className={`relative w-12 h-6 rounded-full transition-colors ${yearly ? 'bg-cyan-600' : 'bg-zinc-700'}`}>
                 <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all shadow-sm ${yearly ? 'left-7' : 'left-1'}`} />
               </button>
               <span className={`text-sm font-medium ${yearly ? 'text-slate-900 dark:text-white' : 'text-slate-500 dark:text-zinc-400'}`}>Yearly</span>
@@ -161,10 +161,10 @@ export default function ApiPricingPage() {
             const price = yearly ? tier.yearly : tier.monthly;
             const Icon = tier.icon;
             return (
-              <div key={tier.name} className={`rounded-2xl p-6 flex flex-col relative ${tier.featured ? 'bg-slate-100 dark:bg-zinc-800 shadow-2xl shadow-purple-500/15 ring-2 ring-purple-500/30 scale-[1.02]' : 'bg-white dark:bg-zinc-900 border border-slate-300 dark:border-zinc-700/60'}`}>
+              <div key={tier.name} className={`rounded-2xl p-6 flex flex-col relative ${tier.featured ? 'bg-slate-100 dark:bg-zinc-800 shadow-2xl shadow-cyan-500/15 ring-2 ring-cyan-500/30 scale-[1.02]' : 'bg-white dark:bg-zinc-900 border border-slate-300 dark:border-zinc-700/60'}`}>
                 <div className="absolute top-0 left-4 right-4 h-[2px] rounded-full" style={{ background: `linear-gradient(90deg, transparent, ${tier.color}, transparent)` }} />
                 {tier.featured && (
-                  <span className="absolute -top-3 left-1/2 -translate-x-1/2 bg-gradient-to-r from-purple-600 to-purple-500 text-white text-[10px] font-bold uppercase tracking-wider py-1 px-3 rounded-full shadow-lg">Most Popular</span>
+                  <span className="absolute -top-3 left-1/2 -translate-x-1/2 bg-gradient-to-r from-cyan-600 to-cyan-500 text-white text-[10px] font-bold uppercase tracking-wider py-1 px-3 rounded-full shadow-lg">Most Popular</span>
                 )}
 
                 <div className="flex items-center gap-2 mb-3">
@@ -182,18 +182,18 @@ export default function ApiPricingPage() {
                 <div className="space-y-2.5 mb-6 flex-1">
                   {tier.features.map((f, j) => (
                     <div key={j} className="flex items-start gap-2">
-                      <CheckCircle2 className={`w-4 h-4 shrink-0 mt-0.5 ${tier.featured ? 'text-purple-400' : 'text-emerald-500'}`} />
+                      <CheckCircle2 className={`w-4 h-4 shrink-0 mt-0.5 ${tier.featured ? 'text-cyan-400' : 'text-emerald-500'}`} />
                       <span className="text-sm text-slate-700 dark:text-zinc-300">{f}</span>
                     </div>
                   ))}
                 </div>
 
                 {tier.name === 'Enterprise' ? (
-                  <Link href="/contact" className="w-full py-3 rounded-xl text-sm font-semibold text-center bg-purple-600/10 text-purple-400 border border-purple-500/30 hover:bg-purple-600/20 transition-all block">
+                  <Link href="/contact" className="w-full py-3 rounded-xl text-sm font-semibold text-center bg-cyan-600/10 text-cyan-400 border border-cyan-500/30 hover:bg-cyan-600/20 transition-all block">
                     {tier.cta}
                   </Link>
                 ) : (
-                  <Link href="/app/settings" className={`w-full py-3 rounded-xl text-sm font-semibold text-center transition-all block ${tier.featured ? 'bg-gradient-to-r from-purple-600 to-purple-500 text-white hover:from-purple-700 hover:to-purple-600 shadow-lg shadow-purple-500/25' : 'bg-purple-600/10 text-purple-400 border border-purple-500/30 hover:bg-purple-600/20'}`}>
+                  <Link href="/app/settings" className={`w-full py-3 rounded-xl text-sm font-semibold text-center transition-all block ${tier.featured ? 'bg-gradient-to-r from-cyan-600 to-cyan-500 text-white hover:from-cyan-700 hover:to-cyan-600 shadow-lg shadow-cyan-500/25' : 'bg-cyan-600/10 text-cyan-400 border border-cyan-500/30 hover:bg-cyan-600/20'}`}>
                     {tier.cta} <ArrowRight className="w-3.5 h-3.5 inline ml-1" />
                   </Link>
                 )}
@@ -215,7 +215,7 @@ export default function ApiPricingPage() {
                 <div className="flex items-center gap-2 mb-1">
                   <span className="font-semibold text-sm text-slate-900 dark:text-white">{e.name}</span>
                   <code className="text-xs text-slate-500 dark:text-zinc-500 font-mono bg-slate-100 dark:bg-zinc-800 px-1.5 py-0.5 rounded">{e.id}</code>
-                  <span className="text-[10px] font-bold text-purple-400 bg-purple-950/40 px-2 py-0.5 rounded-full">{e.tier}</span>
+                  <span className="text-[10px] font-bold text-cyan-400 bg-cyan-950/40 px-2 py-0.5 rounded-full">{e.tier}</span>
                 </div>
                 <p className="text-xs text-slate-500 dark:text-zinc-400">{e.desc}</p>
               </div>
@@ -234,7 +234,7 @@ export default function ApiPricingPage() {
             { step: '3', title: 'Get Results', desc: 'Receive humanized text with AI scores and usage metadata.' },
           ].map((s) => (
             <div key={s.step} className="bg-white dark:bg-zinc-900 rounded-xl border border-slate-200 dark:border-zinc-800 p-6 text-center">
-              <div className="w-10 h-10 mx-auto mb-4 rounded-full bg-purple-950/50 text-purple-400 flex items-center justify-center text-lg font-bold">{s.step}</div>
+              <div className="w-10 h-10 mx-auto mb-4 rounded-full bg-cyan-950/50 text-cyan-400 flex items-center justify-center text-lg font-bold">{s.step}</div>
               <h3 className="font-semibold text-slate-900 dark:text-white mb-2">{s.title}</h3>
               <p className="text-sm text-slate-500 dark:text-zinc-400">{s.desc}</p>
             </div>
@@ -257,7 +257,7 @@ export default function ApiPricingPage() {
         </div>
 
         <div className="text-center mt-10">
-          <Link href="/app/docs" className="inline-flex items-center gap-2 bg-purple-600 text-white px-6 py-3 rounded-xl text-sm font-semibold hover:bg-purple-700 transition-colors shadow-lg shadow-purple-500/25">
+          <Link href="/app/docs" className="inline-flex items-center gap-2 bg-cyan-600 text-white px-6 py-3 rounded-xl text-sm font-semibold hover:bg-cyan-700 transition-colors shadow-lg shadow-cyan-500/25">
             View Full Documentation <ArrowRight className="w-4 h-4" />
           </Link>
         </div>

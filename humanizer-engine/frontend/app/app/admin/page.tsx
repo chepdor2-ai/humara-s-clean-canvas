@@ -353,12 +353,12 @@ export default function AdminDashboard() {
       {tab === 'overview' && stats && (
         <div className="grid grid-cols-2 lg:grid-cols-6 gap-3">
           {[
-            { label: 'Total Users', val: stats.totalUsers, icon: Users, color: 'text-purple-400' },
+            { label: 'Total Users', val: stats.totalUsers, icon: Users, color: 'text-cyan-400' },
             { label: 'Active Subs', val: stats.activeSubscriptions, icon: CreditCard, color: 'text-emerald-400' },
             { label: 'Suspended', val: stats.suspendedUsers, icon: Ban, color: 'text-red-400' },
             { label: 'Documents', val: stats.totalDocuments, icon: FileText, color: 'text-cyan-400' },
             { label: 'Feedback', val: stats.totalFeedback, icon: MessageSquare, color: 'text-amber-400' },
-            { label: 'Revenue', val: `$${stats.revenueThisMonth.toFixed(0)}`, icon: BarChart3, color: 'text-purple-400' },
+            { label: 'Revenue', val: `$${stats.revenueThisMonth.toFixed(0)}`, icon: BarChart3, color: 'text-cyan-400' },
           ].map(s => (
             <div key={s.label} className="bg-white dark:bg-[#0c0c14] border border-slate-200 dark:border-zinc-800/60 rounded-xl p-4">
               <div className="flex items-center justify-between mb-3">
@@ -385,7 +385,7 @@ export default function AdminDashboard() {
             <div className="bg-white dark:bg-[#0c0c14] border border-slate-200 dark:border-zinc-800/60 rounded-xl p-4">
               <div className="flex items-center justify-between mb-2">
                 <span className="text-[11px] font-semibold text-slate-500 dark:text-zinc-500 uppercase tracking-wider">Free Tier</span>
-                <Cpu className="w-4 h-4 text-purple-400" />
+                <Cpu className="w-4 h-4 text-cyan-400" />
               </div>
               <p className="text-2xl font-bold text-slate-900 dark:text-white">{freeCount}</p>
             </div>
@@ -448,7 +448,7 @@ export default function AdminDashboard() {
                   <button onClick={resetEngines} className="px-3 py-1.5 text-xs font-medium text-slate-500 dark:text-zinc-400 hover:text-white rounded-lg hover:bg-slate-100 dark:bg-zinc-800 transition-colors">Reset</button>
                 )}
                 <button onClick={saveEngines} disabled={!engineDirty || engineSaving}
-                  className={`flex items-center gap-1.5 px-4 py-1.5 text-xs font-bold rounded-lg transition-all ${engineDirty ? 'bg-purple-600 hover:bg-purple-700 text-white' : 'bg-slate-100 dark:bg-zinc-800 text-slate-500 dark:text-zinc-500 cursor-not-allowed'}`}>
+                  className={`flex items-center gap-1.5 px-4 py-1.5 text-xs font-bold rounded-lg transition-all ${engineDirty ? 'bg-cyan-600 hover:bg-cyan-700 text-white' : 'bg-slate-100 dark:bg-zinc-800 text-slate-500 dark:text-zinc-500 cursor-not-allowed'}`}>
                   {engineSaving ? <RefreshCw className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />}
                   {engineSaving ? 'Savingâ€¦' : 'Save'}
                 </button>
@@ -461,11 +461,11 @@ export default function AdminDashboard() {
 
             {engineDraft.map((eng, idx) => (
               <div key={eng.engine_id} draggable onDragStart={() => handleDragStart(idx)} onDragOver={(e) => handleDragOver(e, idx)} onDragEnd={handleDragEnd}
-                className={`grid grid-cols-[32px_1fr_80px_80px_80px_80px] gap-2 px-4 py-3 items-center border-b border-slate-200 dark:border-zinc-800/30 last:border-b-0 transition-colors ${dragIdx === idx ? 'bg-purple-950/20' : 'hover:bg-slate-100 dark:bg-zinc-800/50'} ${!eng.enabled ? 'opacity-50' : ''}`}>
+                className={`grid grid-cols-[32px_1fr_80px_80px_80px_80px] gap-2 px-4 py-3 items-center border-b border-slate-200 dark:border-zinc-800/30 last:border-b-0 transition-colors ${dragIdx === idx ? 'bg-cyan-950/20' : 'hover:bg-slate-100 dark:bg-zinc-800/50'} ${!eng.enabled ? 'opacity-50' : ''}`}>
                 <div className="cursor-grab active:cursor-grabbing text-slate-400 dark:text-zinc-600 hover:text-slate-500 dark:text-zinc-400"><GripVertical className="w-4 h-4" /></div>
                 <div className="flex items-center gap-2">
                   <input value={eng.label} onChange={(e) => updateEngineDraft(idx, 'label', e.target.value)}
-                    className="text-sm font-semibold text-slate-900 dark:text-white bg-transparent border-b border-transparent hover:border-zinc-600 focus:border-purple-400 outline-none transition-colors py-0.5 w-full max-w-[180px]" />
+                    className="text-sm font-semibold text-slate-900 dark:text-white bg-transparent border-b border-transparent hover:border-zinc-600 focus:border-cyan-400 outline-none transition-colors py-0.5 w-full max-w-[180px]" />
                   <span className="text-[10px] font-mono text-slate-500 dark:text-zinc-500">{eng.engine_id}</span>
                 </div>
                 <div className="flex justify-center">
@@ -560,7 +560,7 @@ export default function AdminDashboard() {
                         <td className="px-4 py-3">
                           <button
                             onClick={() => openUserModal(u)}
-                            className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-purple-400 bg-purple-950/30 hover:bg-purple-900/40 rounded-lg transition-colors"
+                            className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-cyan-400 bg-cyan-950/30 hover:bg-cyan-900/40 rounded-lg transition-colors"
                           >
                             <Edit3 className="w-3 h-3" /> Manage
                           </button>
@@ -680,7 +680,7 @@ export default function AdminDashboard() {
                       <select
                         value={modalPlan}
                         onChange={e => setModalPlan(e.target.value)}
-                        className="w-full px-3 py-2 text-sm bg-slate-100 dark:bg-zinc-800 border border-slate-300 dark:border-zinc-700 rounded-lg text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
+                        className="w-full px-3 py-2 text-sm bg-slate-100 dark:bg-zinc-800 border border-slate-300 dark:border-zinc-700 rounded-lg text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-cyan-500"
                         title="Select plan"
                       >
                         {AVAILABLE_PLANS.map(p => (
@@ -696,7 +696,7 @@ export default function AdminDashboard() {
                         onChange={e => setModalDays(parseInt(e.target.value) || 1)}
                         min={1}
                         max={365}
-                        className="w-full px-3 py-2 text-sm bg-slate-100 dark:bg-zinc-800 border border-slate-300 dark:border-zinc-700 rounded-lg text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
+                        className="w-full px-3 py-2 text-sm bg-slate-100 dark:bg-zinc-800 border border-slate-300 dark:border-zinc-700 rounded-lg text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-cyan-500"
                       />
                     </div>
                   </div>
@@ -704,7 +704,7 @@ export default function AdminDashboard() {
                     <button
                       onClick={() => handleUserAction('set_plan', { plan_name: modalPlan, days: modalDays })}
                       disabled={modalLoading}
-                      className="flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-slate-900 dark:text-white bg-purple-600 hover:bg-purple-700 rounded-lg transition-colors disabled:opacity-50"
+                      className="flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-slate-900 dark:text-white bg-cyan-600 hover:bg-cyan-700 rounded-lg transition-colors disabled:opacity-50"
                     >
                       {modalLoading ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Clock className="w-3.5 h-3.5" />}
                       Set Plan for {modalDays} Days
@@ -801,7 +801,7 @@ export default function AdminDashboard() {
 
       {loading && (
         <div className="flex items-center justify-center py-12">
-          <RefreshCw className="w-5 h-5 text-purple-500 animate-spin" />
+          <RefreshCw className="w-5 h-5 text-cyan-500 animate-spin" />
         </div>
       )}
     </div>

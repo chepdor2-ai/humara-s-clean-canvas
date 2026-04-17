@@ -13,10 +13,10 @@ const Logo = () => (
   <Link href="/" className="flex items-center space-x-3 group">
     <div className="relative">
       <Image src="/logo.png" alt="HumaraGPT" width={56} height={56} className="w-14 h-14 relative z-10 drop-shadow-[0_0_14px_rgba(147,51,234,0.7)]" />
-      {/* Layered purple glow rings */}
-      <div className="absolute -inset-1 rounded-full bg-purple-500/25 animate-[logoPulse_2.5s_ease-in-out_infinite] blur-md" />
-      <div className="absolute -inset-2.5 rounded-full bg-purple-400/15 animate-[logoPulse_2.5s_ease-in-out_infinite_0.6s] blur-lg" />
-      <div className="absolute -inset-4 rounded-full bg-purple-600/8 animate-[logoPulse_2.5s_ease-in-out_infinite_1.2s] blur-xl" />
+      {/* Layered cyan glow rings */}
+      <div className="absolute -inset-1 rounded-full bg-cyan-500/25 animate-[logoPulse_2.5s_ease-in-out_infinite] blur-md" />
+      <div className="absolute -inset-2.5 rounded-full bg-cyan-400/15 animate-[logoPulse_2.5s_ease-in-out_infinite_0.6s] blur-lg" />
+      <div className="absolute -inset-4 rounded-full bg-cyan-600/8 animate-[logoPulse_2.5s_ease-in-out_infinite_1.2s] blur-xl" />
     </div>
     <span className="brand-wordmark text-xl font-bold tracking-tight">HumaraGPT</span>
   </Link>
@@ -115,7 +115,7 @@ export default function RootLayoutClient({ children }: { children: React.ReactNo
                       className={`inline-flex items-center gap-1.5 rounded-full px-3 py-2 text-sm font-medium transition-all ${
                         isActive
                           ? 'bg-white/90 text-slate-900 shadow-sm shadow-slate-200/80 dark:bg-white/10 dark:text-white dark:shadow-black/20'
-                          : 'text-slate-600 dark:text-zinc-400 hover:text-purple-500 hover:bg-white/70 dark:hover:bg-white/5'
+                          : 'text-slate-600 dark:text-zinc-400 hover:text-cyan-500 hover:bg-white/70 dark:hover:bg-white/5'
                       }`}
                     >
                       {link.name}
@@ -145,12 +145,12 @@ export default function RootLayoutClient({ children }: { children: React.ReactNo
                   className={`text-sm font-medium transition-colors ${
                     isRouteActive(secondaryAction.href, [], secondaryAction.exact)
                       ? 'text-slate-900 dark:text-white'
-                      : 'text-slate-600 dark:text-zinc-400 hover:text-purple-500'
+                      : 'text-slate-600 dark:text-zinc-400 hover:text-cyan-500'
                   }`}
                 >
                   {secondaryAction.label}
                 </Link>
-                <Link href={primaryAction.href} className="bg-purple-600 hover:bg-purple-700 text-white px-6 py-3 rounded-2xl text-sm font-semibold transition-all hover:shadow-lg hover:shadow-purple-600/25">
+                <Link href={primaryAction.href} className="bg-cyan-600 hover:bg-cyan-700 text-white px-6 py-3 rounded-2xl text-sm font-semibold transition-all hover:shadow-lg hover:shadow-cyan-600/25">
                   {primaryAction.label}
                 </Link>
                 {user && (
@@ -202,7 +202,7 @@ export default function RootLayoutClient({ children }: { children: React.ReactNo
               })}
               <div className="h-px bg-slate-200 dark:bg-white/10 my-1"></div>
               <Link href={secondaryAction.href} onClick={() => setMobileMenuOpen(false)} className="text-sm font-medium text-slate-700 dark:text-zinc-200 py-1">{secondaryAction.label}</Link>
-              <Link href={primaryAction.href} onClick={() => setMobileMenuOpen(false)} className="text-sm font-medium text-purple-400 py-1">{primaryAction.label}</Link>
+              <Link href={primaryAction.href} onClick={() => setMobileMenuOpen(false)} className="text-sm font-medium text-cyan-400 py-1">{primaryAction.label}</Link>
               {user && (
                 <button onClick={signOut} className="text-left text-sm font-medium text-red-500 dark:text-red-400 py-1">
                   Sign Out

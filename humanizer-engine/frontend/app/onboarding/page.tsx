@@ -24,13 +24,13 @@ export default function Onboarding() {
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 w-full max-w-5xl">
         {options.map((opt, i) => (
-          <button key={i} className="group p-8 bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-xl hover:border-purple-700 hover:shadow-lg transition-all text-left flex flex-col h-full">
-            <div className="w-14 h-14 rounded-xl bg-purple-950/40 text-purple-400 flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
+          <button key={i} className="group p-8 bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-xl hover:border-cyan-700 hover:shadow-lg transition-all text-left flex flex-col h-full">
+            <div className="w-14 h-14 rounded-xl bg-cyan-950/40 text-cyan-400 flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
               {opt.icon}
             </div>
             <h3 className="text-xl font-semibold text-slate-900 dark:text-white mb-2">{opt.title}</h3>
             <p className="text-sm text-slate-500 dark:text-zinc-400 flex-1 mb-6 leading-relaxed">{opt.desc}</p>
-            <div className="flex items-center text-purple-400 text-sm font-medium group-hover:translate-x-1 transition-transform">
+            <div className="flex items-center text-cyan-400 text-sm font-medium group-hover:translate-x-1 transition-transform">
                Select <ArrowRight className="w-4 h-4 ml-1"/>
             </div>
           </button>

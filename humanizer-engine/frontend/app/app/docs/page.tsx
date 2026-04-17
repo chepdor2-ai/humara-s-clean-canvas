@@ -53,7 +53,7 @@ export default function DocsPage() {
         <tbody className="text-slate-600 dark:text-zinc-300">
           {params.map((p, i) => (
             <tr key={i} className="border-b border-slate-200 dark:border-zinc-800">
-              <td className="py-2 font-mono text-xs text-brand-600 dark:text-purple-400">{p.name}</td>
+              <td className="py-2 font-mono text-xs text-brand-600 dark:text-cyan-400">{p.name}</td>
               <td className="py-2 text-xs">{p.type}</td>
               <td className="py-2">{p.required ? <span className="text-red-500 dark:text-red-400 text-xs font-semibold">Yes</span> : <span className="text-slate-400 dark:text-zinc-500 text-xs">No</span>}</td>
               <td className="py-2 text-xs text-slate-400 dark:text-zinc-500">{p.def || '—'}</td>
@@ -79,7 +79,7 @@ export default function DocsPage() {
             </h1>
             <p className="text-sm text-slate-500 dark:text-zinc-400 mt-1">Complete reference for the HumaraGPT REST API v1</p>
           </div>
-          <Link href="/api-pricing" className="text-sm text-brand-600 dark:text-purple-400 hover:text-brand-500 dark:hover:text-purple-300 flex items-center gap-1">
+          <Link href="/api-pricing" className="text-sm text-brand-600 dark:text-cyan-400 hover:text-brand-500 dark:hover:text-cyan-300 flex items-center gap-1">
             View API Plans <ArrowRight className="w-3.5 h-3.5" />
           </Link>
         </div>
@@ -176,10 +176,10 @@ export default function DocsPage() {
               <div className="bg-white dark:bg-zinc-900 rounded-xl border border-slate-200 dark:border-zinc-800 p-6 space-y-4">
                 <h2 className="text-lg font-semibold text-slate-900 dark:text-white">Generating API Keys</h2>
                 <ol className="space-y-3 text-sm text-slate-500 dark:text-zinc-400">
-                  <li className="flex gap-3"><span className="text-brand-600 dark:text-purple-400 font-bold shrink-0">1.</span> Sign in at <a href="https://humaragpt.com/login" className="text-brand-600 dark:text-purple-400 underline">humaragpt.com/login</a></li>
-                  <li className="flex gap-3"><span className="text-brand-600 dark:text-purple-400 font-bold shrink-0">2.</span> Navigate to <Link href="/app/settings" className="text-brand-600 dark:text-purple-400 underline">Settings → API Keys</Link></li>
-                  <li className="flex gap-3"><span className="text-brand-600 dark:text-purple-400 font-bold shrink-0">3.</span> Click &quot;Create Key&quot; and give it a name</li>
-                  <li className="flex gap-3"><span className="text-brand-600 dark:text-purple-400 font-bold shrink-0">4.</span> Copy the key immediately — it&apos;s shown only once</li>
+                  <li className="flex gap-3"><span className="text-brand-600 dark:text-cyan-400 font-bold shrink-0">1.</span> Sign in at <a href="https://humaragpt.com/login" className="text-brand-600 dark:text-cyan-400 underline">humaragpt.com/login</a></li>
+                  <li className="flex gap-3"><span className="text-brand-600 dark:text-cyan-400 font-bold shrink-0">2.</span> Navigate to <Link href="/app/settings" className="text-brand-600 dark:text-cyan-400 underline">Settings → API Keys</Link></li>
+                  <li className="flex gap-3"><span className="text-brand-600 dark:text-cyan-400 font-bold shrink-0">3.</span> Click &quot;Create Key&quot; and give it a name</li>
+                  <li className="flex gap-3"><span className="text-brand-600 dark:text-cyan-400 font-bold shrink-0">4.</span> Copy the key immediately — it&apos;s shown only once</li>
                 </ol>
                 <div className="flex items-start gap-3 p-4 bg-amber-50 dark:bg-amber-950/30 rounded-lg border border-amber-200 dark:border-amber-800/40">
                   <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400 mt-0.5 shrink-0" />
@@ -417,7 +417,7 @@ export default function DocsPage() {
                   <div className="flex items-center gap-2 flex-wrap">
                     <h3 className="text-base font-semibold text-slate-900 dark:text-white">{e.name}</h3>
                     <code className="text-xs text-slate-500 dark:text-zinc-500 font-mono bg-slate-100 dark:bg-zinc-800 px-1.5 py-0.5 rounded">{e.id}</code>
-                    <span className="text-[10px] font-bold text-brand-600 dark:text-purple-400 bg-brand-50 dark:bg-purple-950/40 px-2 py-0.5 rounded-full">{e.tier}</span>
+                    <span className="text-[10px] font-bold text-brand-600 dark:text-cyan-400 bg-brand-50 dark:bg-cyan-950/40 px-2 py-0.5 rounded-full">{e.tier}</span>
                   </div>
                   <p className="text-sm text-slate-500 dark:text-zinc-400 leading-relaxed">{e.desc}</p>
                   <div className="text-xs text-slate-400 dark:text-zinc-500"><strong className="text-slate-600 dark:text-zinc-400">Parameters:</strong> {e.params}</div>
@@ -428,9 +428,9 @@ export default function DocsPage() {
               <div className="bg-white dark:bg-zinc-900 rounded-xl border border-slate-200 dark:border-zinc-800 p-6 space-y-4">
                 <h3 className="text-sm font-semibold text-slate-700 dark:text-zinc-200">Strength Levels</h3>
                 <div className="space-y-2 text-sm text-slate-500 dark:text-zinc-400">
-                  <div className="flex gap-3"><code className="text-brand-600 dark:text-purple-400 font-mono text-xs w-20 shrink-0">light</code>Minimal changes — preserves original style closely. ~15-25% modification.</div>
-                  <div className="flex gap-3"><code className="text-brand-600 dark:text-purple-400 font-mono text-xs w-20 shrink-0">medium</code>Balanced rewriting — good mix of naturalness and preservation. ~30-45% modification.</div>
-                  <div className="flex gap-3"><code className="text-brand-600 dark:text-purple-400 font-mono text-xs w-20 shrink-0">strong</code>Aggressive rewriting — maximum AI pattern removal. ~50-70% modification.</div>
+                  <div className="flex gap-3"><code className="text-brand-600 dark:text-cyan-400 font-mono text-xs w-20 shrink-0">light</code>Minimal changes — preserves original style closely. ~15-25% modification.</div>
+                  <div className="flex gap-3"><code className="text-brand-600 dark:text-cyan-400 font-mono text-xs w-20 shrink-0">medium</code>Balanced rewriting — good mix of naturalness and preservation. ~30-45% modification.</div>
+                  <div className="flex gap-3"><code className="text-brand-600 dark:text-cyan-400 font-mono text-xs w-20 shrink-0">strong</code>Aggressive rewriting — maximum AI pattern removal. ~50-70% modification.</div>
                 </div>
               </div>
 
@@ -446,7 +446,7 @@ export default function DocsPage() {
                     { tone: 'technical', desc: 'Preserves technical terms and code references.' },
                     { tone: 'wikipedia', desc: 'Encyclopedic NPOV style with citation awareness.' },
                   ].map(t => (
-                    <div key={t.tone} className="flex gap-3"><code className="text-brand-600 dark:text-purple-400 font-mono text-xs w-24 shrink-0">{t.tone}</code>{t.desc}</div>
+                    <div key={t.tone} className="flex gap-3"><code className="text-brand-600 dark:text-cyan-400 font-mono text-xs w-24 shrink-0">{t.tone}</code>{t.desc}</div>
                   ))}
                 </div>
               </div>
@@ -491,7 +491,7 @@ export default function DocsPage() {
                       ].map((e, i) => (
                         <tr key={i} className="border-b border-slate-200 dark:border-zinc-800">
                           <td className="py-2"><span className={`text-xs font-bold px-1.5 py-0.5 rounded ${e.http < 400 ? 'text-emerald-600 bg-emerald-50 dark:text-emerald-400 dark:bg-emerald-950' : e.http < 500 ? 'text-amber-600 bg-amber-50 dark:text-amber-400 dark:bg-amber-950' : 'text-red-600 bg-red-50 dark:text-red-400 dark:bg-red-950'}`}>{e.http}</span></td>
-                          <td className="py-2 font-mono text-xs text-brand-600 dark:text-purple-400">{e.code}</td>
+                          <td className="py-2 font-mono text-xs text-brand-600 dark:text-cyan-400">{e.code}</td>
                           <td className="py-2 text-xs">{e.desc}</td>
                         </tr>
                       ))}

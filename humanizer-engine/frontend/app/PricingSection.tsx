@@ -94,12 +94,12 @@ export default function PricingSection() {
             key={plan.name}
             className={`relative p-7 sm:p-8 rounded-3xl flex flex-col transition-shadow duration-300 ${
               plan.popular
-                ? 'bg-white dark:bg-[#0F0F17] border-2 border-purple-500 shadow-lg shadow-purple-500/10 lg:scale-[1.03]'
+                ? 'bg-white dark:bg-[#0F0F17] border-2 border-cyan-500 shadow-lg shadow-cyan-500/10 lg:scale-[1.03]'
                 : 'bg-white dark:bg-[#0F0F17] border border-slate-200 dark:border-white/10 hover:shadow-xl hover:shadow-white/5'
             }`}
           >
             {plan.popular && (
-              <span className="absolute -top-3 left-1/2 -translate-x-1/2 bg-purple-600 text-white text-[10px] font-semibold uppercase tracking-wider py-1 px-3 rounded-lg">
+              <span className="absolute -top-3 left-1/2 -translate-x-1/2 bg-cyan-600 text-white text-[10px] font-semibold uppercase tracking-wider py-1 px-3 rounded-lg">
                 Popular
               </span>
             )}
@@ -119,7 +119,7 @@ export default function PricingSection() {
             <ul className="space-y-3 mb-8 flex-1">
               {plan.features.map((f) => (
                 <li key={f} className="flex items-center gap-2 text-sm text-slate-600 dark:text-gray-300">
-                  <CheckCircle2 className={`w-4 h-4 shrink-0 ${plan.popular ? 'text-purple-500' : 'text-emerald-500'}`} />
+                  <CheckCircle2 className={`w-4 h-4 shrink-0 ${plan.popular ? 'text-cyan-500' : 'text-emerald-500'}`} />
                   {f}
                 </li>
               ))}
@@ -128,8 +128,8 @@ export default function PricingSection() {
               href="/signup"
               className={`block w-full text-center text-sm font-medium rounded-2xl py-3 transition-all ${
                 plan.popular
-                  ? 'bg-purple-600 hover:bg-purple-700 text-white hover:shadow-md hover:shadow-purple-600/25'
-                  : 'bg-purple-600/10 text-purple-400 border border-purple-500/30 hover:bg-purple-600/20'
+                  ? 'bg-cyan-600 hover:bg-cyan-700 text-white hover:shadow-md hover:shadow-cyan-600/25'
+                  : 'bg-cyan-600/10 text-cyan-400 border border-cyan-500/30 hover:bg-cyan-600/20'
               }`}
             >
               Get Started

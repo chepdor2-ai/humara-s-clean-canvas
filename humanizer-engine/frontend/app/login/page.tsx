@@ -69,8 +69,8 @@ function LoginForm() {
       <main className="flex-grow">
         <section className="min-h-[85vh] flex items-center justify-center p-4 sm:p-6 relative">
           <div className="absolute inset-0 pointer-events-none overflow-hidden">
-            <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-purple-600/8 rounded-full blur-[120px]" />
-            <div className="absolute bottom-1/4 right-1/3 w-[400px] h-[400px] bg-purple-500/5 rounded-full blur-[100px]" />
+            <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-cyan-600/8 rounded-full blur-[120px]" />
+            <div className="absolute bottom-1/4 right-1/3 w-[400px] h-[400px] bg-cyan-500/5 rounded-full blur-[100px]" />
           </div>
 
           <div className="max-w-md w-full relative z-10">
@@ -78,15 +78,15 @@ function LoginForm() {
               <Link href="/" className="flex items-center gap-3 group">
                 <div className="relative">
                   <Image src="/logo.png" alt="HumaraGPT" width={56} height={56} className="w-14 h-14 relative z-10 drop-shadow-[0_0_14px_rgba(147,51,234,0.7)]" />
-                  <div className="absolute -inset-1 rounded-full bg-purple-500/25 animate-[logoPulse_2.5s_ease-in-out_infinite] blur-md" />
-                  <div className="absolute -inset-2.5 rounded-full bg-purple-400/15 animate-[logoPulse_2.5s_ease-in-out_infinite_0.6s] blur-lg" />
-                  <div className="absolute -inset-4 rounded-full bg-purple-600/8 animate-[logoPulse_2.5s_ease-in-out_infinite_1.2s] blur-xl" />
+                  <div className="absolute -inset-1 rounded-full bg-cyan-500/25 animate-[logoPulse_2.5s_ease-in-out_infinite] blur-md" />
+                  <div className="absolute -inset-2.5 rounded-full bg-cyan-400/15 animate-[logoPulse_2.5s_ease-in-out_infinite_0.6s] blur-lg" />
+                  <div className="absolute -inset-4 rounded-full bg-cyan-600/8 animate-[logoPulse_2.5s_ease-in-out_infinite_1.2s] blur-xl" />
                 </div>
-                <span className="text-2xl font-bold bg-gradient-to-r from-white via-purple-200 to-purple-400 bg-clip-text text-transparent drop-shadow-[0_0_20px_rgba(168,85,247,0.4)]">HumaraGPT</span>
+                <span className="text-2xl font-bold bg-gradient-to-r from-white via-cyan-200 to-cyan-400 bg-clip-text text-transparent drop-shadow-[0_0_20px_rgba(168,85,247,0.4)]">HumaraGPT</span>
               </Link>
             </div>
 
-            <div className="bg-white/90 dark:bg-zinc-900/90 backdrop-blur-2xl rounded-3xl border border-purple-500/10 shadow-2xl shadow-purple-900/20 p-7 sm:p-9">
+            <div className="bg-white/90 dark:bg-zinc-900/90 backdrop-blur-2xl rounded-3xl border border-cyan-500/10 shadow-2xl shadow-cyan-900/20 p-7 sm:p-9">
               <h2 className="text-2xl font-bold text-center mb-1.5 text-slate-900 dark:text-white tracking-tight">Welcome back</h2>
               <p className="text-center text-slate-500 dark:text-zinc-400 text-sm mb-7">Sign in to continue to HumaraGPT</p>
 
@@ -99,7 +99,7 @@ function LoginForm() {
               <button
                 onClick={handleGoogleSignIn}
                 disabled={googleLoading}
-                className="w-full flex items-center justify-center gap-3 bg-slate-100 dark:bg-zinc-800/80 border border-slate-300 dark:border-zinc-700/80 hover:bg-slate-200 dark:hover:bg-zinc-700/80 text-slate-800 dark:text-zinc-200 font-medium py-3 rounded-xl transition-all disabled:opacity-50 text-sm mb-6 hover:border-purple-500/30"
+                className="w-full flex items-center justify-center gap-3 bg-slate-100 dark:bg-zinc-800/80 border border-slate-300 dark:border-zinc-700/80 hover:bg-slate-200 dark:hover:bg-zinc-700/80 text-slate-800 dark:text-zinc-200 font-medium py-3 rounded-xl transition-all disabled:opacity-50 text-sm mb-6 hover:border-cyan-500/30"
               >
                 <svg className="w-4 h-4" viewBox="0 0 24 24">
                   <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4"/>
@@ -124,7 +124,7 @@ function LoginForm() {
                       type="email"
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
-                      className="w-full pl-10 pr-4 py-3 border border-slate-300 dark:border-zinc-700/80 rounded-xl bg-white dark:bg-zinc-950/80 text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-zinc-600 focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 focus:outline-none transition-all text-sm"
+                      className="w-full pl-10 pr-4 py-3 border border-slate-300 dark:border-zinc-700/80 rounded-xl bg-white dark:bg-zinc-950/80 text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-zinc-600 focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20 focus:outline-none transition-all text-sm"
                       placeholder="user@example.com"
                       title="Email address"
                       required
@@ -135,7 +135,7 @@ function LoginForm() {
                 <div>
                   <div className="flex justify-between items-center mb-1.5">
                     <label className="block text-sm font-medium text-slate-600 dark:text-zinc-300">Password</label>
-                    <Link href="/reset-password" className="text-xs font-medium text-purple-400 hover:text-purple-300 transition-colors">
+                    <Link href="/reset-password" className="text-xs font-medium text-cyan-400 hover:text-cyan-300 transition-colors">
                       Forgot?
                     </Link>
                   </div>
@@ -145,7 +145,7 @@ function LoginForm() {
                       type={showPassword ? 'text' : 'password'}
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
-                      className="w-full pl-10 pr-12 py-3 border border-slate-300 dark:border-zinc-700/80 rounded-xl bg-white dark:bg-zinc-950/80 text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-zinc-600 focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 focus:outline-none transition-all text-sm"
+                      className="w-full pl-10 pr-12 py-3 border border-slate-300 dark:border-zinc-700/80 rounded-xl bg-white dark:bg-zinc-950/80 text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-zinc-600 focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20 focus:outline-none transition-all text-sm"
                       placeholder=""
                       title="Password"
                       required
@@ -153,7 +153,7 @@ function LoginForm() {
                     <button
                       type="button"
                       onClick={() => setShowPassword(!showPassword)}
-                      className="absolute right-3 top-3.5 text-zinc-500 hover:text-purple-400 transition-colors"
+                      className="absolute right-3 top-3.5 text-zinc-500 hover:text-cyan-400 transition-colors"
                     >
                       {showPassword ? <EyeOff className="h-4 w-4" strokeWidth={2} /> : <Eye className="h-4 w-4" strokeWidth={2} />}
                     </button>
@@ -163,7 +163,7 @@ function LoginForm() {
                 <button
                   type="submit"
                   disabled={isLoading}
-                  className="w-full bg-purple-600 hover:bg-purple-500 text-white font-semibold py-3 rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed text-sm shadow-lg shadow-purple-600/20 hover:shadow-purple-500/30 active:scale-[0.98]"
+                  className="w-full bg-cyan-600 hover:bg-cyan-500 text-white font-semibold py-3 rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed text-sm shadow-lg shadow-cyan-600/20 hover:shadow-cyan-500/30 active:scale-[0.98]"
                 >
                   {isLoading ? 'Logging in...' : 'Log In'}
                 </button>
@@ -171,7 +171,7 @@ function LoginForm() {
 
               <p className="text-center text-sm text-zinc-500 mt-6">
                 Need an account?{' '}
-                <Link href="/signup" className="text-purple-400 font-medium hover:text-purple-300 transition-colors">
+                <Link href="/signup" className="text-cyan-400 font-medium hover:text-cyan-300 transition-colors">
                   Sign up
                 </Link>
               </p>

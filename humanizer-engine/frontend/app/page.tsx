@@ -31,8 +31,8 @@ export default function Home() {
         {/* Radial glow overlays */}
         <div className="absolute inset-0 pointer-events-none overflow-hidden">
           <div className="absolute inset-0 bg-[radial-gradient(at_center,#9333ea15_0%,transparent_70%)]" />
-          <div className="absolute -top-[40%] left-[10%] w-[70%] h-[120%] bg-gradient-to-br from-purple-600/[0.12] via-transparent to-transparent rotate-[-20deg] blur-3xl" />
-          <div className="absolute -top-[20%] right-[5%] w-[40%] h-[80%] bg-gradient-to-bl from-purple-500/[0.08] via-transparent to-transparent rotate-[15deg] blur-3xl" />
+          <div className="absolute -top-[40%] left-[10%] w-[70%] h-[120%] bg-gradient-to-br from-cyan-600/[0.12] via-transparent to-transparent rotate-[-20deg] blur-3xl" />
+          <div className="absolute -top-[20%] right-[5%] w-[40%] h-[80%] bg-gradient-to-bl from-cyan-500/[0.08] via-transparent to-transparent rotate-[15deg] blur-3xl" />
         </div>
 
         <div className="max-w-7xl mx-auto px-4 sm:px-6 relative z-10 w-full">
@@ -194,9 +194,9 @@ export default function Home() {
         </div>
         <div className="max-w-6xl mx-auto px-4 sm:px-6 relative z-10">
           <FadeInUp delay={0.1} className="text-center mb-12">
-            <div className="inline-flex items-center gap-2 py-1.5 px-4 rounded-full bg-purple-500/10 border border-purple-500/20 mb-5">
-              <Monitor className="w-3.5 h-3.5 text-purple-400" />
-              <span className="text-xs font-medium text-purple-300">Desktop Experience</span>
+            <div className="inline-flex items-center gap-2 py-1.5 px-4 rounded-full bg-cyan-500/10 border border-cyan-500/20 mb-5">
+              <Monitor className="w-3.5 h-3.5 text-cyan-400" />
+              <span className="text-xs font-medium text-cyan-300">Desktop Experience</span>
             </div>
             <h2 className="text-2xl sm:text-3xl md:text-4xl font-bold text-slate-900 dark:text-white mb-3 text-balance">Professional-grade humanization</h2>
             <p className="text-sm sm:text-base text-slate-500 dark:text-gray-400 max-w-2xl mx-auto text-balance">See the full desktop workflow — input on the left, humanized output on the right, with real-time detector scores.</p>
@@ -207,7 +207,7 @@ export default function Home() {
               <img src="/laptop-showcase.png" alt="HumaraGPT Desktop" className="w-full h-auto relative z-10 drop-shadow-2xl rounded-lg" loading="eager" decoding="async" />
             </div>
             {/* Glow beneath laptop */}
-            <div className="absolute -bottom-6 left-1/2 -translate-x-1/2 w-[50%] h-12 bg-purple-500/12 blur-3xl rounded-full animate-[glowPulse_3s_ease-in-out_infinite]" />
+            <div className="absolute -bottom-6 left-1/2 -translate-x-1/2 w-[50%] h-12 bg-cyan-500/12 blur-3xl rounded-full animate-[glowPulse_3s_ease-in-out_infinite]" />
           </ScaleIn>
         </div>
       </section>
@@ -327,33 +327,33 @@ export default function Home() {
               <img src="/devices-showcase.png" alt="HumaraGPT on all devices" className="w-full h-auto relative z-10 mx-auto drop-shadow-2xl rounded-lg" loading="lazy" decoding="async" />
               {/* Animated glow overlay on screens */}
               <div className="absolute inset-0 z-20 pointer-events-none">
-                <div className="absolute inset-0 bg-gradient-to-tr from-purple-500/8 via-transparent to-purple-400/5 animate-[shimmer_4s_ease-in-out_infinite]" />
+                <div className="absolute inset-0 bg-gradient-to-tr from-cyan-500/8 via-transparent to-cyan-400/5 animate-[shimmer_4s_ease-in-out_infinite]" />
               </div>
             </div>
             {/* Glow beneath devices */}
-            <div className="absolute -bottom-6 left-1/2 -translate-x-1/2 w-[70%] h-12 bg-purple-500/8 blur-3xl rounded-full" />
+            <div className="absolute -bottom-6 left-1/2 -translate-x-1/2 w-[70%] h-12 bg-cyan-500/8 blur-3xl rounded-full" />
             {/* Feature labels */}
             <div className="grid grid-cols-3 gap-4 mt-8 text-center">
               <div>
-                <div className="inline-flex items-center gap-2 py-1.5 px-3 rounded-full bg-purple-500/10 border border-purple-500/20 mb-2">
-                  <Monitor className="w-3 h-3 text-purple-400" />
-                  <span className="text-[10px] sm:text-xs font-medium text-purple-300">Desktop</span>
+                <div className="inline-flex items-center gap-2 py-1.5 px-3 rounded-full bg-cyan-500/10 border border-cyan-500/20 mb-2">
+                  <Monitor className="w-3 h-3 text-cyan-400" />
+                  <span className="text-[10px] sm:text-xs font-medium text-cyan-300">Desktop</span>
                 </div>
-                <p className="text-xs text-slate-500 dark:text-gray-500 hover:text-purple-400 transition-colors cursor-default">Full split-pane workflow</p>
+                <p className="text-xs text-slate-500 dark:text-gray-500 hover:text-cyan-400 transition-colors cursor-default">Full split-pane workflow</p>
               </div>
               <div>
-                <div className="inline-flex items-center gap-2 py-1.5 px-3 rounded-full bg-purple-500/10 border border-purple-500/20 mb-2">
-                  <Cpu className="w-3 h-3 text-purple-400" />
-                  <span className="text-[10px] sm:text-xs font-medium text-purple-300">Tablet</span>
+                <div className="inline-flex items-center gap-2 py-1.5 px-3 rounded-full bg-cyan-500/10 border border-cyan-500/20 mb-2">
+                  <Cpu className="w-3 h-3 text-cyan-400" />
+                  <span className="text-[10px] sm:text-xs font-medium text-cyan-300">Tablet</span>
                 </div>
-                <p className="text-xs text-slate-500 dark:text-gray-500 hover:text-purple-400 transition-colors cursor-default">Touch-optimized UI</p>
+                <p className="text-xs text-slate-500 dark:text-gray-500 hover:text-cyan-400 transition-colors cursor-default">Touch-optimized UI</p>
               </div>
               <div>
-                <div className="inline-flex items-center gap-2 py-1.5 px-3 rounded-full bg-purple-500/10 border border-purple-500/20 mb-2">
-                  <Smartphone className="w-3 h-3 text-purple-400" />
-                  <span className="text-[10px] sm:text-xs font-medium text-purple-300">Mobile</span>
+                <div className="inline-flex items-center gap-2 py-1.5 px-3 rounded-full bg-cyan-500/10 border border-cyan-500/20 mb-2">
+                  <Smartphone className="w-3 h-3 text-cyan-400" />
+                  <span className="text-[10px] sm:text-xs font-medium text-cyan-300">Mobile</span>
                 </div>
-                <p className="text-xs text-slate-500 dark:text-gray-500 hover:text-purple-400 transition-colors cursor-default">Quick edits on the go</p>
+                <p className="text-xs text-slate-500 dark:text-gray-500 hover:text-cyan-400 transition-colors cursor-default">Quick edits on the go</p>
               </div>
             </div>
           </ScaleIn>
@@ -505,9 +505,9 @@ export default function Home() {
       <section className="py-20 sm:py-28 bg-slate-50 dark:bg-black border-y border-slate-200 dark:border-white/10 w-full">
         <div className="max-w-5xl mx-auto px-4 sm:px-6">
           <FadeInUp className="text-center mb-14">
-            <div className="inline-flex items-center gap-2 py-1.5 px-4 rounded-full bg-purple-500/10 border border-purple-500/20 mb-5">
-              <TrendingUp className="w-3.5 h-3.5 text-purple-400" />
-              <span className="text-xs font-medium text-purple-300">Real Results</span>
+            <div className="inline-flex items-center gap-2 py-1.5 px-4 rounded-full bg-cyan-500/10 border border-cyan-500/20 mb-5">
+              <TrendingUp className="w-3.5 h-3.5 text-cyan-400" />
+              <span className="text-xs font-medium text-cyan-300">Real Results</span>
             </div>
             <h2 className="text-2xl sm:text-3xl md:text-4xl font-bold text-slate-900 dark:text-white mb-3 text-balance">See the difference</h2>
             <p className="text-sm sm:text-base text-slate-500 dark:text-gray-400 max-w-2xl mx-auto text-balance">Side-by-side comparison of AI-generated text vs. HumaraGPT output — same meaning, completely different detection profile.</p>
@@ -607,13 +607,13 @@ export default function Home() {
           {/* Pipeline visual */}
           <div className="relative">
             {/* Connector line */}
-            <div className="hidden sm:block absolute top-1/2 left-0 right-0 h-px bg-gradient-to-r from-transparent via-purple-500/30 to-transparent -translate-y-1/2 z-0" />
+            <div className="hidden sm:block absolute top-1/2 left-0 right-0 h-px bg-gradient-to-r from-transparent via-cyan-500/30 to-transparent -translate-y-1/2 z-0" />
             <StaggerContainer className="grid grid-cols-1 sm:grid-cols-5 gap-4 sm:gap-3 relative z-10">
               {[
                 { icon: FileText, label: 'Input', desc: 'Paste AI text', color: 'text-gray-400' },
-                { icon: Brain, label: 'Analyze', desc: 'Context mapping', color: 'text-purple-400' },
-                { icon: Cpu, label: 'Rewrite', desc: 'Structural rebuild', color: 'text-purple-300' },
-                { icon: ShieldCheck, label: 'Verify', desc: 'Multi-detector scan', color: 'text-purple-200' },
+                { icon: Brain, label: 'Analyze', desc: 'Context mapping', color: 'text-cyan-400' },
+                { icon: Cpu, label: 'Rewrite', desc: 'Structural rebuild', color: 'text-cyan-300' },
+                { icon: ShieldCheck, label: 'Verify', desc: 'Multi-detector scan', color: 'text-cyan-200' },
                 { icon: CheckCircle2, label: 'Output', desc: '99.2% human', color: 'text-emerald-400' },
               ].map((step, i) => (
                 <StaggerItem key={step.label} className="flex flex-col items-center text-center">
@@ -637,7 +637,7 @@ export default function Home() {
                 { val: '7+', label: 'Detectors Bypassed', icon: TrendingUp },
               ].map((m) => (
                 <div key={m.label} className="hover:scale-105 transition-transform duration-300">
-                  <m.icon className="w-5 h-5 text-purple-400 mx-auto mb-2" />
+                  <m.icon className="w-5 h-5 text-cyan-400 mx-auto mb-2" />
                   <p className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white">{m.val}</p>
                   <p className="text-[10px] sm:text-xs text-slate-500 dark:text-gray-500 font-medium mt-1">{m.label}</p>
                 </div>
@@ -648,7 +648,7 @@ export default function Home() {
       </section>
 
       {/* ═══════════════ FINAL CTA ═══════════════ */}
-      <section className="py-24 sm:py-32 bg-gradient-to-b from-[#05050A] via-[#05050A] to-purple-950/20 w-full relative overflow-hidden">
+      <section className="py-24 sm:py-32 bg-gradient-to-b from-[#05050A] via-[#05050A] to-cyan-950/20 w-full relative overflow-hidden">
         <div className="arc-decor arc-decor--lg -bottom-40 left-1/2 -translate-x-1/2 hidden md:block" />
         <div className="absolute inset-0 pointer-events-none">
           <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[60%] h-[50%] bg-gradient-to-b from-brand-500/[0.08] to-transparent rounded-full blur-3xl" />

@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import { useState, useCallback, useMemo, useRef, useEffect } from 'react';
 import {
@@ -15,7 +15,7 @@ import {
   type CorrectionResult,
 } from '@/lib/engine/grammar-corrector';
 
-/* â”€â”€ Severity config â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+/* ── Severity config ──────────────────────────────────────────────────────── */
 
 const SEV: Record<Severity, { label: string; dot: string; underline: string; category: string; strip: string }> = {
   error:   { label: 'Error',   dot: 'bg-red-500',   underline: 'decoration-red-500/80',   category: 'Correctness', strip: 'bg-red-50 dark:bg-red-950/20 text-red-600 dark:text-red-400' },
@@ -41,7 +41,7 @@ const CATEGORIES: { key: CategoryFilter; label: string; desc: string; match: (i:
   { key: 'ai',          label: 'AI Detection', desc: 'LLM-powered detection',       match: i => !!i.aiDetected },
 ];
 
-/* â”€â”€ Score circle (Grammarly-style single ring) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+/* ── Score circle (Grammarly-style single ring) ───────────────────────────── */
 
 function ScoreCircle({ score, size = 100 }: { score: number; size?: number }) {
   const r = (size - 12) / 2;
@@ -66,7 +66,7 @@ function ScoreCircle({ score, size = 100 }: { score: number; size?: number }) {
   );
 }
 
-/* â”€â”€ Mini score bar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+/* ── Mini score bar ───────────────────────────────────────────────────────── */
 
 function ScoreBar({ label, score, color }: { label: string; score: number; color: string }) {
   return (
@@ -80,7 +80,7 @@ function ScoreBar({ label, score, color }: { label: string; score: number; color
   );
 }
 
-/* â”€â”€ Suggestion card (Grammarly-style) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+/* ── Suggestion card (Grammarly-style) ────────────────────────────────────── */
 
 function SuggestionCard({ issue, inputText, isActive, onHover, onAccept, onDismiss }: {
   issue: Issue; inputText: string; isActive: boolean;
@@ -103,12 +103,12 @@ function SuggestionCard({ issue, inputText, isActive, onHover, onAccept, onDismi
         <span className={`w-1.5 h-1.5 rounded-full ${cfg.dot}`} />
         {cfg.category}
         {issue.aiDetected && (
-          <span className="ml-auto text-[9px] px-1.5 py-0.5 rounded bg-purple-100 dark:bg-purple-950/40 text-purple-600 dark:text-purple-400 font-bold normal-case">AI</span>
+          <span className="ml-auto text-[9px] px-1.5 py-0.5 rounded bg-cyan-100 dark:bg-cyan-950/40 text-cyan-600 dark:text-cyan-400 font-bold normal-case">AI</span>
         )}
       </div>
 
       <div className="p-3">
-        {/* Original â†’ Corrected diff */}
+        {/* Original → Corrected diff */}
         {hasFix && (
           <div className="mb-2 text-sm leading-relaxed">
             <span className="bg-red-100 dark:bg-red-950/40 text-red-600 dark:text-red-400 line-through decoration-2 rounded-sm px-0.5">{originalText}</span>
@@ -117,7 +117,7 @@ function SuggestionCard({ issue, inputText, isActive, onHover, onAccept, onDismi
           </div>
         )}
 
-        {/* No fix â€” show original text only */}
+        {/* No fix — show original text only */}
         {!hasFix && (
           <div className="mb-2 text-sm leading-relaxed">
             <span className="bg-amber-50 dark:bg-amber-950/30 text-amber-700 dark:text-amber-400 rounded-sm px-0.5 underline decoration-wavy decoration-1">{originalText}</span>
@@ -163,7 +163,7 @@ function SuggestionCard({ issue, inputText, isActive, onHover, onAccept, onDismi
   );
 }
 
-/* â”€â”€ Editor text with underlines â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+/* ── Editor text with underlines ──────────────────────────────────────────── */
 
 function EditorHighlight({ text, issues, activeIdx, onClickIssue }: {
   text: string; issues: Issue[]; activeIdx: number | null; onClickIssue: (i: number) => void;
@@ -190,7 +190,7 @@ function EditorHighlight({ text, issues, activeIdx, onClickIssue }: {
         s.isIssue ? (
           <span key={i} onClick={() => onClickIssue(s.idx)}
             className={`underline decoration-wavy decoration-2 underline-offset-4 cursor-pointer transition-all duration-150
-              ${s.ai ? 'decoration-purple-500/80' : SEV[s.sev].underline}
+              ${s.ai ? 'decoration-cyan-500/80' : SEV[s.sev].underline}
               ${activeIdx === s.idx ? 'bg-emerald-100/70 dark:bg-emerald-950/30 rounded-sm' : 'hover:bg-slate-50 dark:hover:bg-zinc-800/30 rounded-sm'}`}>
             {s.text}
           </span>
@@ -200,7 +200,7 @@ function EditorHighlight({ text, issues, activeIdx, onClickIssue }: {
   );
 }
 
-/* â”€â”€ Correction diff view â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+/* ── Correction diff view ─────────────────────────────────────────────────── */
 
 function CorrectionDiff({ input, issues }: { input: string; issues: Issue[] }) {
   const fixable = issues.filter(i => i.replacements.length > 0).sort((a, b) => a.start - b.start);
@@ -241,7 +241,7 @@ function CorrectionDiff({ input, issues }: { input: string; issues: Issue[] }) {
   );
 }
 
-/* â”€â”€ Engine selector â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+/* ── Engine selector ──────────────────────────────────────────────────────── */
 
 function EngineSelector({ mode, onChange }: { mode: EngineMode; onChange: (m: EngineMode) => void }) {
   const [open, setOpen] = useState(false);
@@ -292,9 +292,9 @@ function EngineSelector({ mode, onChange }: { mode: EngineMode; onChange: (m: En
   );
 }
 
-/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+/* ══════════════════════════════════════════════════════════════════════════════
    MAIN PAGE
-   â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
+   ══════════════════════════════════════════════════════════════════════════════ */
 
 const EXAMPLE = `She don't like apples. I have went to the store yesterday. Their going to a university soon. The the cat sat on a mat. He have many informations about the enviromment. Me and him went to the store , and buyed a apple. The results of the study is clear. I seen him at the park and he dont care about they're feelings. She recieve the package and then she go home. However the weather was nice outside. Dr. smith told me to come back tommorow but i cant make it. Between you and I the test was definately harder then expected.`;
 
@@ -310,7 +310,7 @@ export default function GrammarPage() {
   const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>('all');
   const issueListRef = useRef<HTMLDivElement>(null);
 
-  /* â”€â”€ Analysis â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+  /* ── Analysis ────────────────────────────────────────────────────────── */
 
   const handleCheck = useCallback(async () => {
     if (!inputText.trim()) return;
@@ -335,7 +335,7 @@ export default function GrammarPage() {
     // Show rules immediately if we'll also run python/ai
     if (usesRules) setResult(r);
 
-    // ── AI engine ──
+    // -- AI engine --
     if (usesAI) {
       try {
         const res = await fetch('/api/grammar-ai', {
@@ -385,7 +385,7 @@ export default function GrammarPage() {
     setShowCorrected(false);
   }, [inputText, engineMode]);
 
-  /* â”€â”€ Actions â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+  /* ── Actions ─────────────────────────────────────────────────────────── */
 
   const handlePaste = useCallback(async () => {
     try { setInputText(await navigator.clipboard.readText()); } catch { /* denied */ }
@@ -457,7 +457,7 @@ export default function GrammarPage() {
     setResult(finalResult); setActiveIssue(null); setDismissed(new Set()); setCategoryFilter('all');
   }, [result, inputText]);
 
-  /* â”€â”€ Derived data â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+  /* ── Derived data ────────────────────────────────────────────────────── */
 
   const visibleIssues = useMemo(() => {
     if (!result) return [];
@@ -482,7 +482,7 @@ export default function GrammarPage() {
 
   const wordCount = useMemo(() => inputText.trim().split(/\s+/).filter(Boolean).length, [inputText]);
 
-  /* â”€â”€ Scroll sidebar to active card â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+  /* ── Scroll sidebar to active card ───────────────────────────────────── */
 
   useEffect(() => {
     if (activeIssue === null || !issueListRef.current || !result) return;
@@ -501,14 +501,14 @@ export default function GrammarPage() {
     }
   }, [activeIssue, result, dismissed]);
 
-  /* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+  /* ════════════════════════════════════════════════════════════════════════
      RENDER
-     â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
+     ════════════════════════════════════════════════════════════════════════ */
 
   return (
     <div className="min-h-screen bg-[#f8f9fa] dark:bg-[#0a0a0f]">
 
-      {/* â”€â”€ Top bar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+      {/* ── Top bar ────────────────────────────────────────────────────── */}
       <div className="border-b border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900/70 sticky top-0 z-30">
         <div className="max-w-[1800px] mx-auto px-6">
           <div className="flex items-center justify-between h-14">
@@ -525,8 +525,8 @@ export default function GrammarPage() {
             <div className="flex items-center gap-3">
               <EngineSelector mode={engineMode} onChange={setEngineMode} />
               {aiLoading && (
-                <span className="text-[11px] text-purple-500 animate-pulse flex items-center gap-1">
-                  <Brain className="w-3 h-3" /> Analyzingâ€¦
+                <span className="text-[11px] text-cyan-500 animate-pulse flex items-center gap-1">
+                  <Brain className="w-3 h-3" /> Analyzing…
                 </span>
               )}
             </div>
@@ -550,10 +550,10 @@ export default function GrammarPage() {
         </div>
       </div>
 
-      {/* â”€â”€ Two-column layout â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+      {/* ── Two-column layout ──────────────────────────────────────────── */}
       <div className="max-w-[1800px] mx-auto flex min-h-[calc(100vh-57px)]">
 
-        {/* â•â•â• LEFT: Editor â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */}
+        {/* ═══ LEFT: Editor ════════════════════════════════════════════════ */}
         <div className="flex-1 flex flex-col border-b lg:border-b-0 lg:border-r border-slate-200 dark:border-zinc-800">
 
           {/* Toolbar */}
@@ -609,7 +609,7 @@ export default function GrammarPage() {
             {!result ? (
               <textarea value={inputText} onChange={(e) => setInputText(e.target.value)}
                 onKeyDown={(e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) handleCheck(); }}
-                placeholder="Start typing or paste your text hereâ€¦"
+                placeholder="Start typing or paste your text here…"
                 className="w-full h-full p-8 text-[15px] leading-[1.85] resize-none outline-none bg-transparent text-slate-800 dark:text-zinc-200 placeholder:text-slate-300 dark:placeholder:text-zinc-700" />
             ) : (
               <div className="p-8">
@@ -630,7 +630,7 @@ export default function GrammarPage() {
           )}
         </div>
 
-        {/* â•â•â• RIGHT: Sidebar â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */}
+        {/* ═══ RIGHT: Sidebar ══════════════════════════════════════════════ */}
         <div className="w-full lg:w-[360px] xl:w-[400px] flex-shrink-0 flex flex-col bg-white dark:bg-zinc-900/40 overflow-hidden">
 
           {result ? (
@@ -735,7 +735,7 @@ export default function GrammarPage() {
               </div>
             </>
           ) : (
-            /* â”€â”€ Empty state â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+            /* ── Empty state ──────────────────────────────────────────── */
             <div className="flex-1 flex flex-col items-center justify-center p-8 text-center">
               <div className="p-4 rounded-2xl bg-gradient-to-br from-emerald-50 to-teal-50 dark:from-emerald-950/40 dark:to-teal-950/40 mb-4">
                 <Shield className="w-10 h-10 text-emerald-500" />

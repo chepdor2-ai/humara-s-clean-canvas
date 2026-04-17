@@ -133,7 +133,7 @@ export function Sidebar({ open, onClose }: { open?: boolean; onClose?: () => voi
           <Link href="/" className="flex items-center gap-3 group">
             <div className="relative">
               <Image src="/logo.png" alt="HumaraGPT" width={36} height={36} className="w-9 h-9 relative z-10 drop-shadow-[0_0_10px_rgba(147,51,234,0.6)]" />
-              <div className="absolute -inset-1 rounded-full bg-purple-500/25 animate-[logoPulse_2.5s_ease-in-out_infinite] blur-md" />
+              <div className="absolute -inset-1 rounded-full bg-cyan-500/25 animate-[logoPulse_2.5s_ease-in-out_infinite] blur-md" />
             </div>
             <div className="flex flex-col">
               <span className="text-base font-semibold tracking-tight text-sidebar-foreground">HumaraGPT</span>

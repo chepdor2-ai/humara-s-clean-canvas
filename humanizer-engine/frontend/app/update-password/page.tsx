@@ -63,7 +63,7 @@ export default function UpdatePasswordPage() {
   return (
     <main className="min-h-screen flex items-center justify-center p-4 sm:p-6 bg-white dark:bg-[#05050A] relative premium-dots">
       <div className="absolute inset-0 pointer-events-none overflow-hidden">
-        <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-purple-600/5 rounded-full blur-[100px]" />
+        <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-cyan-600/5 rounded-full blur-[100px]" />
       </div>
 
       <div className="max-w-md w-full relative z-10">
@@ -71,18 +71,18 @@ export default function UpdatePasswordPage() {
           <Link href="/" className="flex items-center gap-2.5">
             <div className="relative">
               <Image src="/logo.png" alt="HumaraGPT" width={56} height={56} className="w-14 h-14 relative z-10 drop-shadow-[0_0_14px_rgba(147,51,234,0.7)]" />
-              <div className="absolute -inset-1 rounded-full bg-purple-500/25 animate-[logoPulse_2.5s_ease-in-out_infinite] blur-md" />
-              <div className="absolute -inset-2.5 rounded-full bg-purple-400/15 animate-[logoPulse_2.5s_ease-in-out_infinite_0.6s] blur-lg" />
-              <div className="absolute -inset-4 rounded-full bg-purple-600/8 animate-[logoPulse_2.5s_ease-in-out_infinite_1.2s] blur-xl" />
+              <div className="absolute -inset-1 rounded-full bg-cyan-500/25 animate-[logoPulse_2.5s_ease-in-out_infinite] blur-md" />
+              <div className="absolute -inset-2.5 rounded-full bg-cyan-400/15 animate-[logoPulse_2.5s_ease-in-out_infinite_0.6s] blur-lg" />
+              <div className="absolute -inset-4 rounded-full bg-cyan-600/8 animate-[logoPulse_2.5s_ease-in-out_infinite_1.2s] blur-xl" />
             </div>
-            <span className="text-2xl font-bold bg-gradient-to-r from-white via-purple-200 to-purple-400 bg-clip-text text-transparent drop-shadow-[0_0_20px_rgba(168,85,247,0.4)]">HumaraGPT</span>
+            <span className="text-2xl font-bold bg-gradient-to-r from-white via-cyan-200 to-cyan-400 bg-clip-text text-transparent drop-shadow-[0_0_20px_rgba(168,85,247,0.4)]">HumaraGPT</span>
           </Link>
         </div>
 
-        <div className="bg-white/80 dark:bg-zinc-900/80 backdrop-blur-xl rounded-3xl border border-purple-500/10 shadow-2xl shadow-purple-900/20 p-7 sm:p-9">
+        <div className="bg-white/80 dark:bg-zinc-900/80 backdrop-blur-xl rounded-3xl border border-cyan-500/10 shadow-2xl shadow-cyan-900/20 p-7 sm:p-9">
           <div className="flex justify-center mb-6">
-            <div className="bg-purple-950/40 p-3 rounded-xl">
-              <Lock className="w-8 h-8 text-purple-400" />
+            <div className="bg-cyan-950/40 p-3 rounded-xl">
+              <Lock className="w-8 h-8 text-cyan-400" />
             </div>
           </div>
 
@@ -99,7 +99,7 @@ export default function UpdatePasswordPage() {
             <div className="text-center py-4">
               <p className="text-zinc-400 text-sm">Verifying reset link...</p>
               <p className="text-zinc-600 text-xs mt-2">If this takes too long, try requesting a new reset link.</p>
-              <Link href="/reset-password" className="inline-block mt-4 text-purple-400 text-sm font-medium hover:text-purple-300 transition-colors">
+              <Link href="/reset-password" className="inline-block mt-4 text-cyan-400 text-sm font-medium hover:text-cyan-300 transition-colors">
                 Request new link
               </Link>
             </div>
@@ -119,13 +119,13 @@ export default function UpdatePasswordPage() {
                     required
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    className="w-full pl-10 pr-12 py-3 rounded-xl border border-slate-300 dark:border-zinc-700/80 bg-white dark:bg-zinc-950/80 text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-zinc-600 focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 focus:outline-none transition-all text-sm"
+                    className="w-full pl-10 pr-12 py-3 rounded-xl border border-slate-300 dark:border-zinc-700/80 bg-white dark:bg-zinc-950/80 text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-zinc-600 focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20 focus:outline-none transition-all text-sm"
                     placeholder="Min. 6 characters"
                   />
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-3.5 text-zinc-500 hover:text-purple-400 transition-colors"
+                    className="absolute right-3 top-3.5 text-zinc-500 hover:text-cyan-400 transition-colors"
                   >
                     {showPassword ? <EyeOff className="h-4 w-4" strokeWidth={2} /> : <Eye className="h-4 w-4" strokeWidth={2} />}
                   </button>
@@ -140,7 +140,7 @@ export default function UpdatePasswordPage() {
                     required
                     value={confirmPassword}
                     onChange={(e) => setConfirmPassword(e.target.value)}
-                    className="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-300 dark:border-zinc-700/80 bg-white dark:bg-zinc-950/80 text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-zinc-600 focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 focus:outline-none transition-all text-sm"
+                    className="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-300 dark:border-zinc-700/80 bg-white dark:bg-zinc-950/80 text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-zinc-600 focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20 focus:outline-none transition-all text-sm"
                     placeholder="Confirm password"
                   />
                 </div>
@@ -148,7 +148,7 @@ export default function UpdatePasswordPage() {
               <button
                 type="submit"
                 disabled={isLoading}
-                className="w-full bg-purple-600 hover:bg-purple-500 text-white font-semibold py-3 rounded-xl transition-all shadow-lg shadow-purple-600/20 hover:shadow-purple-500/30 active:scale-[0.98] disabled:opacity-50"
+                className="w-full bg-cyan-600 hover:bg-cyan-500 text-white font-semibold py-3 rounded-xl transition-all shadow-lg shadow-cyan-600/20 hover:shadow-cyan-500/30 active:scale-[0.98] disabled:opacity-50"
               >
                 {isLoading ? 'Updating...' : 'Update Password'}
               </button>
@@ -156,7 +156,7 @@ export default function UpdatePasswordPage() {
           )}
 
           <p className="text-center text-sm text-zinc-500 mt-8">
-            <Link href="/login" className="text-purple-400 font-medium hover:text-purple-300 transition-colors">
+            <Link href="/login" className="text-cyan-400 font-medium hover:text-cyan-300 transition-colors">
               Back to login
             </Link>
           </p>

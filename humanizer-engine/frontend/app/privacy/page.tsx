@@ -16,10 +16,10 @@ export default function PrivacyPage() {
         <div className="max-w-5xl mx-auto px-6 text-center mt-12">
           <div className="flex justify-center mb-6">
             <div className="p-3 bg-slate-200 dark:bg-zinc-800 rounded-xl">
-              <Lock className="w-8 h-8 text-purple-400" strokeWidth={2} />
+              <Lock className="w-8 h-8 text-cyan-400" strokeWidth={2} />
             </div>
           </div>
-          <h1 className="text-4xl md:text-6xl font-bold text-slate-900 dark:text-white mb-8 border-b-4 border-purple-500 pb-6 inline-block">
+          <h1 className="text-4xl md:text-6xl font-bold text-slate-900 dark:text-white mb-8 border-b-4 border-cyan-500 pb-6 inline-block">
             Privacy Policy
           </h1>
           <p className="text-xl text-slate-500 dark:text-zinc-400 max-w-3xl mx-auto font-medium leading-relaxed mt-8">
@@ -35,13 +35,13 @@ export default function PrivacyPage() {
             {/* Information We Collect */}
             <div className="space-y-4">
               <div className="flex items-center gap-3 mb-4">
-                <Database className="w-6 h-6 text-purple-400 flex-shrink-0" strokeWidth={2} />
+                <Database className="w-6 h-6 text-cyan-400 flex-shrink-0" strokeWidth={2} />
                 <h2 className="text-2xl font-bold text-slate-900 dark:text-white">Information We Collect</h2>
               </div>
               <p className="text-slate-600 dark:text-zinc-300 text-lg leading-relaxed font-medium">
                 We collect information you provide directly, including email addresses, account names, and the text you submit to be rewritten through our service.
               </p>
-              <div className="bg-slate-200 dark:bg-zinc-800/50 border-l-4 border-purple-500 p-6 rounded-r-lg">
+              <div className="bg-slate-200 dark:bg-zinc-800/50 border-l-4 border-cyan-500 p-6 rounded-r-lg">
                 <p className="text-sm text-slate-600 dark:text-zinc-300 font-medium leading-relaxed">
                   We use industry-standard encryption to protect your data in transit and at rest. Your submitted text is never shared with third parties without your explicit consent.
                 </p>
@@ -51,7 +51,7 @@ export default function PrivacyPage() {
             {/* How We Use Your Data */}
             <div className="space-y-4">
               <div className="flex items-center gap-3 mb-4">
-                <Eye className="w-6 h-6 text-purple-400 flex-shrink-0" strokeWidth={2} />
+                <Eye className="w-6 h-6 text-cyan-400 flex-shrink-0" strokeWidth={2} />
                 <h2 className="text-2xl font-bold text-slate-900 dark:text-white">How We Use Your Data</h2>
               </div>
               <p className="text-slate-600 dark:text-zinc-300 text-lg leading-relaxed font-medium">
@@ -59,19 +59,19 @@ export default function PrivacyPage() {
               </p>
               <ul className="space-y-3 text-slate-600 dark:text-zinc-300 font-medium">
                 <li className="flex items-start gap-3">
-                  <span className="inline-block w-2 h-2 bg-purple-500 rounded-full mt-2 flex-shrink-0" />
+                  <span className="inline-block w-2 h-2 bg-cyan-500 rounded-full mt-2 flex-shrink-0" />
                   <span>Providing and improving our humanization services</span>
                 </li>
                 <li className="flex items-start gap-3">
-                  <span className="inline-block w-2 h-2 bg-purple-500 rounded-full mt-2 flex-shrink-0" />
+                  <span className="inline-block w-2 h-2 bg-cyan-500 rounded-full mt-2 flex-shrink-0" />
                   <span>Maintaining and securing your account</span>
                 </li>
                 <li className="flex items-start gap-3">
-                  <span className="inline-block w-2 h-2 bg-purple-500 rounded-full mt-2 flex-shrink-0" />
+                  <span className="inline-block w-2 h-2 bg-cyan-500 rounded-full mt-2 flex-shrink-0" />
                   <span>Communicating service updates and support</span>
                 </li>
                 <li className="flex items-start gap-3">
-                  <span className="inline-block w-2 h-2 bg-purple-500 rounded-full mt-2 flex-shrink-0" />
+                  <span className="inline-block w-2 h-2 bg-cyan-500 rounded-full mt-2 flex-shrink-0" />
                   <span>Complying with legal obligations</span>
                 </li>
               </ul>
@@ -80,7 +80,7 @@ export default function PrivacyPage() {
             {/* Content Storage */}
             <div className="space-y-4">
               <div className="flex items-center gap-3 mb-4">
-                <Zap className="w-6 h-6 text-purple-400 flex-shrink-0" strokeWidth={2} />
+                <Zap className="w-6 h-6 text-cyan-400 flex-shrink-0" strokeWidth={2} />
                 <h2 className="text-2xl font-bold text-slate-900 dark:text-white">Content Storage & Retention</h2>
               </div>
               <p className="text-slate-600 dark:text-zinc-300 text-lg leading-relaxed font-medium">
@@ -91,7 +91,7 @@ export default function PrivacyPage() {
             {/* Third-Party Services */}
             <div className="space-y-4">
               <div className="flex items-center gap-3 mb-4">
-                <Mail className="w-6 h-6 text-purple-400 flex-shrink-0" strokeWidth={2} />
+                <Mail className="w-6 h-6 text-cyan-400 flex-shrink-0" strokeWidth={2} />
                 <h2 className="text-2xl font-bold text-slate-900 dark:text-white">Third-Party Services</h2>
               </div>
               <p className="text-slate-600 dark:text-zinc-300 text-lg leading-relaxed font-medium">
@@ -102,7 +102,7 @@ export default function PrivacyPage() {
             {/* Security Measures */}
             <div className="space-y-4">
               <div className="flex items-center gap-3 mb-4">
-                <Shield className="w-6 h-6 text-purple-400 flex-shrink-0" strokeWidth={2} />
+                <Shield className="w-6 h-6 text-cyan-400 flex-shrink-0" strokeWidth={2} />
                 <h2 className="text-2xl font-bold text-slate-900 dark:text-white">Security Measures</h2>
               </div>
               <p className="text-slate-600 dark:text-zinc-300 text-lg leading-relaxed font-medium">
@@ -113,7 +113,7 @@ export default function PrivacyPage() {
             {/* Your Rights */}
             <div className="space-y-4">
               <div className="flex items-center gap-3 mb-4">
-                <Lock className="w-6 h-6 text-purple-400 flex-shrink-0" strokeWidth={2} />
+                <Lock className="w-6 h-6 text-cyan-400 flex-shrink-0" strokeWidth={2} />
                 <h2 className="text-2xl font-bold text-slate-900 dark:text-white">Your Rights & Choices</h2>
               </div>
               <p className="text-slate-600 dark:text-zinc-300 text-lg leading-relaxed font-medium">
@@ -139,7 +139,7 @@ export default function PrivacyPage() {
             Have privacy concerns? Contact us anytime for clarification or data requests.
           </p>
           <div className="flex flex-col sm:flex-row justify-center gap-4">
-            <Link href="/app" className="bg-purple-600 hover:bg-purple-700 text-white px-8 py-3 font-medium rounded-lg transition-colors">
+            <Link href="/app" className="bg-cyan-600 hover:bg-cyan-700 text-white px-8 py-3 font-medium rounded-lg transition-colors">
               Start Using HumaraGPT
             </Link>
             <Link href="/" className="bg-slate-200 dark:bg-zinc-800 text-slate-900 dark:text-white px-8 py-3 font-medium rounded-lg border border-slate-300 dark:border-zinc-700 hover:bg-slate-300 dark:hover:bg-zinc-700 transition-colors">

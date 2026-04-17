@@ -69,7 +69,7 @@ export default function IPhoneMockup() {
   return (
     <div className="relative force-dark" style={{ perspective: '1200px' }}>
       {/* Glow behind phone */}
-      <div className="absolute -inset-10 bg-gradient-to-br from-purple-500/25 via-purple-600/15 to-transparent rounded-full blur-[60px] pointer-events-none" />
+      <div className="absolute -inset-10 bg-gradient-to-br from-cyan-500/25 via-cyan-600/15 to-transparent rounded-full blur-[60px] pointer-events-none" />
 
       {/* iPhone frame — 3D tilt */}
       <motion.div
@@ -81,7 +81,7 @@ export default function IPhoneMockup() {
         initial={{ rotateY: -8, rotateX: 4 }}
       >
         {/* Outer shell with metallic edge */}
-        <div className="rounded-[3rem] p-[2px] bg-gradient-to-b from-zinc-500 via-zinc-700 to-zinc-800 shadow-2xl shadow-purple-900/40">
+        <div className="rounded-[3rem] p-[2px] bg-gradient-to-b from-zinc-500 via-zinc-700 to-zinc-800 shadow-2xl shadow-cyan-900/40">
           {/* Inner frame */}
           <div className="rounded-[2.9rem] bg-zinc-900 p-[8px]">
             {/* Notch */}
@@ -101,18 +101,18 @@ export default function IPhoneMockup() {
 
               {/* App header */}
               <div className="px-4 pb-3 flex items-center gap-2 border-b border-white/5">
-                <div className="w-6 h-6 rounded-lg bg-gradient-to-br from-purple-500 to-purple-700 flex items-center justify-center shadow-lg shadow-purple-500/30">
+                <div className="w-6 h-6 rounded-lg bg-gradient-to-br from-cyan-500 to-cyan-700 flex items-center justify-center shadow-lg shadow-cyan-500/30">
                   <Zap className="w-3 h-3 text-white" />
                 </div>
                 <span className="text-[11px] font-semibold text-white/90">HumaraGPT</span>
                 {isScanning && (
-                  <span className="ml-auto text-[8px] text-purple-400 flex items-center gap-1">
-                    <div className="w-1.5 h-1.5 border border-purple-400 border-t-transparent rounded-full animate-spin" />
+                  <span className="ml-auto text-[8px] text-cyan-400 flex items-center gap-1">
+                    <div className="w-1.5 h-1.5 border border-cyan-400 border-t-transparent rounded-full animate-spin" />
                     Scanning…
                   </span>
                 )}
                 {isHumanizing && (
-                  <span className="ml-auto text-[8px] text-purple-400 flex items-center gap-1">
+                  <span className="ml-auto text-[8px] text-cyan-400 flex items-center gap-1">
                     <Zap className="w-2 h-2" /> Writing…
                   </span>
                 )}
@@ -135,11 +135,11 @@ export default function IPhoneMockup() {
 
                 {/* Output card */}
                 <div className={`rounded-xl p-3 border transition-all duration-700 ${isDone ? 'bg-emerald-500/[0.06] border-emerald-500/15 shadow-lg shadow-emerald-500/5' : 'bg-white/[0.03] border-white/[0.06]'}`}>
-                  <span className={`text-[8px] uppercase tracking-wider font-semibold ${isDone ? 'text-emerald-400' : 'text-purple-400'}`}>Output</span>
+                  <span className={`text-[8px] uppercase tracking-wider font-semibold ${isDone ? 'text-emerald-400' : 'text-cyan-400'}`}>Output</span>
                   {isHumanizing || isDone ? (
                     <p className="text-[10px] leading-relaxed mt-1.5 text-gray-200">
                       {outputText}
-                      {isHumanizing && <span className="inline-block w-px h-2.5 bg-purple-400 ml-0.5 animate-pulse align-text-bottom" />}
+                      {isHumanizing && <span className="inline-block w-px h-2.5 bg-cyan-400 ml-0.5 animate-pulse align-text-bottom" />}
                     </p>
                   ) : (
                     <p className="text-[10px] leading-relaxed mt-1.5 text-gray-600 italic">Awaiting output…</p>
@@ -172,7 +172,7 @@ export default function IPhoneMockup() {
               {/* Bottom bar */}
               <div className="absolute bottom-0 left-0 right-0 px-4 py-3 bg-gradient-to-t from-[#09090F] via-[#09090F]/80 to-transparent">
                 <div className="flex items-center justify-center gap-1.5">
-                  <div className={`w-1.5 h-1.5 rounded-full transition-colors ${isDone ? 'bg-emerald-500 shadow-sm shadow-emerald-500/50' : isScanning || isHumanizing ? 'bg-purple-500 animate-pulse shadow-sm shadow-purple-500/50' : 'bg-gray-600'}`} />
+                  <div className={`w-1.5 h-1.5 rounded-full transition-colors ${isDone ? 'bg-emerald-500 shadow-sm shadow-emerald-500/50' : isScanning || isHumanizing ? 'bg-cyan-500 animate-pulse shadow-sm shadow-cyan-500/50' : 'bg-gray-600'}`} />
                   <span className="text-[8px] text-gray-500">{isDone ? 'Human Score: 98%' : isScanning || isHumanizing ? 'Processing…' : 'Ready'}</span>
                 </div>
               </div>

@@ -97,8 +97,8 @@
 }
 
 /* Keep white text on colored/gradient backgrounds */
-[data-theme="light"] [class*="from-purple"][class~="text-white"],
-[data-theme="light"] [class*="bg-purple"][class~="text-white"],
+[data-theme="light"] [class*="from-cyan"][class~="text-white"],
+[data-theme="light"] [class*="bg-cyan"][class~="text-white"],
 [data-theme="light"] [class*="bg-emerald"][class~="text-white"],
 [data-theme="light"] [class*="bg-orange"][class~="text-white"],
 [data-theme="light"] [class*="bg-red-"][class~="text-white"],
@@ -184,10 +184,10 @@
 [data-theme="light"] [class~="border-slate-800"] {
   border-color: #e2e8f0 !important;
 }
-[data-theme="light"] [class~="border-purple-500/10"] {
+[data-theme="light"] [class~="border-cyan-500/10"] {
   border-color: rgba(168, 85, 247, 0.08) !important;
 }
-[data-theme="light"] [class~="border-purple-800/60"] {
+[data-theme="light"] [class~="border-cyan-800/60"] {
   border-color: rgba(168, 85, 247, 0.15) !important;
 }
 [data-theme="light"] [class~="border-cyan-900/30"],
@@ -203,10 +203,10 @@
 }
 
 /* ── 9. Shadow Normalization ─────────────────────────────────── */
-[data-theme="light"] [class~="shadow-purple-900/10"] {
+[data-theme="light"] [class~="shadow-cyan-900/10"] {
   --tw-shadow-color: rgba(168, 85, 247, 0.06) !important;
 }
-[data-theme="light"] [class~="shadow-purple-900/20"] {
+[data-theme="light"] [class~="shadow-cyan-900/20"] {
   --tw-shadow-color: rgba(168, 85, 247, 0.08) !important;
 }
 [data-theme="light"] [class~="shadow-black/60"] {
@@ -410,7 +410,7 @@
 }
 
 /* Auth-page logo gradient text */
-:root:not(.dark) .bg-gradient-to-r.from-white.via-purple-200.to-purple-400 {
+:root:not(.dark) .bg-gradient-to-r.from-white.via-cyan-200.to-cyan-400 {
   background-image: linear-gradient(to right, #1e1b4b, #7c3aed, #a855f7) !important;
 }
 
@@ -606,12 +606,12 @@
 
 /* Keep white text on colored/gradient buttons (higher specificity) */
 [data-theme="light"] [class*="bg-brand"] [class~="text-gray-400"],
-[data-theme="light"] [class*="bg-purple"] [class~="text-gray-400"],
+[data-theme="light"] [class*="bg-cyan"] [class~="text-gray-400"],
 [data-theme="light"] [class*="bg-emerald"] [class~="text-gray-400"] {
   color: #9ca3af !important;
 }
-/* Keep hover:text-white on purple/brand/colored buttons */
-[data-theme="light"] [class*="bg-purple"][class~="hover:text-white"]:hover,
+/* Keep hover:text-white on cyan/brand/colored buttons */
+[data-theme="light"] [class*="bg-cyan"][class~="hover:text-white"]:hover,
 [data-theme="light"] [class*="bg-brand"][class~="hover:text-white"]:hover,
 [data-theme="light"] [class*="bg-emerald"][class~="hover:text-white"]:hover {
   color: #ffffff !important;
@@ -660,7 +660,7 @@
 [data-theme="light"] .force-dark [class~="text-gray-600"] {
   color: #4b5563 !important;
 }
-[data-theme="light"] .force-dark [class~="text-purple-400"] {
+[data-theme="light"] .force-dark [class~="text-cyan-400"] {
   color: #c084fc !important;
 }
 [data-theme="light"] .force-dark [class~="text-emerald-400"] {

@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import { Shield } from 'lucide-react';
 import Link from 'next/link';
@@ -6,8 +6,8 @@ import Link from 'next/link';
 export default function DetectorPage() {
   return (
     <div className="flex flex-col items-center justify-center min-h-[70vh] gap-8 px-6 py-12">
-      <div className="w-20 h-20 rounded-3xl bg-purple-50 flex items-center justify-center">
-        <Shield className="w-10 h-10 text-purple-500" />
+      <div className="w-20 h-20 rounded-3xl bg-cyan-50 flex items-center justify-center">
+        <Shield className="w-10 h-10 text-cyan-500" />
       </div>
       <div className="text-center space-y-3 max-w-md">
         <h1 className="text-2xl font-bold text-gray-900 tracking-tight">AI Detector</h1>
@@ -21,7 +21,7 @@ export default function DetectorPage() {
       </div>
       <Link
         href="/app"
-        className="mt-2 px-6 py-2.5 bg-purple-600 hover:bg-purple-700 text-white text-sm font-bold rounded-xl transition-all shadow-md hover:shadow-lg"
+        className="mt-2 px-6 py-2.5 bg-cyan-600 hover:bg-cyan-700 text-white text-sm font-bold rounded-xl transition-all shadow-md hover:shadow-lg"
       >
         Back to Humanizer
       </Link>

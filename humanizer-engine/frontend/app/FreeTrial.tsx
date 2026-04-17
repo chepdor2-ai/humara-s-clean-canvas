@@ -85,7 +85,7 @@ export default function FreeTrial() {
           <div className="flex items-center justify-between px-4 py-2.5 border-b border-slate-200 dark:border-zinc-800 bg-slate-50 dark:bg-zinc-900/80">
             <span className="text-sm font-semibold text-slate-900 dark:text-white">Humanized Output</span>
             {output && (
-              <button onClick={handleCopy} className="p-1 text-purple-400 hover:bg-purple-950/50 rounded-md transition-colors" title="Copy">
+              <button onClick={handleCopy} className="p-1 text-cyan-400 hover:bg-cyan-950/50 rounded-md transition-colors" title="Copy">
                 {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
               </button>
             )}

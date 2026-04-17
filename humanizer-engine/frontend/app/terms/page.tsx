@@ -15,11 +15,11 @@ export default function TermsPage() {
       <section className="w-full bg-slate-50 dark:bg-zinc-900 pt-32 pb-24">
         <div className="max-w-5xl mx-auto px-6 text-center mt-12">
           <div className="flex justify-center mb-6">
-            <div className="p-3 bg-purple-950/30 rounded-xl">
-              <FileText className="w-8 h-8 text-purple-400" strokeWidth={2} />
+            <div className="p-3 bg-cyan-950/30 rounded-xl">
+              <FileText className="w-8 h-8 text-cyan-400" strokeWidth={2} />
             </div>
           </div>
-          <h1 className="text-4xl md:text-6xl font-bold text-slate-900 dark:text-white mb-8 border-b-4 border-purple-500 pb-6 inline-block">
+          <h1 className="text-4xl md:text-6xl font-bold text-slate-900 dark:text-white mb-8 border-b-4 border-cyan-500 pb-6 inline-block">
             Terms of Service
           </h1>
           <p className="text-xl text-slate-500 dark:text-zinc-400 max-w-3xl mx-auto font-medium leading-relaxed mt-8">
@@ -35,13 +35,13 @@ export default function TermsPage() {
             {/* Service Usage */}
             <div className="space-y-4">
               <div className="flex items-center gap-3 mb-4">
-                <Shield className="w-6 h-6 text-purple-400 flex-shrink-0" strokeWidth={2} />
+                <Shield className="w-6 h-6 text-cyan-400 flex-shrink-0" strokeWidth={2} />
                 <h2 className="text-2xl font-bold text-slate-900 dark:text-white">Service Usage</h2>
               </div>
               <p className="text-slate-600 dark:text-zinc-300 text-lg leading-relaxed font-medium">
                 We provide tools strictly designed to refine text structure and readability (burstiness, perplexity adjustment). Ensure you follow institutional guidelines when using AI-modified text.
               </p>
-              <div className="bg-purple-950/20 border-l-4 border-purple-500 p-6 rounded-r-lg">
+              <div className="bg-cyan-950/20 border-l-4 border-cyan-500 p-6 rounded-r-lg">
                 <p className="text-sm text-slate-600 dark:text-zinc-300 font-medium leading-relaxed">
                   By using HumaraGPT, you acknowledge and agree that you are responsible for the content you submit and ensure compliance with all applicable laws and institutional policies.
                 </p>
@@ -51,7 +51,7 @@ export default function TermsPage() {
             {/* Acceptable Content */}
             <div className="space-y-4">
               <div className="flex items-center gap-3 mb-4">
-                <AlertCircle className="w-6 h-6 text-purple-400 flex-shrink-0" strokeWidth={2} />
+                <AlertCircle className="w-6 h-6 text-cyan-400 flex-shrink-0" strokeWidth={2} />
                 <h2 className="text-2xl font-bold text-slate-900 dark:text-white">Acceptable Content</h2>
               </div>
               <p className="text-slate-600 dark:text-zinc-300 text-lg leading-relaxed font-medium">
@@ -59,19 +59,19 @@ export default function TermsPage() {
               </p>
               <ul className="space-y-3 text-slate-600 dark:text-zinc-300 font-medium">
                 <li className="flex items-start gap-3">
-                  <span className="inline-block w-2 h-2 bg-purple-500 rounded-full mt-2 flex-shrink-0" />
+                  <span className="inline-block w-2 h-2 bg-cyan-500 rounded-full mt-2 flex-shrink-0" />
                   <span>No illegal or harmful content</span>
                 </li>
                 <li className="flex items-start gap-3">
-                  <span className="inline-block w-2 h-2 bg-purple-500 rounded-full mt-2 flex-shrink-0" />
+                  <span className="inline-block w-2 h-2 bg-cyan-500 rounded-full mt-2 flex-shrink-0" />
                   <span>No content that violates third-party intellectual property rights</span>
                 </li>
                 <li className="flex items-start gap-3">
-                  <span className="inline-block w-2 h-2 bg-purple-500 rounded-full mt-2 flex-shrink-0" />
+                  <span className="inline-block w-2 h-2 bg-cyan-500 rounded-full mt-2 flex-shrink-0" />
                   <span>No harassment, discrimination, or hate speech</span>
                 </li>
                 <li className="flex items-start gap-3">
-                  <span className="inline-block w-2 h-2 bg-purple-500 rounded-full mt-2 flex-shrink-0" />
+                  <span className="inline-block w-2 h-2 bg-cyan-500 rounded-full mt-2 flex-shrink-0" />
                   <span>Comply with academic integrity policies where applicable</span>
                 </li>
               </ul>
@@ -125,7 +125,7 @@ export default function TermsPage() {
             {/* Data Privacy */}
             <div className="space-y-4">
               <div className="flex items-center gap-3 mb-4">
-                <Lock className="w-6 h-6 text-purple-400 flex-shrink-0" strokeWidth={2} />
+                <Lock className="w-6 h-6 text-cyan-400 flex-shrink-0" strokeWidth={2} />
                 <h2 className="text-2xl font-bold text-slate-900 dark:text-white">Data & Privacy</h2>
               </div>
               <p className="text-slate-600 dark:text-zinc-300 text-lg leading-relaxed font-medium">
@@ -136,7 +136,7 @@ export default function TermsPage() {
             {/* User Responsibilities */}
             <div className="space-y-4">
               <div className="flex items-center gap-3 mb-4">
-                <Users className="w-6 h-6 text-purple-400 flex-shrink-0" strokeWidth={2} />
+                <Users className="w-6 h-6 text-cyan-400 flex-shrink-0" strokeWidth={2} />
                 <h2 className="text-2xl font-bold text-slate-900 dark:text-white">User Responsibilities</h2>
               </div>
               <p className="text-slate-600 dark:text-zinc-300 text-lg leading-relaxed font-medium">
@@ -147,7 +147,7 @@ export default function TermsPage() {
             {/* Limitation of Liability */}
             <div className="space-y-4">
               <div className="flex items-center gap-3 mb-4">
-                <Server className="w-6 h-6 text-purple-400 flex-shrink-0" strokeWidth={2} />
+                <Server className="w-6 h-6 text-cyan-400 flex-shrink-0" strokeWidth={2} />
                 <h2 className="text-2xl font-bold text-slate-900 dark:text-white">Limitation of Liability</h2>
               </div>
               <p className="text-slate-600 dark:text-zinc-300 text-lg leading-relaxed font-medium">
@@ -173,7 +173,7 @@ export default function TermsPage() {
             Contact our support team for clarification on any of our policies.
           </p>
           <div className="flex flex-col sm:flex-row justify-center gap-4">
-            <Link href="/app" className="bg-purple-600 hover:bg-purple-500 text-white px-8 py-3 font-medium rounded-lg transition-colors">
+            <Link href="/app" className="bg-cyan-600 hover:bg-cyan-500 text-white px-8 py-3 font-medium rounded-lg transition-colors">
               Get Started
             </Link>
             <Link href="/" className="bg-slate-200 dark:bg-zinc-800 text-slate-600 dark:text-zinc-300 px-8 py-3 font-medium rounded-lg border border-slate-300 dark:border-zinc-700 hover:bg-slate-300 dark:hover:bg-zinc-700 transition-colors">

@@ -124,7 +124,7 @@ function renderMarkdown(content: string) {
         <ul key={`ul-${i}`} className="space-y-2 my-6 ml-1">
           {listItems.map((item, li) => (
             <li key={li} className="flex gap-3 text-slate-600 dark:text-zinc-300 leading-relaxed">
-              <span className="text-purple-400 mt-1.5 shrink-0">•</span>
+              <span className="text-cyan-400 mt-1.5 shrink-0">•</span>
               <span dangerouslySetInnerHTML={{ __html: inlineMarkdown(item) }} />
             </li>
           ))}
@@ -209,12 +209,12 @@ export default async function BlogPostPage({ params }: Props) {
       {/* Hero */}
       <section className="w-full bg-white dark:bg-zinc-900 pt-32 pb-16">
         <div className="max-w-4xl mx-auto px-6 mt-12">
-          <Link href="/blog" className="inline-flex items-center gap-2 text-sm text-slate-500 dark:text-zinc-400 hover:text-purple-400 mb-8 transition-colors">
+          <Link href="/blog" className="inline-flex items-center gap-2 text-sm text-slate-500 dark:text-zinc-400 hover:text-cyan-400 mb-8 transition-colors">
             <ArrowLeft className="w-4 h-4" /> Back to Blog
           </Link>
 
           <div className="flex items-center gap-3 mb-6">
-            <span className="text-[10px] font-bold uppercase px-2.5 py-1 rounded-full border bg-purple-900/30 text-purple-300 border-purple-700">
+            <span className="text-[10px] font-bold uppercase px-2.5 py-1 rounded-full border bg-cyan-900/30 text-cyan-300 border-cyan-700">
               {post.category}
             </span>
           </div>
@@ -265,15 +265,15 @@ export default async function BlogPostPage({ params }: Props) {
         <div className="max-w-4xl mx-auto px-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {prevPost && (
-              <Link href={`/blog/${prevPost.slug}`} className="group bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-xl p-6 hover:border-purple-700/50 transition-all">
+              <Link href={`/blog/${prevPost.slug}`} className="group bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-xl p-6 hover:border-cyan-700/50 transition-all">
                 <span className="text-xs text-slate-500 dark:text-zinc-500 mb-2 block">← Previous</span>
-                <span className="text-slate-900 dark:text-white font-semibold group-hover:text-purple-300 transition-colors">{prevPost.title}</span>
+                <span className="text-slate-900 dark:text-white font-semibold group-hover:text-cyan-300 transition-colors">{prevPost.title}</span>
               </Link>
             )}
             {nextPost && (
-              <Link href={`/blog/${nextPost.slug}`} className="group bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-xl p-6 hover:border-purple-700/50 transition-all md:text-right md:col-start-2">
+              <Link href={`/blog/${nextPost.slug}`} className="group bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-xl p-6 hover:border-cyan-700/50 transition-all md:text-right md:col-start-2">
                 <span className="text-xs text-slate-500 dark:text-zinc-500 mb-2 block">Next →</span>
-                <span className="text-slate-900 dark:text-white font-semibold group-hover:text-purple-300 transition-colors">{nextPost.title}</span>
+                <span className="text-slate-900 dark:text-white font-semibold group-hover:text-cyan-300 transition-colors">{nextPost.title}</span>
               </Link>
             )}
           </div>
@@ -289,7 +289,7 @@ export default async function BlogPostPage({ params }: Props) {
           </p>
           <Link
             href="/signup"
-            className="inline-flex items-center gap-2 bg-purple-600 hover:bg-purple-700 text-white px-8 py-4 rounded-2xl text-sm font-semibold transition-all hover:shadow-lg hover:shadow-purple-600/25"
+            className="inline-flex items-center gap-2 bg-cyan-600 hover:bg-cyan-700 text-white px-8 py-4 rounded-2xl text-sm font-semibold transition-all hover:shadow-lg hover:shadow-cyan-600/25"
           >
             Get Started Free <ArrowRight className="w-4 h-4" />
           </Link>

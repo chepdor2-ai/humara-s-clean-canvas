@@ -87,7 +87,7 @@ export default function SignupPage() {
               </p>
               <p className="text-sm text-slate-900 dark:text-white font-medium mb-6">{email}</p>
               <p className="text-xs text-zinc-500 mb-6">Click the link in your email to activate your account.</p>
-              <Link href="/login" className="inline-flex items-center gap-1.5 text-purple-400 font-medium text-sm hover:text-purple-300 transition-colors">
+              <Link href="/login" className="inline-flex items-center gap-1.5 text-cyan-400 font-medium text-sm hover:text-cyan-300 transition-colors">
                 Back to Login <ArrowRight className="w-3.5 h-3.5" />
               </Link>
             </div>
@@ -101,9 +101,9 @@ export default function SignupPage() {
     <div className="min-h-screen flex flex-col bg-white dark:bg-[#05050A] relative overflow-hidden premium-dots">
       {/* Background ambient glow */}
       <div className="absolute inset-0 pointer-events-none">
-        <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/3 w-[800px] h-[600px] bg-purple-600/[0.07] rounded-full blur-[120px]" />
-        <div className="absolute bottom-0 right-1/4 w-[400px] h-[400px] bg-purple-500/[0.04] rounded-full blur-[100px]" />
-        <div className="absolute top-1/2 left-0 w-[300px] h-[500px] bg-purple-400/[0.03] rounded-full blur-[80px]" />
+        <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/3 w-[800px] h-[600px] bg-cyan-600/[0.07] rounded-full blur-[120px]" />
+        <div className="absolute bottom-0 right-1/4 w-[400px] h-[400px] bg-cyan-500/[0.04] rounded-full blur-[100px]" />
+        <div className="absolute top-1/2 left-0 w-[300px] h-[500px] bg-cyan-400/[0.03] rounded-full blur-[80px]" />
       </div>
 
       <main className="flex-grow flex items-center justify-center px-4 sm:px-6 py-12 relative z-10">
@@ -113,11 +113,11 @@ export default function SignupPage() {
             <Link href="/" className="flex items-center gap-3 group">
               <div className="relative">
                 <Image src="/logo.png" alt="HumaraGPT" width={56} height={56} className="w-14 h-14 relative z-10 drop-shadow-[0_0_14px_rgba(147,51,234,0.7)]" />
-                <div className="absolute -inset-1 rounded-full bg-purple-500/25 animate-[logoPulse_2.5s_ease-in-out_infinite] blur-md" />
-                <div className="absolute -inset-2.5 rounded-full bg-purple-400/15 animate-[logoPulse_2.5s_ease-in-out_infinite_0.6s] blur-lg" />
-                <div className="absolute -inset-4 rounded-full bg-purple-600/8 animate-[logoPulse_2.5s_ease-in-out_infinite_1.2s] blur-xl" />
+                <div className="absolute -inset-1 rounded-full bg-cyan-500/25 animate-[logoPulse_2.5s_ease-in-out_infinite] blur-md" />
+                <div className="absolute -inset-2.5 rounded-full bg-cyan-400/15 animate-[logoPulse_2.5s_ease-in-out_infinite_0.6s] blur-lg" />
+                <div className="absolute -inset-4 rounded-full bg-cyan-600/8 animate-[logoPulse_2.5s_ease-in-out_infinite_1.2s] blur-xl" />
               </div>
-              <span className="text-[22px] font-bold bg-gradient-to-r from-white via-purple-200 to-purple-400 bg-clip-text text-transparent drop-shadow-[0_0_20px_rgba(168,85,247,0.4)]">HumaraGPT</span>
+              <span className="text-[22px] font-bold bg-gradient-to-r from-white via-cyan-200 to-cyan-400 bg-clip-text text-transparent drop-shadow-[0_0_20px_rgba(168,85,247,0.4)]">HumaraGPT</span>
             </Link>
           </div>
 
@@ -164,7 +164,7 @@ export default function SignupPage() {
                     type="text"
                     value={fullName}
                     onChange={(e) => setFullName(e.target.value)}
-                    className="w-full pl-11 pr-4 py-3 rounded-xl border border-slate-300 dark:border-zinc-800 bg-white dark:bg-zinc-950/60 text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-zinc-600 focus:border-purple-500/60 focus:ring-2 focus:ring-purple-500/10 focus:outline-none transition-all text-sm"
+                    className="w-full pl-11 pr-4 py-3 rounded-xl border border-slate-300 dark:border-zinc-800 bg-white dark:bg-zinc-950/60 text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-zinc-600 focus:border-cyan-500/60 focus:ring-2 focus:ring-cyan-500/10 focus:outline-none transition-all text-sm"
                     placeholder="John Doe"
                     required
                   />
@@ -179,7 +179,7 @@ export default function SignupPage() {
                     type="email"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    className="w-full pl-11 pr-4 py-3 rounded-xl border border-slate-300 dark:border-zinc-800 bg-white dark:bg-zinc-950/60 text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-zinc-600 focus:border-purple-500/60 focus:ring-2 focus:ring-purple-500/10 focus:outline-none transition-all text-sm"
+                    className="w-full pl-11 pr-4 py-3 rounded-xl border border-slate-300 dark:border-zinc-800 bg-white dark:bg-zinc-950/60 text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-zinc-600 focus:border-cyan-500/60 focus:ring-2 focus:ring-cyan-500/10 focus:outline-none transition-all text-sm"
                     placeholder="you@example.com"
                     required
                   />
@@ -194,7 +194,7 @@ export default function SignupPage() {
                     type={showPassword ? 'text' : 'password'}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    className="w-full pl-11 pr-12 py-3 rounded-xl border border-slate-300 dark:border-zinc-800 bg-white dark:bg-zinc-950/60 text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-zinc-600 focus:border-purple-500/60 focus:ring-2 focus:ring-purple-500/10 focus:outline-none transition-all text-sm"
+                    className="w-full pl-11 pr-12 py-3 rounded-xl border border-slate-300 dark:border-zinc-800 bg-white dark:bg-zinc-950/60 text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-zinc-600 focus:border-cyan-500/60 focus:ring-2 focus:ring-cyan-500/10 focus:outline-none transition-all text-sm"
                     placeholder="Min. 6 characters"
                     required
                   />
@@ -213,19 +213,19 @@ export default function SignupPage() {
                   type="checkbox"
                   checked={agreedToTerms}
                   onChange={(e) => setAgreedToTerms(e.target.checked)}
-                  className="mt-0.5 h-4 w-4 rounded border-slate-300 dark:border-zinc-700 bg-zinc-950 accent-purple-600 cursor-pointer"
+                  className="mt-0.5 h-4 w-4 rounded border-slate-300 dark:border-zinc-700 bg-zinc-950 accent-cyan-600 cursor-pointer"
                 />
                 <span className="text-xs text-zinc-500 leading-relaxed">
                   I agree to the{' '}
-                  <Link href="/terms" className="text-purple-400/80 hover:text-purple-300 underline underline-offset-2">Terms of Service</Link>{' '}and{' '}
-                  <Link href="/privacy" className="text-purple-400/80 hover:text-purple-300 underline underline-offset-2">Privacy Policy</Link>
+                  <Link href="/terms" className="text-cyan-400/80 hover:text-cyan-300 underline underline-offset-2">Terms of Service</Link>{' '}and{' '}
+                  <Link href="/privacy" className="text-cyan-400/80 hover:text-cyan-300 underline underline-offset-2">Privacy Policy</Link>
                 </span>
               </label>
 
               <button
                 type="submit"
                 disabled={isLoading || !agreedToTerms}
-                className="w-full bg-purple-600 hover:bg-purple-500 text-white font-semibold py-3 rounded-xl transition-all disabled:opacity-40 disabled:cursor-not-allowed text-sm shadow-lg shadow-purple-600/25 hover:shadow-purple-500/30 active:scale-[0.98] mt-2"
+                className="w-full bg-cyan-600 hover:bg-cyan-500 text-white font-semibold py-3 rounded-xl transition-all disabled:opacity-40 disabled:cursor-not-allowed text-sm shadow-lg shadow-cyan-600/25 hover:shadow-cyan-500/30 active:scale-[0.98] mt-2"
               >
                 {isLoading ? (
                   <span className="flex items-center justify-center gap-2">
@@ -242,7 +242,7 @@ export default function SignupPage() {
 
             <p className="text-center text-sm text-zinc-600 mt-8">
               Already have an account?{' '}
-              <Link href="/login" className="text-purple-400 font-medium hover:text-purple-300 transition-colors">
+              <Link href="/login" className="text-cyan-400 font-medium hover:text-cyan-300 transition-colors">
                 Sign in
               </Link>
             </p>

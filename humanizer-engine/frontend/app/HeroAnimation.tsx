@@ -100,7 +100,7 @@ export default function HeroAnimation() {
   const isDone = phase === 'complete';
 
   return (
-    <div className="force-dark bg-[#0F0F17] border border-white/10 rounded-xl overflow-hidden shadow-2xl shadow-purple-900/10">
+    <div className="force-dark bg-[#0F0F17] border border-white/10 rounded-xl overflow-hidden shadow-2xl shadow-cyan-900/10">
       {/* Title bar */}
       <div className="flex items-center gap-2 px-5 py-3 border-b border-white/5 bg-[#0A0A12]">
         <div className="w-2.5 h-2.5 bg-red-500/80 rounded-full" />
@@ -108,13 +108,13 @@ export default function HeroAnimation() {
         <div className="w-2.5 h-2.5 bg-green-500/80 rounded-full" />
         <span className="text-xs text-gray-500 ml-2">HumaraGPT Humanizer</span>
         {isScanning && (
-          <span className="ml-auto text-[10px] font-medium text-purple-400 flex items-center gap-1">
-            <div className="w-2 h-2 border border-purple-400 border-t-transparent rounded-full animate-spin" />
+          <span className="ml-auto text-[10px] font-medium text-cyan-400 flex items-center gap-1">
+            <div className="w-2 h-2 border border-cyan-400 border-t-transparent rounded-full animate-spin" />
             Scanning detectors…
           </span>
         )}
         {isHumanizing && (
-          <span className="ml-auto text-[10px] font-medium text-purple-400 flex items-center gap-1">
+          <span className="ml-auto text-[10px] font-medium text-cyan-400 flex items-center gap-1">
             <Zap className="w-3 h-3" /> Humanizing…
           </span>
         )}
@@ -151,12 +151,12 @@ export default function HeroAnimation() {
 
         {/* Output side */}
         <div className={`p-6 transition-colors duration-700 ${isDone ? 'bg-emerald-500/[0.04]' : ''}`}>
-          <span className={`text-xs font-medium uppercase tracking-wider transition-colors duration-500 ${isDone ? 'text-emerald-400' : 'text-purple-400'}`}>Output</span>
+          <span className={`text-xs font-medium uppercase tracking-wider transition-colors duration-500 ${isDone ? 'text-emerald-400' : 'text-cyan-400'}`}>Output</span>
 
           {isHumanizing || isDone ? (
             <p className="text-sm mt-3 leading-relaxed text-gray-200">
               {outputText}
-              {isHumanizing && <span className="inline-block w-0.5 h-4 bg-purple-400 ml-0.5 animate-pulse align-text-bottom" />}
+              {isHumanizing && <span className="inline-block w-0.5 h-4 bg-cyan-400 ml-0.5 animate-pulse align-text-bottom" />}
             </p>
           ) : (
             <p className="text-sm mt-3 leading-relaxed text-gray-600 italic">Output appears here…</p>
@@ -185,7 +185,7 @@ export default function HeroAnimation() {
           </span>
         </div>
         <div className="flex items-center gap-1.5">
-          <div className={`w-1.5 h-1.5 rounded-full transition-colors duration-500 ${isDone ? 'bg-emerald-500 shadow-sm shadow-emerald-500/50' : isScanning || isHumanizing ? 'bg-purple-500 animate-pulse shadow-sm shadow-purple-500/50' : 'bg-gray-600'}`} />
+          <div className={`w-1.5 h-1.5 rounded-full transition-colors duration-500 ${isDone ? 'bg-emerald-500 shadow-sm shadow-emerald-500/50' : isScanning || isHumanizing ? 'bg-cyan-500 animate-pulse shadow-sm shadow-cyan-500/50' : 'bg-gray-600'}`} />
           <span className="text-[10px] text-gray-500">
             {isDone ? 'Human' : isScanning || isHumanizing ? 'Processing' : 'Idle'}
           </span>
