@@ -1181,11 +1181,13 @@ export async function POST(req: Request) {
           // ═══════════════════════════════════════════════════════════════
           // UNIVERSAL Nuru x5 + GPT-4o-mini DETECTION POST-PROCESSING
           // Applies to ALL engines EXCEPT ozone (Humara 2.1).
+          // Ozone only gets synonym recovery (applyAIWordKill + synonymReplace)
+          // via the restructuring pass — no heavy Nuru iterations.
           // Engines that already ran Nuru in their phase pipeline skip the
           // 5 baseline passes but still get GPT detection + targeted cleanup.
           // Hard time budget: 10 seconds max.
           // ═══════════════════════════════════════════════════════════════
-          if (!(deadlineReached || Date.now() - startTime > DEADLINE_MS - 12000)) {
+          if (eng !== 'ozone' && !(deadlineReached || Date.now() - startTime > DEADLINE_MS - 12000)) {
             const nuruPostStart = Date.now();
             const NURU_POST_DEADLINE_MS = 10_000; // 10s hard budget
             const nuruPostTimeOk = () => Date.now() - nuruPostStart < NURU_POST_DEADLINE_MS && !(deadlineReached || Date.now() - startTime > DEADLINE_MS - 8000);
@@ -1410,7 +1412,8 @@ export async function POST(req: Request) {
           }
 
           // Last-mile meaning validation (2 iterations max)
-          if (!isDeepKill) {
+          // Skip for ozone — user only wants synonym recovery, not full post-processing.
+          if (!isDeepKill && eng !== 'ozone') {
             const { sentences: origSentsM } = splitIntoIndexedSentences(normalizedText);
             const isHeadingM = (s: string) => looksLikeHeadingLine(s.trim()) || (s.trim().length < 120 && !/[.!?]$/.test(s.trim()) && s.trim().split(/\s+/).length <= 15);
             const STOPWORDS_M = new Set(['the','a','an','is','are','was','were','be','been','being','have','has','had','do','does','did','will','would','could','should','may','might','can','shall','to','of','in','for','on','with','at','by','from','as','into','through','during','before','after','above','below','between','out','off','over','under','again','further','then','once','here','there','when','where','why','how','all','each','every','both','few','more','most','other','some','such','no','nor','not','only','own','same','so','than','too','very','just','because','but','and','or','if','while','that','this','these','those','it','its','they','them','their','we','our','he','she','his','her','which','what','who','whom','about','also']);
@@ -1614,25 +1617,12 @@ export async function POST(req: Request) {
           // Final cleanup: collapse double spaces
           humanized = humanized.replace(/ {2,}/g, ' ');
 
-          // ── FINAL OUTPUT CAP: hard-trim to 1.5× input word count ──────
+          // ── OUTPUT SIZE MONITORING ──────────────────────────────────
           {
             const _capInputWC = text.trim().split(/\s+/).filter(Boolean).length;
             const _capOutputWC = humanized.trim().split(/\s+/).filter(Boolean).length;
-            const _capLimit = Math.max(300, Math.ceil(_capInputWC * 1.5));
-            if (_capOutputWC > _capLimit) {
-              console.warn(`[OutputCap] Trimming ${eng} output from ${_capOutputWC} to ~${_capLimit} words (input: ${_capInputWC})`);
-              // Trim to the cap limit, ending at a sentence boundary
-              const words = humanized.split(/\s+/);
-              const trimmed = words.slice(0, _capLimit).join(' ');
-              // Find the last sentence-ending punctuation
-              const lastSentEnd = Math.max(trimmed.lastIndexOf('. '), trimmed.lastIndexOf('.\n'), trimmed.lastIndexOf('? '), trimmed.lastIndexOf('! '));
-              if (lastSentEnd > trimmed.length * 0.6) {
-                humanized = trimmed.slice(0, lastSentEnd + 1).trim();
-              } else {
-                // No good sentence boundary — just trim at word boundary
-                humanized = trimmed.trim();
-                if (!/[.!?]$/.test(humanized)) humanized += '.';
-              }
+            if (_capOutputWC > _capInputWC * 1.5) {
+              console.warn(`[OutputWatch] ${eng} output ${_capOutputWC}w vs input ${_capInputWC}w (${(_capOutputWC / _capInputWC).toFixed(2)}x)`);
             }
           }
 

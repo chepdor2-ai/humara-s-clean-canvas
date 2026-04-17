@@ -605,7 +605,7 @@ function EditorPageInner() {
 
     const sourceWordCount = sourceText.trim().split(/\s+/).filter(Boolean).length;
     const outputWordCount = cleaned.split(/\s+/).filter(Boolean).length;
-    const hardWordLimit = Math.max(300, Math.floor(sourceWordCount * 1.5));
+    const hardWordLimit = Math.max(300, Math.floor(sourceWordCount * 2.4));
 
     if (sourceWordCount < 8 || outputWordCount <= hardWordLimit) {
       return cleaned;
