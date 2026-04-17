@@ -349,9 +349,9 @@ export async function POST(req: Request) {
           };
 
           const runHumara21 = async (input: string): Promise<string> => {
-            // Always use sentence-by-sentence mode to prevent the API from
-            // rewriting the entire paper into unrelated content.
-            const ozoneResult = await ozoneHumanize(input, true);
+            // Use whole-text mode to prevent per-sentence expansion bloat.
+            // SBS was causing each short sentence to expand into a paragraph.
+            const ozoneResult = await ozoneHumanize(input, false);
             return ozoneResult.humanized;
           };
 
@@ -713,6 +713,15 @@ export async function POST(req: Request) {
               fullResult = (await runHumara21(normalizedText));
             }
             if (!fullResult || fullResult.trim().length === 0) fullResult = normalizedText;
+
+            // ── Length guard: prevent engines from bloating output ──
+            const inputWC = normalizedText.split(/\s+/).filter(Boolean).length;
+            const outputWC = fullResult.split(/\s+/).filter(Boolean).length;
+            if (outputWC > inputWC * 1.6) {
+              console.warn(`[FullText] Engine '${eng}' produced ${outputWC} words from ${inputWC} input words (${(outputWC / inputWC).toFixed(1)}x expansion) — falling back to input`);
+              fullResult = normalizedText;
+            }
+
             const { sentences: resultSents, paragraphBoundaries: resultBounds } = splitIntoIndexedSentences(fullResult);
             sentenceResults = resultSents;
             // Stream each sentence to the client
@@ -1243,6 +1252,7 @@ export async function POST(req: Request) {
 
           // ── POST-PROCESSING ──
           {
+          const _ppWC = (t: string) => t.trim().split(/\s+/).filter(Boolean).length;
 
           // 4. Unified Sentence Process
           const FIRST_PERSON_RE_EARLY = /\b(I|me|my|mine|myself|we|us|our|ours|ourselves)\b/i;
@@ -1394,15 +1404,23 @@ export async function POST(req: Request) {
             const isHeadingM = (s: string) => looksLikeHeadingLine(s.trim()) || (s.trim().length < 120 && !/[.!?]$/.test(s.trim()) && s.trim().split(/\s+/).length <= 15);
             const STOPWORDS_M = new Set(['the','a','an','is','are','was','were','be','been','being','have','has','had','do','does','did','will','would','could','should','may','might','can','shall','to','of','in','for','on','with','at','by','from','as','into','through','during','before','after','above','below','between','out','off','over','under','again','further','then','once','here','there','when','where','why','how','all','each','every','both','few','more','most','other','some','such','no','nor','not','only','own','same','so','than','too','very','just','because','but','and','or','if','while','that','this','these','those','it','its','they','them','their','we','our','he','she','his','her','which','what','who','whom','about','also']);
             const getContentWordsM = (t: string) => t.toLowerCase().replace(/[^a-z0-9\s]/g, '').split(/\s+/).filter(w => w.length >= 3 && !STOPWORDS_M.has(w));
+            const inputWordCount = _ppWC(normalizedText);
+
+            // Skip meaning validation when original splits into far fewer sentences than humanized
+            // (e.g. entire paragraph treated as 1 sentence due to no capitals) — replacing each
+            // humanized sentence with the full original causes massive duplication.
+            const origNonHeadingCount = origSentsM.filter(s => !isHeadingM(s)).length;
+
+            if (origNonHeadingCount >= 2) {
             for (let meaningIter = 0; meaningIter < 2; meaningIter++) {
               const { sentences: humanSentsM, paragraphBoundaries: humanMParaBounds } = splitIntoIndexedSentences(humanized);
               let anyFixed = false;
               for (let i = 0; i < humanSentsM.length; i++) {
-                if (isHeadingM(humanSentsM[i])) continue; // Skip headings
+                if (isHeadingM(humanSentsM[i])) continue;
                 let bestOverlap = 0;
                 let bestOrigIdx = -1;
                 for (let j = 0; j < origSentsM.length; j++) {
-                  if (isHeadingM(origSentsM[j])) continue; // Don't match against headings
+                  if (isHeadingM(origSentsM[j])) continue;
                   const origW = new Set(getContentWordsM(origSentsM[j]));
                   const modW = new Set(getContentWordsM(humanSentsM[i]));
                   if (origW.size === 0) continue;
@@ -1411,17 +1429,29 @@ export async function POST(req: Request) {
                   const overlap = matches / origW.size;
                   if (overlap > bestOverlap) { bestOverlap = overlap; bestOrigIdx = j; }
                 }
+                // Only replace when the matched original sentence is similar in length
+                // (within 3x) to prevent replacing a short sentence with a much longer one
                 if (bestOrigIdx >= 0 && bestOverlap < 0.35) {
-                  let fixed = applyAIWordKill(origSentsM[bestOrigIdx]);
-                  const usedW = new Set<string>();
-                  fixed = synonymReplace(fixed, 0.35, usedW);
-                  humanSentsM[i] = fixed;
-                  anyFixed = true;
+                  const origLen = origSentsM[bestOrigIdx].split(/\s+/).length;
+                  const humanLen = humanSentsM[i].split(/\s+/).length;
+                  if (origLen <= humanLen * 3) {
+                    let fixed = applyAIWordKill(origSentsM[bestOrigIdx]);
+                    const usedW = new Set<string>();
+                    fixed = synonymReplace(fixed, 0.35, usedW);
+                    humanSentsM[i] = fixed;
+                    anyFixed = true;
+                  }
                 }
               }
               if (!anyFixed) break;
               humanized = reassembleText(humanSentsM, humanMParaBounds.length ? humanMParaBounds : [0]);
               humanized = preserveInputStructure(normalizedText, humanized);
+              // Abort if output has grown beyond 1.6× input
+              if (_ppWC(humanized) > inputWordCount * 1.6) {
+                humanized = reassembleText(humanSentsM, humanMParaBounds.length ? humanMParaBounds : [0]);
+                break;
+              }
+            }
             }
           } // end !isDeepKill meaning validation guard
 

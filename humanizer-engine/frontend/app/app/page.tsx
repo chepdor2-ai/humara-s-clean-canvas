@@ -1,6 +1,5 @@
 'use client';
 import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
-import { motion } from 'framer-motion';
 
 import { Copy, Check, Zap, Eraser, RotateCcw, Type, AlignLeft, RefreshCw, AlertTriangle, Clock, ChevronDown, ChevronUp, Shield, Settings, ClipboardPaste, SpellCheck, GitCompare, ShieldCheck, Text, Download, Sparkles } from 'lucide-react';
 import { GrammarChecker } from '@/lib/engine/grammar-corrector';
@@ -391,7 +390,7 @@ function EditorPageInner() {
   const [iterationCount, setIterationCount] = useState(0);
   const [preGeneratedAlts, setPreGeneratedAlts] = useState<Record<string, SentenceAlternative[]>>({});
 
-  // Live streaming progress animation
+  // Live streaming progress state
   const [isAnimating, setIsAnimating] = useState(false);
   const [streamGlobalStage, setStreamGlobalStage] = useState('Initializing…');
   const [streamProgress, setStreamProgress] = useState(0); // 0-100 within current phase
@@ -570,6 +569,70 @@ function EditorPageInner() {
     return cleaned;
   };
 
+  const splitSentenceStrings = (value: string): string[] => {
+    const matches = value.match(/[^.!?]+[.!?]+(?:["')\]]+)?|[^.!?]+$/g);
+    return (matches ?? [value]).map(part => part.trim()).filter(Boolean);
+  };
+
+  const sentenceFingerprint = (sentence: string): string => (
+    sentence
+      .toLowerCase()
+      .replace(/[^a-z0-9\s]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .split(' ')
+      .slice(0, 10)
+      .join(' ')
+  );
+
+  // Guard against rare stream regressions where near-duplicate draft snapshots get concatenated.
+  const collapseRunawayOutput = (sourceText: string, candidateText: string): string => {
+    const cleaned = candidateText.trim();
+    if (!cleaned) return cleaned;
+
+    const sourceWordCount = sourceText.trim().split(/\s+/).filter(Boolean).length;
+    const outputWordCount = cleaned.split(/\s+/).filter(Boolean).length;
+    const hardWordLimit = Math.max(240, Math.floor(sourceWordCount * 2.4));
+
+    if (sourceWordCount < 8 || outputWordCount <= hardWordLimit) {
+      return cleaned;
+    }
+
+    const sourceSentenceCount = Math.max(1, splitSentenceStrings(sourceText).length);
+    const outputSentences = splitSentenceStrings(cleaned);
+    if (!outputSentences.length) {
+      return cleaned;
+    }
+
+    const seenFingerprints = new Map<string, number>();
+    let repeatHits = 0;
+    let cutAt = outputSentences.length;
+
+    for (let i = 0; i < outputSentences.length; i += 1) {
+      const fingerprint = sentenceFingerprint(outputSentences[i]);
+      if (!fingerprint) continue;
+
+      const previousIndex = seenFingerprints.get(fingerprint);
+      if (typeof previousIndex === 'number' && i - previousIndex >= Math.max(2, Math.floor(sourceSentenceCount * 0.6))) {
+        repeatHits += 1;
+        if (i >= sourceSentenceCount && repeatHits >= Math.max(2, Math.floor(sourceSentenceCount * 0.4))) {
+          cutAt = i;
+          break;
+        }
+      } else {
+        seenFingerprints.set(fingerprint, i);
+      }
+    }
+
+    const collapsed = outputSentences.slice(0, cutAt).join(' ').trim();
+    const collapsedWords = collapsed.split(/\s+/).filter(Boolean);
+    if (collapsedWords.length > hardWordLimit) {
+      return collapsedWords.slice(0, hardWordLimit).join(' ').trim();
+    }
+
+    return collapsed || cleaned;
+  };
+
   /** Shared SSE streaming handler used by humanize & rephrase */
   const runStreamingHumanize = async (inputText: string, signal: AbortSignal) => {
     const requestBody: Record<string, unknown> = {
@@ -664,7 +727,9 @@ function EditorPageInner() {
 
         if (event.type === 'init') {
           markStreamActivity('stage');
-          const rawSents = event.sentences as string[];
+          const rawSents = Array.isArray(event.sentences)
+            ? (event.sentences as string[])
+            : [];
           streamedSentences = [...rawSents];
           streamedParagraphBoundaries = (event.paragraphBoundaries as number[]) ?? [];
           streamSentenceTotalRef.current = Math.max(1, rawSents.length);
@@ -728,8 +793,9 @@ function EditorPageInner() {
           }
         } else if (event.type === 'sentence') {
           markStreamActivity();
-          const idx = event.index as number;
-          const txt = event.text as string;
+          const idx = typeof event.index === 'number' ? event.index : -1;
+          const txt = typeof event.text === 'string' ? event.text : '';
+          if (idx < 0 || !txt.trim()) continue;
           if (idx >= streamedSentences.length) {
             streamedSentences.length = idx + 1;
           }
@@ -783,12 +849,20 @@ function EditorPageInner() {
     if (!finalData) {
       const partialText = reassemblePartialText(streamedSentences, streamedParagraphBoundaries);
       if (partialText.trim()) {
-        finalData = { type: 'done', humanized: partialText, partial: true };
+        finalData = {
+          type: 'done',
+          humanized: collapseRunawayOutput(inputText, partialText),
+          partial: true,
+        };
         setStreamGlobalStage('Complete');
         setStreamProgressTarget(100);
       } else {
         throw new Error('Stream ended before completion');
       }
+    }
+
+    if (typeof finalData.humanized === 'string') {
+      finalData.humanized = collapseRunawayOutput(inputText, finalData.humanized as string);
     }
 
     return finalData;
@@ -809,7 +883,7 @@ function EditorPageInner() {
       }
     }
     setLoading(true); setError(''); setResult(''); setOutputDetection(null); setMeaningScore(null); setIterationCount(0); setPreGeneratedAlts({});
-    // Reset streaming state and start animation
+    // Reset streaming state and start processing state.
     setStreamGlobalStage('Initializing…');
     setStreamProgress(0);
     setStreamProgressTarget(0);
@@ -877,7 +951,7 @@ function EditorPageInner() {
     if (!result.trim()) return;
     if (outputWords < 10) { setError('Output too short to rephrase.'); return; }
     setRephrasing(true); setError('');
-    // Reset streaming state and start animation
+    // Reset streaming state and start processing state.
     setStreamGlobalStage('Initializing…');
     setStreamProgress(0);
     setStreamProgressTarget(0);
@@ -1292,14 +1366,11 @@ function EditorPageInner() {
               className="w-16 h-1.5 accent-cyan-500 cursor-pointer" title={`Humanization rate: ${humanizationRate} (${humanizationRate * 10}% min change)`} />
             <span className="text-[10px] font-bold text-cyan-600 dark:text-cyan-400 min-w-[14px] text-center">{humanizationRate}</span>
           </div>
-          <motion.button onClick={handleHumanize} disabled={!text.trim() || loading || rephrasing}
-            whileHover={{ scale: 1.02, boxShadow: '0 8px 25px -5px rgba(8,145,178,0.4)' }}
-            whileTap={{ scale: 0.97 }}
-            transition={{ type: 'spring', stiffness: 400, damping: 17 }}
+          <button onClick={handleHumanize} disabled={!text.trim() || loading || rephrasing}
             className="w-full sm:w-auto sm:ml-auto bg-gradient-to-r from-cyan-600 to-teal-500 dark:from-cyan-700 dark:to-teal-600 hover:from-cyan-500 hover:to-teal-400 dark:hover:from-cyan-600 dark:hover:to-teal-500 text-white text-[11px] font-bold rounded-lg px-4 py-2 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-1.5 shadow-md hover:shadow-lg">
             {loading ? <RotateCcw className="w-3 h-3" /> : <Sparkles className="w-3 h-3" />}
             {loading ? 'Humanizing…' : 'Humanize'}
-          </motion.button>
+          </button>
         </div>
       </div>
 
@@ -1546,22 +1617,41 @@ function EditorPageInner() {
           </div>
 
           {isAnimating ? (
-            <div className={`relative flex flex-col items-center justify-center ${EDITOR_HEIGHT_CLASS} px-4 py-6 sm:px-5`}>
-              <div className="w-full max-w-[560px] rounded-xl border border-slate-200 dark:border-zinc-800 bg-slate-50 dark:bg-zinc-900/40 p-4 sm:p-5">
-                <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-cyan-700 dark:text-cyan-300">Humanizing</p>
-                <p className="mt-1 truncate text-sm font-semibold text-slate-800 dark:text-zinc-100">{visibleProcessingStage}</p>
-                <p className="mt-2 text-xs leading-5 text-slate-600 dark:text-zinc-300">{processingMessage}</p>
-
-                <div className="mt-3 flex items-center justify-between text-xs font-semibold text-slate-600 dark:text-zinc-300">
-                  <span>{activeEngineLabel}</span>
-                  <span>{Math.round(streamProgress)}%</span>
+            <div className={`relative flex flex-col items-center justify-center ${EDITOR_HEIGHT_CLASS} px-4 py-6 sm:px-5 overflow-hidden`}>
+              <div className="relative w-full max-w-[560px] space-y-4 rounded-2xl border border-slate-200/70 dark:border-zinc-800/60 bg-white/90 dark:bg-zinc-900/45 px-4 py-5">
+                <div className="text-center space-y-1">
+                  <p className="text-[10px] font-bold uppercase tracking-[0.25em] text-cyan-600 dark:text-cyan-400">
+                    Humanizing
+                  </p>
+                  <p className="text-sm font-semibold text-slate-800 dark:text-zinc-100 truncate">
+                    {visibleProcessingStage}
+                  </p>
+                  <p className="text-xs text-slate-500 dark:text-zinc-400 leading-relaxed max-w-md mx-auto">
+                    {processingMessage}
+                  </p>
                 </div>
 
-                <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
-                  {processingStatusItems.map(item => (
-                    <div key={item.label} className="rounded-lg border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900/70 px-2 py-2">
-                      <p className="text-[10px] uppercase tracking-wide text-slate-500 dark:text-zinc-400">{item.label}</p>
-                      <p className="mt-0.5 truncate text-xs font-semibold text-slate-700 dark:text-zinc-200">{item.value}</p>
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between text-[11px] font-semibold">
+                    <span className="text-slate-600 dark:text-zinc-300">{activeEngineLabel}</span>
+                    <span className="text-cyan-600 dark:text-cyan-400 tabular-nums">{Math.round(streamProgress)}%</span>
+                  </div>
+                  <div className="h-1.5 rounded-full bg-slate-100 dark:bg-zinc-800/60 overflow-hidden">
+                    <div
+                      className="h-full rounded-full bg-gradient-to-r from-cyan-500 to-blue-500 dark:from-cyan-400 dark:to-blue-500"
+                      style={{ width: `${Math.max(2, streamProgress)}%` }}
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-3 gap-2">
+                  {processingStatusItems.map((item) => (
+                    <div
+                      key={item.label}
+                      className="rounded-lg border border-slate-200/70 dark:border-zinc-800/50 bg-white/80 dark:bg-zinc-900/50 px-2.5 py-2 text-center"
+                    >
+                      <p className="text-[9px] uppercase tracking-wider text-slate-400 dark:text-zinc-500 font-semibold">{item.label}</p>
+                      <p className="mt-0.5 truncate text-xs font-bold text-slate-700 dark:text-zinc-200">{item.value}</p>
                     </div>
                   ))}
                 </div>
