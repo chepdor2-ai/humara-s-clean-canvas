@@ -1636,12 +1636,11 @@ function EditorPageInner() {
                     <span className="text-slate-600 dark:text-zinc-300">{activeEngineLabel}</span>
                     <span className="text-cyan-600 dark:text-cyan-400 tabular-nums">{Math.round(streamProgress)}%</span>
                   </div>
-                  <div className="h-1.5 rounded-full bg-slate-100 dark:bg-zinc-800/60 overflow-hidden">
-                    <div
-                      className="h-full rounded-full bg-gradient-to-r from-cyan-500 to-blue-500 dark:from-cyan-400 dark:to-blue-500"
-                      style={{ width: `${Math.max(2, streamProgress)}%` }}
-                    />
-                  </div>
+                  <progress
+                    className="h-1.5 w-full overflow-hidden rounded-full bg-transparent [&::-webkit-progress-bar]:bg-slate-100 dark:[&::-webkit-progress-bar]:bg-zinc-800/60 [&::-webkit-progress-value]:bg-cyan-500 dark:[&::-webkit-progress-value]:bg-cyan-400 [&::-moz-progress-bar]:bg-cyan-500 dark:[&::-moz-progress-bar]:bg-cyan-400"
+                    max={100}
+                    value={Math.max(2, Math.min(100, streamProgress))}
+                  />
                 </div>
 
                 <div className="grid grid-cols-3 gap-2">
