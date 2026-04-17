@@ -1565,10 +1565,9 @@ function EditorPageInner() {
 
           {/* Input textarea */}
           <div className="flex-1 relative">
-            <div className="absolute inset-0 bg-red-50/60 dark:bg-red-950/15 pointer-events-none rounded-b-2xl" />
             <textarea ref={inputRef} value={text}
               onChange={(e) => setText(normalizeTypedInput(e.target.value))}
-              className={`relative z-10 w-full ${EDITOR_HEIGHT_CLASS} bg-transparent outline-none resize-y overflow-y-auto text-[14px] leading-[1.8] text-slate-800 dark:text-zinc-200 p-5 placeholder:text-slate-400 dark:placeholder:text-zinc-600`}
+              className={`editor-highlight-input relative z-10 w-full ${EDITOR_HEIGHT_CLASS} outline-none resize-y overflow-y-auto text-[14px] leading-[1.8] text-slate-800 dark:text-zinc-200 p-5 placeholder:text-slate-400 dark:placeholder:text-zinc-500`}
               placeholder="Paste text you want to humanize..." />
             {!text && (
               <div className="absolute inset-0 flex items-center justify-center z-20">
@@ -1678,7 +1677,6 @@ function EditorPageInner() {
             </div>
           ) : result ? (
             <div className={`relative flex-1 ${EDITOR_HEIGHT_CLASS} overflow-hidden`}>
-              <div className="absolute inset-0 bg-green-50/60 dark:bg-green-950/15 pointer-events-none rounded-b-2xl" />
               {/* MetricsStrip for output */}
               <div className="relative z-10 border-b border-emerald-100 dark:border-emerald-900/30">
                 <MetricsStrip text={result} label="Output" />
@@ -1686,7 +1684,7 @@ function EditorPageInner() {
               {outputView === 'result' && (
                 <textarea ref={outputRef} value={result}
                   onChange={(e) => { setResult(e.target.value); }} onSelect={handleOutputSelect}
-                  className="relative z-10 flex-1 w-full h-[calc(100%-2.5rem)] bg-transparent outline-none resize-y overflow-y-auto text-[14px] leading-[1.8] text-slate-800 dark:text-zinc-200 p-5 cursor-text"
+                  className="editor-highlight-output relative z-10 flex-1 w-full h-[calc(100%-2.5rem)] outline-none resize-y overflow-y-auto text-[14px] leading-[1.8] text-slate-800 dark:text-zinc-200 p-5 cursor-text"
                   style={{ fontFamily: 'inherit' }}
                   placeholder="Output appears here…" />
               )}

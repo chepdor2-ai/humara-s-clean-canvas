@@ -606,6 +606,87 @@
     box-shadow: 0 8px 25px -5px rgba(0, 0, 0, 0.3), 0 10px 10px -5px rgba(0, 0, 0, 0.15);
   }
 
+  /* Humanizer editor highlight surfaces */
+  .editor-highlight-input,
+  .editor-highlight-output {
+    background-repeat: no-repeat, repeat;
+    background-attachment: local;
+    background-size: 100% 100%, 100% 26px;
+    background-position: 0 0, 0 4px;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.72);
+    caret-color: #0f172a;
+  }
+
+  .editor-highlight-input {
+    background-color: rgba(255, 252, 252, 0.92);
+    background-image:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.65), rgba(255, 255, 255, 0.18)),
+      repeating-linear-gradient(
+        180deg,
+        rgba(255, 255, 255, 0) 0 7px,
+        rgba(251, 226, 226, 0.92) 7px 24px,
+        rgba(255, 255, 255, 0) 24px 26px
+      );
+  }
+
+  .editor-highlight-output {
+    background-color: rgba(251, 255, 251, 0.94);
+    background-image:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.6), rgba(255, 255, 255, 0.14)),
+      repeating-linear-gradient(
+        180deg,
+        rgba(255, 255, 255, 0) 0 7px,
+        rgba(221, 245, 225, 0.92) 7px 24px,
+        rgba(255, 255, 255, 0) 24px 26px
+      );
+  }
+
+  .editor-highlight-input::selection {
+    background: rgba(245, 179, 179, 0.48);
+  }
+
+  .editor-highlight-output::selection {
+    background: rgba(159, 225, 171, 0.5);
+  }
+
+  .dark .editor-highlight-input,
+  .dark .editor-highlight-output {
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.02);
+    caret-color: #e5e7eb;
+  }
+
+  .dark .editor-highlight-input {
+    background-color: rgba(30, 18, 22, 0.92);
+    background-image:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.02), rgba(255, 255, 255, 0)),
+      repeating-linear-gradient(
+        180deg,
+        rgba(255, 255, 255, 0) 0 7px,
+        rgba(93, 41, 49, 0.45) 7px 24px,
+        rgba(255, 255, 255, 0) 24px 26px
+      );
+  }
+
+  .dark .editor-highlight-output {
+    background-color: rgba(16, 28, 20, 0.92);
+    background-image:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.02), rgba(255, 255, 255, 0)),
+      repeating-linear-gradient(
+        180deg,
+        rgba(255, 255, 255, 0) 0 7px,
+        rgba(34, 84, 50, 0.44) 7px 24px,
+        rgba(255, 255, 255, 0) 24px 26px
+      );
+  }
+
+  .dark .editor-highlight-input::selection {
+    background: rgba(168, 74, 74, 0.46);
+  }
+
+  .dark .editor-highlight-output::selection {
+    background: rgba(66, 143, 86, 0.5);
+  }
+
   /* Range slider styling */
   input[type="range"]::-webkit-slider-thumb {
     -webkit-appearance: none;
