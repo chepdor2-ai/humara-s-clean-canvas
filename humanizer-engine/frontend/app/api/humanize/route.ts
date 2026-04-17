@@ -1033,6 +1033,8 @@ export async function POST(req: Request) {
       });
     }
 
+    const ozoneKeywordRestoreOnly = engine === 'ozone';
+
     // ═══════════════════════════════════════════════════════════════
     // UNIVERSAL NURU POST-PROCESSING: Non-LLM Deep AI Clean
     // Applies to ALL engines EXCEPT ozone (Humara 2.1).
@@ -1107,10 +1109,14 @@ export async function POST(req: Request) {
     }
 
     // Fix AI/ai capitalization that fixCapitalization may lowercase
-    humanized = humanized
-      .replace(/\bai-(\w)/gi, (_m: string, c: string) => `AI-${c}`)
-      .replace(/\baI\b/g, 'AI')
-      .replace(/\bai\b/g, 'AI');
+    let coherenceReport: CoherenceReport | null = null;
+
+    if (!ozoneKeywordRestoreOnly) {
+      humanized = humanized
+        .replace(/\bai-(\w)/gi, (_m: string, c: string) => `AI-${c}`)
+        .replace(/\baI\b/g, 'AI')
+        .replace(/\bai\b/g, 'AI');
+    }
 
     // Cross-sentence repetition cleanup — deduplicates phrases repeated across sentences
     // Skip for humara engine: it has its own coherence layer
@@ -1128,10 +1134,11 @@ export async function POST(req: Request) {
     // Restore the original title/paragraph layout for EVERY engine output.
     // Skip for nuru_v2: it preserves paragraph structure internally.
     // Skip for Deep Kill: Nuru V2 already preserves structure and this causes duplication.
-    if (!isDeepKill) {
+    if (!isDeepKill && !ozoneKeywordRestoreOnly) {
       humanized = preserveInputStructure(normalizedText, humanized);
     }
 
+    if (!ozoneKeywordRestoreOnly) {
     // ── FINAL SAFETY NET: Zero-contraction enforcement ──────────
     // Expand any contractions that may have slipped through ANY engine
     // or post-processing phase. This is the absolute last line of defense.
@@ -1393,7 +1400,6 @@ export async function POST(req: Request) {
     // human revision fingerprinting, paragraph purpose labeling,
     // search-intent coverage, heading hierarchy, snippet-worthiness.
     // Ordering: meaning → entity retention → coherence → SEO → detector.
-    let coherenceReport: CoherenceReport | null = null;
     if (!isDeepKill) {
       try {
         const coherenceStart = Date.now();
@@ -1563,6 +1569,7 @@ export async function POST(req: Request) {
         }
       }
     }
+    }
 
     // Generate per-sentence alternatives (3 candidates each, best already picked by engines)
     const FIRST_PERSON_RE = /\b(I|me|my|mine|myself|we|us|our|ours|ourselves)\b/i;
@@ -1584,10 +1591,12 @@ export async function POST(req: Request) {
 
     // ── FINAL AI CAPITALIZATION ──────────────────────────────
     // Must run after ALL post-processing since many phases re-lowercase "AI"
-    humanized = humanized
-      .replace(/\bAi\b/g, 'AI')
-      .replace(/\bai\b/g, 'AI')
-      .replace(/\bai-(\w)/gi, (_m: string, c: string) => `AI-${c}`);
+    if (!ozoneKeywordRestoreOnly) {
+      humanized = humanized
+        .replace(/\bAi\b/g, 'AI')
+        .replace(/\bai\b/g, 'AI')
+        .replace(/\bai-(\w)/gi, (_m: string, c: string) => `AI-${c}`);
+    }
 
     // Run output detection + semantic guard check in parallel
     const [outputAnalysis, meaningCheck] = await Promise.all([

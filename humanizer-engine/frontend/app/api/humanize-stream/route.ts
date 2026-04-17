@@ -1263,8 +1263,10 @@ export async function POST(req: Request) {
             console.log(`[Nuru Post] Complete in ${Date.now() - nuruPostStart}ms`);
           }
 
+          const ozoneKeywordRestoreOnly = eng === 'ozone';
+
           // ── POST-PROCESSING ──
-          {
+          if (!ozoneKeywordRestoreOnly) {
           const _ppWC = (t: string) => t.trim().split(/\s+/).filter(Boolean).length;
 
           // 4. Unified Sentence Process
@@ -1476,12 +1478,14 @@ export async function POST(req: Request) {
           } // end: post-processing block
 
           // Structure preservation (restores heading placement from original)
-          humanized = preserveInputStructure(normalizedText, humanized);
+          if (!ozoneKeywordRestoreOnly) {
+            humanized = preserveInputStructure(normalizedText, humanized);
+          }
 
           // ── EXTERNAL API SANITIZATION (ozone, easy, etc.) ─────────────
           // External APIs can return LLM refusals, garbled phrases, and bad synonyms.
           // This lightweight pass cleans the worst artifacts without full post-processing.
-          {
+          if (!ozoneKeywordRestoreOnly) {
             // 1. Strip LLM refusal/instruction leaks (anywhere in text)
             const REFUSAL_PATTERNS = [
               /Sorry,?\s+I\s+(?:cannot|can't|am unable to|couldn't)\s+(?:complete|do|help|assist|process|fulfill|generate|write|rewrite|paraphrase)[^.!?\n]*[.!?]?\s*/gi,
