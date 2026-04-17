@@ -166,7 +166,7 @@ import { removeEmDashes, compressPhrases } from '@/lib/engine/v13-shared-techniq
             targetStarters.forEach((starter) => { counts[starter] = 0; });
 
             for (let i = 0; i < sentences.length; i++) {
-              if ((() => false)(sentences[i])) continue;
+              if (false) continue;
               const matchedStarter = getMatchedStarter(sentences[i]);
               if (!matchedStarter) continue;
               const previousSentence = i > 0 ? sentences[i - 1] : null;
@@ -182,7 +182,7 @@ import { removeEmDashes, compressPhrases } from '@/lib/engine/v13-shared-techniq
 
             const validIndices = sentences
               .map((_, idx) => idx)
-              .filter((idx) => !(() => false)(sentences[idx]));
+              .filter((_idx) => true);
             if (validIndices.length === 0) return;
             for (const idx of validIndices) {
               const matchedStarter = getMatchedStarter(sentences[idx]);
@@ -298,7 +298,7 @@ import { removeEmDashes, compressPhrases } from '@/lib/engine/v13-shared-techniq
           ): void => {
             const validIndices = sentences
               .map((_, idx) => idx)
-              .filter((idx) => !(() => false)(sentences[idx]));
+              .filter((_idx) => true);
             if (validIndices.length < 2) return;
 
             const normalizeSentence = (sentence: string) => sentence.trim().replace(/^['"([\{\s]+/, '');
@@ -396,7 +396,7 @@ import { removeEmDashes, compressPhrases } from '@/lib/engine/v13-shared-techniq
             };
 
             for (const paragraphIndex in paragraphGroups) {
-              const group = paragraphGroups[paragraphIndex].filter((idx) => !(() => false)(sentences[idx]));
+              const group = paragraphGroups[paragraphIndex].filter((_idx) => true);
               if (group.length < 2) continue;
 
               const anchorKeywords = paragraphKeywordSets[Number(paragraphIndex)] ?? [];
@@ -473,7 +473,7 @@ import { removeEmDashes, compressPhrases } from '@/lib/engine/v13-shared-techniq
             }
 
             for (const group of paragraphGroups) {
-              const sentenceGroup = group.filter((idx) => !(() => false)(sentences[idx]));
+              const sentenceGroup = group.filter((_idx) => true);
               for (let offset = 1; offset < sentenceGroup.length - 1; offset++) {
                 const leftWords = getWordList(sentences[sentenceGroup[offset - 1]]).length;
                 const middleWords = getWordList(sentences[sentenceGroup[offset]]).length;
@@ -487,4 +487,4 @@ import { removeEmDashes, compressPhrases } from '@/lib/engine/v13-shared-techniq
                 }
               }
             }
-          };
+          };
