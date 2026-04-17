@@ -123,7 +123,41 @@ function reassembleText(sentences: string[], paragraphBoundaries: number[]): str
     const end = i < paragraphBoundaries.length - 1 ? paragraphBoundaries[i + 1] : sentences.length;
     paragraphs.push(sentences.slice(start, end));
   }
-  return paragraphs.map(p => p.join(' ')).join('\n\n');
+
+  // Keep heading lines isolated so they are never merged into body paragraphs.
+  const outputParas: string[] = [];
+  for (const paraSents of paragraphs) {
+    const cleaned = paraSents.map(s => s.trim()).filter(Boolean);
+    if (!cleaned.length) continue;
+    const first = cleaned[0];
+    const firstIsHeading = first.length < 120 && !/[.!?]$/.test(first) && first.split(/\s+/).length <= 15;
+    if (firstIsHeading && cleaned.length > 1) {
+      outputParas.push(first);
+      outputParas.push(cleaned.slice(1).join(' '));
+      continue;
+    }
+    outputParas.push(cleaned.join(' '));
+  }
+  return outputParas.join('\n\n');
+}
+
+function stripLeadLabelLines(text: string): string {
+  if (!text) return text;
+  const lines = text.split('\n');
+  let start = 0;
+  while (start < lines.length) {
+    const candidate = lines[start].trim();
+    if (/^(INPUT|OUTPUT)\s*:?$/i.test(candidate)) {
+      start += 1;
+      continue;
+    }
+    if (!candidate) {
+      start += 1;
+      continue;
+    }
+    break;
+  }
+  return lines.slice(start).join('\n');
 }
 
 function measureSentenceChange(original: string, modified: string): number {
@@ -156,6 +190,7 @@ export async function POST(req: Request) {
       enable_post_processing?: boolean; premium?: boolean;
       humanization_rate?: number;
     };
+    const sourceText = stripLeadLabelLines(text);
 
     // Humanization rate: 1-10 scale → minimum word-change threshold
     const hRate = Math.max(1, Math.min(10, Math.round(humanization_rate ?? 8)));
@@ -166,7 +201,7 @@ export async function POST(req: Request) {
       : (!strict_meaning && (strength ?? 'medium') === 'medium') ? 'strong'
       : (strength ?? 'medium');
 
-    if (!text || typeof text !== 'string' || text.trim().length === 0) {
+    if (!sourceText || typeof sourceText !== 'string' || sourceText.trim().length === 0) {
       return new Response('data: ' + JSON.stringify({ type: 'error', error: 'Text is required' }) + '\n\n', {
         status: 400,
         headers: { 'Content-Type': 'text/event-stream' },
@@ -174,7 +209,7 @@ export async function POST(req: Request) {
     }
 
     // Max 2000 words per request
-    const inputWordCount = text.trim().split(/\s+/).length;
+    const inputWordCount = sourceText.trim().split(/\s+/).length;
     if (inputWordCount > 2000) {
       return new Response('data: ' + JSON.stringify({ type: 'error', error: `Maximum 2,000 words per request. You submitted ${inputWordCount.toLocaleString()} words.` }) + '\n\n', {
         status: 400,
@@ -209,7 +244,7 @@ export async function POST(req: Request) {
     if (userId && !isAdmin) {
       try {
         const supa = createServiceClient();
-        const inputWordCount = text.trim().split(/\s+/).length;
+        const inputWordCount = sourceText.trim().split(/\s+/).length;
         const { data: stats, error: statsError } = await supa.rpc('get_usage_stats', { p_user_id: userId });
 
         if (statsError) {
@@ -246,7 +281,7 @@ export async function POST(req: Request) {
         const DEADLINE_MS = 115_000; // 115s — 5s before Vercel's 120s hard cutoff
         const startTime = Date.now();
         let deadlineReached = false;
-        let latestHumanized = text; // always holds the best result so far
+        let latestHumanized = sourceText; // always holds the best result so far
         let streamClosed = false;
         let deadlineTimer: ReturnType<typeof setTimeout> | null = null;
         const finishStream = (payload: Record<string, unknown>) => {
@@ -256,9 +291,9 @@ export async function POST(req: Request) {
           try {
             sendSSE(controller, {
               type: 'done',
-              humanized: latestHumanized || text,
-              word_count: (latestHumanized || text).split(/\s+/).filter(Boolean).length,
-              input_word_count: text.split(/\s+/).filter(Boolean).length,
+              humanized: latestHumanized || sourceText,
+              word_count: (latestHumanized || sourceText).split(/\s+/).filter(Boolean).length,
+              input_word_count: sourceText.split(/\s+/).filter(Boolean).length,
               engine_used: engine ?? 'oxygen',
               ...payload,
             });
@@ -277,7 +312,7 @@ export async function POST(req: Request) {
 
         try {
           // 1. Parse & emit original sentences
-          const { sentences: origSentences, paragraphBoundaries } = splitIntoIndexedSentences(text);
+          const { sentences: origSentences, paragraphBoundaries } = splitIntoIndexedSentences(sourceText);
           sendSSE(controller, {
             type: 'init',
             sentences: origSentences,
@@ -286,7 +321,7 @@ export async function POST(req: Request) {
           await flushDelay(5); // let client render initial state quickly
 
           // 2. Heading normalization
-          let normalizedText = text;
+          let normalizedText = sourceText;
           // Add blank line AFTER heading lines (Roman numerals, markdown, Part/Section/Chapter)
           normalizedText = normalizedText.replace(
             /^((?:#{1,6}\s.+|[IVXLCDM]+\.\s.+|(?:Part|Section|Chapter)\s+\d+.*))\n(?!\n)/gim, "$1\n\n"
@@ -369,6 +404,37 @@ export async function POST(req: Request) {
               }
             }
             return matches / origWords.size;
+          }
+
+          function constrainSentenceOutput(original: string, candidate: string): string {
+            const fallback = original.trim();
+            const out = (candidate || '').trim();
+            if (!out) return fallback;
+
+            const originalWords = fallback.split(/\s+/).filter(Boolean).length;
+            const outputWords = out.split(/\s+/).filter(Boolean).length;
+            const outputSents = robustSentenceSplit(out).map(s => s.trim()).filter(Boolean);
+
+            // Fast path: plausible single-sentence rewrite.
+            if (outputSents.length <= 1 && outputWords <= Math.max(12, Math.ceil(originalWords * 2.2))) {
+              return out;
+            }
+
+            // Pick the sentence most aligned with the source sentence.
+            let best = outputSents[0] || out;
+            let bestScore = -1;
+            for (const sent of outputSents.length ? outputSents : [out]) {
+              const overlap = contentWordOverlap(original, sent);
+              const lengthRatio = outputWords > 0 ? Math.abs((sent.split(/\s+/).filter(Boolean).length / Math.max(1, originalWords)) - 1) : 1;
+              const score = overlap - (lengthRatio * 0.1);
+              if (score > bestScore) {
+                best = sent;
+                bestScore = score;
+              }
+            }
+
+            if (!best || best.trim().length === 0) return fallback;
+            return best.trim();
           }
 
           function adaptiveOxygenChain(phaseOneOutput: string, _originalText: string): string {
@@ -1340,6 +1406,11 @@ export async function POST(req: Request) {
           // ═══════════════════════════════════════════════════════════════
           const { sentences: inputSentences, paragraphBoundaries: inputParaBounds_ } = splitIntoIndexedSentences(normalizedText);
           let inputParaBounds = inputParaBounds_;
+          const getSourceSentenceForIndex = (idx: number): string => {
+            if (idx >= 0 && idx < inputSentences.length) return inputSentences[idx];
+            if (inputSentences.length > 0) return inputSentences[inputSentences.length - 1];
+            return '';
+          };
           const isHeadingSentCheck = (s: string) => {
             const t = s.trim();
             if (t.length < 120 && !/[.!?]$/.test(t) && t.split(/\s+/).length <= 15) return true;
@@ -1347,12 +1418,29 @@ export async function POST(req: Request) {
             if (/^[A-Z][a-zA-Z]+[,.].*\(\d{4}\)\s*\.?\s*$/.test(t) && t.split(/\s+/).length <= 20) return true;
             return false;
           };
+          const restoreOriginalHeadings = (text: string): string => {
+            const { sentences: outSents, paragraphBoundaries: outBounds } = splitIntoIndexedSentences(text);
+            const limit = Math.min(outSents.length, inputSentences.length);
+            let changed = false;
+            for (let i = 0; i < limit; i++) {
+              if (!isHeadingSentCheck(inputSentences[i])) continue;
+              if (outSents[i] !== inputSentences[i]) {
+                outSents[i] = inputSentences[i];
+                changed = true;
+              }
+            }
+            if (!changed) return text;
+            return reassembleText(outSents, outBounds.length ? outBounds : [0]);
+          };
 
           const runEngineOnSentence = async (sentence: string): Promise<string> => {
             if (eng === 'easy') {
               return await runHumara22(sentence);
             } else if (eng === 'ozone') {
               return await runHumara21(sentence);
+            } else if (eng === 'king') {
+              const kingResult = await kingHumanize(sentence);
+              return kingResult.humanized;
             } else if (eng === 'oxygen') {
               return runHumara20(sentence);
             } else if (eng === 'oxygen3') {
@@ -1428,116 +1516,52 @@ export async function POST(req: Request) {
             }
           };
 
-          // ── Full-text engines (Ozone / Humara 2.1, Easy / Humara 2.2) ──
-          // These LLM APIs work best on the entire text, not sentence-by-sentence.
-          const FULL_TEXT_ENGINES = new Set(['easy', 'ozone', 'king', 'ghost_pro_wiki', 'humara_v3_3']);
+          // User flow for standard engines: run sentence-by-sentence in parallel.
+          // For Deep Kill engines: skip sentence-parallel and go straight to phase pipeline.
           let sentenceResults: string[];
 
-          if (FULL_TEXT_ENGINES.has(eng)) {
-            console.log(`[FullText] Processing entire text via '${eng}'`);
-            let fullResult: string;
-            if (eng === 'king') {
-              const kingResult = await kingHumanize(normalizedText);
-              fullResult = kingResult.humanized;
-            } else if (eng === 'ghost_pro_wiki') {
-              fullResult = await runWikipedia(normalizedText);
-            } else if (eng === 'humara_v3_3') {
-              fullResult = await runHumara24(normalizedText);
-            } else if (eng === 'easy') {
-              fullResult = (await runHumara22(normalizedText));
-            } else {
-              fullResult = (await runHumara21(normalizedText));
-            }
-            if (!fullResult || fullResult.trim().length === 0) fullResult = normalizedText;
-            // Apply structure preservation to restore original paragraph/heading layout
-            fullResult = preserveInputStructure(normalizedText, fullResult);
-            const { sentences: resultSents, paragraphBoundaries: resultBounds } = splitIntoIndexedSentences(fullResult);
-            sentenceResults = resultSents;
-            // Update paragraph boundaries to match the new sentence structure
-            inputParaBounds = resultBounds;
-            // Stream each sentence to the client
-            for (let i = 0; i < sentenceResults.length; i++) {
-              sendSSE(controller, { type: 'sentence', index: i, text: sentenceResults[i], stage: 'Engine' });
-            }
-            humanized = fullResult;
-            latestHumanized = humanized;
-            console.log(`[FullText] Engine complete: ${humanized.split(/\s+/).length} words`);
+          if (isDeepKill) {
+            // Deep Kill engines: run phase pipeline on full text directly
+            // Do NOT split into sentences first — phases handle structure internally
+            console.log(`[DeepKill] Starting phase pipeline for '${eng}' on full text`);
+            sentenceResults = [...inputSentences]; // Placeholder; overwritten by phase pipeline below
           } else {
-            // Determine if this engine uses async/LLM calls (can parallelize)
-            const LLM_ENGINES = new Set([
-              'oxygen3', 'oxygen_t5', 'dipper', 'humarin', 'humara_v3_3',
-              'ghost_pro_wiki', 'ninja_1', 'ninja_4', 'ninja_5',
-              'ghost_trial_2', 'ghost_trial_2_alt', 'conscusion_1', 'conscusion_12',
-              'undetectable', 'ninja', 'fast_v11', 'ghost_pro',
-              'humara_v1_3', 'omega',
-            ]);
-            const useParallel = LLM_ENGINES.has(eng);
-
-            if (useParallel) {
-              // Parallel sentence processing for LLM/async engines
-              console.log(`[SentencePar] Processing ${inputSentences.length} sentences in parallel via '${eng}'`);
-              sentenceResults = await Promise.all(
-                inputSentences.map(async (sentence, i) => {
-                  if (isHeadingSentCheck(sentence)) return sentence;
-                  try {
-                    let result = await runEngineOnSentence(sentence);
-                    let final = result && result.trim().length > 0 ? result : sentence;
-                    // LLM engines: max 1 retry (each call is expensive)
-                    let change = measureSentenceChange(sentence, final);
-                    if (change < minChangeThreshold) {
-                      const retried = await runEngineOnSentence(final);
-                      if (retried && retried.trim().length > 0) final = retried;
-                    }
-                    sendSSE(controller, { type: 'sentence', index: i, text: final, stage: 'Engine' });
-                    return final;
-                  } catch (err) {
-                    const errMsg = err instanceof Error ? err.message : String(err);
-                    console.warn(`[SentencePar] Sentence ${i} failed:`, errMsg);
-                    // Surface a non-fatal warning; keep streaming partial results.
-                    if (i === 0) {
-                      sendSSE(controller, { type: 'warning', message: `Engine '${eng}' degraded: ${errMsg}` });
-                    }
-                    return sentence;
-                  }
-                })
-              );
-            } else {
-              // Sequential sentence processing for sync/local engines
-              console.log(`[SentenceSeq] Processing ${inputSentences.length} sentences via '${eng}'`);
-              sentenceResults = [];
-              for (let i = 0; i < inputSentences.length; i++) {
-                const sentence = inputSentences[i];
-                if (isHeadingSentCheck(sentence)) {
-                  sentenceResults.push(sentence);
-                  continue;
-                }
+            // Standard engines: parallel sentence-by-sentence processing
+            console.log(`[SentencePar] Processing ${inputSentences.length} sentences in parallel via '${eng}'`);
+            sentenceResults = await Promise.all(
+              inputSentences.map(async (sentence, i) => {
+                if (isHeadingSentCheck(sentence)) return sentence;
                 try {
                   let result = await runEngineOnSentence(sentence);
                   let final = result && result.trim().length > 0 ? result : sentence;
+                  final = constrainSentenceOutput(sentence, final);
                   let change = measureSentenceChange(sentence, final);
                   let retry = 0;
                   const maxRetries = Math.max(3, hRate - 3);
                   while (change < minChangeThreshold && retry < maxRetries) {
                     const retried = await runEngineOnSentence(final);
-                    if (retried && retried.trim().length > 0) final = retried;
+                    if (retried && retried.trim().length > 0) {
+                      final = constrainSentenceOutput(sentence, retried);
+                    }
                     change = measureSentenceChange(sentence, final);
                     retry++;
                   }
-                  sentenceResults.push(final);
                   sendSSE(controller, { type: 'sentence', index: i, text: final, stage: 'Engine' });
+                  return final;
                 } catch (err) {
                   const errMsg = err instanceof Error ? err.message : String(err);
-                  console.warn(`[SentenceSeq] Sentence ${i} failed:`, errMsg);
+                  console.warn(`[SentencePar] Sentence ${i} failed:`, errMsg);
                   if (i === 0) {
                     sendSSE(controller, { type: 'warning', message: `Engine '${eng}' degraded: ${errMsg}` });
                   }
-                  sentenceResults.push(sentence);
+                  return sentence;
                 }
-              }
-            }
+              })
+            );
+
             humanized = reassembleText(sentenceResults, inputParaBounds.length ? inputParaBounds : [0]);
             latestHumanized = humanized;
-            console.log(`[Sentence${useParallel ? 'Par' : 'Seq'}] Engine complete: ${humanized.split(/\s+/).length} words`);
+            console.log(`[SentencePar] Engine complete: ${humanized.split(/\s+/).length} words`);
           }
 
           // ═══════════════════════════════════════════════════════════════
@@ -1705,10 +1729,12 @@ export async function POST(req: Request) {
                   if (!isHeadingSentCheck(currentSentences[i])) {
                     const original = phaseInputSentences[i];
                     let result = phase.fn(currentSentences[i]);
+                    result = constrainSentenceOutput(getSourceSentenceForIndex(i), result);
                     let change = measureSentenceChange(original, result);
                     let retry = 0;
                     while (change < MIN_CHANGE && retry < MAX_RETRIES) {
                       result = phase.fn(result);
+                      result = constrainSentenceOutput(getSourceSentenceForIndex(i), result);
                       change = measureSentenceChange(original, result);
                       retry++;
                     }
@@ -1723,10 +1749,12 @@ export async function POST(req: Request) {
                     if (isHeadingSentCheck(sent)) return sent;
                     const original = phaseInputSentences[i];
                     let result = await phase.fn(sent);
+                    result = constrainSentenceOutput(getSourceSentenceForIndex(i), result);
                     let change = measureSentenceChange(original, result);
                     let retry = 0;
                     while (change < MIN_CHANGE && retry < MAX_RETRIES) {
                       result = await phase.fn(result);
+                      result = constrainSentenceOutput(getSourceSentenceForIndex(i), result);
                       change = measureSentenceChange(original, result);
                       retry++;
                     }
@@ -1764,7 +1792,10 @@ export async function POST(req: Request) {
                   await flushDelay(1);
                   for (let i = 0; i < currentSentences.length; i++) {
                     if (!isHeadingSentCheck(currentSentences[i])) {
-                      currentSentences[i] = runNuruSinglePass(currentSentences[i]);
+                      currentSentences[i] = constrainSentenceOutput(
+                        getSourceSentenceForIndex(i),
+                        runNuruSinglePass(currentSentences[i]),
+                      );
                     }
                     sendSSE(controller, { type: 'sentence', index: i, text: currentSentences[i], stage: phaseLabel });
                   }
@@ -1799,6 +1830,10 @@ export async function POST(req: Request) {
                       phaseInputSentences[flagged.index],
                       POST_DETECTION_MIN_CHANGE,
                     );
+                    currentSentences[flagged.index] = constrainSentenceOutput(
+                      getSourceSentenceForIndex(flagged.index),
+                      currentSentences[flagged.index],
+                    );
                     sendSSE(controller, {
                       type: 'sentence',
                       index: flagged.index,
@@ -1822,6 +1857,10 @@ export async function POST(req: Request) {
                       if (!isHeadingSentCheck(currentSentences[i])) {
                         currentSentences[i] = deepNonLLMClean(runNuruSinglePass(currentSentences[i]));
                         currentSentences[i] = smoothingPass(currentSentences[i]);
+                        currentSentences[i] = constrainSentenceOutput(
+                          getSourceSentenceForIndex(i),
+                          currentSentences[i],
+                        );
                       }
                       sendSSE(controller, { type: 'sentence', index: i, text: currentSentences[i], stage: `${phaseLabel} (cleanup)` });
                     }
@@ -1870,6 +1909,10 @@ export async function POST(req: Request) {
                         phaseInputSentences[flagged.index],
                         POST_DETECTION_MIN_CHANGE,
                       );
+                      currentSentences[flagged.index] = constrainSentenceOutput(
+                        getSourceSentenceForIndex(flagged.index),
+                        currentSentences[flagged.index],
+                      );
                       sendSSE(controller, {
                         type: 'sentence',
                         index: flagged.index,
@@ -1894,6 +1937,10 @@ export async function POST(req: Request) {
                           phaseInputSentences[flagged.index],
                           POST_DETECTION_MIN_CHANGE,
                         );
+                        currentSentences[flagged.index] = constrainSentenceOutput(
+                          getSourceSentenceForIndex(flagged.index),
+                          currentSentences[flagged.index],
+                        );
                         sendSSE(controller, { type: 'sentence', index: flagged.index, text: currentSentences[flagged.index], stage: `${phaseLabel} (recheck cleanup)` });
                       }
                       await flushDelay(1);
@@ -1914,6 +1961,7 @@ export async function POST(req: Request) {
                   let retry = 0;
                   while (change < POST_DETECTION_MIN_CHANGE && retry < 3) {
                     currentSentences[i] = cleanFlaggedSentenceNonLLM(currentSentences[i], [], original, POST_DETECTION_MIN_CHANGE);
+                    currentSentences[i] = constrainSentenceOutput(getSourceSentenceForIndex(i), currentSentences[i]);
                     change = measureSentenceChange(original, currentSentences[i]);
                     sendSSE(controller, { type: 'sentence', index: i, text: currentSentences[i], stage: phaseLabel });
                     retry++;
@@ -1940,6 +1988,15 @@ export async function POST(req: Request) {
             }
 
             console.log(`[Pipeline] Complete: ${humanized.split(/\s+/).length} words in ${Date.now() - phaseStart}ms`);
+
+            // For Deep Kill engines: after phase pipeline, restore exact input structure
+            // (phases may have corrupted sentence/paragraph boundaries during processing)
+            if (isDeepKill) {
+              console.log(`[DeepKill] Restoring input structure after phase pipeline...`);
+              humanized = preserveInputStructure(normalizedText, humanized);
+              latestHumanized = humanized;
+              console.log(`[DeepKill] Structure restored: ${humanized.split(/\s+/).length} words`);
+            }
           }
 
           // Emit final engine sentences for non-phased engines
@@ -1951,7 +2008,7 @@ export async function POST(req: Request) {
 
           // Detector + input analysis — needed for both post-processing and final detection
           const detector = getDetector();
-          const inputAnalysis = detector.analyze(text);
+          const inputAnalysis = detector.analyze(sourceText);
 
           // ═══════════════════════════════════════════════════════════════
           // UNIVERSAL NURU POST-PROCESSING: 10 passes → built-in detect → Nuru cleanup
@@ -1960,7 +2017,7 @@ export async function POST(req: Request) {
           // Engines that already ran Nuru in their phase pipeline skip baseline.
           // Runs all phases until hard deadline (deadlineReached).
           // ═══════════════════════════════════════════════════════════════
-          if (eng !== 'ozone' && !deadlineReached) {
+          if (!deadlineReached) {
             const nuruPostStart = Date.now();
             const nuruPostTimeOk = () => !deadlineReached;
 
@@ -1988,7 +2045,7 @@ export async function POST(req: Request) {
                 await flushDelay(1);
                 for (let i = 0; i < postSents.length; i++) {
                   if (!isHeadingSentCheck(postSents[i])) {
-                    postSents[i] = runNuruSinglePass(postSents[i]);
+                    postSents[i] = constrainSentenceOutput(getSourceSentenceForIndex(i), runNuruSinglePass(postSents[i]));
                   }
                   sendSSE(controller, { type: 'sentence', index: i, text: postSents[i], stage: 'Nuru 2.0 Post-Processing' });
                 }
@@ -2021,6 +2078,7 @@ export async function POST(req: Request) {
                   postBaselineSentences[flagged.index],
                   POST_DETECTION_MIN_CHANGE,
                 );
+                postSents[flagged.index] = constrainSentenceOutput(getSourceSentenceForIndex(flagged.index), postSents[flagged.index]);
                 sendSSE(controller, {
                   type: 'sentence',
                   index: flagged.index,
@@ -2044,6 +2102,7 @@ export async function POST(req: Request) {
                   if (!isHeadingSentCheck(postSents[i])) {
                     postSents[i] = deepNonLLMClean(runNuruSinglePass(postSents[i]));
                     postSents[i] = smoothingPass(postSents[i]);
+                    postSents[i] = constrainSentenceOutput(getSourceSentenceForIndex(i), postSents[i]);
                   }
                   sendSSE(controller, { type: 'sentence', index: i, text: postSents[i], stage: 'Nuru 2.0 (cleanup)' });
                 }
@@ -2070,6 +2129,7 @@ export async function POST(req: Request) {
                     postBaselineSentences[flagged.index],
                     POST_DETECTION_MIN_CHANGE,
                   );
+                  postSents[flagged.index] = constrainSentenceOutput(getSourceSentenceForIndex(flagged.index), postSents[flagged.index]);
                   sendSSE(controller, { type: 'sentence', index: flagged.index, text: postSents[flagged.index], stage: 'Nuru 2.0 (flagged cleanup)' });
                 }
                 await flushDelay(1);
@@ -2112,6 +2172,7 @@ export async function POST(req: Request) {
                     postBaselineSentences[flagged.index],
                     POST_DETECTION_MIN_CHANGE,
                   );
+                  postSents[flagged.index] = constrainSentenceOutput(getSourceSentenceForIndex(flagged.index), postSents[flagged.index]);
                   sendSSE(controller, { type: 'sentence', index: flagged.index, text: postSents[flagged.index], stage: 'Nuru 2.0 (recheck clean)' });
                 }
 
@@ -2131,6 +2192,7 @@ export async function POST(req: Request) {
                       postBaselineSentences[flagged.index],
                       POST_DETECTION_MIN_CHANGE,
                     );
+                    postSents[flagged.index] = constrainSentenceOutput(getSourceSentenceForIndex(flagged.index), postSents[flagged.index]);
                     sendSSE(controller, { type: 'sentence', index: flagged.index, text: postSents[flagged.index], stage: 'Nuru 2.0 (recheck cleanup)' });
                   }
                   await flushDelay(1);
@@ -2149,6 +2211,7 @@ export async function POST(req: Request) {
               let retry = 0;
               while (change < POST_DETECTION_MIN_CHANGE && retry < 3) {
                 postSents[i] = cleanFlaggedSentenceNonLLM(postSents[i], [], postBaselineSentences[i], POST_DETECTION_MIN_CHANGE);
+                postSents[i] = constrainSentenceOutput(getSourceSentenceForIndex(i), postSents[i]);
                 change = measureSentenceChange(postBaselineSentences[i], postSents[i]);
                 sendSSE(controller, { type: 'sentence', index: i, text: postSents[i], stage: 'Nuru 2.0 Post-Processing' });
                 retry++;
@@ -2164,20 +2227,15 @@ export async function POST(req: Request) {
           if (eng !== 'ozone') {
 
           // 4. Unified Sentence Process
-          const FIRST_PERSON_RE_EARLY = /\b(I|me|my|mine|myself|we|us|our|ours|ourselves)\b/i;
-          const earlyFirstPerson = FIRST_PERSON_RE_EARLY.test(text);
-          const inputAiScore = inputAnalysis.summary.overall_ai_score;
+          // SKIP: This causes massive duplication (4-5x bloat) when applied after sentence-by-sentence processing,
+          // Nuru post-processing, and other stages. Only useful for raw engine outputs.
+          // const FIRST_PERSON_RE_EARLY = /\b(I|me|my|mine|myself|we|us|our|ours|ourselves)\b/i;
+          // const earlyFirstPerson = FIRST_PERSON_RE_EARLY.test(sourceText);
+          // const inputAiScore = inputAnalysis.summary.overall_ai_score;
 
-          if (eng !== 'humara' && eng !== 'humara_v1_3' && eng !== 'nuru' && eng !== 'omega' && eng !== 'oxygen' && eng !== 'ozone' && !isDeepKill) {
-            humanized = unifiedSentenceProcess(humanized, earlyFirstPerson, inputAiScore);
-            if (!usePhasePipeline) {
-              sendSSE(controller, { type: 'stage', stage: 'Sentence Processing' });
-              await flushDelay(2);
-              const { sentences: uspSentences } = splitIntoIndexedSentences(humanized);
-              await emitSentencesStaggered(controller, uspSentences, 'Sentence Processing', 2);
-              await flushDelay(2);
-            }
-          }
+          // if (eng !== 'humara' && eng !== 'humara_v1_3' && eng !== 'nuru' && eng !== 'omega' && eng !== 'oxygen' && eng !== 'ozone' && !isDeepKill) {
+          //   humanized = unifiedSentenceProcess(humanized, earlyFirstPerson, inputAiScore);
+          // }
 
           // 5. 40% Restructuring enforcement
           if (!isDeepKill) {
@@ -2227,7 +2285,7 @@ export async function POST(req: Request) {
 
           // 6. Capitalization fix
           if (eng !== 'humara' && eng !== 'humara_v1_3' && eng !== 'nuru' && eng !== 'omega' && !isDeepKill) {
-            humanized = fixCapitalization(humanized, text);
+            humanized = fixCapitalization(humanized, sourceText);
           }
 
           // 7. AI capitalization
@@ -2245,8 +2303,12 @@ export async function POST(req: Request) {
             humanized = structuralPostProcess(humanized);
           }
 
-          // 10. Structure preservation — skip for engines that preserve structure internally
-          if (!isDeepKill) humanized = preserveInputStructure(normalizedText, humanized);
+          // 10. Structure preservation — only apply for Deep Kill engines
+          // Standard sentence-by-sentence engines already have correct structure via reassembleText
+          // Applying preserveInputStructure to them causes 4-5x output bloat and title loss
+          if (isDeepKill) {
+            humanized = preserveInputStructure(normalizedText, humanized);
+          }
 
           // 11. Contraction & em-dash enforcement
           humanized = expandContractions(humanized);
@@ -2284,6 +2346,9 @@ export async function POST(req: Request) {
 
           // Post-clean grammar check (universal for ALL engines)
           humanized = postCleanGrammar(humanized);
+
+          // Ensure source headings/titles remain exact after all global transforms.
+          humanized = restoreOriginalHeadings(humanized);
 
           if (eng === 'nuru_v2') {
             const { sentences: calibratedSentences, paragraphBoundaries: calibratedBounds } = splitIntoIndexedSentences(humanized);
@@ -2359,7 +2424,7 @@ export async function POST(req: Request) {
 
           // Final sentence-initial caps + mid-sentence caps fix
           humanized = humanized.replace(/(^|[.!?]\s+)([a-z])/g, (_m: string, pre: string, ch: string) => pre + ch.toUpperCase());
-          humanized = fixMidSentenceCapitalization(humanized, text);
+          humanized = fixMidSentenceCapitalization(humanized, sourceText);
 
           } // end: if (eng !== 'ozone') post-processing block
 
@@ -2512,10 +2577,12 @@ export async function POST(req: Request) {
           }
           // For engines with server-side meaning checks (oxygen3), use fast sync heuristic
           const meaningCheck = (eng === 'oxygen3')
-            ? isMeaningPreservedSync(text, humanized, 0.88)
-            : await isMeaningPreserved(text, humanized, 0.88);
+            ? isMeaningPreservedSync(sourceText, humanized, 0.88)
+            : await isMeaningPreserved(sourceText, humanized, 0.88);
 
-          const inputWords = text.trim().split(/\s+/).length;
+          humanized = stripLeadLabelLines(humanized);
+
+          const inputWords = sourceText.trim().split(/\s+/).length;
           const outputWords = humanized.trim().split(/\s+/).length;
 
           // Track usage + save document BEFORE sending done event so we can include updated counts
@@ -2529,8 +2596,8 @@ export async function POST(req: Request) {
               const [usageResult, docResult] = await Promise.all([
                 supa.rpc('increment_usage', { p_user_id: userId, p_words: inputWords, p_engine_type: engineType }),
                 supa.from('documents').insert({
-                  user_id: userId, title: text.slice(0, 60).replace(/\n/g, ' ').trim() + (text.length > 60 ? '…' : ''),
-                  input_text: text, output_text: humanized,
+                  user_id: userId, title: sourceText.slice(0, 60).replace(/\n/g, ' ').trim() + (sourceText.length > 60 ? '…' : ''),
+                  input_text: sourceText, output_text: humanized,
                   input_word_count: inputWords, output_word_count: outputWords,
                   engine_used: eng, strength: effectiveStrength, tone: toneDb,
                   meaning_preserved: meaningCheck.isSafe, meaning_similarity: meaningCheck.similarity,
