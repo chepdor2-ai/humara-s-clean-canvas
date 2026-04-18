@@ -1,9 +1,9 @@
-// Shared utilities for OpenAI API proxy endpoints
+import { GROQ_BASE_URL, resolveGroqChatModel } from '../groq-client.ts';
 
-const OPENAI_BASE = 'https://api.openai.com/v1';
+// Shared utilities for Groq API proxy endpoints
 
 export function getOpenAIKey() {
-  return process.env.OPENAI_API_KEY || '';
+  return process.env.GROQ_API_KEY || '';
 }
 
 export async function openaiChat(messages, options = {}) {
@@ -13,12 +13,12 @@ export async function openaiChat(messages, options = {}) {
     return {
       ok: false,
       status: 500,
-      payload: { error: 'OpenAI API key is not configured on the server.' },
+      payload: { error: 'GROQ_API_KEY is not configured on the server.' },
     };
   }
 
-  const model = options.model || 'gpt-4o';
-  const fallbackModel = options.fallbackModel || 'gpt-4o-mini';
+  const model = resolveGroqChatModel(options.model, 'llama-3.3-70b-versatile');
+  const fallbackModel = resolveGroqChatModel(options.fallbackModel, 'llama-3.1-8b-instant');
   const temperature = options.temperature ?? 0.7;
   const maxTokens = options.max_tokens ?? 2048;
 
@@ -45,7 +45,7 @@ export async function openaiChat(messages, options = {}) {
 
 async function callChatCompletion(key, body) {
   try {
-    const response = await fetch(`${OPENAI_BASE}/chat/completions`, {
+    const response = await fetch(`${GROQ_BASE_URL}/chat/completions`, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${key}`,
@@ -55,7 +55,7 @@ async function callChatCompletion(key, body) {
     });
 
     const payload = await response.json().catch(() => ({
-      error: 'Invalid OpenAI response.',
+      error: 'Invalid Groq response.',
     }));
 
     return {
@@ -67,7 +67,7 @@ async function callChatCompletion(key, body) {
     return {
       ok: false,
       status: 500,
-      payload: { error: err.message || 'Network error calling OpenAI.' },
+      payload: { error: err.message || 'Network error calling Groq.' },
     };
   }
 }

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { resolveGroqChatModel } from '@/lib/engine/groq-client';
 
 /**
  * AI Grammar Highlight API
@@ -34,9 +35,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ issues: [] });
     }
 
-    // Try Groq first (faster), fall back to OpenAI
     const groqKey = process.env.GROQ_API_KEY;
-    const openaiKey = process.env.OPENAI_API_KEY;
 
     let aiIssues: Array<{
       text: string;
@@ -48,10 +47,8 @@ export async function POST(req: NextRequest) {
 
     if (groqKey) {
       aiIssues = await callGroq(text, groqKey);
-    } else if (openaiKey) {
-      aiIssues = await callOpenAI(text, openaiKey);
     } else {
-      return NextResponse.json({ issues: [], error: 'No AI API key configured' });
+      return NextResponse.json({ issues: [], error: 'GROQ_API_KEY is not configured' });
     }
 
     // Map text spans to character positions in the original
@@ -82,7 +79,7 @@ async function callGroq(text: string, apiKey: string) {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
     body: JSON.stringify({
-      model: 'llama-3.3-70b-versatile',
+      model: resolveGroqChatModel(process.env.GROQ_MODEL, 'llama-3.3-70b-versatile'),
       messages: [
         { role: 'system', content: SYSTEM_PROMPT },
         { role: 'user', content: `Find grammar errors in this text:\n\n${text}` },
@@ -98,32 +95,6 @@ async function callGroq(text: string, apiKey: string) {
     return JSON.parse(content);
   } catch {
     // Try to extract JSON from response
-    const match = content.match(/\[[\s\S]*\]/);
-    if (match) return JSON.parse(match[0]);
-    return [];
-  }
-}
-
-async function callOpenAI(text: string, apiKey: string) {
-  const res = await fetch('https://api.openai.com/v1/chat/completions', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
-    body: JSON.stringify({
-      model: process.env.LLM_MODEL || 'gpt-4o-mini',
-      messages: [
-        { role: 'system', content: SYSTEM_PROMPT },
-        { role: 'user', content: `Find grammar errors in this text:\n\n${text}` },
-      ],
-      temperature: 0.1,
-      max_tokens: 2000,
-    }),
-  });
-  if (!res.ok) return [];
-  const data = await res.json();
-  const content = data.choices?.[0]?.message?.content?.trim() || '[]';
-  try {
-    return JSON.parse(content);
-  } catch {
     const match = content.match(/\[[\s\S]*\]/);
     if (match) return JSON.parse(match[0]);
     return [];

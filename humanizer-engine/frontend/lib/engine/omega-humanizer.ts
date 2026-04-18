@@ -30,29 +30,17 @@
  *     • Target: 0% AI detection score
  */
 
-import OpenAI from "openai";
 import { getDetector } from "./multi-detector";
 import { robustSentenceSplit } from "./content-protection";
 import { validateAndRepairOutput } from "./validation-post-process";
+import { getGroqClient, resolveGroqChatModel } from "./groq-client";
 
 // ── MODEL SELECTION ──
-// gpt-4.1-nano: cheapest ($0.10/M in, $0.40/M out), 200K TPM, 500 RPM
-// gpt-4.1-mini: mid-range ($0.40/M in, $1.60/M out), 200K TPM, 500 RPM
-// gpt-4o-mini: current default ($0.15/M in, $0.60/M out), 200K TPM, 500 RPM
-// Recommended: gpt-4.1-mini for best quality/cost ratio
-const LLM_MODEL = process.env.OMEGA_MODEL ?? process.env.LLM_MODEL ?? "gpt-4o-mini";
-
-// ── OpenAI client singleton ──
-
-let _client: OpenAI | null = null;
-
-function getClient(): OpenAI {
-  if (_client) return _client;
-  const apiKey = process.env.OPENAI_API_KEY?.trim();
-  if (!apiKey) throw new Error("OPENAI_API_KEY not set — Omega engine requires an OpenAI key.");
-  _client = new OpenAI({ apiKey });
-  return _client;
-}
+// Omega now resolves Groq chat models only.
+const LLM_MODEL = resolveGroqChatModel(
+  process.env.OMEGA_MODEL ?? process.env.LLM_MODEL,
+  "llama-3.3-70b-versatile",
+);
 
 async function llmCall(
   system: string,
@@ -60,7 +48,7 @@ async function llmCall(
   temperature: number,
   maxTokens = 512,
 ): Promise<string> {
-  const client = getClient();
+  const client = getGroqClient();
   const r = await client.chat.completions.create({
     model: LLM_MODEL,
     messages: [
@@ -833,7 +821,7 @@ function ppNgramBreaking(text: string): string {
 
 async function llmFlowCleanup(text: string): Promise<string> {
   try {
-    const client = getClient();
+    const client = getGroqClient();
     const wordCount = text.split(/\s+/).length;
     const maxTokens = Math.min(16384, Math.max(4096, Math.ceil(wordCount * 2)));
 

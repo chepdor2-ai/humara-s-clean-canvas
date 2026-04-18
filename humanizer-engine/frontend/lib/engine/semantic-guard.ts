@@ -2,9 +2,7 @@
  * Semantic Guard — ported from semantic_guard.py
  * Content-aware meaning preservation layer.
  *
- * Uses OpenAI embeddings API (text-embedding-3-small) instead of local
- * sentence-transformers to ensure rewrites preserve meaning.
- * Falls back to word-overlap heuristics when no API key is available.
+ * Uses heuristic similarity only so the runtime stays Groq-only.
  */
 
 // ── Types ──
@@ -69,68 +67,16 @@ function heuristicSimilarity(original: string, rewritten: string): number {
   return j1 * 0.4 + j2 * 0.3 + j3 * 0.3;
 }
 
-// ── OpenAI embeddings helper ──
-
-function cosineSimilarity(a: number[], b: number[]): number {
-  let dot = 0;
-  let normA = 0;
-  let normB = 0;
-  for (let i = 0; i < a.length; i++) {
-    dot += a[i] * b[i];
-    normA += a[i] * a[i];
-    normB += b[i] * b[i];
-  }
-  const denom = Math.sqrt(normA) * Math.sqrt(normB);
-  return denom > 0 ? dot / denom : 0;
-}
-
-async function getEmbeddings(texts: string[]): Promise<number[][] | null> {
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) return null;
-
-  try {
-    const response = await fetch("https://api.openai.com/v1/embeddings", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model: "text-embedding-3-small",
-        input: texts,
-      }),
-    });
-
-    if (!response.ok) return null;
-
-    const data = (await response.json()) as {
-      data: { embedding: number[]; index: number }[];
-    };
-    // Sort by index to ensure correct order
-    const sorted = data.data.sort((a, b) => a.index - b.index);
-    return sorted.map((d) => d.embedding);
-  } catch {
-    return null;
-  }
-}
-
 // ── Core functions ──
 
 /**
  * Measure semantic similarity between original and rewritten text.
- * Uses OpenAI embeddings when available, falls back to heuristic.
  * Returns 0.0–1.0 (1.0 = identical meaning).
  */
 export async function semanticSimilarity(
   original: string,
   rewritten: string,
 ): Promise<number> {
-  // Try embeddings first
-  const embeddings = await getEmbeddings([original, rewritten]);
-  if (embeddings && embeddings.length === 2) {
-    return cosineSimilarity(embeddings[0], embeddings[1]);
-  }
-  // Fallback: heuristic
   return heuristicSimilarity(original, rewritten);
 }
 
@@ -181,18 +127,6 @@ export async function semanticSimilarityBatch(
     throw new Error("Arrays must have equal length");
   }
 
-  // Try embeddings for all at once
-  const allTexts = [...originals, ...rewrittenList];
-  const embeddings = await getEmbeddings(allTexts);
-
-  if (embeddings && embeddings.length === allTexts.length) {
-    const n = originals.length;
-    return originals.map((_, i) =>
-      cosineSimilarity(embeddings[i], embeddings[n + i]),
-    );
-  }
-
-  // Fallback: heuristic per pair
   return originals.map((orig, i) =>
     heuristicSimilarity(orig, rewrittenList[i]),
   );
@@ -210,26 +144,16 @@ export async function findContextualSynonyms(
 ): Promise<string[]> {
   if (synonymCandidates.length === 0) return [];
 
-  // Build candidate sentences
-  const candidateSentences = synonymCandidates.map((c) =>
-    sentence.replace(new RegExp(`\\b${targetWord}\\b`, "gi"), c),
-  );
+  const scored = synonymCandidates.map((candidate) => ({
+    candidate,
+    similarity: heuristicSimilarity(
+      sentence,
+      sentence.replace(new RegExp(`\\b${targetWord}\\b`, 'gi'), candidate),
+    ),
+  }));
 
-  const allTexts = [sentence, ...candidateSentences];
-  const embeddings = await getEmbeddings(allTexts);
-
-  if (embeddings && embeddings.length === allTexts.length) {
-    const origEmb = embeddings[0];
-    const scored = synonymCandidates.map((candidate, i) => ({
-      candidate,
-      similarity: cosineSimilarity(origEmb, embeddings[i + 1]),
-    }));
-    scored.sort((a, b) => b.similarity - a.similarity);
-    return scored.slice(0, topK).map((s) => s.candidate);
-  }
-
-  // Fallback: return first candidates
-  return synonymCandidates.slice(0, topK);
+  scored.sort((a, b) => b.similarity - a.similarity);
+  return scored.slice(0, topK).map((entry) => entry.candidate);
 }
 
 /**

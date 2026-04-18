@@ -30,7 +30,6 @@
  *   - Iterate until scores improve (max 6 iterations)
  */
 
-import OpenAI from "openai";
 import { sentTokenize } from "./utils";
 import { expandContractions } from "./advanced-transforms";
 import { protectSpecialContent, restoreSpecialContent, protectContentTerms, restoreContentTerms, cleanOutputRepetitions, robustSentenceSplit, placeholdersToLLMFormat, llmFormatToPlaceholders, countSentences, enforceSentenceCountStrict, enforcePerParagraphSentenceCounts, rephraseCitations } from "./content-protection";
@@ -60,27 +59,16 @@ import {
   type SurgeryItem,
   type InputFeatures as SurgeryInputFeatures,
 } from "./sentence-surgery";
+import { getGroqClient, resolveGroqChatModel } from "./groq-client";
 
 // ── Config ──
 
-const LLM_MODEL = process.env.LLM_MODEL ?? "gpt-4o-mini";
+const LLM_MODEL = resolveGroqChatModel(process.env.LLM_MODEL, "llama-3.3-70b-versatile");
 const MAX_FEEDBACK_ITERATIONS_MAP: Record<string, number> = { light: 1, medium: 1, strong: 2 };
 const TARGET_AI_SCORE = 5.0;
 
-// ── OpenAI client singleton ──
-
-let _client: OpenAI | null = null;
-
-function getClient(): OpenAI {
-  if (_client) return _client;
-  const apiKey = process.env.OPENAI_API_KEY?.trim();
-  if (!apiKey) throw new Error("OPENAI_API_KEY not set. Add it to .env or environment variables.");
-  _client = new OpenAI({ apiKey });
-  return _client;
-}
-
 function llmCall(system: string, user: string, temperature: number, maxTokens = 4096): Promise<string> {
-  const client = getClient();
+  const client = getGroqClient();
   return client.chat.completions.create({
     model: LLM_MODEL,
     messages: [

@@ -6,9 +6,14 @@ import {
   applySentenceSurgery,
   reassembleFromItems,
 } from './sentence-surgery.ts';
-import OpenAI from 'openai';
+import {
+  DEFAULT_GROQ_SMALL_MODEL,
+  getGroqClient,
+  hasGroqApiKey,
+  resolveGroqChatModel,
+} from './groq-client.ts';
 
-const LLM_MODEL = process.env.LLM_MODEL ?? 'gpt-4o-mini';
+const LLM_MODEL = resolveGroqChatModel(process.env.LLM_MODEL, DEFAULT_GROQ_SMALL_MODEL);
 
 // ── AI Vocabulary Purge (targeted, unlike deepPostProcess which corrupts) ──
 
@@ -146,10 +151,9 @@ function breakNgramPatterns(text) {
 
 async function llmPunctuationCleanup(text) {
   try {
-    const apiKey = process.env.OPENAI_API_KEY?.trim();
-    if (!apiKey) return text;
+    if (!hasGroqApiKey()) return text;
 
-    const client = new OpenAI({ apiKey });
+    const client = getGroqClient();
     const wordCount = text.split(/\s+/).length;
     const maxTokens = Math.min(16384, Math.max(4096, Math.ceil(wordCount * 2)));
 

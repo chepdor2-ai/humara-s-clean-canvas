@@ -8,15 +8,19 @@
 
 import type { DocumentState, Phase } from '../types';
 import { isLLMAvailable } from '../services/llmService';
-import OpenAI from 'openai';
+import {
+  DEFAULT_GROQ_SMALL_MODEL,
+  getGroqClient,
+  hasGroqApiKey,
+  resolveGroqChatModel,
+} from '../../groq-client';
 
-const LLM_MODEL = process.env.LLM_MODEL ?? 'gpt-4.1-nano';
+const LLM_MODEL = resolveGroqChatModel(process.env.LLM_MODEL, DEFAULT_GROQ_SMALL_MODEL);
 
 async function llmFixPunctuation(text: string): Promise<string> {
-  const apiKey = process.env.OPENAI_API_KEY?.trim();
-  if (!apiKey) return text;
+  if (!hasGroqApiKey()) return text;
 
-  const client = new OpenAI({ apiKey });
+  const client = getGroqClient();
   const wordCount = text.trim().split(/\s+/).length;
   const maxTokens = Math.min(16384, Math.max(4096, Math.ceil(wordCount * 2)));
 

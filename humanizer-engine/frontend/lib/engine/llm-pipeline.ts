@@ -10,17 +10,21 @@
 
 import { readFileSync } from "fs";
 import { join } from "path";
-// @ts-ignore — OpenAI types
-import OpenAI from "openai";
 import { sentTokenize } from "./utils";
 import { robustSentenceSplit } from "./content-protection";
 import { PROTECTED_WORDS } from "./rules";
 import { expandContractions } from "./advanced-transforms";
 import { protectSpecialContent, restoreSpecialContent } from "./content-protection";
+import {
+  DEFAULT_GROQ_SMALL_MODEL,
+  getGroqClient,
+  hasGroqApiKey,
+  resolveGroqChatModel,
+} from "./groq-client";
 
 // ── Config ──
 
-const PIPELINE_MODEL = process.env.PIPELINE_MODEL ?? "gpt-4o-mini";
+const PIPELINE_MODEL = resolveGroqChatModel(process.env.PIPELINE_MODEL, DEFAULT_GROQ_SMALL_MODEL);
 const CHUNK_MAX_WORDS = 200;
 const MIN_SENT_WORDS = 8;
 const MAX_SENT_WORDS = 50;
@@ -336,7 +340,7 @@ function chunkToText(chunk: ChunkItem[]): string {
 }
 
 async function asyncLlmCall(
-  client: OpenAI, chunkText: string,
+  client: ReturnType<typeof getGroqClient>, chunkText: string,
 ): Promise<string> {
   const prompt = buildCombinedPrompt(chunkText);
   const controller = new AbortController();
@@ -368,12 +372,11 @@ async function asyncLlmCall(
 }
 
 async function phases3to6LlmProcess(chunks: ChunkItem[][]): Promise<string[]> {
-  const apiKey = process.env.OPENAI_API_KEY?.trim();
-  if (!apiKey) {
+  if (!hasGroqApiKey()) {
     return chunks.map(chunkToText);
   }
 
-  const client = new OpenAI({ apiKey });
+  const client = getGroqClient();
 
   // Process with concurrency limit
   const results: string[] = new Array(chunks.length);

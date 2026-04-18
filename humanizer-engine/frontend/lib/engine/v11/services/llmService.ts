@@ -3,36 +3,31 @@
  * ==================
  * Optional LLM wrapper for chunk rewriting.
  * Only called in Phase 4 for sentences scoring > 0.4.
- * Falls back to rule-based rewrite when unavailable.
+ * Falls back to rule-based rewrite when Groq is unavailable.
  */
 
-import OpenAI from 'openai';
+import {
+  DEFAULT_GROQ_SMALL_MODEL,
+  getGroqClient,
+  hasGroqApiKey,
+  resolveGroqChatModel,
+} from '../../groq-client';
 
-const LLM_MODEL = process.env.LLM_MODEL ?? 'gpt-4.1-nano';
-
-let _client: OpenAI | null = null;
-
-function getClient(): OpenAI | null {
-  if (_client) return _client;
-  const apiKey = process.env.OPENAI_API_KEY?.trim();
-  if (!apiKey) return null;
-  _client = new OpenAI({ apiKey });
-  return _client;
-}
+const LLM_MODEL = resolveGroqChatModel(process.env.LLM_MODEL, DEFAULT_GROQ_SMALL_MODEL);
 
 /**
  * Check whether LLM is available (API key present).
  */
 export function isLLMAvailable(): boolean {
-  return !!process.env.OPENAI_API_KEY?.trim();
+  return hasGroqApiKey();
 }
 
 /**
  * Call the LLM with a system + user prompt.
  */
 async function llmCall(system: string, user: string, temperature: number, maxTokens?: number): Promise<string> {
-  const client = getClient();
-  if (!client) throw new Error('LLM not available');
+  if (!hasGroqApiKey()) throw new Error('LLM not available');
+  const client = getGroqClient();
   const response = await client.chat.completions.create({
     model: LLM_MODEL,
     messages: [

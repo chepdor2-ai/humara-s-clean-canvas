@@ -3,7 +3,7 @@
  * ==================================================================
  *
  * When Premium mode is active, ALL stages of humanization are handled
- * exclusively through GPT-4o-mini with extremely strict prompt rules.
+ * exclusively through Groq chat models with extremely strict prompt rules.
  * No rule-based/non-LLM transforms are called at any point.
  *
  * The pipeline processes EACH sentence independently through multiple
@@ -22,7 +22,6 @@
  *   - Aggressiveness of restructuring
  */
 
-import OpenAI from "openai";
 import {
   protectSpecialContent,
   restoreSpecialContent,
@@ -61,22 +60,11 @@ import {
   type SurgeryItem,
   type InputFeatures as SurgeryInputFeatures,
 } from "./sentence-surgery";
+import { getGroqClient, resolveGroqChatModel } from "./groq-client";
 
 // ── Config ──
 
-const LLM_MODEL = process.env.LLM_MODEL ?? "gpt-4o-mini";
-
-// ── OpenAI client singleton ──
-
-let _client: OpenAI | null = null;
-
-function getClient(): OpenAI {
-  if (_client) return _client;
-  const apiKey = process.env.OPENAI_API_KEY?.trim();
-  if (!apiKey) throw new Error("OPENAI_API_KEY not set.");
-  _client = new OpenAI({ apiKey });
-  return _client;
-}
+const LLM_MODEL = resolveGroqChatModel(process.env.GROQ_MODEL, "llama-3.3-70b-versatile");
 
 async function llmCall(
   system: string,
@@ -84,7 +72,7 @@ async function llmCall(
   temperature: number,
   maxTokens = 4096,
 ): Promise<string> {
-  const client = getClient();
+  const client = getGroqClient();
   const r = await client.chat.completions.create({
     model: LLM_MODEL,
     messages: [

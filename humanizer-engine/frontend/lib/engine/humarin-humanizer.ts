@@ -209,12 +209,12 @@ export async function humarinHumanize(
     }
   }
 
-  // Phase 3: LLM Academic Humanizer fallback — 5-phase GPT-4o-mini pipeline
+  // Phase 3: LLM Academic Humanizer fallback — 5-phase Groq pipeline
   return llmAcademicFallback(text);
 }
 
 /**
- * Fall back to 5-phase LLM Academic Humanizer (GPT-4o-mini).
+ * Fall back to 5-phase LLM Academic Humanizer (Groq).
  * Deep structural rewrites + targeted AI signal removal.
  */
 async function llmAcademicFallback(text: string): Promise<HumarinResult> {

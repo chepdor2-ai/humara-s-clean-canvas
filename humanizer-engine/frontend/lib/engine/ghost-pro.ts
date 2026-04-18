@@ -15,6 +15,7 @@
  */
 
 import OpenAI from "openai";
+import { resolveGroqChatModel } from "./groq-client";
 import { sentTokenize } from "./utils";
 import { expandContractions } from "./advanced-transforms";
 import { validateAndRepairOutput } from "./validation-post-process";
@@ -53,30 +54,26 @@ import {
   type InputFeatures as SurgeryInputFeatures,
 } from "./sentence-surgery";
 
-// ── Config ──
+// ── OpenAI config ──
+const LLM_MODEL = process.env.LLM_MODEL ?? 'gpt-4o-mini';
+const LLM_FALLBACK_MODEL = 'gpt-4.1-nano';
 
-const LLM_MODEL = process.env.LLM_MODEL ?? "gpt-4o-mini";
+let _openaiClient: OpenAI | null = null;
 
-// ── Groq config (OpenAI-compatible, Llama models) ──
-const GROQ_MODELS = [
-  "llama-3.3-70b-versatile",                        // Primary: best quality
-  "meta-llama/llama-4-scout-17b-16e-instruct",      // Fallback 1: good quality, 5x token limit
-  "llama-3.1-8b-instant",                            // Fallback 2: fast, highest request limits
-] as const;
-
-// ── OpenAI client singleton ──
-
-let _client: OpenAI | null = null;
-
-function getClient(): OpenAI {
-  if (_client) return _client;
+function getOpenAIClient(): OpenAI {
+  if (_openaiClient) return _openaiClient;
   const apiKey = process.env.OPENAI_API_KEY?.trim();
   if (!apiKey) throw new Error("OPENAI_API_KEY not set.");
-  _client = new OpenAI({ apiKey });
-  return _client;
+  _openaiClient = new OpenAI({ apiKey });
+  return _openaiClient;
 }
 
-// ── Groq client singleton (OpenAI-compatible) ──
+// ── Groq config (OpenAI-compatible, Llama models) — kept as last-resort ──
+const GROQ_MODELS = [
+  "llama-3.3-70b-versatile",
+  "meta-llama/llama-4-scout-17b-16e-instruct",
+  "llama-3.1-8b-instant",
+] as const;
 
 let _groqClient: OpenAI | null = null;
 
@@ -124,33 +121,33 @@ async function groqCall(system: string, user: string, temperature: number, maxTo
 }
 
 async function llmCall(system: string, user: string, temperature: number, maxTokens?: number, modelOverride?: string): Promise<string> {
-  // Try Groq first (free tier — llama-3.3-70b-versatile, 14,400 req/day)
-  if (!modelOverride && process.env.GROQ_API_KEY?.trim()) {
+  const client = getOpenAIClient();
+  const models = modelOverride ? [modelOverride] : [LLM_MODEL, LLM_FALLBACK_MODEL];
+
+  for (let i = 0; i < models.length; i++) {
+    const model = models[i];
     try {
-      return await groqCall(system, user, temperature, maxTokens);
-    } catch (groqErr: any) {
-      console.warn("  [GhostPro] Groq primary failed, falling back to OpenAI:", groqErr.message);
+      const r = await client.chat.completions.create({
+        model,
+        messages: [
+          { role: "system", content: system },
+          { role: "user", content: user },
+        ],
+        temperature,
+        max_tokens: maxTokens ?? 4096,
+      });
+      const content = r.choices[0]?.message?.content?.trim() ?? "";
+      if (content) {
+        if (i > 0) console.log(`  [GhostPro] Succeeded with fallback model: ${model}`);
+        return content;
+      }
+    } catch (err: unknown) {
+      const errMsg = err instanceof Error ? err.message : String(err);
+      console.warn(`  [GhostPro] Model ${model} failed: ${errMsg}`);
+      if (i < models.length - 1) console.log(`  [GhostPro] Falling back to ${models[i + 1]}...`);
     }
   }
-
-  // Groq unavailable / failed — fall back to OpenAI
-  try {
-    const client = getClient();
-    const model = modelOverride ?? LLM_MODEL;
-    const r = await client.chat.completions.create({
-      model,
-      messages: [
-        { role: "system", content: system },
-        { role: "user", content: user },
-      ],
-      temperature,
-      max_tokens: maxTokens ?? 4096,
-    });
-    return r.choices[0]?.message?.content?.trim() ?? "";
-  } catch (err: any) {
-    console.error("  [GhostPro] OpenAI fallback also failed:", err.message);
-    throw new Error("Both Groq and OpenAI API calls failed. Check your API keys.");
-  }
+  throw new Error("All LLM models failed (gpt-4o-mini and gpt-4.1-nano).");
 }
 
 // ── Input Feature Detection ──
@@ -2122,12 +2119,12 @@ async function processChunk(
   if (isWikiRewrite) {
     // ── WIKIPEDIA: Dual-LLM paragraph rewriting + sentence mixing ──
     // STRATEGY: Two different LLM architectures in sequence.
-    // Pass 1A: GPT-4o-mini rewrites paragraphs (high quality, smooth output)
-    // Pass 1B: Groq/Llama 3.3 70B re-rewrites the GPT-4o-mini output
+    // Pass 1A: Groq paragraph rewrite (high quality, smooth output)
+    // Pass 1B: Optional second Groq rewrite with a different model profile
     // This breaks the single-model token probability signature that neural
     // detectors (GPTZero, Originality, Pangram) are trained to catch.
     // Then mixes in ~35% of original sentences for perplexity burstiness.
-    console.log("  [GhostPro]   Pass 1A: GPT-4o-mini paragraph rewrite (wiki mode)...");
+    console.log("  [GhostPro]   Pass 1A: Groq paragraph rewrite (wiki mode)...");
 
     const paragraphSystemPrompt = getWikiParagraphSystemPrompt();
 
@@ -2172,7 +2169,7 @@ async function processChunk(
           return trimmedPara;
         }
 
-        // ── GPT-4o-mini output is clean; minimal dedup needed ──
+        // ── First-pass output is clean; minimal dedup needed ──
         // Still check for rare sentence-count drift
         {
           const rawSentences = robustSentenceSplit(rewrittenPara);
@@ -2216,7 +2213,7 @@ async function processChunk(
     }));
 
     result = rewrittenParagraphs.join("\n\n");
-    console.log(`  [GhostPro]   Pass 1A done: ${result.split(/\s+/).length} words (GPT-4o-mini, ${totalSentencesProcessed} sentences processed)`);
+    console.log(`  [GhostPro]   Pass 1A done: ${result.split(/\s+/).length} words (Groq, ${totalSentencesProcessed} sentences processed)`);
 
     if (options.turbo) {
       console.log("  [GhostPro]   Pass 1B: SKIPPED (turbo mode — single LLM wiki rewrite)");
@@ -2351,7 +2348,7 @@ CRITICAL RULES:
     // ═══════════════════════════════════════════
     // PASS 1C: 5x ITERATIVE RE-HUMANIZATION LOOP
     // Each iteration feeds the previous output back through Groq for aggressive rewriting.
-    // The pass1A output (GPT-4o-mini) is the baseline. After each iteration, we measure
+    // The pass1A output is the baseline. After each iteration, we measure
     // per-sentence word change % vs. the baseline. We run exactly 5 iterations, but can
     // stop early if ALL sentences have ≥50% word change from the baseline.
     // TURBO MODE: Skip entirely — the outer 10x re-humanization loop replaces this.

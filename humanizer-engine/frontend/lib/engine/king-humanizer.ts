@@ -2,7 +2,7 @@
  * King Humanizer Engine — Pure LLM Multi-Phase Sentence-by-Sentence Pipeline
  * ===========================================================================
  *
- * Uses GPT-4o-mini with the full Wikipedia AI Cleanup ruleset to remove every
+ * Uses Groq chat models with the full Wikipedia AI Cleanup ruleset to remove every
  * known AI writing pattern.  Each sentence is processed independently through
  * multiple humanization phases, then reassembled back into the original
  * paragraph structure.
@@ -21,7 +21,6 @@
  *   - Title-case enforcement inside body text is corrected
  */
 
-import OpenAI from "openai";
 import { robustSentenceSplit } from "./content-protection";
 import {
   applyAIWordKill,
@@ -30,24 +29,14 @@ import {
   fixPunctuation,
 } from "./shared-dictionaries";
 import { semanticSimilaritySync } from "./semantic-guard";
+import { getGroqClient, resolveGroqChatModel } from "./groq-client";
 
 // ── Config ──────────────────────────────────────────────────────────
 
-const LLM_MODEL = process.env.LLM_MODEL ?? "gpt-4o-mini";
+const LLM_MODEL = resolveGroqChatModel(process.env.LLM_MODEL, "llama-3.3-70b-versatile");
 const CONCURRENCY = Math.min(Number(process.env.KING_CONCURRENCY ?? 10), 20);
 const LLM_TIMEOUT_MS = 15_000;
 const TOTAL_BUDGET_MS = 120_000;
-
-// ── OpenAI client ───────────────────────────────────────────────────
-
-let _client: OpenAI | null = null;
-function getClient(): OpenAI {
-  if (_client) return _client;
-  const apiKey = process.env.OPENAI_API_KEY?.trim();
-  if (!apiKey) throw new Error("OPENAI_API_KEY not set — King engine requires an OpenAI key.");
-  _client = new OpenAI({ apiKey });
-  return _client;
-}
 
 function withTimeout<T>(promise: Promise<T>, ms: number, fallback: T): Promise<T> {
   return Promise.race([
@@ -62,7 +51,7 @@ async function llmCall(
   temperature: number,
   maxTokens = 1024,
 ): Promise<string> {
-  const client = getClient();
+  const client = getGroqClient();
   const p = client.chat.completions
     .create({
       model: LLM_MODEL,

@@ -1,6 +1,5 @@
 import { robustSentenceSplit } from '@/lib/engine/content-protection';
 import { getDetector, TextSignals } from '@/lib/engine/multi-detector';
-import OpenAI from 'openai';
 import { isMeaningPreserved, isMeaningPreservedSync } from '@/lib/engine/semantic-guard';
 import { fixCapitalization, applyPhrasePatterns, fixPunctuation, expandAllContractions } from '@/lib/engine/shared-dictionaries';
 import { deduplicateRepeatedPhrases } from '@/lib/engine/premium-deep-clean';
@@ -1219,13 +1218,13 @@ export async function POST(req: Request) {
           const inputAnalysis = detector.analyze(text);
 
           // ═══════════════════════════════════════════════════════════════
-          // UNIVERSAL Nuru x5 + GPT-4o-mini DETECTION POST-PROCESSING
+          // UNIVERSAL Nuru x5 + AI DETECTION POST-PROCESSING
           // Applies to ALL engines EXCEPT ozone (Humara 2.1) and phantom.
           // Ozone only gets synonym recovery (applyAIWordKill + synonymReplace)
           // via the restructuring pass — no heavy Nuru iterations.
           // Phantom uses AntiPangram instead of Nuru for post-processing.
           // Engines that already ran Nuru in their phase pipeline skip the
-          // 5 baseline passes but still get GPT detection + targeted cleanup.
+          // 5 baseline passes but still get AI detection + targeted cleanup.
           // Hard time budget: 10 seconds max.
           // ═══════════════════════════════════════════════════════════════
           if (eng !== 'ozone' && eng !== 'phantom' && !(deadlineReached || Date.now() - startTime > DEADLINE_MS - 12000)) {

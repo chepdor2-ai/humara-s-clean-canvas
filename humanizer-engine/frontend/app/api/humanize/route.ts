@@ -18,7 +18,6 @@ import { expandContractions } from '@/lib/humanize-transforms';
 import { removeEmDashes } from '@/lib/engine/v13-shared-techniques';
 import { nuruHumanize } from '@/lib/engine/nuru-humanizer';
 import { stealthHumanize, stealthHumanizeTargeted } from '@/lib/engine/stealth';
-import OpenAI from 'openai';
 import { applySentenceStartersDistribution, applyNuruDocumentFlowCalibration } from '@/lib/engine/stealth/nuru-document-phases';
 import { omegaHumanize } from '@/lib/engine/omega-humanizer';
 import { easyHumanize } from '@/lib/engine/easy-humanizer';
@@ -973,7 +972,7 @@ export async function POST(req: Request) {
       // Nuru 2.0: 15-pass stealth humanizer with deep non-LLM cleaning
       humanized = applySmartNuruPolish(normalizedText);
     } else if (engine === 'king') {
-      // King: Pure LLM multi-phase sentence-by-sentence humanizer (GPT-4o-mini)
+      // King: Pure LLM multi-phase sentence-by-sentence humanizer (Groq)
       // Phase 1: Deep rewrite (29 Wikipedia AI Cleanup rules)
       // Phase 2: Self-audit ("what makes this AI?")
       // Phase 3: Targeted revision (fix Phase 2 findings)
@@ -1043,7 +1042,7 @@ export async function POST(req: Request) {
       const { ghostMiniV1_2 } = await import('@/lib/engine/ghost-mini-v1-2');
       humanized = ghostMiniV1_2(normalizedText);
     } else if (engine === 'apex') {
-      // Apex: 6-phase GPT-4o-mini + multi-phase post-processing pipeline
+      // Apex: 6-phase Groq + multi-phase post-processing pipeline
       // Phase 1: LLM sentence-by-sentence rewrite (50%+ change)
       // Phase 2: Aggressive PP (40%) | Phase 3: Cleaning PP (30%)
       // Phase 4: Paragraph restructuring (20%) | Phase 5: AI signal kill

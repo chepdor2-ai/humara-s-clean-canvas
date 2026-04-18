@@ -1,6 +1,14 @@
-import OpenAI from 'openai';
+import {
+  DEFAULT_GROQ_SMALL_MODEL,
+  getGroqClient,
+  hasGroqApiKey,
+  resolveGroqChatModel,
+} from './groq-client';
 
-const KEYWORD_RESTORE_MODEL = process.env.OZONE_KEYWORD_RESTORE_MODEL?.trim() || 'gpt-4o-mini';
+const KEYWORD_RESTORE_MODEL = resolveGroqChatModel(
+  process.env.OZONE_KEYWORD_RESTORE_MODEL,
+  DEFAULT_GROQ_SMALL_MODEL,
+);
 const MAX_CANDIDATES = 24;
 const CHUNK_SIZE = 1;
 
@@ -21,14 +29,8 @@ type RestorePlan = {
   decisions?: RestoreDecision[];
 };
 
-let client: OpenAI | null = null;
-
-function getClient(): OpenAI | null {
-  if (client) return client;
-  const apiKey = process.env.OPENAI_API_KEY?.trim();
-  if (!apiKey) return null;
-  client = new OpenAI({ apiKey });
-  return client;
+function getClient() {
+  return hasGroqApiKey() ? getGroqClient() : null;
 }
 
 function normalizeWhitespace(value: string): string {

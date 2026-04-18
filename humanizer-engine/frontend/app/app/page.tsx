@@ -193,7 +193,7 @@ const ENGINE_GUIDES: Record<string, string> = {
 
   humara_v3_3: 'High-power Anti GPTZero engine for stubborn GPTZero flags.',
   oxygen: 'Anti GPTZero engine tuned for GPTZero signal suppression.',
-  king: 'Pure LLM humanizer (GPT-4o-mini). 3-phase pipeline: deep rewrite, self-audit, targeted revision.',
+  king: 'Pure LLM humanizer (Groq). 3-phase pipeline: deep rewrite, self-audit, targeted revision.',
   nuru_v2: 'Purely non-LLM stealth engine. 10 iterative passes — no AI calls, no external APIs.',
   ghost_pro_wiki: 'Academic-style rewrite that sounds like encyclopedic human writing.',
 

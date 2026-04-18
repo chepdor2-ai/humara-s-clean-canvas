@@ -10,6 +10,7 @@ import {
   type SentenceAnalysis,
   type Severity,
 } from '@/lib/engine/grammar';
+import { resolveGroqChatModel } from '@/lib/engine/groq-client';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -414,35 +415,7 @@ async function callGroq(text: string, apiKey: string): Promise<RawAiIssue[]> {
         Authorization: `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        model: 'llama-3.3-70b-versatile',
-        temperature: 0.1,
-        max_tokens: 1800,
-        messages: [
-          { role: 'system', content: AI_SYSTEM_PROMPT },
-          { role: 'user', content: `Review this text for grammar issues only:\n\n${text}` },
-        ],
-      }),
-    });
-
-    if (!response.ok) return [];
-    const data = await response.json();
-    const content = data.choices?.[0]?.message?.content?.trim() ?? '[]';
-    return parseJsonArray(content);
-  } catch {
-    return [];
-  }
-}
-
-async function callOpenAI(text: string, apiKey: string): Promise<RawAiIssue[]> {
-  try {
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model: process.env.LLM_MODEL || 'gpt-4o-mini',
+        model: resolveGroqChatModel(process.env.GROQ_MODEL, 'llama-3.3-70b-versatile'),
         temperature: 0.1,
         max_tokens: 1800,
         messages: [
@@ -530,8 +503,7 @@ function resolveAiIssues(text: string, sentences: SentenceAnalysis[], rawIssues:
 
 async function collectAiIssues(text: string, sentences: SentenceAnalysis[]) {
   const groqKey = process.env.GROQ_API_KEY;
-  const openaiKey = process.env.OPENAI_API_KEY;
-  const available = Boolean(groqKey || openaiKey);
+  const available = Boolean(groqKey);
 
   if (!available) {
     return {
@@ -539,7 +511,7 @@ async function collectAiIssues(text: string, sentences: SentenceAnalysis[]) {
       available: false,
       used: false,
       provider: null as string | null,
-      warning: 'AI assist is not configured on this deployment. Using the Vercel rules engine only.',
+      warning: 'Groq AI assist is not configured on this deployment. Using the Vercel rules engine only.',
     };
   }
 
@@ -559,11 +531,6 @@ async function collectAiIssues(text: string, sentences: SentenceAnalysis[]) {
   if (groqKey) {
     rawIssues = await callGroq(text, groqKey);
     provider = rawIssues.length > 0 ? 'groq' : null;
-  }
-
-  if (rawIssues.length === 0 && openaiKey) {
-    rawIssues = await callOpenAI(text, openaiKey);
-    provider = rawIssues.length > 0 ? 'openai' : provider;
   }
 
   const issues = resolveAiIssues(text, sentences, rawIssues);
@@ -611,7 +578,7 @@ export async function POST(req: NextRequest) {
     issues = mergeIssues(issues, domainIssues);
 
     let aiProvider: string | null = null;
-    let aiAvailable = Boolean(process.env.GROQ_API_KEY || process.env.OPENAI_API_KEY);
+    let aiAvailable = Boolean(process.env.GROQ_API_KEY);
     let aiUsed = false;
 
     if (mode !== 'rules') {
@@ -736,7 +703,7 @@ export async function GET() {
       deployment: 'vercel',
       version: ENGINE_VERSION,
       rules_count: ALL_RULES.length,
-      ai_available: Boolean(process.env.GROQ_API_KEY || process.env.OPENAI_API_KEY),
+      ai_available: Boolean(process.env.GROQ_API_KEY),
       domains: VALID_DOMAINS,
       features: [
         'deterministic rules',
@@ -744,7 +711,7 @@ export async function GET() {
         'protected quotes and citations',
         'strict minimal edits',
         'sentence change budget',
-        'optional ai assist',
+        'optional groq ai assist',
       ],
       limits: {
         max_text_length: MAX_TEXT_LENGTH,

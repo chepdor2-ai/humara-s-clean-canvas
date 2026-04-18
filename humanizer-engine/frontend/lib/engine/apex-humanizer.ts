@@ -1,5 +1,5 @@
 /**
- * Apex Humanizer Engine — 6-Phase GPT-4o-mini + Post-Processing Pipeline
+ * Apex Humanizer Engine — 6-Phase Groq + Post-Processing Pipeline
  * ========================================================================
  *
  * Pure TypeScript engine combining LLM rewriting with aggressive multi-phase
@@ -29,7 +29,6 @@
  *   - Preserve original meaning
  */
 
-import OpenAI from "openai";
 import { robustSentenceSplit } from "./content-protection";
 import {
   applyAIWordKill,
@@ -45,10 +44,11 @@ import {
 import { synonymReplace } from "./utils";
 import { validateAndRepairOutput } from "./validation-post-process";
 import { semanticSimilaritySync } from "./semantic-guard";
+import { getGroqClient, resolveGroqChatModel } from "./groq-client";
 
 // ── Config ──
 
-const LLM_MODEL = process.env.LLM_MODEL ?? "gpt-4o-mini";
+const LLM_MODEL = resolveGroqChatModel(process.env.LLM_MODEL, "llama-3.3-70b-versatile");
 const CONCURRENCY = Math.min(Number(process.env.PIPELINE_CONCURRENCY ?? 15), 20);
 const LLM_TIMEOUT_MS = 4_000;
 const PHASE1_BUDGET_MS = 4_000;
@@ -64,25 +64,13 @@ function withTimeout<T>(promise: Promise<T>, ms: number, fallback: T): Promise<T
   ]);
 }
 
-// ── OpenAI client singleton ──
-
-let _client: OpenAI | null = null;
-
-function getClient(): OpenAI {
-  if (_client) return _client;
-  const apiKey = process.env.OPENAI_API_KEY?.trim();
-  if (!apiKey) throw new Error("OPENAI_API_KEY not set — Apex engine requires an OpenAI key.");
-  _client = new OpenAI({ apiKey });
-  return _client;
-}
-
 async function llmCall(
   system: string,
   user: string,
   temperature: number,
   maxTokens = 512,
 ): Promise<string> {
-  const client = getClient();
+  const client = getGroqClient();
   const callPromise = client.chat.completions.create({
     model: LLM_MODEL,
     messages: [
@@ -645,7 +633,7 @@ function fastFallback(text: string): string {
 }
 
 /**
- * Apex Humanizer — 6-phase GPT-4o-mini + post-processing pipeline.
+ * Apex Humanizer — 6-phase Groq + post-processing pipeline.
  * Produces college-level academic prose with zero AI detection signals.
  *
  * SPEED GUARANTEES:

@@ -2,7 +2,7 @@
  * 5-Phase LLM Academic Humanizer
  * ---
  * Fallback for Humara 2.4 when HF Space is unavailable.
- * Uses Groq (free tier, llama-3.3-70b) by default; falls back to OpenAI if GROQ_API_KEY is absent.
+ * Uses Groq chat models only.
  * Completes all 5 phases in a single batched API call per phase (~6s total).
  *
  * Phase 1: Deep structural rewrite — expert student academic writer
@@ -66,20 +66,18 @@ CRITICAL: Do not rewrite sentences. Only transform verb forms and voice. Keep al
 Input: numbered sentences [0], [1], ...
 Output: ONLY a JSON array of modified strings, same count as input. No markdown.`;
 
-// ── LLM client factory: Groq first, OpenAI fallback ──
-function makeLLMClient(): { client: OpenAI; model: string } {
-  const groqKey = process.env.GROQ_API_KEY?.trim();
-  if (groqKey) {
-    return {
-      client: new OpenAI({ apiKey: groqKey, baseURL: 'https://api.groq.com/openai/v1' }),
-      model: 'llama-3.3-70b-versatile',
-    };
-  }
-  const openaiKey = process.env.OPENAI_API_KEY?.trim();
-  if (openaiKey) {
-    return { client: new OpenAI({ apiKey: openaiKey }), model: 'gpt-4o-mini' };
-  }
-  throw new Error('No LLM API key available. Set GROQ_API_KEY (free) or OPENAI_API_KEY.');
+// ── OpenAI client factory ──
+const LLM_MODEL = process.env.LLM_MODEL ?? 'gpt-4o-mini';
+const LLM_FALLBACK_MODEL = 'gpt-4.1-nano';
+
+function makeLLMClient(): { client: OpenAI; model: string; fallbackModel: string } {
+  const apiKey = process.env.OPENAI_API_KEY?.trim();
+  if (!apiKey) throw new Error('OPENAI_API_KEY not set. Set it in .env.local.');
+  return {
+    client: new OpenAI({ apiKey }),
+    model: LLM_MODEL,
+    fallbackModel: LLM_FALLBACK_MODEL,
+  };
 }
 
 /**
@@ -91,7 +89,8 @@ async function batchPhase(
   sentences: string[],
   systemPrompt: string,
   timeoutMs: number = 8000,
-  model: string = 'llama-3.3-70b-versatile',
+  model: string = 'gpt-4o-mini',
+  fallbackModel: string = 'gpt-4.1-nano',
 ): Promise<string[]> {
   const sentenceList = sentences.map((s, i) => `[${i}] ${s}`).join('\n');
 
@@ -125,21 +124,50 @@ async function batchPhase(
     console.warn(`[LLM Academic] Phase returned ${parsed.length} sentences, expected ${sentences.length}`);
     return sentences;
   } catch (err) {
-    console.warn(`[LLM Academic] Phase failed: ${err instanceof Error ? err.message : err}`);
+    // Primary model failed — retry once with fallback model
+    if (fallbackModel && fallbackModel !== model) {
+      console.warn(`[LLM Academic] ${model} failed, retrying with ${fallbackModel}`);
+      try {
+        const resp = await Promise.race([
+          oai.chat.completions.create({
+            model: fallbackModel,
+            messages: [
+              { role: 'system', content: systemPrompt },
+              { role: 'user', content: sentences.map((s, i) => `[${i}] ${s}`).join('\n').slice(0, 6000) },
+            ],
+            temperature: 0.7,
+            max_tokens: 3000,
+          }),
+          new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error('Fallback phase timed out')), timeoutMs)
+          ),
+        ]);
+        const raw = resp.choices[0]?.message?.content?.trim() ?? '';
+        const cleaned = raw.replace(/^```(?:json)?\s*\n?/i, '').replace(/\n?```\s*$/i, '').trim();
+        const parsed = JSON.parse(cleaned);
+        if (Array.isArray(parsed) && parsed.length === sentences.length) {
+          return parsed.map((s: unknown, i: number) =>
+            typeof s === 'string' && s.trim().length > 0 ? s.trim() : sentences[i]
+          );
+        }
+      } catch (fallbackErr) {
+        console.warn(`[LLM Academic] Fallback ${fallbackModel} also failed: ${fallbackErr instanceof Error ? fallbackErr.message : fallbackErr}`);
+      }
+    }
     return sentences;
   }
 }
 
 /**
  * 5-Phase LLM Academic Humanizer.
- * Processes all sentences through GPT-4o-mini in 3 batched API calls (~6s total).
+ * Processes all sentences through Groq chat models in 3 batched API calls (~6s total).
  * Returns fully humanized text that reads like expert student writing.
  */
 export async function llmAcademicHumanize(
   text: string,
   maxTotalMs: number = 10000,
 ): Promise<{ humanized: string; stats: { mode: string; total_sentences: number; avg_change_ratio: number; met_threshold: number; threshold_ratio: number } }> {
-  const { client: oai, model } = makeLLMClient();
+  const { client: oai, model, fallbackModel } = makeLLMClient();
   const sentences = robustSentenceSplit(text);
   const start = Date.now();
   const perPhaseTimeout = Math.floor(maxTotalMs / 3); // ~5s per phase batch
@@ -147,18 +175,18 @@ export async function llmAcademicHumanize(
   console.log(`[LLM Academic] Starting 5-phase humanization: ${sentences.length} sentences`);
 
   // Phase 1: Deep structural rewrite
-  let current = await batchPhase(oai, sentences, PHASE_1_SYSTEM, perPhaseTimeout, model);
+  let current = await batchPhase(oai, sentences, PHASE_1_SYSTEM, perPhaseTimeout, model, fallbackModel);
   console.log(`[LLM Academic] Phase 1 complete (${Date.now() - start}ms)`);
 
   if (Date.now() - start < maxTotalMs - 3000) {
     // Phases 2-3: Phrase injection + synonym replacement (combined)
-    current = await batchPhase(oai, current, PHASE_2_3_SYSTEM, perPhaseTimeout, model);
+    current = await batchPhase(oai, current, PHASE_2_3_SYSTEM, perPhaseTimeout, model, fallbackModel);
     console.log(`[LLM Academic] Phases 2-3 complete (${Date.now() - start}ms)`);
   }
 
   if (Date.now() - start < maxTotalMs - 2000) {
     // Phases 4-5: -ing forms + voice shuffle (combined)
-    current = await batchPhase(oai, current, PHASE_4_5_SYSTEM, perPhaseTimeout, model);
+    current = await batchPhase(oai, current, PHASE_4_5_SYSTEM, perPhaseTimeout, model, fallbackModel);
     console.log(`[LLM Academic] Phases 4-5 complete (${Date.now() - start}ms)`);
   }
 
