@@ -169,11 +169,11 @@ export function Sidebar({ open, onClose }: { open?: boolean; onClose?: () => voi
         <div className="relative overflow-hidden rounded-xl border border-sidebar-border bg-gradient-to-br from-sidebar-accent/60 to-transparent p-4">
           <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Monthly Usage</div>
           <div className="mt-2 flex items-baseline gap-1">
-            <span className="text-xl font-semibold text-sidebar-foreground tabular-nums">{usageLoading ? '—' : (usage?.wordsUsed ?? 0).toLocaleString()}</span>
-            <span className="text-xs text-muted-foreground">/ {usageLoading ? '—' : (usage?.wordsLimit ?? 0).toLocaleString()}</span>
+            <span className="text-xl font-semibold text-sidebar-foreground tabular-nums">{usageLoading ? '—' : (usage?.monthlyUsed ?? 0).toLocaleString()}</span>
+            <span className="text-xs text-muted-foreground">/ {usageLoading ? '—' : (usage?.monthlyLimit ?? 0).toLocaleString()}</span>
           </div>
           <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-muted">
-            <div className="h-full rounded-full bg-gradient-to-r from-primary to-cyan-500 transition-all" style={{ width: `${usage ? Math.min(100, Math.round((usage.wordsUsed / Math.max(1, usage.wordsLimit)) * 100)) : 0}%` }} />
+            <div className="h-full rounded-full bg-gradient-to-r from-primary to-cyan-500 transition-all" style={{ width: `${usage ? Math.min(100, Math.round(((usage.monthlyUsed ?? 0) / Math.max(1, usage.monthlyLimit ?? 0)) * 100)) : 0}%` }} />
           </div>
           <Link
             href="/pricing"

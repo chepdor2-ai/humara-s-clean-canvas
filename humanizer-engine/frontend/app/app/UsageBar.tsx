@@ -6,6 +6,8 @@ import { supabase } from '../../lib/supabase';
 interface UsageData {
   wordsUsed: number;
   wordsLimit: number;
+  monthlyUsed: number;
+  monthlyLimit: number;
   daysRemaining: number;
   planName: string;
 }
@@ -61,10 +63,16 @@ function parseUsageResponse(data: any): UsageData {
   const planName = String(data.plan_name || 'Free');
   const isFree = planName.trim().toLowerCase() === 'free';
   const totalLimit = rawLimit > 0 ? rawLimit : (isFree ? 1000 : 0);
+  const daysRemaining = Number(data.days_remaining || 0);
+  const cycleDays = daysRemaining > 0 ? Math.max(1, Math.min(30, daysRemaining)) : 30;
+  const monthlyLimit = totalLimit * 30;
+  const monthlyUsed = Math.min(monthlyLimit, Math.max(0, totalUsed + (30 - cycleDays) * totalLimit));
   return {
     wordsUsed: totalUsed,
     wordsLimit: totalLimit,
-    daysRemaining: data.days_remaining || 0,
+    monthlyUsed,
+    monthlyLimit,
+    daysRemaining,
     planName,
   };
 }
@@ -93,7 +101,14 @@ async function fetchUsageData(accessToken: string | undefined, userId: string): 
   return null;
 }
 
-const FREE_DEFAULTS: UsageData = { wordsUsed: 0, wordsLimit: 1000, daysRemaining: 0, planName: 'Free' };
+const FREE_DEFAULTS: UsageData = {
+  wordsUsed: 0,
+  wordsLimit: 1000,
+  monthlyUsed: 0,
+  monthlyLimit: 30000,
+  daysRemaining: 0,
+  planName: 'Free',
+};
 
 function useUsageInternal() {
   const { user, session } = useAuth();

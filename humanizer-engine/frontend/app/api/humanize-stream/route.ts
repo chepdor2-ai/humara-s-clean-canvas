@@ -202,7 +202,7 @@ export async function POST(req: Request) {
     const adminEmails = (process.env.ADMIN_EMAILS || '').split(',').map(e => e.trim().toLowerCase()).filter(Boolean);
     const isAdmin = userEmail ? adminEmails.includes(userEmail.toLowerCase()) : false;
 
-    // Detect premium plan — premium users skip quota checks and usage deduction
+    // Track plan type (for telemetry/UI only). Quotas are enforced for all non-admin users.
     let isPremiumPlan = false;
 
     if (userId && !isAdmin) {
@@ -220,26 +220,24 @@ export async function POST(req: Request) {
           isPremiumPlan = planName.trim().toLowerCase() !== 'free';
         }
 
-        // Premium plans skip quota checks entirely
-        if (!isPremiumPlan) {
-          // Default free-tier limits when RPC fails or missing
-          let totalUsed = 0;
-          let totalLimit = 1000;
+        // Enforce quota for every non-admin user
+        // Default free-tier limits when RPC fails or missing
+        let totalUsed = 0;
+        let totalLimit = 1000;
 
-          if (!statsError && stats) {
-            totalUsed = (stats.words_used_fast || 0) + (stats.words_used_stealth || 0);
-            const rawLimit = (stats.words_limit_fast || 0) + (stats.words_limit_stealth || 0);
-            // Use DB limit if user has active subscription, otherwise free tier (1000)
-            totalLimit = rawLimit > 0 ? rawLimit : 1000;
-          }
+        if (!statsError && stats) {
+          totalUsed = (stats.words_used_fast || 0) + (stats.words_used_stealth || 0);
+          const rawLimit = (stats.words_limit_fast || 0) + (stats.words_limit_stealth || 0);
+          // Use DB limit if user has active subscription, otherwise free tier (1000)
+          totalLimit = rawLimit > 0 ? rawLimit : 1000;
+        }
 
-          const remaining = Math.max(0, totalLimit - totalUsed);
-          if (remaining < inputWordCount) {
-            return new Response(
-              'data: ' + JSON.stringify({ type: 'error', error: `Word limit reached. ${remaining} words remaining of ${totalLimit} daily words.` }) + '\n\n',
-              { status: 200, headers: { 'Content-Type': 'text/event-stream' } }
-            );
-          }
+        const remaining = Math.max(0, totalLimit - totalUsed);
+        if (remaining < inputWordCount) {
+          return new Response(
+            'data: ' + JSON.stringify({ type: 'error', error: `Word limit reached. ${remaining} words remaining of your daily ${totalLimit} words.` }) + '\n\n',
+            { status: 200, headers: { 'Content-Type': 'text/event-stream' } }
+          );
         }
       } catch (err) {
         console.error('Quota pre-check error:', err);
@@ -1740,8 +1738,8 @@ export async function POST(req: Request) {
                 output_ai_score: 0,
               });
 
-              // Premium/admin users skip usage deduction
-              if (isAdmin || isPremiumPlan) {
+              // Admin users are unlimited; all other users are metered
+              if (isAdmin) {
                 const docResult = await docPromise;
                 if (docResult.error) console.error('Document insert failed:', docResult.error.message, docResult.error.details);
               } else {
