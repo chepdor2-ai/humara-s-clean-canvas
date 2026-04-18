@@ -105,6 +105,12 @@ export const ENGINE_CATALOG: EngineCatalogEntry[] = [
     description: 'Forensic AI-signal destroyer — pure TypeScript, no LLM',
     tier: 'developer',
   },
+  {
+    id: 'phantom',
+    name: 'Phantom',
+    description: 'Humara 2.4 + AntiPangram forensic stealth — zero Nuru',
+    tier: 'business',
+  },
 ];
 
 function readConfiguredEnv(key: EnvKey): string | undefined {

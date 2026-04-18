@@ -876,6 +876,15 @@ export async function POST(req: Request) {
       humanized = runHumara20(normalizedText);
     } else if (engine === 'humara_v3_3') {
       humanized = await runHumara24(normalizedText);
+    } else if (engine === 'phantom') {
+      // Phantom: Humara 2.4 core → AntiPangram forensic cleanup only (no Nuru, no universal post-processing)
+      humanized = await runHumara24(normalizedText);
+      const { antiPangramSimple } = await import('@/lib/engine/antipangram');
+      humanized = antiPangramSimple(
+        humanized,
+        (strength ?? 'strong') as 'light' | 'medium' | 'strong',
+        (tone ?? 'academic') as 'academic' | 'professional' | 'casual' | 'neutral',
+      );
     } else if (engine === 'ninja_3') {
       // Ninja 3 (Deep Kill Alpha): Wikipedia → Humara 2.0 → Smart Nuru
       const stage1 = await runGuarded('ninja_3_stage_1', () => runWikipediaClean(normalizedText), normalizedText);
@@ -1049,13 +1058,13 @@ export async function POST(req: Request) {
       });
     }
 
-    const ozoneKeywordRestoreOnly = engine === 'ozone';
+    const ozoneKeywordRestoreOnly = engine === 'ozone' || engine === 'phantom';
 
     // ═══════════════════════════════════════════════════════════════
     // UNIVERSAL NURU POST-PROCESSING: Non-LLM Deep AI Clean
-    // Applies to ALL engines EXCEPT ozone (Humara 2.1).
+    // Applies to ALL engines EXCEPT ozone (Humara 2.1) and phantom.
     // ═══════════════════════════════════════════════════════════════
-    if (engine !== 'ozone') {
+    if (engine !== 'ozone' && engine !== 'phantom') {
       const nuruPostStart = Date.now();
       humanized = applySmartNuruPolish(humanized, 15);
 

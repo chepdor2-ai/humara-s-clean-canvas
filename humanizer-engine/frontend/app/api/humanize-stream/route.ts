@@ -319,6 +319,7 @@ export async function POST(req: Request) {
             ninja_2: 'Ninja 2', ninja_3: 'Ninja 3', ninja_4: 'Ninja 4', ninja_5: 'Ninja 5',
             ghost_trial_2: 'Ghost Trial', ghost_trial_2_alt: 'Ghost Trial',
             conscusion_1: 'Conscusion', conscusion_12: 'Conscusion',
+            phantom: 'Phantom',
             dipper: 'Dipper', humarin: 'Humarin', oxygen3: 'Oxygen 3', oxygen_t5: 'Oxygen T5',
             fast_v11: 'Fast V11', humara_v1_3: 'Humara 1.3', ghost_mini_v1_2: 'Ghost Mini',
           };
@@ -709,7 +710,7 @@ export async function POST(req: Request) {
 
           // ── Full-text engines (Ozone / Humara 2.1, Easy / Humara 2.2) ──
           // These LLM APIs work best on the entire text, not sentence-by-sentence.
-          const FULL_TEXT_ENGINES = new Set(['easy', 'ozone', 'king', 'ghost_pro_wiki', 'humara_v3_3']);
+          const FULL_TEXT_ENGINES = new Set(['easy', 'ozone', 'king', 'ghost_pro_wiki', 'humara_v3_3', 'phantom']);
           let sentenceResults: string[];
 
           if (FULL_TEXT_ENGINES.has(eng)) {
@@ -720,7 +721,7 @@ export async function POST(req: Request) {
               fullResult = kingResult.humanized;
             } else if (eng === 'ghost_pro_wiki') {
               fullResult = await runWikipedia(normalizedText);
-            } else if (eng === 'humara_v3_3') {
+            } else if (eng === 'humara_v3_3' || eng === 'phantom') {
               fullResult = await runHumara24(normalizedText);
             } else if (eng === 'easy') {
               fullResult = (await runHumara22(normalizedText));
@@ -1187,20 +1188,38 @@ export async function POST(req: Request) {
             await flushDelay(30);
           }
 
+          // ── Phantom: apply AntiPangram forensic cleanup (sole post-engine step) ──
+          if (eng === 'phantom') {
+            sendSSE(controller, { type: 'stage', stage: 'AntiPangram Forensic Clean' });
+            await flushDelay(10);
+            const { antiPangramSimple } = await import('@/lib/engine/antipangram');
+            humanized = antiPangramSimple(
+              humanized,
+              (strength ?? 'strong') as 'light' | 'medium' | 'strong',
+              (tone ?? 'academic') as 'academic' | 'professional' | 'casual' | 'neutral',
+            );
+            latestHumanized = humanized;
+            const { sentences: phantomSents } = splitIntoIndexedSentences(humanized);
+            await emitSentencesStaggered(controller, phantomSents, 'AntiPangram Forensic Clean', 20);
+            await flushDelay(20);
+            console.log(`[Phantom] AntiPangram complete: ${humanized.split(/\s+/).length} words`);
+          }
+
           // Detector + input analysis — needed for both post-processing and final detection
           const detector = getDetector();
           const inputAnalysis = detector.analyze(text);
 
           // ═══════════════════════════════════════════════════════════════
           // UNIVERSAL Nuru x5 + GPT-4o-mini DETECTION POST-PROCESSING
-          // Applies to ALL engines EXCEPT ozone (Humara 2.1).
+          // Applies to ALL engines EXCEPT ozone (Humara 2.1) and phantom.
           // Ozone only gets synonym recovery (applyAIWordKill + synonymReplace)
           // via the restructuring pass — no heavy Nuru iterations.
+          // Phantom uses AntiPangram instead of Nuru for post-processing.
           // Engines that already ran Nuru in their phase pipeline skip the
           // 5 baseline passes but still get GPT detection + targeted cleanup.
           // Hard time budget: 10 seconds max.
           // ═══════════════════════════════════════════════════════════════
-          if (eng !== 'ozone' && !(deadlineReached || Date.now() - startTime > DEADLINE_MS - 12000)) {
+          if (eng !== 'ozone' && eng !== 'phantom' && !(deadlineReached || Date.now() - startTime > DEADLINE_MS - 12000)) {
             const nuruPostStart = Date.now();
             const NURU_POST_DEADLINE_MS = 10_000; // 10s hard budget
             const nuruPostTimeOk = () => Date.now() - nuruPostStart < NURU_POST_DEADLINE_MS && !(deadlineReached || Date.now() - startTime > DEADLINE_MS - 8000);
@@ -1287,7 +1306,7 @@ export async function POST(req: Request) {
             }
           }
 
-          const ozoneKeywordRestoreOnly = eng === 'ozone';
+          const ozoneKeywordRestoreOnly = eng === 'ozone' || eng === 'phantom';
 
           // ── POST-PROCESSING ──
           const prePostProcessSnapshot = humanized;
@@ -1489,8 +1508,8 @@ export async function POST(req: Request) {
           }
 
           // Last-mile meaning validation (2 iterations max)
-          // Skip for ozone — user only wants synonym recovery, not full post-processing.
-          if (!isDeepKill && eng !== 'ozone') {
+          // Skip for ozone/phantom — they bypass universal post-processing entirely.
+          if (!isDeepKill && eng !== 'ozone' && eng !== 'phantom') {
             const { sentences: origSentsM } = splitIntoIndexedSentences(normalizedText);
             const isHeadingM = (s: string) => looksLikeHeadingLine(s.trim());
             const STOPWORDS_M = new Set(['the','a','an','is','are','was','were','be','been','being','have','has','had','do','does','did','will','would','could','should','may','might','can','shall','to','of','in','for','on','with','at','by','from','as','into','through','during','before','after','above','below','between','out','off','over','under','again','further','then','once','here','there','when','where','why','how','all','each','every','both','few','more','most','other','some','such','no','nor','not','only','own','same','so','than','too','very','just','because','but','and','or','if','while','that','this','these','those','it','its','they','them','their','we','our','he','she','his','her','which','what','who','whom','about','also']);
