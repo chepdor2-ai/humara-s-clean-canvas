@@ -99,6 +99,12 @@ export const ENGINE_CATALOG: EngineCatalogEntry[] = [
     description: 'Encyclopedic neutral point-of-view mode',
     tier: 'developer',
   },
+  {
+    id: 'antipangram',
+    name: 'AntiPangram',
+    description: 'Forensic AI-signal destroyer — pure TypeScript, no LLM',
+    tier: 'developer',
+  },
 ];
 
 function readConfiguredEnv(key: EnvKey): string | undefined {

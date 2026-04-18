@@ -1028,6 +1028,15 @@ export async function POST(req: Request) {
       const o3Mode = effectiveStrength === 'light' ? 'fast' : effectiveStrength === 'strong' ? 'quality' : 'fast';
       const o3Result = await oxygen3Humanize(normalizedText, o3Mode, tone ?? 'neutral');
       humanized = o3Result.humanized;
+    } else if (engine === 'antipangram') {
+      // AntiPangram: Forensic AI-signal-aware pure-TypeScript humanizer
+      // Specifically engineered to defeat Pangram and similar detectors
+      const { antiPangramSimple } = await import('@/lib/engine/antipangram');
+      humanized = antiPangramSimple(
+        normalizedText,
+        (strength ?? 'strong') as 'light' | 'medium' | 'strong',
+        (tone ?? 'academic') as 'academic' | 'professional' | 'casual' | 'neutral',
+      );
     } else {
       // Ghost Mini: Statistical-only pipeline (no LLM)
       humanized = humanize(normalizedText, {
@@ -1578,6 +1587,10 @@ export async function POST(req: Request) {
         }
       }
     }
+
+    // Detector feedback/Oxygen polishing can reintroduce stray Title Case.
+    // Run the body-text capitalization repair again after those passes.
+    humanized = fixMidSentenceCapitalization(humanized, text);
     }
 
     // Generate per-sentence alternatives (3 candidates each, best already picked by engines)

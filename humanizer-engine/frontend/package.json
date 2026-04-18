@@ -7,6 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "test:validation-post-process": "npx tsx lib/engine/validation-post-process.test.ts",
+    "test:validation-post-process:api": "npx tsx lib/engine/validation-post-process.api-test.ts",
     "lint:automation": "eslint \"app/api/health/route.ts\" \"app/api/v1/status/route.ts\" \"lib/ops/runtime-health.ts\" \"scripts/*.mjs\" \"deploy-helper.js\" \"deploy-all.js\"",
     "check:env": "node scripts/check-env.mjs --profile=deploy",
     "check:env:ci": "node scripts/check-env.mjs --profile=ci",

@@ -1720,6 +1720,10 @@ export async function POST(req: Request) {
           // Final cleanup: collapse double spaces
           humanized = humanized.replace(/ {2,}/g, ' ');
 
+          // Final safety net after Oxygen polish and external cleanup.
+          // These late passes can reintroduce Title Case inside body text.
+          humanized = fixMidSentenceCapitalization(humanized, text);
+
           // ── OUTPUT SIZE MONITORING ──────────────────────────────────
           {
             const _capInputWC = text.trim().split(/\s+/).filter(Boolean).length;

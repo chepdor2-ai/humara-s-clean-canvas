@@ -5,6 +5,8 @@
  * after humanization. Used across all humanizer engines.
  */
 
+import nlp from 'compromise';
+
 interface ValidationResult {
   isValid: boolean;
   issues: string[];
@@ -27,6 +29,11 @@ interface SentenceValidation {
   isMissing: boolean;
   wordChangeRatio: number;
 }
+
+type ProperNounSignals = {
+  properNouns: Set<string>;
+  properPhrases: string[];
+};
 
 /**
  * Split text into sentences with robust handling.
@@ -496,145 +503,260 @@ function isAbbreviationOrProper(word: string): boolean {
   return false;
 }
 
-/**
- * Extract proper nouns that genuinely appear mid-sentence in the ORIGINAL text.
- * Only picks up words that are capitalized in non-heading, mid-sentence positions
- * AND are not in the common-words blacklist.
- */
-function extractGenuineProperNouns(originalText: string): Set<string> {
-  const proper = new Set<string>();
-  if (!originalText) return proper;
-
-  // Collect all lowercase occurrences of words (mid-sentence, non-initial)
-  const alsoLowercase = new Set<string>();
-  const paragraphs = originalText.split(/\n\s*\n/);
-  for (const para of paragraphs) {
-    const lines = para.split(/\n/).map(l => l.trim()).filter(Boolean);
-    for (const line of lines) {
-      if (isHeadingLine(line)) continue;
-      const sentences = line.split(/(?<=[.!?])\s+/);
-      for (const sent of sentences) {
-        const words = sent.split(/\s+/);
-        for (let i = 1; i < words.length; i++) {
-          const w = words[i].replace(/[^a-zA-Z'-]/g, '');
-          if (!w || w.length < 2) continue;
-          if (/^[a-z]/.test(w)) {
-            alsoLowercase.add(w.toLowerCase());
-          }
-        }
-      }
-    }
-  }
-
-  for (const para of paragraphs) {
-    const lines = para.split(/\n/).map(l => l.trim()).filter(Boolean);
-    for (const line of lines) {
-      // Skip heading lines
-      if (isHeadingLine(line)) continue;
-
-      // Split into rough sentences
-      const sentences = line.split(/(?<=[.!?])\s+/);
-      for (const sent of sentences) {
-        const words = sent.split(/\s+/);
-        for (let i = 1; i < words.length; i++) { // skip first word (sentence-initial)
-          const w = words[i].replace(/[^a-zA-Z'-]/g, '');
-          if (!w || w.length < 2) continue;
-          if (/^[A-Z][a-z]/.test(w) && !ALWAYS_LOWERCASE_MID_SENTENCE.has(w.toLowerCase())) {
-            // Only treat as proper noun if it NEVER appears lowercase in the text.
-            // Words like "health" (from "World Health Organization") or "women"
-            // (from "UN Women") that also appear lowercase are common nouns.
-            if (!alsoLowercase.has(w.toLowerCase())) {
-              proper.add(w);
-            }
-          }
-        }
-      }
-    }
-  }
-  return proper;
+function isSimpleTitleCaseWord(word: string): boolean {
+  const stripped = word.replace(/[^a-zA-Z'-]/g, '');
+  if (!stripped) return false;
+  return /^[A-Z][a-z]+(?:['-][A-Za-z]+)*$/.test(stripped);
 }
 
-/**
- * Extract multi-word proper noun phrases from original text.
- * Finds sequences of 2+ capitalized words mid-sentence, allowing small
- * connector words (on, and, of, for, the) between capitalized words.
- * E.g. "World Health Organization", "United Nations Office on Drugs and Crime",
- * "Sustainable Development Goals", "UN Women".
- */
-function extractProperNounPhrases(originalText: string): string[] {
+const PROPER_NOUN_CONNECTORS = new Set([
+  'on', 'and', 'of', 'for', 'the', 'in', 'at', 'to', 'de', 'la', 'le', 'du', 'des'
+]);
+
+const PROPER_NOUN_HINT_WORDS = new Set([
+  'academy', 'agency', 'association', 'authority', 'bank', 'bureau', 'center',
+  'centre', 'college', 'committee', 'commission', 'conference', 'council',
+  'court', 'department', 'directorate', 'division', 'foundation', 'fund',
+  'government', 'group', 'institute', 'ministry', 'office', 'organization',
+  'programme', 'program', 'republic', 'school', 'society', 'states', 'union',
+  'university'
+]);
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function cleanEntityWord(word: string): string {
+  return word.replace(/[^a-zA-Z'-]/g, '');
+}
+
+function normalizeExtractedPhrase(phrase: string): string {
+  return phrase
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/[.,;:!?]+$/g, '');
+}
+
+function getSignificantPhraseWords(phrase: string): string[] {
+  return normalizeExtractedPhrase(phrase)
+    .split(/\s+/)
+    .map(cleanEntityWord)
+    .filter(Boolean)
+    .filter(word => !PROPER_NOUN_CONNECTORS.has(word.toLowerCase()));
+}
+
+function isAcronymWord(word: string): boolean {
+  const stripped = word.replace(/[^A-Z0-9&/-]/g, '');
+  return stripped.length >= 2 && stripped === stripped.toUpperCase() && /[A-Z]/.test(stripped);
+}
+
+function buildFlexiblePhrasePattern(phrase: string): string {
+  return normalizeExtractedPhrase(phrase)
+    .split(/\s+/)
+    .map(escapeRegExp)
+    .join('\\s+');
+}
+
+function isCitationNamePhrase(phrase: string): boolean {
+  const normalized = normalizeExtractedPhrase(phrase);
+  if (!normalized) return false;
+
+  return /^[A-Z][a-z]+(?:\s+(?:&|and)\s+[A-Z][a-z]+)+$/.test(normalized)
+    || /^[A-Z][a-z]+\s+et\s+al\.?$/i.test(normalized);
+}
+
+function isPhraseFollowedByAcronym(originalText: string, phrase: string): boolean {
+  const normalized = normalizeExtractedPhrase(phrase);
+  if (!normalized) return false;
+
+  return new RegExp(`${buildFlexiblePhrasePattern(normalized)}\\s*\\([A-Z][A-Z0-9&/-]{2,}\\)`).test(originalText);
+}
+
+function extractCitationPhrases(originalText: string): string[] {
+  const citations = new Set<string>();
+  const patterns = [
+    /\b([A-Z][a-z]+(?:\s+(?:&|and)\s+[A-Z][a-z]+)+)(?=\s*\(\d{4}\))/g,
+    /\b([A-Z][a-z]+\s+et\s+al\.?)(?=\s*\(\d{4}\))/gi,
+  ];
+
+  for (const pattern of patterns) {
+    for (const match of originalText.matchAll(pattern)) {
+      const phrase = normalizeExtractedPhrase(match[1] || '');
+      if (phrase) citations.add(phrase);
+    }
+  }
+
+  return [...citations];
+}
+
+function collectCapitalizedPhraseCandidates(originalText: string): string[] {
   const phrases: string[] = [];
   if (!originalText) return phrases;
 
-  const CONNECTORS = new Set(['on', 'and', 'of', 'for', 'the', 'in', 'at', 'to', 'de', 'la', 'le', 'du', 'des']);
-
   const paragraphs = originalText.split(/\n\s*\n/);
   for (const para of paragraphs) {
-    const lines = para.split(/\n/).map(l => l.trim()).filter(Boolean);
+    const lines = para.split(/\n/).map(line => line.trim()).filter(Boolean);
     for (const line of lines) {
       if (isHeadingLine(line)) continue;
 
-      // Split into sentences
       const sentences = line.split(/(?<=[.!?])\s+/);
-      for (const sent of sentences) {
-        const words = sent.split(/\s+/);
+      for (const sentence of sentences) {
+        const words = sentence.split(/\s+/);
         if (words.length < 2) continue;
 
-        // Start from index 0 for phrases — we'll validate that at least
-        // one non-initial word is capitalized to confirm it's a proper noun phrase
-        let i = 0;
-        while (i < words.length) {
-          const cleanWord = (w: string) => w.replace(/[^a-zA-Z'-]/g, '');
-          const isCapitalized = (w: string) => {
-            const c = cleanWord(w);
-            if (!c || c.length < 1) return false;
-            return /^[A-Z]/.test(c);
+        let index = 0;
+        while (index < words.length) {
+          const isCapitalized = (word: string) => {
+            const cleaned = cleanEntityWord(word);
+            return cleaned.length > 0 && /^[A-Z]/.test(cleaned);
           };
-          const isConnector = (w: string) => CONNECTORS.has(cleanWord(w).toLowerCase());
+          const isConnector = (word: string) => PROPER_NOUN_CONNECTORS.has(cleanEntityWord(word).toLowerCase());
 
-          if (isCapitalized(words[i])) {
-            // Start collecting a potential phrase, allowing connectors between caps
-            const phraseWords = [words[i]];
-            let j = i + 1;
-            while (j < words.length) {
-              if (isCapitalized(words[j])) {
-                phraseWords.push(words[j]);
-                j++;
-              } else if (isConnector(words[j]) && j + 1 < words.length && isCapitalized(words[j + 1])) {
-                // Allow connector if followed by another capitalized word
-                phraseWords.push(words[j]);
-                phraseWords.push(words[j + 1]);
-                j += 2;
-              } else {
-                break;
-              }
-            }
-
-            // Need at least 2 capitalized words in the phrase
-            const capCount = phraseWords.filter(w => isCapitalized(w)).length;
-            // If phrase starts at sentence beginning (i===0), require 2+ capitalized words
-            // beyond the first to be sure it's a proper noun, not just sentence-initial cap.
-            // Exception: if first word is all-caps (acronym like "UN"), it's a proper noun.
-            const firstIsAcronym = cleanWord(phraseWords[0]).length >= 2 
-              && cleanWord(phraseWords[0]) === cleanWord(phraseWords[0]).toUpperCase();
-            
-            if (capCount >= 2 && (i > 0 || firstIsAcronym || capCount >= 3)) {
-              const phrase = phraseWords.join(' ');
-              phrases.push(phrase);
-            }
-            i = j;
-          } else {
-            i++;
+          if (!isCapitalized(words[index])) {
+            index++;
+            continue;
           }
+
+          const phraseWords = [words[index]];
+          let nextIndex = index + 1;
+
+          while (nextIndex < words.length) {
+            if (isCapitalized(words[nextIndex])) {
+              phraseWords.push(words[nextIndex]);
+              nextIndex++;
+              continue;
+            }
+
+            if (isConnector(words[nextIndex]) && nextIndex + 1 < words.length && isCapitalized(words[nextIndex + 1])) {
+              phraseWords.push(words[nextIndex]);
+              phraseWords.push(words[nextIndex + 1]);
+              nextIndex += 2;
+              continue;
+            }
+
+            break;
+          }
+
+          const capitalizedWordCount = phraseWords.filter(word => isCapitalized(word)).length;
+          const firstWord = cleanEntityWord(phraseWords[0]);
+          const firstIsAcronym = firstWord.length >= 2 && firstWord === firstWord.toUpperCase();
+
+          if (capitalizedWordCount >= 2 && (index > 0 || firstIsAcronym || capitalizedWordCount >= 3)) {
+            const phrase = normalizeExtractedPhrase(phraseWords.join(' '));
+            if (phrase) phrases.push(phrase);
+          }
+
+          index = nextIndex;
         }
       }
     }
   }
 
-  // Deduplicate, prefer longest phrases
-  const unique = [...new Set(phrases)];
-  // Sort longest first so longer phrases get re-applied before shorter subphrases
-  unique.sort((a, b) => b.length - a.length);
-  return unique;
+  return [...new Set(phrases)];
+}
+
+function isHighConfidenceProperNounPhrase(
+  phrase: string,
+  anchorWords: Set<string>,
+  originalText: string,
+): boolean {
+  const significantWords = getSignificantPhraseWords(phrase);
+  if (significantWords.length < 2) return false;
+
+  if (isCitationNamePhrase(phrase)) return true;
+  if (isPhraseFollowedByAcronym(originalText, phrase)) return true;
+  if (significantWords.some(word => isAcronymWord(word))) return true;
+  if (significantWords.some(word => PROPER_NOUN_HINT_WORDS.has(word.toLowerCase()))) return true;
+  if (significantWords.some(word => anchorWords.has(word.toLowerCase()))) return true;
+
+  return false;
+}
+
+function getTokenCore(token: string): string {
+  const lead = token.match(/^([^a-zA-Z0-9]*)/)?.[1] || '';
+  const trail = token.match(/([^a-zA-Z0-9]*)$/)?.[1] || '';
+  return token.slice(lead.length, token.length - (trail.length || 0));
+}
+
+function getNeighborToken(tokens: string[], startIndex: number, step: -1 | 1): string {
+  for (let index = startIndex + step; index >= 0 && index < tokens.length; index += step) {
+    const token = tokens[index];
+    if (!token || /^\s+$/.test(token)) continue;
+    return token;
+  }
+  return '';
+}
+
+/**
+ * Extract only high-confidence proper-noun signals from the original text.
+ * This intentionally rejects arbitrary title-cased input so contaminated source
+ * text does not poison the cleanup pass.
+ */
+function extractProperNounSignals(originalText: string): ProperNounSignals {
+  const properNouns = new Set<string>();
+  const candidatePhrases = new Set<string>();
+  if (!originalText) {
+    return { properNouns, properPhrases: [] };
+  }
+
+  const placeOrPersonAnchors = new Set<string>();
+  const doc = nlp(originalText);
+
+  const addSingleWordCandidate = (word: string, anchor = false) => {
+    const cleaned = cleanEntityWord(word);
+    if (!cleaned || cleaned.length < 2) return;
+    if (ALWAYS_LOWERCASE_MID_SENTENCE.has(cleaned.toLowerCase())) return;
+
+    properNouns.add(cleaned);
+    if (anchor) placeOrPersonAnchors.add(cleaned.toLowerCase());
+  };
+
+  const addEntityPhraseCandidate = (phrase: string, anchor = false) => {
+    const normalized = normalizeExtractedPhrase(phrase);
+    if (!normalized) return;
+
+    const significantWords = getSignificantPhraseWords(normalized);
+    if (significantWords.length === 0) return;
+
+    if (significantWords.length === 1) {
+      addSingleWordCandidate(significantWords[0], anchor);
+      return;
+    }
+
+    candidatePhrases.add(normalized);
+
+    if (anchor) {
+      for (const word of significantWords) {
+        placeOrPersonAnchors.add(word.toLowerCase());
+      }
+    }
+  };
+
+  for (const phrase of doc.people().out('array') as string[]) {
+    addEntityPhraseCandidate(phrase, true);
+  }
+
+  for (const phrase of doc.places().out('array') as string[]) {
+    addEntityPhraseCandidate(phrase, true);
+  }
+
+  for (const phrase of doc.organizations().out('array') as string[]) {
+    addEntityPhraseCandidate(phrase);
+  }
+
+  for (const phrase of extractCitationPhrases(originalText)) {
+    candidatePhrases.add(phrase);
+  }
+
+  for (const phrase of collectCapitalizedPhraseCandidates(originalText)) {
+    candidatePhrases.add(phrase);
+  }
+
+  const properPhrases = [...candidatePhrases]
+    .filter(phrase => isHighConfidenceProperNounPhrase(phrase, placeOrPersonAnchors, originalText))
+    .sort((left, right) => right.length - left.length);
+
+  return { properNouns, properPhrases };
 }
 
 /**
@@ -645,11 +767,9 @@ function extractProperNounPhrases(originalText: string): string[] {
 export function fixMidSentenceCapitalization(text: string, originalText?: string): string {
   if (!text || !text.trim()) return text;
 
-  // Extract genuine proper nouns from original text
-  const properNouns = originalText ? extractGenuineProperNouns(originalText) : new Set<string>();
-
-  // Extract multi-word proper noun phrases from original text (e.g. "World Health Organization")
-  const properNounPhrases = originalText ? extractProperNounPhrases(originalText) : [];
+  const { properNouns, properPhrases } = originalText
+    ? extractProperNounSignals(originalText)
+    : { properNouns: new Set<string>(), properPhrases: [] };
 
   // Also always preserve "I" as a word
   properNouns.add('I');
@@ -680,10 +800,8 @@ export function fixMidSentenceCapitalization(text: string, originalText?: string
   // After lowercasing common words, multi-word proper names like
   // "World Health Organization" may have become "World health organization".
   // This step restores them.
-  for (const phrase of properNounPhrases) {
-    // Build a case-insensitive regex to find the lowercased version
-    const escaped = phrase.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const regex = new RegExp(escaped, 'gi');
+  for (const phrase of properPhrases) {
+    const regex = new RegExp(buildFlexiblePhrasePattern(phrase), 'gi');
     result = result.replace(regex, phrase);
   }
 
@@ -717,7 +835,7 @@ function fixLineCapitalization(line: string, properNouns: Set<string>): string {
     const tokens = sentence.split(/(\s+)/);
     let isFirstWord = true;
 
-    return tokens.map(token => {
+    return tokens.map((token, tokenIndex) => {
       // Preserve whitespace tokens
       if (/^\s+$/.test(token)) return token;
 
@@ -765,7 +883,30 @@ function fixLineCapitalization(line: string, properNouns: Set<string>): string {
         return leadPunc + lower + trailPunc;
       }
 
-      // Leave unknown capitalized words as-is (may be proper nouns or part of proper noun phrases)
+      // Lower isolated Title Case words that were not protected above.
+      // Genuine proper nouns from the original text are restored earlier,
+      // and multi-word proper noun phrases are re-applied after line fixing.
+      if (isSimpleTitleCaseWord(core)) {
+        const prevToken = getNeighborToken(tokens, tokenIndex, -1).trim();
+        const nextToken = getNeighborToken(tokens, tokenIndex, 1).trim();
+        const prevCore = getTokenCore(prevToken).toLowerCase();
+        const nextCore = getTokenCore(nextToken).toLowerCase();
+
+        const isInlineNamePattern = prevToken === '&'
+          || nextToken === '&'
+          || nextCore === 'et'
+          || prevCore === 'et'
+          || nextCore === 'al'
+          || prevCore === 'al';
+
+        if (isInlineNamePattern) {
+          return token;
+        }
+
+        return leadPunc + lower + trailPunc;
+      }
+
+      // Preserve unusual mixed-case or symbol-bearing tokens.
       return token;
     }).join('');
   }).join(' ');

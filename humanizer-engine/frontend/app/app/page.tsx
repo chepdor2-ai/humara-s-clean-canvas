@@ -157,6 +157,7 @@ const ALL_ENGINES: EngineConfig[] = [
   { id: 'nuru_v2', label: 'Nuru Pure' },
   { id: 'ghost_pro_wiki', label: 'Academic Shield' },
   // Deep Signal Kill
+  { id: 'antipangram', label: 'AntiPangram' },
   { id: 'ninja_3', label: 'Deep Kill Alpha' },
   { id: 'ninja_2', label: 'Deep Kill Beta' },
   { id: 'ninja_5', label: 'Deep Kill Omega' },
@@ -168,6 +169,7 @@ const MODE_ENGINES: Record<ModeId, Set<string>> = {
   stealth_mode: new Set(['ninja_4', 'easy', 'ozone', 'ninja_1']),
   anti_gptzero: new Set(['humara_v3_3', 'oxygen', 'king', 'nuru_v2', 'ghost_pro_wiki']),
   deep_signal_kill: new Set([
+    'antipangram',
     'ninja_3',
     'ninja_2',
     'ninja_5',
@@ -192,6 +194,7 @@ const ENGINE_GUIDES: Record<string, string> = {
   nuru_v2: 'Purely non-LLM stealth engine. 10 iterative passes — no AI calls, no external APIs.',
   ghost_pro_wiki: 'Academic-style rewrite that sounds like encyclopedic human writing.',
 
+  antipangram: 'Forensic AI-signal destroyer. Pure TypeScript — no LLM, no API. Targets Pangram, GPTZero, and all major detectors with surgical precision.',
   ninja_3: 'Deep Kill: Wikipedia → Humara 2.0 → full Nuru. Aggressive AI signal suppression.',
   ninja_2: 'Deep Kill: Humara 2.1 → Humara 2.0 → full Nuru. Multi-API chain for deep cleaning.',
   ninja_5: 'Deep Kill: Humara 2.2 → Humara 2.4 → full Nuru. Maximum transformation depth.',
