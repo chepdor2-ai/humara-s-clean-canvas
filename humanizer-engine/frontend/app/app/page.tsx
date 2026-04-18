@@ -162,6 +162,7 @@ const ALL_ENGINES: EngineConfig[] = [
   { id: 'ninja_2', label: 'Deep Kill Beta' },
   { id: 'ninja_5', label: 'Deep Kill Omega' },
   { id: 'ghost_trial_2', label: 'Deep Kill Ghost' },
+  { id: 'phantom', label: 'Phantom' },
 ];
 
 type ModeId = 'stealth_mode' | 'anti_gptzero' | 'deep_signal_kill';
@@ -174,6 +175,7 @@ const MODE_ENGINES: Record<ModeId, Set<string>> = {
     'ninja_2',
     'ninja_5',
     'ghost_trial_2',
+    'phantom',
   ]),
 };
 const MODE_LABELS: Record<ModeId, string> = {
@@ -199,6 +201,7 @@ const ENGINE_GUIDES: Record<string, string> = {
   ninja_2: 'Deep Kill: Humara 2.1 → Humara 2.0 → full Nuru. Multi-API chain for deep cleaning.',
   ninja_5: 'Deep Kill: Humara 2.2 → Humara 2.4 → full Nuru. Maximum transformation depth.',
   ghost_trial_2: 'Deep Kill: Humara 2.4 → Humara 2.0 → full Nuru. Ghost-grade signal removal.',
+  phantom: 'LLM deep rewrite via Humara 2.4 followed by AntiPangram forensic cleanup. No Nuru post-processing — pure structural signal destruction.',
 };
 
 const DEFAULT_PROCESSING_MESSAGES = [

@@ -22,7 +22,7 @@ import type { ForensicProfile, SentenceProfile, DocumentContext } from './types'
 // CONNECTOR / TRANSITION DETECTION
 // ═══════════════════════════════════════════════════════════════════
 
-const FORMAL_CONNECTORS_RE = /^(?:Furthermore|Moreover|Additionally|Consequently|Nevertheless|Nonetheless|Subsequently|Accordingly|In contrast|By contrast|As a result|In addition|For example|For instance|On the other hand|In other words|To begin with|In particular|As such|In essence|In summary|In conclusion|Therefore|However|Thus|Hence|Indeed|Notably|Specifically|First and foremost|It is (?:important|crucial|essential|vital|worth noting) (?:to note |that )?)/i;
+const FORMAL_CONNECTORS_RE = /^(?:Furthermore|Moreover|Additionally|Consequently|Nevertheless|Nonetheless|Subsequently|Accordingly|In contrast|By contrast|As a result|In addition|For example|For instance|On the other hand|In other words|To begin with|In particular|As such|In essence|In summary|In conclusion|Therefore|However|Thus|Hence|Indeed|Notably|Specifically|Importantly|Evidently|Interestingly|Significantly|Crucially|Undeniably|Undoubtedly|Inevitably|Certainly|Clearly|Firstly|Secondly|Thirdly|Finally|Lastly|Above all|In this sense|In this regard|On this note|With this in mind|Building on this|Given this|Taken together|Taken as a whole|First and foremost|Last but not least|It is (?:important|crucial|essential|vital|worth noting|worth emphasizing|worth considering|noteworthy|imperative|critical|fundamental|evident|clear|apparent) (?:to note |to recognize |to understand |to acknowledge |to emphasize |that )?|It should be (?:noted|emphasized|highlighted|recognized|acknowledged|mentioned|stressed|pointed out) that|It must be (?:acknowledged|recognized|noted|understood|emphasized) that|It (?:can|could|may|might) be (?:argued|noted|observed|suggested|concluded|said) that)/i;
 
 const CAUSAL_CONNECTORS = /\b(?:because of this|as a result|consequently|therefore|thus|hence|accordingly|this leads? to|this results? in|this means that|which contributes? to|which leads? to)\b/gi;
 
@@ -30,7 +30,47 @@ const EVALUATIVE_PHRASES = /\b(?:one of the (?:major|most important|key|primary|
 
 const COMPOUND_ENUMERATION = /(?:\w+(?:,\s+\w+){2,},?\s+and\s+\w+)/gi;
 
-const ABSTRACT_NOMINALIZATIONS = /\b(?:functioning|regulation|stabilit(?:y|ies)|well-being|effectiveness|implementation|conceptualization|operationalization|utilization|facilitation|optimization|prioritization|establishment|development|enhancement|improvement|management|assessment|evaluation|interpretation|examination|exploration|investigation|consideration|determination|representation|manifestation|transformation|modification|diversification|categorization|identification|characterization|normalization|rationalization|institutionalization|marginalization|globalization|modernization|urbanization|specialization|generalization|formalization|internalization|externalization|commercialization|professionalization|decentralization|democratization|standardization|centralization|liberalization|privatization|socialization|visualization|initialization)\b/gi;
+const ABSTRACT_NOMINALIZATIONS = /\b(?:functioning|regulation|stabilit(?:y|ies)|well-being|effectiveness|implementation|conceptualization|operationalization|utilization|facilitation|optimization|prioritization|establishment|development|enhancement|improvement|management|assessment|evaluation|interpretation|examination|exploration|investigation|consideration|determination|representation|manifestation|transformation|modification|diversification|categorization|identification|characterization|normalization|rationalization|institutionalization|marginalization|globalization|modernization|urbanization|specialization|generalization|formalization|internalization|externalization|commercialization|professionalization|decentralization|democratization|standardization|centralization|liberalization|privatization|socialization|visualization|initialization|communication|collaboration|coordination|integration|documentation|presentation|distribution|organization|administration|configuration|participation|contribution|demonstration|experimentation|accommodation|appreciation|recommendation|achievement|advancement|alignment|allocation|application|articulation|assumption|authorization|calculation|clarification|classification|combination|compensation|confirmation|confrontation|construction|continuation|cooperation|creation|declaration|definition|delegation|description|differentiation|elimination|engagement|estimation|expectation|explanation|expression|formation|foundation|generation|indication|innovation|justification|limitation|motivation|observation|perception|performance|preparation|preservation|production|proliferation|qualification|recognition|reduction|restriction|specification|validation|variation|responsiveness|awareness|consciousness|connectedness|cohesiveness|competitiveness|inclusiveness|comprehensiveness|responsibilit(?:y|ies)|possibilit(?:y|ies)|accessibilit(?:y|ies)|sustainabilit(?:y|ies)|accountabilit(?:y|ies)|availabilit(?:y|ies)|flexibilit(?:y|ies)|complexit(?:y|ies)|diversit(?:y|ies)|capacit(?:y|ies)|vulnerabilit(?:y|ies)|productivit(?:y|ies)|creativit(?:y|ies)|adaptabilit(?:y|ies)|reliabilit(?:y|ies)|scalabilit(?:y|ies)|viabilit(?:y|ies)|necessit(?:y|ies)|priorit(?:y|ies)|continuit(?:y|ies)|ambiguit(?:y|ies)|uncertaint(?:y|ies))\b/gi;
+
+// ═══════════════════════════════════════════════════════════════════
+// PASSIVE VOICE DETECTION
+// be-verb + past participle — a systematic overuse pattern in AI writing
+// ═══════════════════════════════════════════════════════════════════
+
+const PASSIVE_VOICE_RE = /\b(?:is|are|was|were|has been|have been|had been|will be|would be|could be|should be|can be|may be|might be)\s+\w+(?:ed|en)\b/gi;
+
+// ═══════════════════════════════════════════════════════════════════
+// HEDGING / EPISTEMIC PHRASE DETECTION
+// Metacommentary phrases that appear at much higher rates in AI text.
+// Humans write directly; AI wraps statements in epistemic scaffolding.
+// ═══════════════════════════════════════════════════════════════════
+
+const HEDGING_PHRASES_RE = /\b(?:it is (?:important|crucial|essential|necessary|vital|worth noting|worth considering|noteworthy|imperative|critical|fundamental|key) (?:to|that)|it should be (?:noted|emphasized|highlighted|recognized|acknowledged|mentioned|stressed)|it (?:can|could|may|might|must) be (?:argued|noted|observed|suggested|concluded|inferred|understood|seen)|one (?:might|could|should|must) (?:argue|consider|note|recognize|acknowledge|observe|suggest)|it is (?:generally|widely|often|commonly|broadly|frequently) (?:accepted|recognized|acknowledged|believed|understood|observed)|it (?:has|have) been (?:shown|demonstrated|established|found|observed|noted|argued|suggested) that|as (?:previously|earlier|already) (?:noted|mentioned|discussed|outlined|highlighted|described))\b/gi;
+
+// ═══════════════════════════════════════════════════════════════════
+// AI VOCABULARY DENSITY
+// Words that appear at significantly higher rates in AI-generated text
+// vs human-written corpora. High density = strong AI signal.
+// ═══════════════════════════════════════════════════════════════════
+
+const AI_VOCABULARY_SET = new Set([
+  'utilize', 'utilizes', 'utilized', 'utilization',
+  'facilitate', 'facilitates', 'facilitated', 'facilitation',
+  'leverage', 'leverages', 'leveraged', 'leveraging',
+  'paramount', 'pivotal', 'multifaceted', 'nuanced', 'holistic',
+  'synergy', 'synergies', 'stakeholder', 'stakeholders',
+  'framework', 'paradigm', 'ecosystem', 'trajectory', 'landscape',
+  'transformative', 'unprecedented', 'comprehensive', 'robust',
+  'innovative', 'furthermore', 'moreover', 'additionally',
+  'consequently', 'subsequently', 'underpins', 'encompasses',
+  'delineates', 'elucidates', 'substantiates', 'corroborates',
+  'imperative', 'streamline', 'actionable', 'scalable',
+  'empower', 'empowers', 'empowering', 'inclusive', 'inclusivity',
+  'mitigate', 'mitigates', 'mitigated', 'optimal', 'optimize',
+  'overarching', 'multifarious', 'heterogeneous', 'juxtaposition',
+  'ameliorate', 'elucidate', 'promulgate', 'propagate',
+  'underscore', 'underscores', 'underscored',
+]);
 
 // ═══════════════════════════════════════════════════════════════════
 // SENTENCE SPLITTING
@@ -95,6 +135,14 @@ export function profileSentence(text: string, index: number): SentenceProfile {
   if (!!text.match(CAUSAL_CONNECTORS)) aiSignals.push('causal-chain');
   if (wordCount >= 20 && wordCount <= 30) aiSignals.push('uniform-length');
 
+  // Passive voice detection (strong AI over-use signal)
+  const hasPassiveVoice = !!text.match(PASSIVE_VOICE_RE);
+  if (hasPassiveVoice) aiSignals.push('passive-voice');
+
+  // Hedging / epistemic phrase detection
+  const hasHedging = !!text.match(HEDGING_PHRASES_RE);
+  if (hasHedging) aiSignals.push('hedging-phrase');
+
   return {
     text,
     index,
@@ -107,6 +155,8 @@ export function profileSentence(text: string, index: number): SentenceProfile {
     starterWord,
     complexity,
     aiSignals,
+    hasPassiveVoice,
+    hasHedging,
   };
 }
 
@@ -142,10 +192,28 @@ export function buildForensicProfile(text: string): ForensicProfile {
   const nomCount = profiles.filter(p => p.hasNominalization).length;
   const nominalizationDensity = totalSentences > 0 ? nomCount / totalSentences : 0;
 
-  // 5. Register consistency (measured by sentence complexity uniformity)
-  const complexities = profiles.map(p => p.complexity);
-  const uniqueComplexities = new Set(complexities);
-  const registerConsistency = uniqueComplexities.size <= 1 ? 1 : uniqueComplexities.size === 2 ? 0.5 : 0;
+  // 5. Register consistency — improved: measures uniformity of sentence-level
+  //    formality instead of just counting 3 complexity types. AI text has
+  //    very uniform formality across sentences; human text varies it.
+  const formalityScores = profiles.map(p => {
+    let score = 0;
+    if (p.hasConnector)       score += 2;
+    if (p.hasNominalization)  score += 2;
+    if (p.hasPassiveVoice)    score += 1;
+    if (p.hasHedging)         score += 2;
+    if (p.hasEnumeration)     score += 1;
+    return score;
+  });
+  let registerConsistency: number;
+  if (formalityScores.length <= 1) {
+    registerConsistency = 0.5;
+  } else {
+    const fAvg = formalityScores.reduce((a, b) => a + b, 0) / formalityScores.length;
+    const fVariance = formalityScores.reduce((sum, f) => sum + Math.pow(f - fAvg, 2), 0) / formalityScores.length;
+    const fCV = fAvg > 0 ? Math.sqrt(fVariance) / fAvg : 0;
+    // Low CV = uniform formality = AI. Scale: CV 0 → score 1, CV ≥ 0.8 → score 0.
+    registerConsistency = Math.max(0, 1 - fCV / 0.8);
+  }
 
   // 6. Enumeration patterns
   const enumCount = profiles.filter(p => p.hasEnumeration).length;
@@ -160,20 +228,38 @@ export function buildForensicProfile(text: string): ForensicProfile {
   const maxStarterRepeat = Math.max(...starterCounts.values(), 0);
   const starterRepetition = totalSentences > 0 ? maxStarterRepeat / totalSentences : 0;
 
-  // 8. Perplexity approximation (unique words / total words ratio)
+  // 8. Perplexity approximation (type-token ratio; higher = more lexical variety = human)
   const allWords = text.toLowerCase().match(/[a-z']+/g) ?? [];
   const uniqueWords = new Set(allWords);
   const perplexityScore = allWords.length > 0 ? uniqueWords.size / allWords.length : 0;
 
-  // Overall AI score (weighted composite)
+  // 9. Passive voice density
+  const passiveCount = profiles.filter(p => p.hasPassiveVoice).length;
+  const passiveVoiceDensity = totalSentences > 0 ? passiveCount / totalSentences : 0;
+
+  // 10. Hedging phrase density
+  const hedgingCount = profiles.filter(p => p.hasHedging).length;
+  const hedgingPhraseDensity = totalSentences > 0 ? hedgingCount / totalSentences : 0;
+
+  // 11. AI vocabulary density
+  //     Ratio of known AI-typical words to total words.
+  //     Calibrated so ~8% AI-word density = score 1.0.
+  const aiWordCount = allWords.filter(w => AI_VOCABULARY_SET.has(w)).length;
+  const aiVocabularyDensity = allWords.length > 0 ? Math.min(1, aiWordCount / (allWords.length * 0.08)) : 0;
+
+  // Overall AI score — weighted composite, max ≈ 100.
+  // Weights are tuned against Pangram's internal signal model.
   const overallAiScore = Math.round(
-    (1 - sentenceLengthVariance) * 20 +          // Low variance = AI
-    connectorDensity * 20 +                       // High connectors = AI
-    parallelStructureScore * 15 +                 // Parallel = AI
-    nominalizationDensity * 10 +                  // Nominalizations = AI
-    registerConsistency * 15 +                    // Uniform register = AI
-    enumerationPatterns * 10 +                    // Perfect lists = AI
-    starterRepetition * 10                        // Repeated starters = AI
+    (1 - sentenceLengthVariance) * 20 +   // Low length variance   = AI
+    connectorDensity            * 20 +   // High formal connectors = AI
+    parallelStructureScore      * 14 +   // Parallel structures    = AI
+    nominalizationDensity       * 10 +   // Heavy nominalizations  = AI
+    registerConsistency         * 13 +   // Uniform formality      = AI
+    enumerationPatterns         *  8 +   // Perfect enumerations   = AI
+    starterRepetition           *  8 +   // Repeated starters      = AI
+    passiveVoiceDensity         *  4 +   // Passive overuse        = AI
+    hedgingPhraseDensity        *  3     // Epistemic hedging      = AI
+    // aiVocabularyDensity available in profile for display/future use
   );
 
   return {
@@ -185,6 +271,9 @@ export function buildForensicProfile(text: string): ForensicProfile {
     enumerationPatterns,
     starterRepetition,
     perplexityScore,
+    passiveVoiceDensity,
+    hedgingPhraseDensity,
+    aiVocabularyDensity,
     avgSentenceLength: avgLen,
     sentenceLengths: sentenceWords,
     totalSentences,

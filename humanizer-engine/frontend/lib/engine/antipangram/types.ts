@@ -21,6 +21,9 @@ export interface ForensicProfile {
   enumerationPatterns: number;         // 0-1: 1 = perfect list parallelism (AI)
   starterRepetition: number;           // 0-1: 1 = repetitive starters (AI)
   perplexityScore: number;             // higher = more human-like word choices
+  passiveVoiceDensity: number;         // 0-1: 1 = heavy passive voice usage (AI)
+  hedgingPhraseDensity: number;        // 0-1: 1 = heavy epistemic hedging language (AI)
+  aiVocabularyDensity: number;         // 0-1: density of known AI-typical vocabulary
   avgSentenceLength: number;
   sentenceLengths: number[];
   totalSentences: number;
@@ -40,6 +43,8 @@ export interface SentenceProfile {
   starterWord: string;
   complexity: 'simple' | 'compound' | 'complex';
   aiSignals: string[];
+  hasPassiveVoice: boolean;
+  hasHedging: boolean;
 }
 
 export interface TransformResult {
