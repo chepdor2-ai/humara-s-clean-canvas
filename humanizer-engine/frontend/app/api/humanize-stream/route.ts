@@ -18,6 +18,7 @@ import { humanizeV11 } from '@/lib/engine/v11';
 import { humaraHumanize } from '@/lib/humara';
 import { nuruHumanize } from '@/lib/engine/nuru-humanizer';
 import { stealthHumanize, stealthHumanizeTargeted } from '@/lib/engine/stealth';
+import { applySentenceStartersDistribution, applyNuruDocumentFlowCalibration } from '@/lib/engine/stealth/nuru-document-phases';
 import { omegaHumanize } from '@/lib/engine/omega-humanizer';
 import { easyHumanize } from '@/lib/engine/easy-humanizer';
 import { ozoneHumanize } from '@/lib/engine/ozone-humanizer';
@@ -649,8 +650,8 @@ export async function POST(req: Request) {
             } else if (eng === 'ghost_pro_wiki') {
               return await runWikipedia(sentence);
             } else if (eng === 'ninja_3') {
-              // Phase 1 only: Humara 2.0 — remaining phases handled in pipeline
-              return runHumara20(sentence);
+              // Phase 1 only: Wikipedia — remaining phases handled in pipeline
+              return await runGuarded('ninja3_s1', () => runWikipediaClean(sentence), sentence);
             } else if (eng === 'ninja_2') {
               // Phase 1 only: Humara 2.1 — remaining phases handled in pipeline
               return await runGuarded('ninja_2_s1', () => runHumara21(sentence), sentence, 35_000);
@@ -661,8 +662,8 @@ export async function POST(req: Request) {
               // Phase 1 only: Humara 2.2 — remaining phases handled in pipeline
               return await runGuarded('ninja_5_s1', () => runHumara22(sentence), sentence, 35_000);
             } else if (eng === 'ghost_trial_2') {
-              // Phase 1 only: Wikipedia — remaining phases handled in pipeline
-              return await runGuarded('gt2_s1', () => runWikipediaClean(sentence), sentence);
+              // Phase 1 only: Humara 2.4 — remaining phases handled in pipeline
+              return await runGuarded('gt2_s1', () => runHumara24Full(sentence), sentence);
             } else if (eng === 'ghost_trial_2_alt') {
               // Phase 1 only: Wikipedia — remaining phases handled in pipeline
               return await runGuarded('gt2a_s1', () => runWikipediaClean(sentence), sentence);
@@ -898,31 +899,29 @@ export async function POST(req: Request) {
                 break;
               // Deep Kill engines — multi-step pipelines with visible phases
               case 'ninja_2':
-                // Humara 2.1 → Wikipedia → Nuru 2.0 → Deep Non-LLM Clean → Final Smooth
+                // Humara 2.1 → Humara 2.0 → Nuru 2.0 → Deep Non-LLM Clean → Final Smooth
                 phases = [
                   { name: 'Humara 2.1', type: 'emit' },
-                  { name: 'Wikipedia', type: 'async', fn: (s) => runWikipediaClean(s) },
+                  { name: 'Humara 2.0 (Full)', type: 'async', fn: (s) => runHumara20Full(s) },
                   { name: 'Nuru 2.0', type: 'nuru', passes: CHAIN_TS },
                   { name: 'Deep Non-LLM Clean', type: 'sync', fn: (s) => deepNonLLMClean(s) },
                   { name: 'Final Smooth & Grammar', type: 'sync', fn: (s) => finalSmoothGrammar(s) },
                 ];
                 break;
               case 'ninja_3':
-                // Humara 2.0 → Wikipedia → Nuru 2.0 → Deep Non-LLM Clean → Final Smooth
+                // Wikipedia → Humara 2.0 → Nuru 2.0 → Deep Non-LLM Clean → Final Smooth
                 phases = [
-                  { name: 'Humara 2.0', type: 'emit' },
-                  { name: 'Wikipedia', type: 'async', fn: (s) => runWikipediaClean(s) },
+                  { name: 'Wikipedia', type: 'emit' },
+                  { name: 'Humara 2.0 (Full)', type: 'async', fn: (s) => runHumara20Full(s) },
                   { name: 'Nuru 2.0', type: 'nuru', passes: CHAIN_TS },
                   { name: 'Deep Non-LLM Clean', type: 'sync', fn: (s) => deepNonLLMClean(s) },
                   { name: 'Final Smooth & Grammar', type: 'sync', fn: (s) => finalSmoothGrammar(s) },
                 ];
                 break;
               case 'ninja_4':
-                // Humara 2.1 → Humara 2.4 (Full) → Nuru 2.0 → Deep Non-LLM Clean → Final Smooth
+                // Purely Humara 2.1 → Keyword Recovery → Grammar Clean (fast, no Humara 2.4)
                 phases = [
                   { name: 'Humara 2.1', type: 'emit' },
-                  { name: 'Humara 2.4 (Full)', type: 'async', fn: (s) => runHumara24Full(s) },
-                  { name: 'Nuru 2.0', type: 'nuru', passes: CHAIN_TS },
                   { name: 'Deep Non-LLM Clean', type: 'sync', fn: (s) => deepNonLLMClean(s) },
                   { name: 'Final Smooth & Grammar', type: 'sync', fn: (s) => finalSmoothGrammar(s) },
                 ];
@@ -938,10 +937,10 @@ export async function POST(req: Request) {
                 ];
                 break;
               case 'ghost_trial_2':
-                // Wikipedia → Humara 2.4 (Full) → Nuru 2.0 → Deep Non-LLM Clean → Final Smooth
+                // Humara 2.4 → Humara 2.0 → Nuru 2.0 → Deep Non-LLM Clean → Final Smooth
                 phases = [
-                  { name: 'Wikipedia', type: 'emit' },
-                  { name: 'Humara 2.4 (Full)', type: 'async', fn: (s) => runHumara24Full(s) },
+                  { name: 'Humara 2.4', type: 'emit' },
+                  { name: 'Humara 2.0 (Full)', type: 'async', fn: (s) => runHumara20Full(s) },
                   { name: 'Nuru 2.0', type: 'nuru', passes: CHAIN_TS },
                   { name: 'Deep Non-LLM Clean', type: 'sync', fn: (s) => deepNonLLMClean(s) },
                   { name: 'Final Smooth & Grammar', type: 'sync', fn: (s) => finalSmoothGrammar(s) },
@@ -1337,10 +1336,60 @@ export async function POST(req: Request) {
             humanized = fixCapitalization(humanized, text);
           }
 
-          // 7. AI capitalization
+          // 7. AI capitalization + well-known proper nouns/organizations
           humanized = humanized
             .replace(/\bai-(\w)/gi, (_m: string, c: string) => `AI-${c}`)
             .replace(/\bai\b/g, 'AI');
+
+          // Restore well-known multi-word proper nouns and organizations
+          const PROPER_NOUN_PATTERNS: [RegExp, string][] = [
+            [/\bartificial intelligence\b/gi, 'Artificial Intelligence'],
+            [/\bworld health organization\b/gi, 'World Health Organization'],
+            [/\bunited nations\b/gi, 'United Nations'],
+            [/\bunited states\b/gi, 'United States'],
+            [/\bunited kingdom\b/gi, 'United Kingdom'],
+            [/\beuropean union\b/gi, 'European Union'],
+            [/\bmachine learning\b/gi, 'Machine Learning'],
+            [/\bdeep learning\b/gi, 'Deep Learning'],
+            [/\bnatural language processing\b/gi, 'Natural Language Processing'],
+            [/\bworld bank\b/gi, 'World Bank'],
+            [/\binternational monetary fund\b/gi, 'International Monetary Fund'],
+            [/\bworld trade organization\b/gi, 'World Trade Organization'],
+            [/\bsupreme court\b/gi, 'Supreme Court'],
+            [/\bgeneva convention\b/gi, 'Geneva Convention'],
+            [/\bhuman rights\b/gi, 'Human Rights'],
+            [/\bclimate change\b/gi, 'Climate Change'],
+            [/\bglobal warming\b/gi, 'Global Warming'],
+            [/\binformation technology\b/gi, 'Information Technology'],
+            [/\binternet of things\b/gi, 'Internet of Things'],
+            [/\bcyber security\b/gi, 'Cyber Security'],
+            [/\bcybersecurity\b/gi, 'Cybersecurity'],
+            [/\bmental health\b/gi, 'Mental Health'],
+            [/\bpublic health\b/gi, 'Public Health'],
+            [/\bcivil rights\b/gi, 'Civil Rights'],
+            [/\bnorth america\b/gi, 'North America'],
+            [/\bsouth america\b/gi, 'South America'],
+            [/\bsoutheast asia\b/gi, 'Southeast Asia'],
+            [/\bmiddle east\b/gi, 'Middle East'],
+            [/\bsub-saharan africa\b/gi, 'Sub-Saharan Africa'],
+          ];
+          for (const [pattern, replacement] of PROPER_NOUN_PATTERNS) {
+            humanized = humanized.replace(pattern, replacement);
+          }
+
+          // Also restore proper nouns found in the original input text
+          {
+            const inputWords = normalizedText.split(/\s+/);
+            for (const word of inputWords) {
+              const clean = word.replace(/[^a-zA-Z'-]/g, '');
+              if (!clean || clean.length < 2) continue;
+              // Capitalized word (e.g. "Einstein", "Google") - not all-upper, not all-lower
+              if (/^[A-Z][a-z]/.test(clean) && clean !== clean.toLowerCase() && clean !== clean.toUpperCase()) {
+                const re = new RegExp('\\b' + clean.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b', 'gi');
+                humanized = humanized.replace(re, clean);
+              }
+            }
+          }
 
           // 8. Repetition cleanup
           if (eng !== 'humara' && eng !== 'humara_v1_3' && eng !== 'nuru' && eng !== 'omega' && eng !== 'ozone' && !isDeepKill) {

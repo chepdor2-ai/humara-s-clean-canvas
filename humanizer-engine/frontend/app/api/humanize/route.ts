@@ -885,9 +885,8 @@ export async function POST(req: Request) {
       const stage1 = runHumara20(normalizedText);
       humanized = applySmartNuruPolish(stage1);
     } else if (engine === 'ninja_4') {
-      // Ninja 4: Humara 2.4 → Wikipedia (clean)
-      const stage1 = await runGuarded('ninja_4_stage_1', () => runHumara24(normalizedText), normalizedText);
-      humanized = await runGuarded('ninja_4_stage_2', () => runWikipediaClean(stage1), stage1);
+      // Ninja 4: Purely Humara 2.1 (fast, no Humara 2.4)
+      humanized = await runGuarded('ninja_4_stage_1', () => runHumara21(normalizedText), normalizedText);
     } else if (engine === 'ninja_5') {
       // Ninja 5: Humara 2.4 → 15× Smart Nuru
       const stage1 = await runGuarded('ninja_5_stage_1', () => runHumara24(normalizedText), normalizedText);

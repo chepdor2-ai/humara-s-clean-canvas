@@ -57,8 +57,8 @@ function fixProperNouns(text: string) {
 
 export function toLowerSentenceStyle(raw: string): string {
   if (!raw) return ""
-  const lower = raw.toLowerCase()
-  return applyCaseMap(lower, PRESERVED_ABBREVIATIONS)
+  // Preserve original case — only fix known abbreviations
+  return applyCaseMap(raw, PRESERVED_ABBREVIATIONS)
 }
 
 export function toSentenceCase(raw: string): string {

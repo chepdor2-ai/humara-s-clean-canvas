@@ -11,7 +11,6 @@ import { DiffView } from '@/components/humanizer/diff-view';
 import { MetricsStrip } from '@/components/humanizer/metrics-strip';
 import { SentenceMeter } from '@/components/humanizer/sentence-meter';
 import { ExportMenu } from '@/components/humanizer/export-menu';
-import { toLowerSentenceStyle } from '@/lib/text-format';
 
 const ADMIN_EMAILS = ['maguna956@gmail.com', 'maxwellotieno11@gmail.com'];
 
@@ -182,7 +181,7 @@ const MODE_LABELS: Record<ModeId, string> = {
 };
 
 const ENGINE_GUIDES: Record<string, string> = {
-  ninja_4: 'Top-tier stealth engine. Chains Humara 2.1 + Humara 2.4 + full Nuru pipeline for the cleanest output.',
+  ninja_4: 'Top-tier stealth engine. Purely Humara 2.1 with keyword recovery and grammar cleaning for fast, clean output.',
   easy: 'Fast stealth engine. Quick rewrites with balanced, natural-sounding output.',
   ozone: 'Stealth engine for detector cleaning. Best for ZeroGPT and Surfer cleanup.',
   ninja_1: 'LLM-powered stealth rewrite followed by 10 Nuru passes for maximum detector evasion.',
@@ -440,7 +439,8 @@ function EditorPageInner() {
 
   const inputWords = useMemo(() => (text.trim() ? text.trim().split(/\s+/).length : 0), [text]);
   const outputWords = useMemo(() => (result.trim() ? result.trim().split(/\s+/).length : 0), [result]);
-  const normalizeTypedInput = useCallback((value: string) => toLowerSentenceStyle(value), []);
+  // Preserve original casing — only fix known acronyms (AI, API, etc.)
+  const normalizeTypedInput = useCallback((value: string) => value, []);
 
   const inputAvgAi = useMemo(() => {
     if (!inputDetection) return 0;
