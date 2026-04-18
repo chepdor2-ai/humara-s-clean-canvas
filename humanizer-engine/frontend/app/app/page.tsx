@@ -439,8 +439,37 @@ function EditorPageInner() {
 
   const inputWords = useMemo(() => (text.trim() ? text.trim().split(/\s+/).length : 0), [text]);
   const outputWords = useMemo(() => (result.trim() ? result.trim().split(/\s+/).length : 0), [result]);
-  // Preserve original casing — only fix known acronyms (AI, API, etc.)
-  const normalizeTypedInput = useCallback((value: string) => value, []);
+
+  const stripLeadingPanelLabel = useCallback((value: string): string => {
+    const normalized = value.replace(/\r\n/g, '\n');
+    const lines = normalized.split('\n');
+    const firstContentLineIndex = lines.findIndex((line) => line.trim().length > 0);
+
+    if (firstContentLineIndex === -1) return normalized;
+
+    const firstContentLine = lines[firstContentLineIndex].trim();
+    if (!/^(?:input|output)\s*[:\-]?$/i.test(firstContentLine)) {
+      return normalized;
+    }
+
+    lines.splice(firstContentLineIndex, 1);
+    if (firstContentLineIndex < lines.length && lines[firstContentLineIndex].trim() === '') {
+      lines.splice(firstContentLineIndex, 1);
+    }
+
+    return lines.join('\n').replace(/^\n+/, '');
+  }, []);
+
+  // Preserve original casing while stripping accidental panel label wrappers.
+  const normalizeTypedInput = useCallback(
+    (value: string) => stripLeadingPanelLabel(value),
+    [stripLeadingPanelLabel],
+  );
+
+  const normalizeOutputText = useCallback(
+    (value: string) => stripLeadingPanelLabel(value),
+    [stripLeadingPanelLabel],
+  );
 
   const inputAvgAi = useMemo(() => {
     if (!inputDetection) return 0;
@@ -560,7 +589,7 @@ function EditorPageInner() {
   /* ── Handlers ───────────────────────────────────────────────────────── */
   /** Clean input text — strip emoji, bullets, line artifacts, numbering */
   const cleanInputText = (raw: string): string => {
-    let cleaned = raw;
+    let cleaned = stripLeadingPanelLabel(raw);
     // Remove emoji (Unicode emoji ranges)
     cleaned = cleaned.replace(/[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F1E0}-\u{1F1FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{FE00}-\u{FE0F}\u{1F900}-\u{1F9FF}\u{1FA00}-\u{1FA6F}\u{1FA70}-\u{1FAFF}\u{200D}\u{20E3}\u{E0020}-\u{E007F}]/gu, '');
     // Remove bullet points and list markers
@@ -920,7 +949,7 @@ function EditorPageInner() {
       const finalData = await runStreamingHumanize(text, controller.signal);
 
       if (finalData) {
-        let currentResult = finalData.humanized as string;
+        let currentResult = normalizeOutputText(finalData.humanized as string);
 
         // Grammar correction pass — fix capitalization, punctuation, agreement etc.
         if (grammarCorrection) {
@@ -989,7 +1018,7 @@ function EditorPageInner() {
       const finalData = await runStreamingHumanize(result, controller.signal);
 
       if (finalData) {
-        let rephrased = finalData.humanized as string;
+        let rephrased = normalizeOutputText(finalData.humanized as string);
         if (grammarCorrection) {
           const checker = new GrammarChecker();
           rephrased = checker.correctAll(rephrased);
@@ -1813,7 +1842,7 @@ function EditorPageInner() {
                 return (
                   <button
                     key={h.id}
-                    onClick={() => { setText(h.fullInput); setResult(h.fullOutput); }}
+                    onClick={() => { setText(normalizeTypedInput(h.fullInput)); setResult(normalizeOutputText(h.fullOutput)); }}
                     className="w-full text-left px-4 py-2.5 hover:bg-slate-50 dark:hover:bg-zinc-800/30 transition-colors group"
                   >
                     <div className="flex items-center justify-between mb-1">

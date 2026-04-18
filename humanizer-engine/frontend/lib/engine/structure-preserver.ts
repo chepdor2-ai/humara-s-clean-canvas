@@ -33,6 +33,41 @@ export function normalizeParagraphText(text: string): string {
     .trim();
 }
 
+function normalizeHeadingKey(text: string): string {
+  return normalizeParagraphText(text)
+    .replace(/[.!?:;]+$/g, '')
+    .toLowerCase();
+}
+
+function collapseInlineHeadingRepetitions(text: string): string {
+  // Collapse duplicated section headings embedded in paragraph text.
+  // Example: "3.3 Model Specification. 3.3 Model Specification."
+  return text.replace(
+    /\b((?:\d+(?:\.\d+)+)\s+[A-Za-z][^.!?\n]{1,120})(?:\s*[.!?]\s*\1\b){1,}/g,
+    '$1',
+  );
+}
+
+function stripHeadingEchoSentences(rewritten: string, headingKeys: Set<string>): string {
+  if (!rewritten.trim() || headingKeys.size === 0) return rewritten;
+
+  const paragraphs = normalizeNewlines(rewritten).split(/\n\s*\n/);
+  const cleanedParagraphs = paragraphs
+    .map((paragraph) => {
+      const flattened = paragraph.replace(/\n/g, ' ').replace(/\s+/g, ' ').trim();
+      if (!flattened) return '';
+
+      const sentences = robustSentenceSplit(flattened);
+      if (sentences.length === 0) return flattened;
+
+      const kept = sentences.filter((sentence) => !headingKeys.has(normalizeHeadingKey(sentence)));
+      return kept.join(' ').trim();
+    })
+    .filter(Boolean);
+
+  return cleanedParagraphs.join('\n\n');
+}
+
 export function looksLikeHeadingLine(line: string): boolean {
   const trimmed = line.trim();
   if (!trimmed) return false;
@@ -181,14 +216,27 @@ export function preserveInputStructure(original: string, rewritten: string): str
 
   const blocks = parseStructuredBlocks(original);
   const originalParagraphs = blocks.filter(isParagraphBlock);
+  const headingKeys = new Set(
+    blocks
+      .filter((block) => block.type === 'heading')
+      .map((block) => normalizeHeadingKey(block.rawLines.join(' ')))
+      .filter(Boolean),
+  );
 
   if (originalParagraphs.length === 0) {
     return normalizeNewlines(original);
   }
 
-  let rewrittenParagraphs = extractStructuredParagraphs(rewritten);
+  const rewrittenForAlignment = headingKeys.size > 0
+    ? stripHeadingEchoSentences(
+      collapseInlineHeadingRepetitions(normalizeNewlines(rewritten)),
+      headingKeys,
+    )
+    : normalizeNewlines(rewritten);
+
+  let rewrittenParagraphs = extractStructuredParagraphs(rewrittenForAlignment);
   if (rewrittenParagraphs.length !== originalParagraphs.length) {
-    rewrittenParagraphs = redistributeParagraphsBySentenceCount(rewritten, originalParagraphs);
+    rewrittenParagraphs = redistributeParagraphsBySentenceCount(rewrittenForAlignment, originalParagraphs);
   }
 
   let paragraphIndex = 0;
