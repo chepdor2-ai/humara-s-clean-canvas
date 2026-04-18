@@ -1375,8 +1375,13 @@ MODE_PRESETS = {
 def humanize_sentence(original: str, preset: dict, min_change: float,
                       max_retries: int) -> tuple[str, dict]:
     """Full multi-phase humanization of a single sentence with protected tokens."""
+    # Normalize whitespace to merge manual line breaks within sentences
+    original = re.sub(r'\s+', ' ', original).strip()
+    
     if len(original.split()) < 3:
         return original, {"skipped": True, "reason": "too_short"}
+    if is_quotation(original) or is_reference_entry(original):
+        return original, {"skipped": True, "reason": "protected_structure"}
 
     # ── Protect tokens: shield numbers, dates, citations, etc. ──
     protected_input, token_map = protect_tokens(original)
@@ -1585,12 +1590,18 @@ def humanize_text(text: str, mode: str = "quality",
         # ── Special-case handling ──
         # Check each line for bullet points, quotations, references, tables
         lines = para.split('\n')
-        if any(classify_line(line) in ('bullet', 'quote', 'reference', 'table') for line in lines):
+        
+        # Only treat entire block as newline-separated if a significant portion of it is structured 
+        # (bullets/tables/references), ensuring we don't shatter paragraphs over a single inline quote.
+        special_count = sum(1 for line in lines if classify_line(line) in ('bullet', 'reference', 'table'))
+        is_structured_block = special_count > 0 and special_count >= len(lines) * 0.4
+        
+        if is_structured_block:
             # Process line-by-line with special handling
             processed_lines = []
             for line in lines:
                 line_type = classify_line(line)
-                if line_type in ('quote', 'reference', 'table'):
+                if line_type in ('quote', 'reference', 'table', 'heading'):
                     # Preserve exactly — do not rewrite
                     processed_lines.append(line)
                 elif line_type == 'bullet':
@@ -1613,7 +1624,8 @@ def humanize_text(text: str, mode: str = "quality",
                     else:
                         processed_lines.append(line)
                 else:
-                    # Normal line — sentence-split and process
+                    # Normal line in a structured block — sentence-split and process
+                    # Here we treat normal lines inside bullet lists normally
                     sents = split_sentences(line)
                     total_sentences += len(sents)
                     futures = [

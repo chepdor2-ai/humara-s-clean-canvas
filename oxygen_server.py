@@ -1038,6 +1038,9 @@ def humanize_sentence(original: str, preset: dict, min_change: float,
     
     Returns (humanized_text, stats_dict)
     """
+    # Normalize whitespace to merge manual line breaks within sentences
+    original = re.sub(r'\s+', ' ', original).strip()
+    
     if len(original.split()) < 3:
         return original, {"skipped": True, "reason": "too_short"}
 
