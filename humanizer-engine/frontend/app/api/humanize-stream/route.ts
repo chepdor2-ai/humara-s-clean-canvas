@@ -616,6 +616,10 @@ export async function POST(req: Request) {
           // then results are reassembled preserving paragraph structure.
           // ═══════════════════════════════════════════════════════════════
           const { sentences: inputSentences, paragraphBoundaries: inputParaBounds } = splitIntoIndexedSentences(normalizedText);
+          // activeParaBounds tracks which paragraph boundaries to use for reassembly.
+          // For sentence-level engines, this stays as inputParaBounds.
+          // For full-text engines, it gets overwritten with the engine output's bounds.
+          let activeParaBounds = inputParaBounds;
           const isHeadingSentCheck = (s: string) => {
             const t = s.trim();
             // Use robust heading detection from structure-preserver
@@ -737,6 +741,16 @@ export async function POST(req: Request) {
 
             const { sentences: resultSents, paragraphBoundaries: resultBounds } = splitIntoIndexedSentences(fullResult);
             sentenceResults = resultSents;
+            // Full-text engines produce their own paragraph structure — use resultBounds
+            // instead of inputParaBounds for all subsequent reassembly.
+            activeParaBounds = resultBounds;
+            // Re-send init with updated sentence count and paragraph boundaries
+            // so the client-side live preview reassembles paragraphs correctly.
+            sendSSE(controller, {
+              type: 'init',
+              sentences: resultSents,
+              paragraphBoundaries: resultBounds,
+            });
             // Stream each sentence to the client
             for (let i = 0; i < sentenceResults.length; i++) {
               sendSSE(controller, { type: 'sentence', index: i, text: sentenceResults[i], stage: 'Engine' });
@@ -817,7 +831,7 @@ export async function POST(req: Request) {
                 }
               }
             }
-            humanized = reassembleText(sentenceResults, inputParaBounds.length ? inputParaBounds : [0]);
+            humanized = reassembleText(sentenceResults, activeParaBounds.length ? activeParaBounds : [0]);
             latestHumanized = humanized;
             console.log(`[Sentence${useParallel ? 'Par' : 'Seq'}] Engine complete: ${humanized.split(/\s+/).length} words`);
           }
@@ -1154,7 +1168,7 @@ export async function POST(req: Request) {
                 }
               }
 
-              humanized = reassembleText(currentSentences, inputParaBounds.length ? inputParaBounds : [0]);
+              humanized = reassembleText(currentSentences, activeParaBounds.length ? activeParaBounds : [0]);
               latestHumanized = humanized;
               await flushDelay(10);
               console.log(`[Pipeline] ${phaseLabel}: ${humanized.split(/\s+/).length} words (${Date.now() - phaseStart}ms)`);
@@ -1167,8 +1181,9 @@ export async function POST(req: Request) {
             console.log(`[Pipeline] Complete: ${humanized.split(/\s+/).length} words in ${Date.now() - phaseStart}ms`);
           }
 
-          // Emit final engine sentences for non-phased engines
-          if (!usePhasePipeline) {
+          // Emit final engine sentences for non-phased, non-full-text engines
+          // (Full-text engines already emitted sentences at lines 755-757)
+          if (!usePhasePipeline && !FULL_TEXT_ENGINES.has(eng)) {
             const { sentences: engineSentences } = splitIntoIndexedSentences(humanized);
             await emitSentencesStaggered(controller, engineSentences, 'Engine', 20);
             await flushDelay(30);
@@ -1541,7 +1556,8 @@ export async function POST(req: Request) {
           } // end: post-processing block
 
           // Structure preservation (restores heading placement from original)
-          if (!ozoneKeywordRestoreOnly) {
+          // Skip for phased engines — they already called preserveInputStructure at end of pipeline
+          if (!ozoneKeywordRestoreOnly && !usePhasePipeline) {
             humanized = preserveInputStructure(normalizedText, humanized);
           }
 
