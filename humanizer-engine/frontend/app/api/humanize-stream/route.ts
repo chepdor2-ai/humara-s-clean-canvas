@@ -1261,6 +1261,17 @@ export async function POST(req: Request) {
             humanized = reassembleText(postSents, postParaBounds.length ? postParaBounds : [0]);
             latestHumanized = humanized;
             console.log(`[Nuru Post] Complete in ${Date.now() - nuruPostStart}ms`);
+
+            // ── Complete Nuru Document Phases (sentence starters + flow calibration) ──
+            {
+              const { sentences: nuruPostSents, paragraphBoundaries: sharedBounds } = splitIntoIndexedSentences(humanized);
+              const { sentences: sharedSource } = splitIntoIndexedSentences(normalizedText);
+              applySentenceStartersDistribution(nuruPostSents);
+              applyNuruDocumentFlowCalibration(nuruPostSents, sharedBounds, sharedSource);
+              humanized = reassembleText(nuruPostSents, sharedBounds.length ? sharedBounds : [0]);
+              latestHumanized = humanized;
+              console.log(`[Nuru Doc Phases] Starter distribution + flow calibration applied`);
+            }
           }
 
           const ozoneKeywordRestoreOnly = eng === 'ozone';

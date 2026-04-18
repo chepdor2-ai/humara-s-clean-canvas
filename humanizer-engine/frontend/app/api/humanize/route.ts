@@ -877,13 +877,15 @@ export async function POST(req: Request) {
     } else if (engine === 'humara_v3_3') {
       humanized = await runHumara24(normalizedText);
     } else if (engine === 'ninja_3') {
-      // Ninja 3: Oxygen → Wikipedia (clean, no Nuru tail)
-      const stage1 = runHumara20(normalizedText);
-      humanized = await runGuarded('ninja_3_stage_2', () => runWikipediaClean(stage1), stage1);
+      // Ninja 3 (Deep Kill Alpha): Wikipedia → Humara 2.0 → Smart Nuru
+      const stage1 = await runGuarded('ninja_3_stage_1', () => runWikipediaClean(normalizedText), normalizedText);
+      const stage2 = runHumara20(stage1);
+      humanized = applySmartNuruPolish(stage2);
     } else if (engine === 'ninja_2') {
-      // Ninja 2: Oxygen → 15× Smart Nuru
-      const stage1 = runHumara20(normalizedText);
-      humanized = applySmartNuruPolish(stage1);
+      // Ninja 2 (Deep Kill Beta): Humara 2.1 → Humara 2.0 → Smart Nuru
+      const stage1 = await runGuarded('ninja_2_stage_1', () => runHumara21(normalizedText), normalizedText, 35_000);
+      const stage2 = runHumara20(stage1);
+      humanized = applySmartNuruPolish(stage2);
     } else if (engine === 'ninja_4') {
       // Ninja 4: Purely Humara 2.1 (fast, no Humara 2.4)
       humanized = await runGuarded('ninja_4_stage_1', () => runHumara21(normalizedText), normalizedText);
@@ -892,9 +894,9 @@ export async function POST(req: Request) {
       const stage1 = await runGuarded('ninja_5_stage_1', () => runHumara24(normalizedText), normalizedText);
       humanized = applySmartNuruPolish(stage1);
     } else if (engine === 'ghost_trial_2') {
-      // Ghost Trial 2: Wikipedia (clean) → Humara 2.4 → 15× Smart Nuru
-      const stage1 = await runGuarded('ghost_trial_2_stage_1', () => runWikipediaClean(normalizedText), normalizedText);
-      const stage2 = await runGuarded('ghost_trial_2_stage_2', () => runHumara24(stage1), stage1);
+      // Ghost Trial 2 (Deep Kill Ghost): Humara 2.4 → Humara 2.0 → Smart Nuru
+      const stage1 = await runGuarded('ghost_trial_2_stage_1', () => runHumara24(normalizedText), normalizedText);
+      const stage2 = runHumara20(stage1);
       humanized = applySmartNuruPolish(stage2);
     } else if (engine === 'ghost_trial_2_alt') {
       // Ghost Trial 2 Alt: Wikipedia (clean) → Oxygen → 15× Smart Nuru
