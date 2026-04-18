@@ -619,8 +619,6 @@ export async function POST(req: Request) {
             const t = s.trim();
             // Use robust heading detection from structure-preserver
             if (looksLikeHeadingLine(t)) return true;
-            // Simple heading check: short, no sentence-ending punctuation
-            if (t.length < 120 && !/[.!?]$/.test(t) && t.split(/\s+/).length <= 15) return true;
             // Standalone citation references: "Author, A. B. (2012)." or "Author & Author (2012)."
             if (/^[A-Z][a-zA-Z]+[,.].*\(\d{4}\)\s*\.?\s*$/.test(t) && t.split(/\s+/).length <= 20) return true;
             return false;
@@ -1297,7 +1295,7 @@ export async function POST(req: Request) {
           {
             const { sentences: origSents } = splitIntoIndexedSentences(normalizedText);
             const { sentences: humanizedSents, paragraphBoundaries: humanParaBounds } = splitIntoIndexedSentences(humanized);
-            const isHeadingSent = (s: string) => looksLikeHeadingLine(s.trim()) || (s.trim().length < 120 && !/[.!?]$/.test(s.trim()) && s.trim().split(/\s+/).length <= 15);
+            const isHeadingSent = (s: string) => looksLikeHeadingLine(s.trim());
             const RESTRUCTURE_MIN = 0.40;
             const usedWords = new Set<string>();
             let changed = false;
@@ -1420,7 +1418,7 @@ export async function POST(req: Request) {
           // Skip for ozone — user only wants synonym recovery, not full post-processing.
           if (!isDeepKill && eng !== 'ozone') {
             const { sentences: origSentsM } = splitIntoIndexedSentences(normalizedText);
-            const isHeadingM = (s: string) => looksLikeHeadingLine(s.trim()) || (s.trim().length < 120 && !/[.!?]$/.test(s.trim()) && s.trim().split(/\s+/).length <= 15);
+            const isHeadingM = (s: string) => looksLikeHeadingLine(s.trim());
             const STOPWORDS_M = new Set(['the','a','an','is','are','was','were','be','been','being','have','has','had','do','does','did','will','would','could','should','may','might','can','shall','to','of','in','for','on','with','at','by','from','as','into','through','during','before','after','above','below','between','out','off','over','under','again','further','then','once','here','there','when','where','why','how','all','each','every','both','few','more','most','other','some','such','no','nor','not','only','own','same','so','than','too','very','just','because','but','and','or','if','while','that','this','these','those','it','its','they','them','their','we','our','he','she','his','her','which','what','who','whom','about','also']);
             const getContentWordsM = (t: string) => t.toLowerCase().replace(/[^a-z0-9\s]/g, '').split(/\s+/).filter(w => w.length >= 3 && !STOPWORDS_M.has(w));
             const inputWordCount = _ppWC(normalizedText);
@@ -1434,12 +1432,14 @@ export async function POST(req: Request) {
             for (let meaningIter = 0; meaningIter < 2; meaningIter++) {
               const { sentences: humanSentsM, paragraphBoundaries: humanMParaBounds } = splitIntoIndexedSentences(humanized);
               let anyFixed = false;
+              const usedOrigIndices = new Set<number>(); // prevent duplication: each original used at most once
               for (let i = 0; i < humanSentsM.length; i++) {
                 if (isHeadingM(humanSentsM[i])) continue;
                 let bestOverlap = 0;
                 let bestOrigIdx = -1;
                 for (let j = 0; j < origSentsM.length; j++) {
                   if (isHeadingM(origSentsM[j])) continue;
+                  if (usedOrigIndices.has(j)) continue; // skip already-used originals
                   const origW = new Set(getContentWordsM(origSentsM[j]));
                   const modW = new Set(getContentWordsM(humanSentsM[i]));
                   if (origW.size === 0) continue;
@@ -1458,13 +1458,13 @@ export async function POST(req: Request) {
                     const usedW = new Set<string>();
                     fixed = synonymReplace(fixed, 0.35, usedW);
                     humanSentsM[i] = fixed;
+                    usedOrigIndices.add(bestOrigIdx);
                     anyFixed = true;
                   }
                 }
               }
               if (!anyFixed) break;
               humanized = reassembleText(humanSentsM, humanMParaBounds.length ? humanMParaBounds : [0]);
-              humanized = preserveInputStructure(normalizedText, humanized);
               // Abort if output has grown beyond 1.6× input
               if (_ppWC(humanized) > inputWordCount * 1.6) {
                 humanized = reassembleText(humanSentsM, humanMParaBounds.length ? humanMParaBounds : [0]);

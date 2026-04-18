@@ -551,7 +551,8 @@ function lastMileMeaningValidator(
     }
   }
 
-  // Step 3: Fix or remove bad sentences
+  // Step 3: Fix or remove bad sentences — each original used at most once to prevent duplication
+  const usedOriginals = new Set<number>(coveredOriginals);
   let anyFixed = false;
   const fixedSentences: string[] = [];
 
@@ -564,17 +565,22 @@ function lastMileMeaningValidator(
     } else if (coveredOriginals.has(origIdx)) {
       // Original already covered — check if there's a different uncovered original
       // that this sentence might actually correspond to (positional fallback)
-      const positionalOrig = origSentences[Math.min(i, origSentences.length - 1)];
+      const positionalIdx = Math.min(i, origSentences.length - 1);
+      const positionalOrig = origSentences[positionalIdx];
       const positionalOverlap = contentWordOverlap(positionalOrig, humanizedSentences[i]);
       if (positionalOverlap >= minOverlap) {
         fixedSentences.push(humanizedSentences[i]);
-      } else {
+      } else if (!usedOriginals.has(positionalIdx)) {
         // Keep a lightly-transformed version of the positional original instead of dropping
         let fixed = applyAIWordKill(positionalOrig);
         const usedWords = new Set<string>();
         fixed = synonymReplace(fixed, 0.35, usedWords);
         fixedSentences.push(fixed);
+        usedOriginals.add(positionalIdx);
         anyFixed = true;
+      } else {
+        // Both best-match and positional already used — keep existing sentence as-is
+        fixedSentences.push(humanizedSentences[i]);
       }
     } else {
       // Original sentence not yet covered — reprocess with light transforms
@@ -592,6 +598,7 @@ function lastMileMeaningValidator(
         fixedSentences.push(applyAIWordKill(origSent));
       }
       coveredOriginals.add(origIdx);
+      usedOriginals.add(origIdx);
       anyFixed = true;
     }
   }
@@ -1049,7 +1056,7 @@ export async function POST(req: Request) {
         for (const para of paragraphs) {
           B.push(S.length);
           const trimmed = para.trim();
-          const isHeading = trimmed.length < 120 && !/[.!?]$/.test(trimmed) && trimmed.split(/\s+/).length <= 15;
+          const isHeading = looksLikeHeadingLine(trimmed);
           if (isHeading) {
             S.push(trimmed);
           } else {
