@@ -195,6 +195,99 @@ function applyVocabularyPass(text: string, protectedTerms: Set<string>, intensit
 }
 
 // ═══════════════════════════════════════════════════════════════════
+// RHETORICAL QUESTION REMOVAL
+// Hard rule: output must contain zero rhetorical questions.
+// Convert "Isn't it true that X?" → "It is true that X."
+// Drop pure rhetorical questions that can't be converted.
+// ═══════════════════════════════════════════════════════════════════
+
+function removeRhetoricalQuestions(text: string): string {
+  const paragraphs = text.split(/\n\s*\n/).filter(p => p.trim());
+  return paragraphs.map(para => {
+    const sentences = splitToSentences(para.trim());
+    const cleaned = sentences.map(sent => {
+      if (!sent.includes('?')) return sent;
+
+      // Convert "Isn't/Aren't/Doesn't/Don't/Won't/Can't X?" → declarative
+      let converted = sent
+        .replace(/^(?:Is it not|Isn't it) true that (.+?)\?$/i, (_m, rest) => `It is true that ${rest}.`)
+        .replace(/^(?:Is it not|Isn't it) (?:clear|obvious|evident) that (.+?)\?$/i, (_m, rest) => `It is clear that ${rest}.`)
+        .replace(/^(?:Doesn't|Does not) this (.+?)\?$/i, (_m, rest) => `This ${rest}.`)
+        .replace(/^(?:Can|Could) (?:we|you|one) not (?:argue|say|see) that (.+?)\?$/i, (_m, rest) => `It can be argued that ${rest}.`)
+        .replace(/^How (?:can|could) (?:we|one|anyone) (?:ignore|overlook|deny) (.+?)\?$/i, (_m, rest) => `It is difficult to ignore ${rest}.`)
+        .replace(/^What (?:better|more effective) way (.+?)\?$/i, (_m, rest) => `There is no better way ${rest}.`)
+        .replace(/^Why (?:would|should) (?:we|anyone|one) not (.+?)\?$/i, (_m, rest) => `There is good reason to ${rest}.`);
+
+      // If still has "?" after specific patterns, convert generically:
+      // remove the "?" and add "." — only if it's a statement disguised as a question
+      if (converted.includes('?')) {
+        converted = converted.replace(/\?$/, '.');
+      }
+
+      return converted;
+    }).filter(Boolean);
+    return cleaned.join(' ');
+  }).join('\n\n');
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// FIRST-PERSON GUARD
+// Hard rule: never introduce first-person pronouns (I, we, my, our,
+// me, us) unless the original input already contained them.
+// If the input had none, strip any first-person from the output.
+// ═══════════════════════════════════════════════════════════════════
+
+const FIRST_PERSON_RE = /\b(?:I|we|my|our|me|us)\b/g;
+const FIRST_PERSON_SENTENCE_RE = /\b(?:I|we|my|our|me|us)\b/i;
+
+function inputHasFirstPerson(text: string): boolean {
+  // Check if original input contains first-person pronouns
+  // Be careful: "I" alone could be in Roman numerals or acronyms
+  // Only match standalone first-person usage
+  return /\b(?:I\s+(?:am|was|have|had|will|would|could|should|think|believe|feel|know|see)|we\s+(?:are|were|have|had|will|would|could|should|can|need|must)|my\s+\w|our\s+\w|\bme\b|\bus\b)\b/i.test(text);
+}
+
+function guardFirstPerson(originalText: string, humanized: string): string {
+  if (inputHasFirstPerson(originalText)) return humanized; // Input had first-person, allow it
+
+  // Input had no first-person — strip any that transforms may have introduced
+  const paragraphs = humanized.split(/\n\s*\n/).filter(p => p.trim());
+  return paragraphs.map(para => {
+    const sentences = splitToSentences(para.trim());
+    const cleaned = sentences.map(sent => {
+      if (!FIRST_PERSON_SENTENCE_RE.test(sent)) return sent;
+
+      // Replace first-person with third-person equivalents
+      let fixed = sent
+        .replace(/\bWe can\b/g, 'One can')
+        .replace(/\bwe can\b/g, 'one can')
+        .replace(/\bWe should\b/g, 'It is advisable to')
+        .replace(/\bwe should\b/g, 'it is advisable to')
+        .replace(/\bWe need to\b/g, 'It is necessary to')
+        .replace(/\bwe need to\b/g, 'it is necessary to')
+        .replace(/\bWe must\b/g, 'It is essential to')
+        .replace(/\bwe must\b/g, 'it is essential to')
+        .replace(/\bWe see\b/g, 'It is apparent')
+        .replace(/\bwe see\b/g, 'it is apparent')
+        .replace(/\bour\b/g, 'the')
+        .replace(/\bOur\b/g, 'The')
+        .replace(/\bwe\b/gi, 'people')
+        .replace(/\bus\b/gi, 'people')
+        .replace(/\bmy\b/gi, 'the')
+        .replace(/\bme\b/gi, 'one');
+
+      // Handle "I" carefully — only replace standalone pronoun "I"
+      fixed = fixed.replace(/\bI\s+(am|was|have|had|will|would|could|should|think|believe|feel|know)\b/gi,
+        (_m, verb) => `One ${verb}`);
+      fixed = fixed.replace(/\bI\b(?=\s+[a-z])/g, 'one');
+
+      return fixed;
+    });
+    return cleaned.join(' ');
+  }).join('\n\n');
+}
+
+// ═══════════════════════════════════════════════════════════════════
 // TARGETED REFINEMENT PASS
 // When overall score is still high, apply aggressive targeted fixes
 // based on which signals are still firing.
@@ -345,10 +438,18 @@ export function antiPangramHumanize(
   // ── Pass 6: Grammar cleanup ──
   humanized = cleanGrammar(humanized);
 
-  // ── Pass 7: Contraction handling (expand for academic, keep for casual) ──
-  if (cfg.tone === 'academic' || cfg.tone === 'professional') {
-    humanized = expandContractions(humanized);
-  }
+  // ── Pass 7: Contraction handling (ALWAYS expand — no contractions rule) ──
+  humanized = expandContractions(humanized);
+
+  // ── Pass 8: Rhetorical question removal ──
+  // Hard rule: output must never contain rhetorical questions.
+  // Convert any "?" sentences into declarative statements.
+  humanized = removeRhetoricalQuestions(humanized);
+
+  // ── Pass 9: First-person guard ──
+  // Hard rule: do not introduce first-person pronouns (I, we, my, our, me, us)
+  // unless the original input already contained them.
+  humanized = guardFirstPerson(text, humanized);
 
   // ── Final forensic profile ──
   const forensicAfter = buildForensicProfile(humanized);

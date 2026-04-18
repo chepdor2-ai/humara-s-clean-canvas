@@ -33,7 +33,7 @@ async function runLiveValidationPostProcessApiTest(): Promise<void> {
 
   const attemptedUrls: string[] = [];
   let response: Response | undefined;
-  let rawResult: unknown;
+  let rawResult: Record<string, unknown> | null = null;
   let resolvedApiUrl: string | undefined;
 
   for (const apiUrl of API_URL_CANDIDATES) {
