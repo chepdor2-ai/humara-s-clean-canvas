@@ -1,9 +1,11 @@
-import { GROQ_BASE_URL, resolveGroqChatModel } from '../groq-client.ts';
+// Shared utilities for OpenAI API proxy endpoints
 
-// Shared utilities for Groq API proxy endpoints
+const OPENAI_BASE_URL = 'https://api.openai.com/v1';
+const OPENAI_MODEL = process.env.LLM_MODEL ?? 'gpt-4o-mini';
+const OPENAI_FALLBACK_MODEL = 'gpt-4.1-nano';
 
 export function getOpenAIKey() {
-  return process.env.GROQ_API_KEY || '';
+  return process.env.OPENAI_API_KEY || '';
 }
 
 export async function openaiChat(messages, options = {}) {
@@ -13,24 +15,24 @@ export async function openaiChat(messages, options = {}) {
     return {
       ok: false,
       status: 500,
-      payload: { error: 'GROQ_API_KEY is not configured on the server.' },
+      payload: { error: 'OPENAI_API_KEY is not configured on the server.' },
     };
   }
 
-  const model = resolveGroqChatModel(options.model, 'llama-3.3-70b-versatile');
-  const fallbackModel = resolveGroqChatModel(options.fallbackModel, 'llama-3.1-8b-instant');
+  const primaryModel = options.model ?? OPENAI_MODEL;
+  const fallbackModel = options.fallbackModel ?? OPENAI_FALLBACK_MODEL;
   const temperature = options.temperature ?? 0.7;
   const maxTokens = options.max_tokens ?? 2048;
 
   // Try primary model first
   let result = await callChatCompletion(key, {
-    model,
+    model: primaryModel,
     messages,
     temperature,
     max_tokens: maxTokens,
   });
 
-  // Fallback to cheaper model on rate-limit or model unavailability
+  // Fallback to gpt-4.1-nano on rate-limit or model unavailability
   if (!result.ok && (result.status === 429 || result.status === 404 || result.status === 503)) {
     result = await callChatCompletion(key, {
       model: fallbackModel,
@@ -45,7 +47,7 @@ export async function openaiChat(messages, options = {}) {
 
 async function callChatCompletion(key, body) {
   try {
-    const response = await fetch(`${GROQ_BASE_URL}/chat/completions`, {
+    const response = await fetch(`${OPENAI_BASE_URL}/chat/completions`, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${key}`,
@@ -55,7 +57,7 @@ async function callChatCompletion(key, body) {
     });
 
     const payload = await response.json().catch(() => ({
-      error: 'Invalid Groq response.',
+      error: 'Invalid OpenAI response.',
     }));
 
     return {
@@ -67,7 +69,7 @@ async function callChatCompletion(key, body) {
     return {
       ok: false,
       status: 500,
-      payload: { error: err.message || 'Network error calling Groq.' },
+      payload: { error: err.message || 'Network error calling OpenAI.' },
     };
   }
 }

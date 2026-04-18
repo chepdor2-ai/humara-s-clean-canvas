@@ -1,14 +1,7 @@
-import {
-  DEFAULT_GROQ_SMALL_MODEL,
-  getGroqClient,
-  hasGroqApiKey,
-  resolveGroqChatModel,
-} from './groq-client';
+import OpenAI from 'openai';
 
-const KEYWORD_RESTORE_MODEL = resolveGroqChatModel(
-  process.env.OZONE_KEYWORD_RESTORE_MODEL,
-  DEFAULT_GROQ_SMALL_MODEL,
-);
+const KEYWORD_RESTORE_MODEL = process.env.LLM_MODEL ?? 'gpt-4o-mini';
+const KEYWORD_RESTORE_FALLBACK_MODEL = 'gpt-4.1-nano';
 const MAX_CANDIDATES = 24;
 const CHUNK_SIZE = 1;
 
@@ -29,8 +22,14 @@ type RestorePlan = {
   decisions?: RestoreDecision[];
 };
 
-function getClient() {
-  return hasGroqApiKey() ? getGroqClient() : null;
+let _openaiClient: OpenAI | null = null;
+
+function getClient(): OpenAI | null {
+  if (_openaiClient) return _openaiClient;
+  const apiKey = process.env.OPENAI_API_KEY?.trim();
+  if (!apiKey) return null;
+  _openaiClient = new OpenAI({ apiKey });
+  return _openaiClient;
 }
 
 function normalizeWhitespace(value: string): string {
@@ -178,9 +177,14 @@ async function requestRestorePlan(chunk: CandidateSentence[]): Promise<RestoreDe
   const openai = getClient();
   if (!openai || chunk.length === 0) return [];
 
-  const response = await Promise.race([
-    openai.chat.completions.create({
-      model: KEYWORD_RESTORE_MODEL,
+  const models = [KEYWORD_RESTORE_MODEL, KEYWORD_RESTORE_FALLBACK_MODEL];
+  let lastErr: unknown;
+
+  for (const model of models) {
+    try {
+      const response = await Promise.race([
+        openai.chat.completions.create({
+          model,
       messages: [
         {
           role: 'system',
@@ -244,15 +248,23 @@ Rules for fixed_sentence:
       ],
       temperature: 0,
       max_tokens: 1800,
-    }),
-    new Promise<never>((_, reject) => {
-      setTimeout(() => reject(new Error('Keyword restore timed out')), 12000);
-    }),
-  ]);
+        }),
+        new Promise<never>((_, reject) => {
+          setTimeout(() => reject(new Error('Keyword restore timed out')), 12000);
+        }),
+      ]);
 
-  const raw = response.choices[0]?.message?.content?.trim() ?? '';
-  const parsed = parsePlan(raw);
-  return Array.isArray(parsed?.decisions) ? parsed.decisions : [];
+      const raw = response.choices[0]?.message?.content?.trim() ?? '';
+      const parsed = parsePlan(raw);
+      return Array.isArray(parsed?.decisions) ? parsed.decisions : [];
+    } catch (err: unknown) {
+      lastErr = err;
+      console.warn(`[OzoneKeywordRestore] ${model} failed: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+  // All models failed — AntiPangram fallback (skip keyword restore)
+  console.warn('[OzoneKeywordRestore] All OpenAI models failed:', lastErr);
+  return [];
 }
 
 function tokenizeWords(text: string): string[] {

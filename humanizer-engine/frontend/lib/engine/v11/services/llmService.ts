@@ -6,38 +6,52 @@
  * Falls back to rule-based rewrite when Groq is unavailable.
  */
 
-import {
-  DEFAULT_GROQ_SMALL_MODEL,
-  getGroqClient,
-  hasGroqApiKey,
-  resolveGroqChatModel,
-} from '../../groq-client';
+import OpenAI from 'openai';
 
-const LLM_MODEL = resolveGroqChatModel(process.env.LLM_MODEL, DEFAULT_GROQ_SMALL_MODEL);
+const LLM_MODEL = process.env.LLM_MODEL ?? 'gpt-4o-mini';
+const LLM_FALLBACK_MODEL = 'gpt-4.1-nano';
+
+let _openaiClient: OpenAI | null = null;
+
+function getOpenAIClient(): OpenAI | null {
+  if (_openaiClient) return _openaiClient;
+  const apiKey = process.env.OPENAI_API_KEY?.trim();
+  if (!apiKey) return null;
+  _openaiClient = new OpenAI({ apiKey });
+  return _openaiClient;
+}
 
 /**
  * Check whether LLM is available (API key present).
  */
 export function isLLMAvailable(): boolean {
-  return hasGroqApiKey();
+  return Boolean(process.env.OPENAI_API_KEY?.trim());
 }
 
 /**
  * Call the LLM with a system + user prompt.
  */
 async function llmCall(system: string, user: string, temperature: number, maxTokens?: number): Promise<string> {
-  if (!hasGroqApiKey()) throw new Error('LLM not available');
-  const client = getGroqClient();
-  const response = await client.chat.completions.create({
-    model: LLM_MODEL,
-    messages: [
-      { role: 'system', content: system },
-      { role: 'user', content: user },
-    ],
-    temperature,
-    max_tokens: maxTokens ?? 2048,
-  });
-  return response.choices[0]?.message?.content?.trim() ?? '';
+  const client = getOpenAIClient();
+  if (!client) throw new Error('OPENAI_API_KEY not set');
+  for (const model of [LLM_MODEL, LLM_FALLBACK_MODEL]) {
+    try {
+      const response = await client.chat.completions.create({
+        model,
+        messages: [
+          { role: 'system', content: system },
+          { role: 'user', content: user },
+        ],
+        temperature,
+        max_tokens: maxTokens ?? 2048,
+      });
+      const content = response.choices[0]?.message?.content?.trim() ?? '';
+      if (content) return content;
+    } catch (err: unknown) {
+      console.warn(`[V11 LLM] ${model} failed: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+  throw new Error('All OpenAI models failed — AntiPangram fallback will apply.');
 }
 
 const SYSTEM_PROMPT = `You are a real human writer — a university student, academic researcher, or high school essayist who writes naturally by hand. You are NOT an AI. You do NOT simulate human writing. You ARE a human, and this is how you naturally write. Rewrite the given text chunk as you would write it yourself.

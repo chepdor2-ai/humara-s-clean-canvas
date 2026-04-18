@@ -6,6 +6,7 @@ import { supabase } from '../../lib/supabase';
 interface UsageData {
   wordsUsed: number;
   wordsLimit: number;
+  isUnlimited: boolean;
   monthlyUsed: number;
   monthlyLimit: number;
   daysRemaining: number;
@@ -25,6 +26,7 @@ const UsageContext = createContext<UsageContextValue | null>(null);
 const FREE_DEFAULTS: UsageData = {
   wordsUsed: 0,
   wordsLimit: 1000,
+  isUnlimited: false,
   monthlyUsed: 0,
   monthlyLimit: 30000,
   daysRemaining: 0,
@@ -77,15 +79,20 @@ function parseUsageResponse(data: Record<string, unknown>): UsageData {
   const totalUsed = usedFast + usedStealth;
   const rawLimit = limitFast + limitStealth;
   const planName = String(data.plan_name ?? 'Free');
-  const isFree = planName.trim().toLowerCase() === 'free';
-  const totalLimit = rawLimit > 0 ? rawLimit : (isFree ? 1000 : 0);
+  const lowerPlanName = planName.trim().toLowerCase();
+  const isFree = lowerPlanName === 'free';
+  const isUnlimited = Boolean(data.is_unlimited) || rawLimit < 0 || lowerPlanName.includes('unlimited');
+  const totalLimit = isUnlimited ? -1 : (rawLimit > 0 ? rawLimit : (isFree ? 1000 : 0));
   const daysRemaining = Number(data.days_remaining ?? 0);
   const cycleDays = daysRemaining > 0 ? Math.max(1, Math.min(30, daysRemaining)) : 30;
-  const monthlyLimit = totalLimit * 30;
-  const monthlyUsed = Math.min(monthlyLimit, Math.max(0, totalUsed + (30 - cycleDays) * totalLimit));
+  const monthlyLimit = isUnlimited ? -1 : totalLimit * 30;
+  const monthlyUsed = isUnlimited
+    ? totalUsed
+    : Math.min(monthlyLimit, Math.max(0, totalUsed + (30 - cycleDays) * totalLimit));
   return {
     wordsUsed: totalUsed,
     wordsLimit: totalLimit,
+    isUnlimited,
     monthlyUsed,
     monthlyLimit,
     daysRemaining,
@@ -152,10 +159,39 @@ function useUsageInternal() {
       setLoading(false);
       return;
     }
-    refresh(); 
-    const interval = setInterval(refresh, 10000);
-    return () => clearInterval(interval);
-  }, [refresh, user]);
+    void refresh();
+
+    // Keep a slow polling fallback alongside realtime in case websocket drops.
+    const interval = setInterval(() => { void refresh(); }, 30000);
+
+    const channel = supabase
+      .channel(`usage-live-${user.id}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'usage', filter: `user_id=eq.${user.id}` },
+        () => { void refresh(); }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'subscriptions', filter: `user_id=eq.${user.id}` },
+        () => { void refresh(); }
+      )
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'plans' },
+        () => { void refresh(); }
+      )
+      .subscribe((status) => {
+        if (status === 'CHANNEL_ERROR') {
+          console.error('Usage realtime channel error');
+        }
+      });
+
+    return () => {
+      clearInterval(interval);
+      void supabase.removeChannel(channel);
+    };
+  }, [refresh, user?.id]);
 
   return { usage, loading, refresh, addWords };
 }
@@ -172,8 +208,9 @@ export default function UsageBar() {
 
   if (loading || !usage) return null;
 
-  const pct = usage.wordsLimit > 0 ? Math.min(100, (usage.wordsUsed / usage.wordsLimit) * 100) : 0;
-  const barColor = pct > 90 ? 'bg-red-500' : pct > 70 ? 'bg-amber-500' : 'bg-brand-500';
+  const isUnlimitedPlan = usage.isUnlimited || usage.wordsLimit < 0;
+  const pct = isUnlimitedPlan ? 100 : (usage.wordsLimit > 0 ? Math.min(100, (usage.wordsUsed / usage.wordsLimit) * 100) : 0);
+  const barColor = isUnlimitedPlan ? 'bg-emerald-500' : (pct > 90 ? 'bg-red-500' : pct > 70 ? 'bg-amber-500' : 'bg-brand-500');
 
   return (
     <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
@@ -187,7 +224,9 @@ export default function UsageBar() {
           <div className={`h-full rounded-full transition-all duration-700 ${barColor}`}
             style={{ width: `${pct}%` }} />
         </div>
-        <span className="text-[9px] text-slate-500 dark:text-zinc-500 tabular-nums">{wordsCount.toLocaleString()}/{usage.wordsLimit.toLocaleString()}</span>
+        <span className="text-[9px] text-slate-500 dark:text-zinc-500 tabular-nums">
+          {isUnlimitedPlan ? `${wordsCount.toLocaleString()}/Unlimited` : `${wordsCount.toLocaleString()}/${usage.wordsLimit.toLocaleString()}`}
+        </span>
       </div>
     </div>
   );

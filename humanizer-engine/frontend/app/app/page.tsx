@@ -151,6 +151,7 @@ const ALL_ENGINES: EngineConfig[] = [
   { id: 'easy', label: 'Stealth Quick' },
   { id: 'ozone', label: 'Stealth Shield' },
   { id: 'ninja_1', label: 'Stealth Ninja' },
+  { id: 'antipangram', label: 'AntiPangram' },
   // Anti GPTZero
   { id: 'humara_v3_3', label: 'GPTZero Killer' },
   { id: 'oxygen', label: 'GPTZero Shield' },
@@ -158,7 +159,6 @@ const ALL_ENGINES: EngineConfig[] = [
   { id: 'nuru_v2', label: 'Nuru Pure' },
   { id: 'ghost_pro_wiki', label: 'Academic Shield' },
   // Deep Signal Kill
-  { id: 'antipangram', label: 'AntiPangram' },
   { id: 'ninja_3', label: 'Deep Kill Alpha' },
   { id: 'ninja_2', label: 'Deep Kill Beta' },
   { id: 'ninja_5', label: 'Deep Kill Omega' },
@@ -168,10 +168,9 @@ const ALL_ENGINES: EngineConfig[] = [
 
 type ModeId = 'stealth_mode' | 'anti_gptzero' | 'deep_signal_kill';
 const MODE_ENGINES: Record<ModeId, Set<string>> = {
-  stealth_mode: new Set(['ninja_4', 'easy', 'ozone', 'ninja_1']),
+  stealth_mode: new Set(['ninja_4', 'easy', 'ozone', 'ninja_1', 'antipangram']),
   anti_gptzero: new Set(['humara_v3_3', 'oxygen', 'king', 'nuru_v2', 'ghost_pro_wiki']),
   deep_signal_kill: new Set([
-    'antipangram',
     'ninja_3',
     'ninja_2',
     'ninja_5',
@@ -269,7 +268,6 @@ const getProcessingMessages = (label: string) => {
 const MAX_WORDS_PER_REQUEST = 2000;
 const RECOMMENDED_MIN_WORDS = 500;
 const RECOMMENDED_MAX_WORDS = 1500;
-const FREE_DAILY_WORD_LIMIT = 2000;
 const EDITOR_HEIGHT_CLASS = 'min-h-[240px] sm:min-h-[320px] md:min-h-[380px] lg:min-h-[420px] max-h-[320px] sm:max-h-[420px] md:max-h-[500px] lg:max-h-[560px]';
 
 interface EngineConfig {
@@ -442,9 +440,12 @@ function EditorPageInner() {
 
   const inputWords = useMemo(() => (text.trim() ? text.trim().split(/\s+/).length : 0), [text]);
   const outputWords = useMemo(() => (result.trim() ? result.trim().split(/\s+/).length : 0), [result]);
-  const remainingDailyWords = usage ? Math.max(0, usage.wordsLimit - usage.wordsUsed) : 0;
-  const isDailyLimitReached = !isAdmin && !!usage && remainingDailyWords <= 0;
-  const isRephraseLimitReached = !isAdmin && !!usage && remainingDailyWords < outputWords;
+  const hasUnlimitedDailyWords = !!usage && (usage.isUnlimited || usage.wordsLimit < 0);
+  const remainingDailyWords = hasUnlimitedDailyWords
+    ? Number.POSITIVE_INFINITY
+    : (usage ? Math.max(0, usage.wordsLimit - usage.wordsUsed) : 0);
+  const isDailyLimitReached = !isAdmin && !!usage && !hasUnlimitedDailyWords && remainingDailyWords <= 0;
+  const isRephraseLimitReached = !isAdmin && !!usage && !hasUnlimitedDailyWords && remainingDailyWords < outputWords;
 
   const stripLeadingPanelLabel = useCallback((value: string): string => {
     const normalized = value.replace(/\r\n/g, '\n');
@@ -1324,6 +1325,11 @@ function EditorPageInner() {
             {isDailyLimitReached && (
               <span className="inline-flex items-center rounded-full border border-red-200 dark:border-red-900/60 bg-red-50 dark:bg-red-950/40 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-red-700 dark:text-red-300">
                 Limit reached
+              </span>
+            )}
+            {!isDailyLimitReached && hasUnlimitedDailyWords && (
+              <span className="inline-flex items-center rounded-full border border-emerald-200 dark:border-emerald-900/60 bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-emerald-700 dark:text-emerald-300">
+                Unlimited
               </span>
             )}
           </div>

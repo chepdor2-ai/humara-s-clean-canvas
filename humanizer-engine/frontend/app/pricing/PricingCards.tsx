@@ -12,7 +12,7 @@ const TIERS = [
     monthly: 5,
     yearly: 4.25,
     description: 'For casual users and light writing needs.',
-    features: ['10,000 words/day', 'All 3 models (Humara 2.0, 2.1, 2.2)', 'All strength & tone modes', '30 Day Access', 'Email Support'],
+    features: ['20,000 words/day', 'All humanizer engines', 'All strength & tone modes', '30 Day Access', 'Email Support'],
     cta: 'Get Started',
     featured: false,
     color: '#9333ea',
@@ -22,7 +22,7 @@ const TIERS = [
     monthly: 10,
     yearly: 8.50,
     description: 'For students and content creators.',
-    features: ['20,000 words/day', 'All 3 models (Humara 2.0, 2.1, 2.2)', 'All strength & tone modes', 'Style Memory (3 slots)', 'Priority Support'],
+    features: ['50,000 words/day', 'All humanizer engines', 'All strength & tone modes', 'Style Memory (3 slots)', 'Priority Support'],
     cta: 'Get Started',
     featured: true,
     color: '#7c3aed',
@@ -32,10 +32,20 @@ const TIERS = [
     monthly: 20,
     yearly: 17,
     description: 'For power users and agencies.',
-    features: ['40,000 words/day', 'All 3 models (Humara 2.0, 2.1, 2.2)', 'All strength & tone modes', 'Style Memory (5 slots)', 'API Access', 'Dedicated Support'],
+    features: ['100,000 words/day', 'All humanizer engines', 'All strength & tone modes', 'Style Memory (5 slots)', 'API Access', 'Dedicated Support'],
     cta: 'Get Started',
     featured: false,
     color: '#a855f7',
+  },
+  {
+    name: 'Business',
+    monthly: 50,
+    yearly: 42.50,
+    description: 'For teams that need unlimited throughput.',
+    features: ['Unlimited words/day', 'All humanizer engines', 'All strength & tone modes', 'Unlimited style profiles', 'Full API Access', 'Priority Support'],
+    cta: 'Get Started',
+    featured: false,
+    color: '#0f766e',
   },
 ];
 
@@ -119,7 +129,7 @@ export default function PricingCards() {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
           {TIERS.map((tier, i) => {
             const price = yearly ? tier.yearly : tier.monthly;
             return (

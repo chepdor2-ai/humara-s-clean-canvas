@@ -8,19 +8,25 @@
 
 import type { DocumentState, Phase } from '../types';
 import { isLLMAvailable } from '../services/llmService';
-import {
-  DEFAULT_GROQ_SMALL_MODEL,
-  getGroqClient,
-  hasGroqApiKey,
-  resolveGroqChatModel,
-} from '../../groq-client';
+import OpenAI from 'openai';
 
-const LLM_MODEL = resolveGroqChatModel(process.env.LLM_MODEL, DEFAULT_GROQ_SMALL_MODEL);
+const LLM_MODEL = process.env.LLM_MODEL ?? 'gpt-4o-mini';
+const LLM_FALLBACK_MODEL = 'gpt-4.1-nano';
+
+let _openaiClient: OpenAI | null = null;
+
+function getOpenAIClient(): OpenAI | null {
+  if (_openaiClient) return _openaiClient;
+  const apiKey = process.env.OPENAI_API_KEY?.trim();
+  if (!apiKey) return null;
+  _openaiClient = new OpenAI({ apiKey });
+  return _openaiClient;
+}
 
 async function llmFixPunctuation(text: string): Promise<string> {
-  if (!hasGroqApiKey()) return text;
+  const client = getOpenAIClient();
+  if (!client) return text;
 
-  const client = getGroqClient();
   const wordCount = text.trim().split(/\s+/).length;
   const maxTokens = Math.min(16384, Math.max(4096, Math.ceil(wordCount * 2)));
 
@@ -38,35 +44,38 @@ You are ONLY allowed to touch punctuation marks and letter capitalization. Do NO
 
   const userPrompt = `Fix ONLY the punctuation and capitalization in this text. Do not change any words.\n\nTEXT:\n${text}`;
 
-  try {
-    const r = await client.chat.completions.create({
-      model: LLM_MODEL,
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: userPrompt },
-      ],
-      temperature: 0.1,
-      max_tokens: maxTokens,
-    });
-    const result = r.choices[0]?.message?.content?.trim() ?? '';
-    if (!result || result.length < text.length * 0.5) return text;
+  for (const model of [LLM_MODEL, LLM_FALLBACK_MODEL]) {
+    try {
+      const r = await client.chat.completions.create({
+        model,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userPrompt },
+        ],
+        temperature: 0.1,
+        max_tokens: maxTokens,
+      });
+      const result = r.choices[0]?.message?.content?.trim() ?? '';
+      if (!result || result.length < text.length * 0.5) continue;
 
-    // Verify no words changed
-    const strip = (s: string) => s.replace(/[^a-zA-Z\s]/g, "").toLowerCase().split(/\s+/).filter(w => w);
-    const origWords = strip(text);
-    const fixedWords = strip(result);
-    const maxDrift = Math.max(3, Math.ceil(origWords.length * 0.02));
-    let diffs = Math.abs(origWords.length - fixedWords.length);
-    const minLen = Math.min(origWords.length, fixedWords.length);
-    for (let i = 0; i < minLen; i++) {
-      if (origWords[i] !== fixedWords[i]) diffs++;
+      // Verify no words changed
+      const strip = (s: string) => s.replace(/[^a-zA-Z\s]/g, "").toLowerCase().split(/\s+/).filter(w => w);
+      const origWords = strip(text);
+      const fixedWords = strip(result);
+      const maxDrift = Math.max(3, Math.ceil(origWords.length * 0.02));
+      let diffs = Math.abs(origWords.length - fixedWords.length);
+      const minLen = Math.min(origWords.length, fixedWords.length);
+      for (let i = 0; i < minLen; i++) {
+        if (origWords[i] !== fixedWords[i]) diffs++;
+      }
+      if (diffs > maxDrift) continue;
+
+      return result;
+    } catch {
+      // try next model
     }
-    if (diffs > maxDrift) return text;
-
-    return result;
-  } catch {
-    return text;
   }
+  return text;
 }
 
 // ── Contraction expansions ──

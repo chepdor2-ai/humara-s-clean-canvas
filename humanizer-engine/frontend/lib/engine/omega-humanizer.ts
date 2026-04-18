@@ -33,14 +33,21 @@
 import { getDetector } from "./multi-detector";
 import { robustSentenceSplit } from "./content-protection";
 import { validateAndRepairOutput } from "./validation-post-process";
-import { getGroqClient, resolveGroqChatModel } from "./groq-client";
+import OpenAI from "openai";
 
-// ── MODEL SELECTION ──
-// Omega now resolves Groq chat models only.
-const LLM_MODEL = resolveGroqChatModel(
-  process.env.OMEGA_MODEL ?? process.env.LLM_MODEL,
-  "llama-3.3-70b-versatile",
-);
+// ── MODEL SELECTION — OpenAI only (gpt-4o-mini → gpt-4.1-nano → AntiPangram fallback) ──
+const LLM_MODEL = process.env.LLM_MODEL ?? 'gpt-4o-mini';
+const LLM_FALLBACK_MODEL = 'gpt-4.1-nano';
+
+let _openaiClient: OpenAI | null = null;
+
+function getOpenAIClient(): OpenAI {
+  if (_openaiClient) return _openaiClient;
+  const apiKey = process.env.OPENAI_API_KEY?.trim();
+  if (!apiKey) throw new Error("OPENAI_API_KEY not set.");
+  _openaiClient = new OpenAI({ apiKey });
+  return _openaiClient;
+}
 
 async function llmCall(
   system: string,
@@ -48,17 +55,25 @@ async function llmCall(
   temperature: number,
   maxTokens = 512,
 ): Promise<string> {
-  const client = getGroqClient();
-  const r = await client.chat.completions.create({
-    model: LLM_MODEL,
-    messages: [
-      { role: "system", content: system },
-      { role: "user", content: user },
-    ],
-    temperature,
-    max_tokens: maxTokens,
-  });
-  return r.choices[0]?.message?.content?.trim() ?? "";
+  const client = getOpenAIClient();
+  for (const model of [LLM_MODEL, LLM_FALLBACK_MODEL]) {
+    try {
+      const r = await client.chat.completions.create({
+        model,
+        messages: [
+          { role: "system", content: system },
+          { role: "user", content: user },
+        ],
+        temperature,
+        max_tokens: maxTokens,
+      });
+      const content = r.choices[0]?.message?.content?.trim() ?? "";
+      if (content) return content;
+    } catch (err: unknown) {
+      console.warn(`[Omega] ${model} failed: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+  throw new Error("All OpenAI models failed — AntiPangram fallback will apply.");
 }
 
 // ══════════════════════════════════════════════════════════════════════════
@@ -821,13 +836,14 @@ function ppNgramBreaking(text: string): string {
 
 async function llmFlowCleanup(text: string): Promise<string> {
   try {
-    const client = getGroqClient();
+    const client = getOpenAIClient();
     const wordCount = text.split(/\s+/).length;
     const maxTokens = Math.min(16384, Math.max(4096, Math.ceil(wordCount * 2)));
 
-    for (let attempt = 0; attempt < 3; attempt++) {
-      const r = await client.chat.completions.create({
-        model: LLM_MODEL,
+    for (const model of [LLM_MODEL, LLM_FALLBACK_MODEL]) {
+      try {
+        const r = await client.chat.completions.create({
+          model,
         messages: [
           {
             role: 'system',
@@ -844,17 +860,20 @@ STRICT RULES:
         ],
         temperature: 0.1,
         max_tokens: maxTokens,
-      });
+        });
 
-      const result = r.choices[0]?.message?.content?.trim() ?? '';
-      if (!result || result.length < text.length * 0.5) continue;
+        const result = r.choices[0]?.message?.content?.trim() ?? '';
+        if (!result || result.length < text.length * 0.5) continue;
 
-      // Word preservation check
-      const strip = (s: string) => s.replace(/[^a-zA-Z\s]/g, '').toLowerCase().split(/\s+/).filter(w => w);
-      const origWords = strip(text);
-      const fixedWords = strip(result);
-      if (Math.abs(origWords.length - fixedWords.length) <= 2) {
-        return result;
+        // Word preservation check
+        const strip = (s: string) => s.replace(/[^a-zA-Z\s]/g, '').toLowerCase().split(/\s+/).filter(w => w);
+        const origWords = strip(text);
+        const fixedWords = strip(result);
+        if (Math.abs(origWords.length - fixedWords.length) <= 2) {
+          return result;
+        }
+      } catch {
+        // try next model
       }
     }
     return text;

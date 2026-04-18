@@ -9,24 +9,32 @@ const plans = [
     name: 'Starter',
     desc: 'For light usage',
     monthly: 5,
-    yearly: 48,
-    features: ['10,000 words/day', 'All 3 models (Humara 2.0, 2.1, 2.2)', 'All strength & tone modes', 'Email support'],
+    yearly: 51,
+    features: ['20,000 words/day', 'All humanizer engines', 'All strength & tone modes', 'Email support'],
     popular: false,
   },
   {
     name: 'Creator',
     desc: 'For content creators',
     monthly: 10,
-    yearly: 96,
-    features: ['20,000 words/day', 'All 3 models (Humara 2.0, 2.1, 2.2)', 'All strength & tone modes', 'Style profiles', 'Priority support'],
+    yearly: 102,
+    features: ['50,000 words/day', 'All humanizer engines', 'All strength & tone modes', 'Style profiles', 'Priority support'],
     popular: true,
   },
   {
     name: 'Professional',
     desc: 'For power users & teams',
     monthly: 20,
-    yearly: 192,
-    features: ['40,000 words/day', 'All 3 models (Humara 2.0, 2.1, 2.2)', 'All strength & tone modes', 'API access', 'Custom style profiles', 'Dedicated manager'],
+    yearly: 204,
+    features: ['100,000 words/day', 'All humanizer engines', 'All strength & tone modes', 'API access', 'Custom style profiles', 'Dedicated manager'],
+    popular: false,
+  },
+  {
+    name: 'Business',
+    desc: 'For unlimited scale',
+    monthly: 50,
+    yearly: 510,
+    features: ['Unlimited words/day', 'All humanizer engines', 'All strength & tone modes', 'Unlimited style profiles', 'Full API access', 'Dedicated manager'],
     popular: false,
   },
 ];
@@ -85,9 +93,13 @@ export default function PricingSection() {
         initial="hidden"
         whileInView="show"
         viewport={{ once: true, margin: "-50px" }}
-        className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5 sm:gap-6"
+        className="grid sm:grid-cols-2 xl:grid-cols-4 gap-5 sm:gap-6"
       >
-        {plans.map((plan) => (
+        {plans.map((plan) => {
+          const monthlyPrice = isYearly ? plan.yearly / 12 : plan.monthly;
+          const monthlyPriceLabel = Number.isInteger(monthlyPrice) ? monthlyPrice.toFixed(0) : monthlyPrice.toFixed(2);
+
+          return (
           <motion.div
             variants={item}
             whileHover={{ y: -5 }}
@@ -107,7 +119,7 @@ export default function PricingSection() {
             <p className="text-xs text-gray-500 mt-1 mb-6">{plan.desc}</p>
             <p className="mb-8">
               <span className="text-5xl sm:text-6xl font-bold text-slate-900 dark:text-white">
-                ${isYearly ? Math.round(plan.yearly / 12) : plan.monthly}
+                ${monthlyPriceLabel}
               </span>
               <span className="text-sm text-gray-500 font-normal ml-1">/mo</span>
             </p>
@@ -135,7 +147,8 @@ export default function PricingSection() {
               Get Started
             </Link>
           </motion.div>
-        ))}
+          );
+        })}
       </motion.div>
     </div>
   );

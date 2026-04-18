@@ -201,8 +201,8 @@ export async function POST(req: Request) {
     const adminEmails = (process.env.ADMIN_EMAILS || '').split(',').map(e => e.trim().toLowerCase()).filter(Boolean);
     const isAdmin = userEmail ? adminEmails.includes(userEmail.toLowerCase()) : false;
 
-    // Track plan type (for telemetry/UI only). Quotas are enforced for all non-admin users.
-    let isPremiumPlan = false;
+    // Quotas are enforced for all non-admin users.
+    let hasUnlimitedDailyWords = false;
 
     if (userId && !isAdmin) {
       try {
@@ -214,11 +214,6 @@ export async function POST(req: Request) {
           console.error('get_usage_stats RPC failed:', statsError.message, statsError.details);
         }
 
-        if (!statsError && stats) {
-          const planName = String(stats.plan_name || 'Free');
-          isPremiumPlan = planName.trim().toLowerCase() !== 'free';
-        }
-
         // Enforce quota for every non-admin user
         // Default free-tier limits when RPC fails or missing
         let totalUsed = 0;
@@ -227,16 +222,19 @@ export async function POST(req: Request) {
         if (!statsError && stats) {
           totalUsed = (stats.words_used_fast || 0) + (stats.words_used_stealth || 0);
           const rawLimit = (stats.words_limit_fast || 0) + (stats.words_limit_stealth || 0);
+          hasUnlimitedDailyWords = Boolean(stats.is_unlimited) || rawLimit < 0;
           // Use DB limit if user has active subscription, otherwise free tier (1000)
-          totalLimit = rawLimit > 0 ? rawLimit : 1000;
+          totalLimit = hasUnlimitedDailyWords ? -1 : (rawLimit > 0 ? rawLimit : 1000);
         }
 
-        const remaining = Math.max(0, totalLimit - totalUsed);
-        if (remaining < inputWordCount) {
-          return new Response(
-            'data: ' + JSON.stringify({ type: 'error', error: `Word limit reached. ${remaining} words remaining of your daily ${totalLimit} words.` }) + '\n\n',
-            { status: 200, headers: { 'Content-Type': 'text/event-stream' } }
-          );
+        if (!hasUnlimitedDailyWords) {
+          const remaining = Math.max(0, totalLimit - totalUsed);
+          if (remaining < inputWordCount) {
+            return new Response(
+              'data: ' + JSON.stringify({ type: 'error', error: `Word limit reached. ${remaining} words remaining of your daily ${totalLimit} words.` }) + '\n\n',
+              { status: 200, headers: { 'Content-Type': 'text/event-stream' } }
+            );
+          }
         }
       } catch (err) {
         console.error('Quota pre-check error:', err);
@@ -710,17 +708,38 @@ export async function POST(req: Request) {
 
           // ── Full-text engines (Ozone / Humara 2.1, Easy / Humara 2.2) ──
           // These LLM APIs work best on the entire text, not sentence-by-sentence.
-          const FULL_TEXT_ENGINES = new Set(['easy', 'ozone', 'king', 'ghost_pro_wiki', 'humara_v3_3', 'phantom']);
+          const FULL_TEXT_ENGINES = new Set(['easy', 'ozone', 'king', 'ghost_pro_wiki', 'humara_v3_3', 'phantom', 'antipangram']);
           let sentenceResults: string[];
 
           if (FULL_TEXT_ENGINES.has(eng)) {
             console.log(`[FullText] Processing entire text via '${eng}'`);
             let fullResult: string;
             if (eng === 'king') {
-              const kingResult = await kingHumanize(normalizedText);
-              fullResult = kingResult.humanized;
+              try {
+                const kingResult = await kingHumanize(normalizedText);
+                fullResult = kingResult.humanized;
+              } catch (kingErr) {
+                console.warn('[King] kingHumanize failed — falling back to Nuru phase pipeline:', kingErr instanceof Error ? kingErr.message : kingErr);
+                fullResult = normalizedText; // phase pipeline (Nuru 2.0 × 10 + Deep Clean + Final Smooth) will still run
+              }
             } else if (eng === 'ghost_pro_wiki') {
               fullResult = await runWikipedia(normalizedText);
+            } else if (eng === 'ozone') {
+              try {
+                fullResult = await runHumara21(normalizedText);
+              } catch (ozoneErr) {
+                console.warn('[Ozone] API failed — falling back to oxygen:', ozoneErr instanceof Error ? ozoneErr.message : ozoneErr);
+                const { oxygenHumanize } = await import('@/lib/engine/oxygen-humanizer');
+                fullResult = oxygenHumanize(normalizedText, effectiveStrength, 'quality', false);
+              }
+            } else if (eng === 'antipangram') {
+              // Standalone AntiPangram engine: forensic signal destruction on full text + Nuru post-processing
+              const { antiPangramSimple } = await import('@/lib/engine/antipangram');
+              fullResult = antiPangramSimple(
+                normalizedText,
+                (strength ?? 'strong') as 'light' | 'medium' | 'strong',
+                (tone ?? 'academic') as 'academic' | 'professional' | 'casual' | 'neutral',
+              );
             } else if (eng === 'humara_v3_3' || eng === 'phantom') {
               fullResult = await runHumara24(normalizedText);
             } else if (eng === 'easy') {
@@ -904,9 +923,9 @@ export async function POST(req: Request) {
                 ];
                 break;
               case 'phantom':
-                // Phantom = full Humara 2.4 WITHOUT Nuru — Deep Clean + Smooth only
-                // AntiPangram runs separately after phases complete
+                // Phantom = Humara 2.4 → Nuru 2.0 × 10 → Deep Clean → Smooth → AntiPangram → Nuru Post-Processing
                 phases = [
+                  { name: 'Nuru 2.0', type: 'nuru', passes: 10 },
                   { name: 'Deep Non-LLM Clean', type: 'sync', fn: (s) => deepNonLLMClean(s) },
                   { name: 'Final Smooth & Grammar', type: 'sync', fn: (s) => finalSmoothGrammar(s) },
                 ];
@@ -1041,20 +1060,26 @@ export async function POST(req: Request) {
                   sendSSE(controller, { type: 'sentence', index: i, text: currentSentences[i], stage: phaseLabel });
                 }
               } else if (phase.type === 'async') {
-                // Parallel processing for async/LLM phases
+                // Parallel processing for async/LLM phases — per-sentence error isolation
+                // so a single LLM call failure cannot abort the whole pipeline.
                 const asyncResults = await Promise.all(
                   currentSentences.map(async (sent, i) => {
                     if (isHeadingSentCheck(sent)) return sent;
                     const original = phaseInputSentences[i];
-                    let result = await phase.fn(sent);
-                    let change = measureSentenceChange(original, result);
-                    let retry = 0;
-                    while (change < MIN_CHANGE && retry < MAX_RETRIES) {
-                      result = await phase.fn(result);
-                      change = measureSentenceChange(original, result);
-                      retry++;
+                    try {
+                      let result = await phase.fn(sent);
+                      let change = measureSentenceChange(original, result);
+                      let retry = 0;
+                      while (change < MIN_CHANGE && retry < MAX_RETRIES) {
+                        result = await phase.fn(result);
+                        change = measureSentenceChange(original, result);
+                        retry++;
+                      }
+                      return result;
+                    } catch (sentErr) {
+                      console.warn(`[Phase ${phase.name}] sentence ${i} failed, keeping previous:`, sentErr instanceof Error ? sentErr.message : sentErr);
+                      return sent;
                     }
-                    return result;
                   })
                 );
                 for (let i = 0; i < asyncResults.length; i++) {
@@ -1227,7 +1252,7 @@ export async function POST(req: Request) {
           // 5 baseline passes but still get AI detection + targeted cleanup.
           // Hard time budget: 10 seconds max.
           // ═══════════════════════════════════════════════════════════════
-          if (eng !== 'ozone' && eng !== 'phantom' && !(deadlineReached || Date.now() - startTime > DEADLINE_MS - 12000)) {
+          if (eng !== 'ozone' && !(deadlineReached || Date.now() - startTime > DEADLINE_MS - 12000)) {
             const nuruPostStart = Date.now();
             const NURU_POST_DEADLINE_MS = 10_000; // 10s hard budget
             const nuruPostTimeOk = () => Date.now() - nuruPostStart < NURU_POST_DEADLINE_MS && !(deadlineReached || Date.now() - startTime > DEADLINE_MS - 8000);
@@ -1238,8 +1263,8 @@ export async function POST(req: Request) {
             sendSSE(controller, { type: 'stage', stage: 'Nuru 2.0 Post-Processing' });
             await flushDelay(10);
 
-            // ── Phase A: 5 baseline Nuru passes (skip if engine already ran Nuru) ──
-            if (!usePhasePipeline && nuruPostTimeOk()) {
+            // ── Phase A: 5 baseline Nuru passes (all non-ozone engines) ──
+            if (nuruPostTimeOk()) {
               for (let pass = 0; pass < 5; pass++) {
                 for (let i = 0; i < postSents.length; i++) {
                   if (!isHeadingSentCheck(postSents[i])) {
@@ -1314,7 +1339,7 @@ export async function POST(req: Request) {
             }
           }
 
-          const ozoneKeywordRestoreOnly = eng === 'ozone' || eng === 'phantom';
+          const ozoneKeywordRestoreOnly = eng === 'ozone';
 
           // ── POST-PROCESSING ──
           const prePostProcessSnapshot = humanized;
@@ -1581,6 +1606,55 @@ export async function POST(req: Request) {
 
           } // end: post-processing block
 
+          // ── Ozone: keyword-only restoration — NO other post-processing ──
+          // Only restore critical proper nouns and technical terms (Climate Change, AI, etc.)
+          if (eng === 'ozone') {
+            humanized = humanized
+              .replace(/\bai-(\w)/gi, (_m: string, c: string) => `AI-${c}`)
+              .replace(/\bai\b/g, 'AI');
+            const OZONE_KEYWORDS: [RegExp, string][] = [
+              [/\bartificial intelligence\b/gi, 'Artificial Intelligence'],
+              [/\bclimate change\b/gi, 'Climate Change'],
+              [/\bglobal warming\b/gi, 'Global Warming'],
+              [/\bmachine learning\b/gi, 'Machine Learning'],
+              [/\bdeep learning\b/gi, 'Deep Learning'],
+              [/\bnatural language processing\b/gi, 'Natural Language Processing'],
+              [/\bworld health organization\b/gi, 'World Health Organization'],
+              [/\bunited nations\b/gi, 'United Nations'],
+              [/\bunited states\b/gi, 'United States'],
+              [/\bunited kingdom\b/gi, 'United Kingdom'],
+              [/\beuropean union\b/gi, 'European Union'],
+              [/\bnorth america\b/gi, 'North America'],
+              [/\bsouth america\b/gi, 'South America'],
+              [/\bmiddle east\b/gi, 'Middle East'],
+              [/\binternet of things\b/gi, 'Internet of Things'],
+              [/\bcybersecurity\b/gi, 'Cybersecurity'],
+              [/\bmental health\b/gi, 'Mental Health'],
+              [/\bpublic health\b/gi, 'Public Health'],
+              [/\bcivil rights\b/gi, 'Civil Rights'],
+              [/\bhuman rights\b/gi, 'Human Rights'],
+              [/\bworld bank\b/gi, 'World Bank'],
+              [/\bsupreme court\b/gi, 'Supreme Court'],
+              [/\bclimate crisis\b/gi, 'Climate Crisis'],
+              [/\bsoutheast asia\b/gi, 'Southeast Asia'],
+              [/\bsub-saharan africa\b/gi, 'Sub-Saharan Africa'],
+            ];
+            for (const [pattern, replacement] of OZONE_KEYWORDS) {
+              humanized = humanized.replace(pattern, replacement);
+            }
+            // Restore capitalized proper nouns found in the original input
+            const ozoneInputWords = normalizedText.split(/\s+/);
+            for (const word of ozoneInputWords) {
+              const clean = word.replace(/[^a-zA-Z'-]/g, '');
+              if (!clean || clean.length < 2) continue;
+              if (/^[A-Z][a-z]/.test(clean) && clean !== clean.toLowerCase() && clean !== clean.toUpperCase()) {
+                const re = new RegExp('\\b' + clean.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b', 'gi');
+                humanized = humanized.replace(re, clean);
+              }
+            }
+            latestHumanized = humanized;
+          }
+
           // ── POST-PROCESSING CHANGE CAP (10%) ──
           // If post-processing mutated the text beyond 10% additional word-level change,
           // revert to the pre-post-processing snapshot to avoid garbling the output.
@@ -1751,6 +1825,34 @@ export async function POST(req: Request) {
           // These late passes can reintroduce Title Case inside body text.
           humanized = fixMidSentenceCapitalization(humanized, text);
 
+          // ── FINAL DEMONYM/NATIONALITY RESTORATION ───────────────────
+          // fixMidSentenceCapitalization lowercases nationality adjectives that NLP doesn't
+          // recognise as proper nouns (e.g. "american" → "American"). This static list runs
+          // LAST so they are always capitalised correctly regardless of earlier passes.
+          // NOTE: do NOT re-run the generic input-word scan here — sentence-initial common
+          // words (The, While, From, This…) would be treated as proper nouns and Title-Cased
+          // throughout the output. The input scan already ran in step 7 above.
+          if (!ozoneKeywordRestoreOnly) {
+            const ALWAYS_CAP_DEMONYMS: [RegExp, string][] = [
+              [/\bamerican\b/gi, 'American'],
+              [/\bmexican\b/gi, 'Mexican'],
+              [/\bcanadian\b/gi, 'Canadian'],
+              [/\beuropean\b/gi, 'European'],
+              [/\bafrican\b/gi, 'African'],
+              [/\basian\b/gi, 'Asian'],
+              [/\bbritish\b/gi, 'British'],
+              [/\bhispanic\b/gi, 'Hispanic'],
+              [/\blatino\b/gi, 'Latino'],
+              [/\blatina\b/gi, 'Latina'],
+              [/\bnorth american\b/gi, 'North American'],
+              [/\bsouth american\b/gi, 'South American'],
+              [/\blatin american\b/gi, 'Latin American'],
+            ];
+            for (const [_dRe, _dRep] of ALWAYS_CAP_DEMONYMS) {
+              humanized = humanized.replace(_dRe, _dRep);
+            }
+          }
+
           // ── OUTPUT SIZE MONITORING ──────────────────────────────────
           {
             const _capInputWC = text.trim().split(/\s+/).filter(Boolean).length;
@@ -1863,7 +1965,7 @@ export async function POST(req: Request) {
                 };
               }
               if (docResult.error) console.error('Document insert failed:', docResult.error.message, docResult.error.details);
-              } // end else (non-premium usage tracking)
+              } // end else (non-admin usage tracking)
             } catch (e) {
               console.error('Usage tracking error:', e);
             }

@@ -24,7 +24,7 @@ export async function POST(request: Request) {
       starter: { monthly: 5, yearly: 4.25 },
       creator: { monthly: 10, yearly: 8.50 },
       professional: { monthly: 20, yearly: 17 },
-      business: { monthly: 35, yearly: 29.75 },
+      business: { monthly: 50, yearly: 42.50 },
     };
 
     const planData = PLANS[plan.toLowerCase()];

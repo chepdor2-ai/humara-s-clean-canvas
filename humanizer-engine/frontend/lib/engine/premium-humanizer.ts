@@ -60,11 +60,22 @@ import {
   type SurgeryItem,
   type InputFeatures as SurgeryInputFeatures,
 } from "./sentence-surgery";
-import { getGroqClient, resolveGroqChatModel } from "./groq-client";
+import OpenAI from "openai";
 
-// ── Config ──
+// ── Config — OpenAI only (gpt-4o-mini → gpt-4.1-nano → AntiPangram fallback) ──
 
-const LLM_MODEL = resolveGroqChatModel(process.env.GROQ_MODEL, "llama-3.3-70b-versatile");
+const LLM_MODEL = process.env.LLM_MODEL ?? 'gpt-4o-mini';
+const LLM_FALLBACK_MODEL = 'gpt-4.1-nano';
+
+let _openaiClient: OpenAI | null = null;
+
+function getOpenAIClient(): OpenAI {
+  if (_openaiClient) return _openaiClient;
+  const apiKey = process.env.OPENAI_API_KEY?.trim();
+  if (!apiKey) throw new Error("OPENAI_API_KEY not set.");
+  _openaiClient = new OpenAI({ apiKey });
+  return _openaiClient;
+}
 
 async function llmCall(
   system: string,
@@ -72,17 +83,25 @@ async function llmCall(
   temperature: number,
   maxTokens = 4096,
 ): Promise<string> {
-  const client = getGroqClient();
-  const r = await client.chat.completions.create({
-    model: LLM_MODEL,
-    messages: [
-      { role: "system", content: system },
-      { role: "user", content: user },
-    ],
-    temperature,
-    max_tokens: maxTokens,
-  });
-  return r.choices[0]?.message?.content?.trim() ?? "";
+  const client = getOpenAIClient();
+  for (const model of [LLM_MODEL, LLM_FALLBACK_MODEL]) {
+    try {
+      const r = await client.chat.completions.create({
+        model,
+        messages: [
+          { role: "system", content: system },
+          { role: "user", content: user },
+        ],
+        temperature,
+        max_tokens: maxTokens,
+      });
+      const content = r.choices[0]?.message?.content?.trim() ?? "";
+      if (content) return content;
+    } catch (err: unknown) {
+      console.warn(`[Premium] ${model} failed: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+  throw new Error("All OpenAI models failed — AntiPangram fallback will apply.");
 }
 
 // ── Input Feature Detection ──
