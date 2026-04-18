@@ -39,12 +39,18 @@ export function looksLikeHeadingLine(line: string): boolean {
 
   if (/^#{1,6}\s/.test(trimmed)) return true;
   if (/^\d+(?:[.)]|(?:\.\d+)+)\s+[A-Z]/.test(trimmed)) return true;
-  if (/^[A-Z][A-Z\s0-9:&()\-–—/,'".]{4,}$/.test(trimmed)) return true;
+  if (/^[A-Z][A-Z\s0-9:&()\-–—\/,'".]{4,}$/.test(trimmed)) return true;
+
+  const words = trimmed.split(/\s+/);
+  const capitalizedWords = words.filter(w => /^[A-Z]/.test(w)).length;
+  // If it's a short line, require at least 50% of words to be capitalized
+  const isMajorityCapitalized = capitalizedWords / Math.max(1, words.length) >= 0.5;
 
   return (
-    countWords(trimmed) <= 12 &&
+    words.length <= 12 &&
     !/[.!?]$/.test(trimmed) &&
-    /^[A-Z0-9][A-Za-z0-9\s:()\-–—/&,'".]+$/.test(trimmed)
+    /^[A-Z0-9]/.test(trimmed) &&
+    isMajorityCapitalized
   );
 }
 
@@ -89,10 +95,23 @@ function splitIntoSentences(text: string): string[] {
   return robustSentenceSplit(normalized);
 }
 
+function shouldPreserveOriginalLineBreaks(originalLines: string[]): boolean {
+  const lines = originalLines.map((line) => line.trim()).filter(Boolean);
+  if (lines.length <= 1) return false;
+
+  const listLineCount = lines.filter((line) => /^(?:[-*•]\s+|\d+[.)]\s+|[A-Za-z][.)]\s+)/.test(line)).length;
+  if (listLineCount === lines.length) return true;
+
+  const structuredLineCount = lines.filter((line) => looksLikeHeadingLine(line) || /[:?]$/.test(line)).length;
+  if (structuredLineCount === lines.length) return true;
+
+  return false;
+}
+
 export function reflowParagraphToOriginalLines(originalLines: string[], rewritten: string): string {
   const cleaned = normalizeParagraphText(rewritten);
   if (!cleaned) return cleaned;
-  if (originalLines.length <= 1) return cleaned;
+  if (!shouldPreserveOriginalLineBreaks(originalLines)) return cleaned;
 
   const tokens = cleaned.split(/\s+/).filter(Boolean);
   if (tokens.length <= originalLines.length) return cleaned;

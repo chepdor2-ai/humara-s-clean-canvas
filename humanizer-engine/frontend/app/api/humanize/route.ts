@@ -10,7 +10,7 @@ import { isMeaningPreserved, semanticSimilaritySync } from '@/lib/engine/semanti
 import { fixCapitalization } from '@/lib/engine/shared-dictionaries';
 import { fixMidSentenceCapitalization } from '@/lib/engine/validation-post-process';
 import { deduplicateRepeatedPhrases } from '@/lib/engine/premium-deep-clean';
-import { preserveInputStructure } from '@/lib/engine/structure-preserver';
+import { preserveInputStructure, looksLikeHeadingLine } from '@/lib/engine/structure-preserver';
 import { structuralPostProcess } from '@/lib/engine/structural-post-processor';
 import { generateCandidates, type ScoredCandidate } from '@/lib/candidate-generator';
 import { unifiedSentenceProcess } from '@/lib/sentence-processor';
@@ -685,11 +685,10 @@ export async function POST(req: Request) {
       /^((?:#{1,6}\s.+|[IVXLCDM]+\.\s.+|(?:Part|Section|Chapter)\s+\d+.*))\n(?!\n)/gim,
       "$1\n\n"
     );
-    // Step 2: Short non-punctuated lines followed by a line starting with uppercase
-    // (likely titles/headings) — ensure double-newline separation
+    // Step 2: Short non-punctuated lines that are actual headings — ensure double-newline separation
     normalizedText = normalizedText.replace(
       /^([^\n]{1,80}[^.!?\n])\n(?!\n)(?=[A-Z])/gm,
-      "$1\n\n"
+      (match, line) => looksLikeHeadingLine(line.trim()) ? line + '\n\n' : match
     );
 
     const runHumara22 = async (input: string): Promise<string> => {
@@ -1054,7 +1053,9 @@ export async function POST(req: Request) {
           if (isHeading) {
             S.push(trimmed);
           } else {
-            const sents = trimmed.match(/[^.!?]+[.!?]+/g)?.map(s => s.trim()) || [trimmed];
+            // Normalize hard wraps within the paragraph to spaces before splitting
+            const normalizedPara = trimmed.replace(/\n/g, ' ').replace(/\s+/g, ' ').trim();
+            const sents = normalizedPara.match(/[^.!?]+[.!?]+/g)?.map(s => s.trim()) || [normalizedPara];
             S.push(...sents);
           }
         }

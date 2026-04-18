@@ -101,8 +101,10 @@ function splitIntoIndexedSentences(text: string): { sentences: string[]; paragra
         sentences.push(line);
       }
     } else {
-      const sents = robustSentenceSplit(trimmed);
-      sentences.push(...(sents.length ? sents : [trimmed]));
+      // Normalize hard wraps within the paragraph to spaces before splitting
+      const normalizedPara = trimmed.replace(/\n/g, ' ').replace(/\s+/g, ' ').trim();
+      const sents = robustSentenceSplit(normalizedPara);
+      sentences.push(...(sents.length ? sents : [normalizedPara]));
     }
   }
   return { sentences, paragraphBoundaries };
@@ -295,9 +297,10 @@ export async function POST(req: Request) {
           normalizedText = normalizedText.replace(
             /^((?:#{1,6}\s.+|[IVXLCDM]+\.\s.+|(?:Part|Section|Chapter)\s+\d+.*))\n(?!\n)/gim, "$1\n\n"
           );
-          // Add blank line AFTER short non-punctuation-ending lines followed by uppercase (likely headings)
+          // Add blank line AFTER short non-punctuation-ending lines that are actual headings
           normalizedText = normalizedText.replace(
-            /^([^\n]{1,80}[^.!?\n])\n(?!\n)(?=[A-Z])/gm, "$1\n\n"
+            /^([^\n]{1,80}[^.!?\n])\n(?!\n)(?=[A-Z])/gm,
+            (match, line) => looksLikeHeadingLine(line.trim()) ? line + '\n\n' : match
           );
           // Add blank line BEFORE heading lines that follow sentence-ending punctuation
           normalizedText = normalizedText.replace(
