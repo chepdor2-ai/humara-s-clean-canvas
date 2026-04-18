@@ -1,7 +1,8 @@
 /**
  * 5-Phase LLM Academic Humanizer
  * ---
- * Fast GPT-4o-mini fallback for Humara 2.4 when HF Space is unavailable.
+ * Fallback for Humara 2.4 when HF Space is unavailable.
+ * Uses Groq (free tier, llama-3.3-70b) by default; falls back to OpenAI if GROQ_API_KEY is absent.
  * Completes all 5 phases in a single batched API call per phase (~6s total).
  *
  * Phase 1: Deep structural rewrite — expert student academic writer
@@ -65,8 +66,24 @@ CRITICAL: Do not rewrite sentences. Only transform verb forms and voice. Keep al
 Input: numbered sentences [0], [1], ...
 Output: ONLY a JSON array of modified strings, same count as input. No markdown.`;
 
+// ── LLM client factory: Groq first, OpenAI fallback ──
+function makeLLMClient(): { client: OpenAI; model: string } {
+  const groqKey = process.env.GROQ_API_KEY?.trim();
+  if (groqKey) {
+    return {
+      client: new OpenAI({ apiKey: groqKey, baseURL: 'https://api.groq.com/openai/v1' }),
+      model: 'llama-3.3-70b-versatile',
+    };
+  }
+  const openaiKey = process.env.OPENAI_API_KEY?.trim();
+  if (openaiKey) {
+    return { client: new OpenAI({ apiKey: openaiKey }), model: 'gpt-4o-mini' };
+  }
+  throw new Error('No LLM API key available. Set GROQ_API_KEY (free) or OPENAI_API_KEY.');
+}
+
 /**
- * Run a single batch phase through GPT-4o-mini.
+ * Run a single batch phase through the configured LLM.
  * Sends all sentences in one call, parses JSON array response.
  */
 async function batchPhase(
@@ -74,13 +91,14 @@ async function batchPhase(
   sentences: string[],
   systemPrompt: string,
   timeoutMs: number = 8000,
+  model: string = 'llama-3.3-70b-versatile',
 ): Promise<string[]> {
   const sentenceList = sentences.map((s, i) => `[${i}] ${s}`).join('\n');
 
   try {
     const resp = await Promise.race([
       oai.chat.completions.create({
-        model: 'gpt-4o-mini',
+        model,
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: sentenceList.slice(0, 6000) },
@@ -121,12 +139,7 @@ export async function llmAcademicHumanize(
   text: string,
   maxTotalMs: number = 10000,
 ): Promise<{ humanized: string; stats: { mode: string; total_sentences: number; avg_change_ratio: number; met_threshold: number; threshold_ratio: number } }> {
-  const apiKey = process.env.OPENAI_API_KEY?.trim();
-  if (!apiKey) {
-    throw new Error('OPENAI_API_KEY not set for LLM Academic Humanizer');
-  }
-
-  const oai = new OpenAI({ apiKey });
+  const { client: oai, model } = makeLLMClient();
   const sentences = robustSentenceSplit(text);
   const start = Date.now();
   const perPhaseTimeout = Math.floor(maxTotalMs / 3); // ~5s per phase batch
@@ -134,18 +147,18 @@ export async function llmAcademicHumanize(
   console.log(`[LLM Academic] Starting 5-phase humanization: ${sentences.length} sentences`);
 
   // Phase 1: Deep structural rewrite
-  let current = await batchPhase(oai, sentences, PHASE_1_SYSTEM, perPhaseTimeout);
+  let current = await batchPhase(oai, sentences, PHASE_1_SYSTEM, perPhaseTimeout, model);
   console.log(`[LLM Academic] Phase 1 complete (${Date.now() - start}ms)`);
 
   if (Date.now() - start < maxTotalMs - 3000) {
     // Phases 2-3: Phrase injection + synonym replacement (combined)
-    current = await batchPhase(oai, current, PHASE_2_3_SYSTEM, perPhaseTimeout);
+    current = await batchPhase(oai, current, PHASE_2_3_SYSTEM, perPhaseTimeout, model);
     console.log(`[LLM Academic] Phases 2-3 complete (${Date.now() - start}ms)`);
   }
 
   if (Date.now() - start < maxTotalMs - 2000) {
     // Phases 4-5: -ing forms + voice shuffle (combined)
-    current = await batchPhase(oai, current, PHASE_4_5_SYSTEM, perPhaseTimeout);
+    current = await batchPhase(oai, current, PHASE_4_5_SYSTEM, perPhaseTimeout, model);
     console.log(`[LLM Academic] Phases 4-5 complete (${Date.now() - start}ms)`);
   }
 

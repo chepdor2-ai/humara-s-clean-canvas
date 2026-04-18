@@ -5,6 +5,7 @@ export type RuntimeStatus = 'healthy' | 'degraded' | 'unhealthy' | 'skipped';
 type EnvKey =
   | 'ADMIN_EMAILS'
   | 'EASY_API_KEY'
+  | 'GROQ_API_KEY'
   | 'NEXT_PUBLIC_ADMIN_EMAILS'
   | 'NEXT_PUBLIC_PAYSTACK_CALLBACK_URL'
   | 'NEXT_PUBLIC_SITE_URL'
@@ -42,10 +43,11 @@ const REQUIRED_ENV_KEYS: EnvKey[] = [
   'NEXT_PUBLIC_SUPABASE_URL',
   'NEXT_PUBLIC_SUPABASE_ANON_KEY',
   'SUPABASE_SERVICE_ROLE_KEY',
-  'OPENAI_API_KEY',
 ];
 
 const OPTIONAL_ENV_KEYS: EnvKey[] = [
+  'GROQ_API_KEY',
+  'OPENAI_API_KEY',
   'NEXT_PUBLIC_SITE_URL',
   'PAYSTACK_SECRET_KEY',
   'NEXT_PUBLIC_PAYSTACK_CALLBACK_URL',

@@ -881,22 +881,30 @@ export async function POST(req: Request) {
       // (no Nuru, no universal post-processing)
       humanized = await runHumara24(normalizedText);
 
-      // Deep Non-LLM Clean + Final Smooth per sentence (same as streaming phase pipeline)
-      const phantomSents = robustSentenceSplit(humanized);
-      for (let i = 0; i < phantomSents.length; i++) {
-        let s = phantomSents[i];
-        // Deep Non-LLM Clean
-        s = applyAIWordKill(s);
-        s = expandContractions(s);
-        s = removeEmDashes(s);
-        // Final Smooth & Grammar
-        s = postCleanGrammar(s);
-        s = expandContractions(s);
-        s = fixMidSentenceCapitalization(s);
-        s = removeEmDashes(s);
-        phantomSents[i] = s;
+      // Deep Non-LLM Clean + Final Smooth per sentence, preserving paragraph structure
+      const phantomParas = humanized.split(/\n\s*\n/).filter(p => p.trim());
+      const processedParas: string[] = [];
+      for (const para of phantomParas) {
+        const sents = robustSentenceSplit(para.trim());
+        for (let i = 0; i < sents.length; i++) {
+          let s = sents[i];
+          // Deep Non-LLM Clean
+          s = applyAIWordKill(s);
+          s = expandContractions(s);
+          s = removeEmDashes(s);
+          // Final Smooth & Grammar
+          s = postCleanGrammar(s);
+          s = expandContractions(s);
+          s = fixMidSentenceCapitalization(s);
+          s = removeEmDashes(s);
+          sents[i] = s;
+        }
+        processedParas.push(sents.join(' '));
       }
-      humanized = phantomSents.join(' ');
+      humanized = processedParas.join('\n\n');
+
+      // Restore original paragraph/heading structure
+      humanized = preserveInputStructure(normalizedText, humanized);
 
       // AntiPangram forensic cleanup
       const { antiPangramSimple } = await import('@/lib/engine/antipangram');

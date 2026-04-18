@@ -124,7 +124,16 @@ async function groqCall(system: string, user: string, temperature: number, maxTo
 }
 
 async function llmCall(system: string, user: string, temperature: number, maxTokens?: number, modelOverride?: string): Promise<string> {
-  // Try OpenAI first
+  // Try Groq first (free tier — llama-3.3-70b-versatile, 14,400 req/day)
+  if (!modelOverride && process.env.GROQ_API_KEY?.trim()) {
+    try {
+      return await groqCall(system, user, temperature, maxTokens);
+    } catch (groqErr: any) {
+      console.warn("  [GhostPro] Groq primary failed, falling back to OpenAI:", groqErr.message);
+    }
+  }
+
+  // Groq unavailable / failed — fall back to OpenAI
   try {
     const client = getClient();
     const model = modelOverride ?? LLM_MODEL;
@@ -139,16 +148,8 @@ async function llmCall(system: string, user: string, temperature: number, maxTok
     });
     return r.choices[0]?.message?.content?.trim() ?? "";
   } catch (err: any) {
-    console.error("  [GhostPro] OpenAI API Error:", err.message);
-  }
-
-  // OpenAI failed — try Groq as fallback
-  console.warn("  [GhostPro] System fallback to Groq due to OpenAI failure...");
-  try {
-    return await groqCall(system, user, temperature, maxTokens);
-  } catch (groqErr: any) {
-    console.error("  [GhostPro] Groq fallback also failed:", groqErr.message);
-    throw new Error("Both OpenAI and Groq API calls failed. Check your API keys.");
+    console.error("  [GhostPro] OpenAI fallback also failed:", err.message);
+    throw new Error("Both Groq and OpenAI API calls failed. Check your API keys.");
   }
 }
 

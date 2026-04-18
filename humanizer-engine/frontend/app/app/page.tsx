@@ -11,6 +11,7 @@ import { DiffView } from '@/components/humanizer/diff-view';
 import { MetricsStrip } from '@/components/humanizer/metrics-strip';
 import { SentenceMeter } from '@/components/humanizer/sentence-meter';
 import { ExportMenu } from '@/components/humanizer/export-menu';
+import { CosmicLoader } from '@/components/humanizer/cosmic-loader';
 
 const ADMIN_EMAILS = ['maguna956@gmail.com', 'maxwellotieno11@gmail.com'];
 
@@ -1705,44 +1706,14 @@ function EditorPageInner() {
           </div>
 
           {isAnimating ? (
-            <div className={`relative flex flex-col items-center justify-center ${EDITOR_HEIGHT_CLASS} px-4 py-6 sm:px-5 overflow-hidden`}>
-              <div className="relative w-full max-w-[560px] space-y-4 rounded-2xl border border-slate-200/70 dark:border-zinc-800/60 bg-white/90 dark:bg-zinc-900/45 px-4 py-5">
-                <div className="text-center space-y-1">
-                  <p className="text-[10px] font-bold uppercase tracking-[0.25em] text-cyan-600 dark:text-cyan-400">
-                    Humanizing
-                  </p>
-                  <p className="text-sm font-semibold text-slate-800 dark:text-zinc-100 truncate">
-                    {visibleProcessingStage}
-                  </p>
-                  <p className="text-xs text-slate-500 dark:text-zinc-400 leading-relaxed max-w-md mx-auto">
-                    {processingMessage}
-                  </p>
-                </div>
-
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between text-[11px] font-semibold">
-                    <span className="text-slate-600 dark:text-zinc-300">{activeEngineLabel}</span>
-                    <span className="text-cyan-600 dark:text-cyan-400 tabular-nums">{Math.round(streamProgress)}%</span>
-                  </div>
-                  <progress
-                    className="h-1.5 w-full overflow-hidden rounded-full bg-transparent [&::-webkit-progress-bar]:bg-slate-100 dark:[&::-webkit-progress-bar]:bg-zinc-800/60 [&::-webkit-progress-value]:bg-cyan-500 dark:[&::-webkit-progress-value]:bg-cyan-400 [&::-moz-progress-bar]:bg-cyan-500 dark:[&::-moz-progress-bar]:bg-cyan-400"
-                    max={100}
-                    value={Math.max(2, Math.min(100, streamProgress))}
-                  />
-                </div>
-
-                <div className="grid grid-cols-3 gap-2">
-                  {processingStatusItems.map((item) => (
-                    <div
-                      key={item.label}
-                      className="rounded-lg border border-slate-200/70 dark:border-zinc-800/50 bg-white/80 dark:bg-zinc-900/50 px-2.5 py-2 text-center"
-                    >
-                      <p className="text-[9px] uppercase tracking-wider text-slate-400 dark:text-zinc-500 font-semibold">{item.label}</p>
-                      <p className="mt-0.5 truncate text-xs font-bold text-slate-700 dark:text-zinc-200">{item.value}</p>
-                    </div>
-                  ))}
-                </div>
-              </div>
+            <div className={`relative ${EDITOR_HEIGHT_CLASS} overflow-hidden`}>
+              <CosmicLoader
+                stage={visibleProcessingStage}
+                message={processingMessage}
+                progress={streamProgress}
+                engineLabel={activeEngineLabel}
+                statusItems={processingStatusItems}
+              />
             </div>
           ) : result ? (
             <div className={`relative flex-1 ${EDITOR_HEIGHT_CLASS} overflow-hidden`}>

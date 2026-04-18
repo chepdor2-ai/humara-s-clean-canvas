@@ -9,7 +9,6 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import {
-  GrammarChecker,
   type Issue,
   type Severity,
   type CorrectionResult,
@@ -24,7 +23,60 @@ const SEV: Record<Severity, { label: string; dot: string; underline: string; cat
 };
 
 type EngineMode = 'rules' | 'ai' | 'both';
+type GrammarDomain = 'general' | 'academic' | 'legal' | 'medical' | 'technical';
 type CategoryFilter = 'all' | 'correctness' | 'clarity' | 'engagement' | 'ai';
+
+type GrammarApiMeta = {
+  request_id: string;
+  engine_version: string;
+  backend: string;
+  backend_label: string;
+  deployment: string;
+  mode: EngineMode | 'full';
+  domain: GrammarDomain;
+  ai_provider: string | null;
+  ai_used: boolean;
+  ai_available: boolean;
+  processing_time_ms: number;
+  rules_version: string;
+  strict_minimal_edits: boolean;
+  max_sentence_change_ratio: number;
+  preserve_quotes: boolean;
+  preserve_citations: boolean;
+  warnings: string[];
+};
+
+type GrammarApiResponse = {
+  editor_result: CorrectionResult;
+  corrected_text: string;
+  meta: GrammarApiMeta;
+};
+
+type GrammarHealth = {
+  status: string;
+  backend: {
+    engine: string;
+    deployment: string;
+    version: string;
+    rules_count: number;
+    ai_available: boolean;
+    domains: GrammarDomain[];
+    features: string[];
+    limits: {
+      max_text_length: number;
+      ai_text_length: number;
+    };
+    preferred_mode: string;
+  };
+};
+
+const DOMAINS: Array<{ value: GrammarDomain; label: string }> = [
+  { value: 'general', label: 'General' },
+  { value: 'academic', label: 'Academic' },
+  { value: 'legal', label: 'Legal' },
+  { value: 'medical', label: 'Medical' },
+  { value: 'technical', label: 'Technical' },
+];
 
 const CATEGORY_ICONS: Record<CategoryFilter, React.ReactNode> = {
   all:          <CheckCircle2 className="w-4 h-4" />,
@@ -44,17 +96,19 @@ const CATEGORIES: { key: CategoryFilter; label: string; desc: string; match: (i:
 /* ── Score circle (Grammarly-style single ring) ───────────────────────────── */
 
 function ScoreCircle({ score, size = 100 }: { score: number; size?: number }) {
-  const r = (size - 12) / 2;
+  const normalizedSize = 100;
+  const sizeClass = size <= 90 ? 'h-[90px] w-[90px]' : 'h-[100px] w-[100px]';
+  const r = (normalizedSize - 12) / 2;
   const circ = 2 * Math.PI * r;
   const off = circ - (score / 100) * circ;
   const c = score >= 80 ? '#22c55e' : score >= 50 ? '#f59e0b' : '#ef4444';
 
   return (
-    <div className="relative" style={{ width: size, height: size }}>
-      <svg className="w-full h-full -rotate-90" viewBox={`0 0 ${size} ${size}`}>
-        <circle cx={size / 2} cy={size / 2} r={r} fill="none" strokeWidth={6}
+    <div className={`relative ${sizeClass}`}>
+      <svg className="w-full h-full -rotate-90" viewBox={`0 0 ${normalizedSize} ${normalizedSize}`}>
+        <circle cx={normalizedSize / 2} cy={normalizedSize / 2} r={r} fill="none" strokeWidth={6}
           className="stroke-slate-100 dark:stroke-zinc-800" />
-        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke={c} strokeWidth={6}
+        <circle cx={normalizedSize / 2} cy={normalizedSize / 2} r={r} fill="none" stroke={c} strokeWidth={6}
           strokeLinecap="round" strokeDasharray={circ} strokeDashoffset={off}
           className="transition-all duration-1000 ease-out" />
       </svg>
@@ -73,7 +127,9 @@ function ScoreBar({ label, score, color }: { label: string; score: number; color
     <div className="flex items-center gap-3">
       <span className="text-[11px] text-slate-500 dark:text-zinc-500 w-16 text-right">{label}</span>
       <div className="flex-1 h-1.5 rounded-full bg-slate-100 dark:bg-zinc-800 overflow-hidden">
-        <div className="h-full rounded-full transition-all duration-700" style={{ width: `${score}%`, backgroundColor: color }} />
+        <svg className="h-full w-full" viewBox="0 0 100 6" preserveAspectRatio="none">
+          <rect x="0" y="0" width={score} height="6" rx="3" fill={color} className="transition-all duration-700" />
+        </svg>
       </div>
       <span className="text-[11px] font-semibold text-slate-600 dark:text-zinc-400 w-7">{score}</span>
     </div>
@@ -254,9 +310,9 @@ function EngineSelector({ mode, onChange }: { mode: EngineMode; onChange: (m: En
   }, []);
 
   const items: Record<EngineMode, { label: string; icon: React.ReactNode; desc: string }> = {
-    rules:  { label: 'Rules Engine', icon: <PenTool className="w-3.5 h-3.5" />, desc: 'Non-LLM grammar rules (17 rules)' },
-    ai:     { label: 'AI Engine',    icon: <Brain className="w-3.5 h-3.5" />,   desc: 'LLM-powered detection + correction' },
-    both:   { label: 'Rules + AI',   icon: <Zap className="w-3.5 h-3.5" />,     desc: 'Combined for maximum coverage' },
+    rules:  { label: 'Rules Engine', icon: <PenTool className="w-3.5 h-3.5" />, desc: 'Deterministic Vercel grammar engine' },
+    ai:     { label: 'AI Assist',    icon: <Brain className="w-3.5 h-3.5" />,   desc: 'AI suggestions with safe rules fallback' },
+    both:   { label: 'Full Coverage', icon: <Zap className="w-3.5 h-3.5" />,    desc: 'Rules plus AI for the strongest coverage' },
   };
 
   return (
@@ -304,95 +360,116 @@ export default function GrammarPage() {
   const [activeIssue, setActiveIssue] = useState<number | null>(null);
   const [copied, setCopied] = useState(false);
   const [showCorrected, setShowCorrected] = useState(false);
-  const [engineMode, setEngineMode] = useState<EngineMode>('rules');
-  const [aiLoading, setAiLoading] = useState(false);
+  const [engineMode, setEngineMode] = useState<EngineMode>('both');
+  const [checking, setChecking] = useState(false);
   const [dismissed, setDismissed] = useState<Set<number>>(new Set());
   const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>('all');
+  const [analysisError, setAnalysisError] = useState<string | null>(null);
+  const [backendMeta, setBackendMeta] = useState<GrammarApiMeta | null>(null);
+  const [backendHealth, setBackendHealth] = useState<GrammarHealth['backend'] | null>(null);
+  const [domain, setDomain] = useState<GrammarDomain>('general');
+  const [strictMinimalEdits, setStrictMinimalEdits] = useState(false);
+  const [preserveQuotes, setPreserveQuotes] = useState(true);
+  const [preserveCitations, setPreserveCitations] = useState(true);
+  const [maxSentenceChangeRatio, setMaxSentenceChangeRatio] = useState(0.28);
   const issueListRef = useRef<HTMLDivElement>(null);
+  const requestSequenceRef = useRef(0);
 
-  /* ── Analysis ────────────────────────────────────────────────────────── */
+  useEffect(() => {
+    let ignore = false;
+
+    void fetch('/api/grammar-check', { cache: 'no-store' })
+      .then(async (response) => {
+        if (!response.ok) return null;
+        return (await response.json()) as GrammarHealth;
+      })
+      .then((data) => {
+        if (!ignore && data?.backend) {
+          setBackendHealth(data.backend);
+        }
+      })
+      .catch(() => {
+        // Ignore passive health-check failures in the UI.
+      });
+
+    return () => {
+      ignore = true;
+    };
+  }, []);
+
+  const runCheck = useCallback(async (textToCheck: string) => {
+    const requestId = ++requestSequenceRef.current;
+    setChecking(true);
+    setAnalysisError(null);
+
+    try {
+      const response = await fetch('/api/grammar-check', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          text: textToCheck,
+          mode: engineMode,
+          domain,
+          preserveQuotes,
+          preserveCitations,
+          strictMinimalEdits,
+          maxSentenceChangeRatio,
+        }),
+      });
+
+      const data = (await response.json()) as Partial<GrammarApiResponse> & { error?: string; detail?: string };
+      if (!response.ok || !data.editor_result || !data.meta) {
+        throw new Error(data.detail || data.error || 'Grammar analysis failed.');
+      }
+
+      if (requestId !== requestSequenceRef.current) return;
+
+      setResult(data.editor_result);
+      setBackendMeta(data.meta);
+      setDismissed(new Set());
+      setCategoryFilter('all');
+      setActiveIssue(null);
+      setShowCorrected(false);
+    } catch (error: unknown) {
+      if (requestId !== requestSequenceRef.current) return;
+      setAnalysisError(error instanceof Error ? error.message : 'Grammar analysis failed.');
+    } finally {
+      if (requestId === requestSequenceRef.current) {
+        setChecking(false);
+      }
+    }
+  }, [domain, engineMode, maxSentenceChangeRatio, preserveCitations, preserveQuotes, strictMinimalEdits]);
 
   const handleCheck = useCallback(async () => {
     if (!inputText.trim()) return;
-    setDismissed(new Set());
-    setCategoryFilter('all');
-
-    const checker = new GrammarChecker();
-    const r = checker.check(inputText);
-    const usesAI = engineMode === 'ai' || engineMode === 'both';
-    const usesRules = engineMode === 'rules' || engineMode === 'both';
-
-    // Start with rules-based result as the base (or empty if not using rules)
-    const base: CorrectionResult = usesRules ? { ...r, issues: [...r.issues] } : { ...r, issues: [] as Issue[] };
-
-    if (usesAI) setAiLoading(true);
-    if (usesRules && !usesAI) {
-      setResult(r);
-      setActiveIssue(null);
-      setShowCorrected(false);
-      return;
-    }
-    // Show rules immediately if we'll also run python/ai
-    if (usesRules) setResult(r);
-
-    // -- AI engine --
-    if (usesAI) {
-      try {
-        const res = await fetch('/api/grammar-ai', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ text: inputText }),
-        });
-        if (res.ok) {
-          const data = await res.json();
-          if (data.issues?.length > 0) {
-            for (const ai of data.issues) {
-              const overlap = base.issues.some(
-                (i: Issue) => Math.abs(i.start - ai.start) < 3 && Math.abs(i.end - ai.end) < 3
-              );
-              if (!overlap) {
-                base.issues.push({
-                  ruleId: 'ai_detected', message: ai.message, severity: ai.severity as Severity,
-                  start: ai.start, end: ai.end,
-                  replacements: ai.correction ? [ai.correction] : [],
-                  confidence: 0.8,
-                  category: ai.category, sentenceIndex: 0, aiDetected: true,
-                });
-              } else if (ai.correction) {
-                const existing = base.issues.find(
-                  (i: Issue) => Math.abs(i.start - ai.start) < 3 && Math.abs(i.end - ai.end) < 3
-                );
-                if (existing && existing.replacements.length === 0) {
-                  existing.replacements = [ai.correction];
-                }
-              }
-            }
-          }
-        }
-      } catch { /* AI unavailable */ }
-    }
-
-    // Finalize
-    base.issues.sort((a: Issue, b: Issue) => a.start - b.start);
-    base.stats = {
-      errors: base.issues.filter((i: Issue) => i.severity === 'error').length,
-      warnings: base.issues.filter((i: Issue) => i.severity === 'warning').length,
-      style: base.issues.filter((i: Issue) => i.severity === 'style').length,
-    };
-    setResult(base);
-    setAiLoading(false);
-    setActiveIssue(null);
-    setShowCorrected(false);
-  }, [inputText, engineMode]);
+    await runCheck(inputText);
+  }, [inputText, runCheck]);
 
   /* ── Actions ─────────────────────────────────────────────────────────── */
 
   const handlePaste = useCallback(async () => {
-    try { setInputText(await navigator.clipboard.readText()); } catch { /* denied */ }
+    try {
+      setInputText(await navigator.clipboard.readText());
+      setResult(null);
+      setActiveIssue(null);
+      setDismissed(new Set());
+      setCategoryFilter('all');
+      setShowCorrected(false);
+      setAnalysisError(null);
+    } catch {
+      /* denied */
+    }
   }, []);
 
   const handleClear = useCallback(() => {
-    setInputText(''); setResult(null); setActiveIssue(null); setDismissed(new Set());
+    setInputText('');
+    setResult(null);
+    setActiveIssue(null);
+    setDismissed(new Set());
+    setCategoryFilter('all');
+    setShowCorrected(false);
+    setAnalysisError(null);
+    setBackendMeta(null);
   }, []);
 
   const handleCopy = useCallback(() => {
@@ -401,25 +478,28 @@ export default function GrammarPage() {
     setCopied(true); setTimeout(() => setCopied(false), 2000);
   }, [result, showCorrected]);
 
-  const handleAccept = useCallback((idx: number, rep: string) => {
+  const handleAccept = useCallback(async (idx: number, rep: string) => {
     if (!result) return;
     const issue = result.issues[idx];
     if (!issue) return;
     const newText = inputText.slice(0, issue.start) + rep + inputText.slice(issue.end);
     setInputText(newText);
-    const r = new GrammarChecker().check(newText);
-    setResult(r); setActiveIssue(null); setDismissed(new Set());
-  }, [result, inputText]);
+    await runCheck(newText);
+  }, [inputText, result, runCheck]);
 
   const handleDismiss = useCallback((idx: number) => {
     setDismissed(prev => new Set(prev).add(idx));
     if (activeIssue === idx) setActiveIssue(null);
   }, [activeIssue]);
 
-  const handleAcceptAll = useCallback(() => {
+  const handleAcceptAll = useCallback(async () => {
     if (!result) return;
+    const matcher = categoryFilter === 'all' ? null : CATEGORIES.find((category) => category.key === categoryFilter)?.match;
     const fixable = result.issues
-      .filter((issue, i) => issue.replacements.length > 0 && !dismissed.has(i))
+      .filter((issue, index) => {
+        if (dismissed.has(index) || issue.replacements.length === 0) return false;
+        return matcher ? matcher(issue) : true;
+      })
       .sort((a, b) => b.start - a.start);
     if (fixable.length === 0) return;
     let text = inputText;
@@ -427,35 +507,15 @@ export default function GrammarPage() {
       text = text.slice(0, issue.start) + issue.replacements[0] + text.slice(issue.end);
     }
     setInputText(text);
-    const r = new GrammarChecker().check(text);
-    setResult(r); setActiveIssue(null); setDismissed(new Set()); setCategoryFilter('all');
-  }, [result, inputText, dismissed]);
+    await runCheck(text);
+  }, [categoryFilter, dismissed, inputText, result, runCheck]);
 
-  const handleCorrectAll = useCallback(() => {
+  const handleCorrectAll = useCallback(async () => {
     if (!result) return;
-    // Iteratively fix all auto-fixable issues until none remain
-    let text = inputText;
-    let iterations = 0;
-    const maxIterations = 10;
-    while (iterations < maxIterations) {
-      const r = new GrammarChecker().check(text);
-      const fixable = r.issues
-        .filter(issue => issue.replacements.length > 0 && issue.confidence >= 0.7)
-        .sort((a, b) => b.start - a.start);
-      if (fixable.length === 0) {
-        setInputText(text);
-        setResult(r); setActiveIssue(null); setDismissed(new Set()); setCategoryFilter('all');
-        return;
-      }
-      for (const issue of fixable) {
-        text = text.slice(0, issue.start) + issue.replacements[0] + text.slice(issue.end);
-      }
-      iterations++;
-    }
-    const finalResult = new GrammarChecker().check(text);
-    setInputText(text);
-    setResult(finalResult); setActiveIssue(null); setDismissed(new Set()); setCategoryFilter('all');
-  }, [result, inputText]);
+    if (result.output === inputText) return;
+    setInputText(result.output);
+    await runCheck(result.output);
+  }, [inputText, result, runCheck]);
 
   /* ── Derived data ────────────────────────────────────────────────────── */
 
@@ -481,6 +541,8 @@ export default function GrammarPage() {
   const fixableCount = useMemo(() => visibleIssues.filter(i => i.replacements.length > 0).length, [visibleIssues]);
 
   const wordCount = useMemo(() => inputText.trim().split(/\s+/).filter(Boolean).length, [inputText]);
+  const backendWarnings = backendMeta?.warnings ?? [];
+  const canCorrectAll = Boolean(result && result.output !== inputText);
 
   /* ── Scroll sidebar to active card ───────────────────────────────────── */
 
@@ -506,12 +568,12 @@ export default function GrammarPage() {
      ════════════════════════════════════════════════════════════════════════ */
 
   return (
-    <div className="min-h-screen bg-[#f8f9fa] dark:bg-[#0a0a0f]">
+    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-[#f8f9fa] dark:bg-[#0a0a0f]">
 
       {/* ── Top bar ────────────────────────────────────────────────────── */}
-      <div className="border-b border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900/70 sticky top-0 z-30">
+      <div className="shrink-0 border-b border-slate-200 bg-white dark:border-zinc-800 dark:bg-zinc-900/70">
         <div className="max-w-[1800px] mx-auto px-6">
-          <div className="flex items-center justify-between h-14">
+          <div className="flex flex-wrap items-center justify-between gap-3 py-3">
             <div className="flex items-center gap-3">
               <Link href="/app" className="text-slate-400 dark:text-zinc-600 hover:text-emerald-500 transition-colors">
                 <ArrowRight className="w-4 h-4 rotate-180" />
@@ -519,31 +581,54 @@ export default function GrammarPage() {
               <div className="p-1.5 rounded-lg bg-gradient-to-br from-emerald-500 to-teal-600">
                 <BookOpen className="w-4 h-4 text-white" />
               </div>
-              <h1 className="text-base font-bold text-slate-900 dark:text-white">Grammar</h1>
+              <div>
+                <h1 className="text-base font-bold text-slate-900 dark:text-white">Grammar Editor</h1>
+                <p className="text-[11px] text-slate-400 dark:text-zinc-500">Vercel-native corrections with protected-span controls</p>
+              </div>
             </div>
 
-            <div className="flex items-center gap-3">
+            <div className="flex flex-wrap items-center gap-2">
               <EngineSelector mode={engineMode} onChange={setEngineMode} />
-              {aiLoading && (
-                <span className="text-[11px] text-cyan-500 animate-pulse flex items-center gap-1">
-                  <Brain className="w-3 h-3" /> Analyzing…
+              <label className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">
+                <span className="text-slate-400 dark:text-zinc-500">Domain</span>
+                <select
+                  value={domain}
+                  onChange={(event) => setDomain(event.target.value as GrammarDomain)}
+                  className="bg-transparent font-semibold text-slate-700 outline-none dark:text-zinc-200"
+                >
+                  {DOMAINS.map((option) => (
+                    <option key={option.value} value={option.value} className="text-slate-900 dark:text-zinc-100">
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              {backendHealth && (
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-600 dark:border-emerald-900/60 dark:bg-emerald-950/30 dark:text-emerald-400">
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                  {backendHealth.deployment} {backendHealth.engine}
+                </span>
+              )}
+              {checking && (
+                <span className="text-[11px] text-cyan-500 flex items-center gap-1">
+                  <RefreshCw className="w-3 h-3 animate-spin" /> Analyzing…
                 </span>
               )}
             </div>
 
             <div className="flex items-center gap-2">
-              {result && (
+              {result && !checking && (
                 <div className="hidden sm:flex items-center gap-3 mr-3 text-[11px]">
                   <span className="flex items-center gap-1 text-red-500 font-semibold"><span className="w-1.5 h-1.5 rounded-full bg-red-500" />{result.stats.errors}</span>
                   <span className="flex items-center gap-1 text-amber-500 font-semibold"><span className="w-1.5 h-1.5 rounded-full bg-amber-500" />{result.stats.warnings}</span>
                   <span className="flex items-center gap-1 text-blue-500 font-semibold"><span className="w-1.5 h-1.5 rounded-full bg-blue-500" />{result.stats.style}</span>
                 </div>
               )}
-              <button onClick={handleCheck} disabled={!inputText.trim()}
+              <button onClick={handleCheck} disabled={!inputText.trim() || checking}
                 className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold
                   bg-emerald-500 hover:bg-emerald-600 text-white
                   disabled:opacity-40 disabled:cursor-not-allowed transition-all">
-                <Zap className="w-4 h-4" /> Check
+                {checking ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4" />} {checking ? 'Checking' : 'Check'}
               </button>
             </div>
           </div>
@@ -551,13 +636,13 @@ export default function GrammarPage() {
       </div>
 
       {/* ── Two-column layout ──────────────────────────────────────────── */}
-      <div className="max-w-[1800px] mx-auto flex min-h-[calc(100vh-57px)]">
+      <div className="max-w-[1800px] mx-auto flex min-h-0 flex-1 w-full overflow-hidden">
 
         {/* ═══ LEFT: Editor ════════════════════════════════════════════════ */}
-        <div className="flex-1 flex flex-col border-b lg:border-b-0 lg:border-r border-slate-200 dark:border-zinc-800">
+        <div className="flex min-h-0 flex-1 flex-col border-b border-slate-200 dark:border-zinc-800 lg:border-b-0 lg:border-r">
 
           {/* Toolbar */}
-          <div className="flex flex-wrap items-center justify-between gap-2 px-4 sm:px-6 py-2 border-b border-slate-100 dark:border-zinc-800/60 bg-white/50 dark:bg-zinc-900/30">
+          <div className="shrink-0 flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 bg-white/50 px-4 py-2 dark:border-zinc-800/60 dark:bg-zinc-900/30 sm:px-6">
             <div className="flex items-center gap-1">
               <button onClick={handlePaste} className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-md text-xs font-medium text-slate-500 dark:text-zinc-400 hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors">
                 <ClipboardPaste className="w-3.5 h-3.5" /> Paste
@@ -604,13 +689,71 @@ export default function GrammarPage() {
             </div>
           </div>
 
+          <div className="shrink-0 border-b border-slate-100 bg-slate-50/80 px-4 py-3 dark:border-zinc-800/60 dark:bg-zinc-950/30 sm:px-6">
+            <div className="flex flex-wrap items-center gap-2 text-[11px]">
+              <button
+                onClick={() => setStrictMinimalEdits((value) => !value)}
+                className={`rounded-full border px-3 py-1.5 font-semibold transition-colors ${
+                  strictMinimalEdits
+                    ? 'border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300'
+                    : 'border-slate-200 bg-white text-slate-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-400'
+                }`}
+              >
+                {strictMinimalEdits ? 'Strict edits on' : 'Strict edits off'}
+              </button>
+              <button
+                onClick={() => setPreserveQuotes((value) => !value)}
+                className={`rounded-full border px-3 py-1.5 font-semibold transition-colors ${
+                  preserveQuotes
+                    ? 'border-cyan-300 bg-cyan-50 text-cyan-700 dark:border-cyan-700 dark:bg-cyan-950/30 dark:text-cyan-300'
+                    : 'border-slate-200 bg-white text-slate-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-400'
+                }`}
+              >
+                {preserveQuotes ? 'Protect quotes' : 'Quotes editable'}
+              </button>
+              <button
+                onClick={() => setPreserveCitations((value) => !value)}
+                className={`rounded-full border px-3 py-1.5 font-semibold transition-colors ${
+                  preserveCitations
+                    ? 'border-violet-300 bg-violet-50 text-violet-700 dark:border-violet-700 dark:bg-violet-950/30 dark:text-violet-300'
+                    : 'border-slate-200 bg-white text-slate-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-400'
+                }`}
+              >
+                {preserveCitations ? 'Protect citations' : 'Citations editable'}
+              </button>
+              <label className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-slate-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-400">
+                <span className="font-semibold">Sentence edit budget</span>
+                <input
+                  type="range"
+                  min={12}
+                  max={50}
+                  step={2}
+                  value={Math.round(maxSentenceChangeRatio * 100)}
+                  onChange={(event) => setMaxSentenceChangeRatio(Number(event.target.value) / 100)}
+                  className="accent-emerald-500"
+                />
+                <span className="font-bold text-emerald-600 dark:text-emerald-400">{Math.round(maxSentenceChangeRatio * 100)}%</span>
+              </label>
+            </div>
+            {(analysisError || backendWarnings.length > 0) && (
+              <div className="mt-2 space-y-1">
+                {analysisError && (
+                  <p className="text-[11px] font-medium text-red-500">{analysisError}</p>
+                )}
+                {!analysisError && backendWarnings.slice(0, 2).map((warning) => (
+                  <p key={warning} className="text-[11px] font-medium text-amber-600 dark:text-amber-400">{warning}</p>
+                ))}
+              </div>
+            )}
+          </div>
+
           {/* Editor area */}
-          <div className="flex-1 overflow-y-auto bg-white dark:bg-zinc-900/20">
+          <div className="min-h-0 flex-1 overflow-y-auto bg-white dark:bg-zinc-900/20">
             {!result ? (
               <textarea value={inputText} onChange={(e) => setInputText(e.target.value)}
                 onKeyDown={(e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) handleCheck(); }}
                 placeholder="Start typing or paste your text here…"
-                className="w-full h-full p-8 text-[15px] leading-[1.85] resize-none outline-none bg-transparent text-slate-800 dark:text-zinc-200 placeholder:text-slate-300 dark:placeholder:text-zinc-700" />
+                className="w-full h-full min-h-full resize-none bg-transparent p-8 text-[15px] leading-[1.85] text-slate-800 outline-none placeholder:text-slate-300 dark:text-zinc-200 dark:placeholder:text-zinc-700" />
             ) : (
               <div className="p-8">
                 {showCorrected ? (
@@ -624,19 +767,19 @@ export default function GrammarPage() {
           </div>
 
           {!result && inputText.trim() && (
-            <div className="px-6 py-2 border-t border-slate-100 dark:border-zinc-800/60 text-[11px] text-slate-400 dark:text-zinc-600 text-center">
+            <div className="shrink-0 border-t border-slate-100 px-6 py-2 text-center text-[11px] text-slate-400 dark:border-zinc-800/60 dark:text-zinc-600">
               <kbd className="px-1.5 py-0.5 rounded border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800 text-[10px] font-mono">Ctrl+Enter</kbd> to check
             </div>
           )}
         </div>
 
         {/* ═══ RIGHT: Sidebar ══════════════════════════════════════════════ */}
-        <div className="w-full lg:w-[360px] xl:w-[400px] flex-shrink-0 flex flex-col bg-white dark:bg-zinc-900/40 overflow-hidden">
+        <div className="flex min-h-0 w-full flex-shrink-0 flex-col overflow-hidden bg-white dark:bg-zinc-900/40 lg:w-[360px] xl:w-[400px]">
 
           {result ? (
             <>
               {/* Score */}
-              <div className="px-5 py-4 border-b border-slate-100 dark:border-zinc-800/60">
+              <div className="shrink-0 border-b border-slate-100 px-5 py-4 dark:border-zinc-800/60">
                 <div className="flex items-center gap-5">
                   <ScoreCircle score={result.scores.overall} size={90} />
                   <div className="flex-1 space-y-1.5">
@@ -646,10 +789,28 @@ export default function GrammarPage() {
                     <ScoreBar label="Flow" score={result.scores.flow} color="#06b6d4" />
                   </div>
                 </div>
+                <div className="mt-4 grid grid-cols-2 gap-2 text-[11px]">
+                  <div className="rounded-lg bg-slate-50 px-3 py-2 dark:bg-zinc-800/50">
+                    <div className="text-slate-400 dark:text-zinc-500">Backend</div>
+                    <div className="font-semibold text-slate-700 dark:text-zinc-200">{backendMeta?.backend_label ?? 'Vercel TypeScript'}</div>
+                  </div>
+                  <div className="rounded-lg bg-slate-50 px-3 py-2 dark:bg-zinc-800/50">
+                    <div className="text-slate-400 dark:text-zinc-500">Domain</div>
+                    <div className="font-semibold text-slate-700 dark:text-zinc-200">{DOMAINS.find((item) => item.value === domain)?.label ?? 'General'}</div>
+                  </div>
+                  <div className="rounded-lg bg-slate-50 px-3 py-2 dark:bg-zinc-800/50">
+                    <div className="text-slate-400 dark:text-zinc-500">Latency</div>
+                    <div className="font-semibold text-slate-700 dark:text-zinc-200">{backendMeta ? `${Math.round(backendMeta.processing_time_ms)} ms` : '—'}</div>
+                  </div>
+                  <div className="rounded-lg bg-slate-50 px-3 py-2 dark:bg-zinc-800/50">
+                    <div className="text-slate-400 dark:text-zinc-500">Mode</div>
+                    <div className="font-semibold text-slate-700 dark:text-zinc-200">{engineMode === 'both' ? 'Full coverage' : engineMode === 'ai' ? 'AI assist' : 'Rules only'}</div>
+                  </div>
+                </div>
               </div>
 
               {/* Category filter bar */}
-              <div className="px-4 py-3 border-b border-slate-100 dark:border-zinc-800/60">
+              <div className="shrink-0 border-b border-slate-100 px-4 py-3 dark:border-zinc-800/60">
                 <div className="grid grid-cols-4 gap-1.5">
                   {CATEGORIES.map(cat => {
                     const count = categoryCounts[cat.key] || 0;
@@ -677,7 +838,7 @@ export default function GrammarPage() {
               </div>
 
               {/* Suggestions header */}
-              <div className="px-5 py-3 border-b border-slate-100 dark:border-zinc-800/60 flex items-center justify-between">
+              <div className="shrink-0 border-b border-slate-100 px-5 py-3 dark:border-zinc-800/60 flex items-center justify-between">
                 <h3 className="text-sm font-bold text-slate-900 dark:text-white">
                   {categoryFilter === 'all' ? 'All Suggestions' : CATEGORIES.find(c => c.key === categoryFilter)?.label}
                   {' '}<span className="text-xs font-normal text-slate-400">({filteredIssues.length})</span>
@@ -691,14 +852,16 @@ export default function GrammarPage() {
                   )}
                   {fixableCount > 0 && (
                     <>
-                      <button onClick={handleCorrectAll}
+                      {canCorrectAll && (
+                        <button onClick={handleCorrectAll} disabled={checking}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-bold
+                            bg-slate-800 hover:bg-slate-900 dark:bg-white dark:hover:bg-zinc-200 text-white dark:text-zinc-900 transition-all disabled:opacity-50 disabled:cursor-not-allowed">
+                          <WandSparkles className="w-3.5 h-3.5" /> Correct All
+                        </button>
+                      )}
+                      <button onClick={handleAcceptAll} disabled={checking}
                         className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-bold
-                          bg-slate-800 hover:bg-slate-900 dark:bg-white dark:hover:bg-zinc-200 text-white dark:text-zinc-900 transition-all">
-                        <WandSparkles className="w-3.5 h-3.5" /> Correct All
-                      </button>
-                      <button onClick={handleAcceptAll}
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-bold
-                          bg-emerald-500 hover:bg-emerald-600 text-white transition-all">
+                          bg-emerald-500 hover:bg-emerald-600 text-white transition-all disabled:opacity-50 disabled:cursor-not-allowed">
                         <CheckCircle2 className="w-3.5 h-3.5" /> Accept All ({fixableCount})
                       </button>
                     </>
@@ -707,7 +870,7 @@ export default function GrammarPage() {
               </div>
 
               {/* Cards */}
-              <div ref={issueListRef} className="flex-1 overflow-y-auto p-3 space-y-2">
+              <div ref={issueListRef} className="min-h-0 flex-1 overflow-y-auto p-3 space-y-2">
                 {filteredIssues.length > 0 ? (
                   filteredIssues.map((issue) => {
                     const realIdx = result.issues.indexOf(issue);
@@ -750,12 +913,16 @@ export default function GrammarPage() {
                 <div className="text-[10px] font-bold text-slate-400 dark:text-zinc-500 uppercase tracking-wider mb-2">Engines</div>
                 <div className="space-y-1.5">
                   <div className="flex items-center justify-between text-xs">
-                    <span className="flex items-center gap-1.5 text-slate-600 dark:text-zinc-400"><PenTool className="w-3 h-3" /> Rules (17)</span>
+                    <span className="flex items-center gap-1.5 text-slate-600 dark:text-zinc-400"><PenTool className="w-3 h-3" /> Vercel grammar backend</span>
                     <span className="text-emerald-500 text-[10px] font-bold">Ready</span>
                   </div>
                   <div className="flex items-center justify-between text-xs">
-                    <span className="flex items-center gap-1.5 text-slate-600 dark:text-zinc-400"><Brain className="w-3 h-3" /> AI (LLM)</span>
-                    <span className="text-slate-400 dark:text-zinc-500 text-[10px] font-bold">On demand</span>
+                    <span className="flex items-center gap-1.5 text-slate-600 dark:text-zinc-400"><Brain className="w-3 h-3" /> AI assist</span>
+                    <span className="text-slate-400 dark:text-zinc-500 text-[10px] font-bold">{backendHealth?.ai_available ? 'Configured' : 'Optional'}</span>
+                  </div>
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="flex items-center gap-1.5 text-slate-600 dark:text-zinc-400"><Shield className="w-3 h-3" /> Protected spans</span>
+                    <span className="text-slate-400 dark:text-zinc-500 text-[10px] font-bold">Quotes + citations</span>
                   </div>
                 </div>
               </div>
