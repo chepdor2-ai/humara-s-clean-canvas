@@ -175,23 +175,33 @@ export function reflowParagraphToOriginalLines(originalLines: string[], rewritte
 }
 
 /**
- * Extract paragraphs by splitting on blank lines only — no heading detection.
- * This avoids the mismatch where the engine capitalises short lines (e.g.
- * "variable descriptions" → "Variable descriptions"), causing them to be
- * falsely detected as headings and dropped from the rewritten paragraph list.
+ * Extract paragraphs by splitting on blank lines only — no heuristic heading
+ * detection on the rewritten text.  We then exclude any chunk whose normalised
+ * key exactly matches one of the original heading keys.
+ *
+ * This avoids two problems:
+ *   1. Engine-capitalised short lines ("Variable descriptions") being falsely
+ *      detected as headings and dropped from the paragraph list.
+ *   2. Real headings preserved verbatim by the engine ("Applications of
+ *      Artificial Intelligence in Nursing") inflating the paragraph count.
  */
-function extractFlatParagraphs(text: string): string[] {
-  return normalizeNewlines(text)
+function extractFlatParagraphs(text: string, headingKeys?: Set<string>): string[] {
+  const paragraphs = normalizeNewlines(text)
     .split(/\n\s*\n/)
     .map((p) => normalizeParagraphText(p))
     .filter(Boolean);
+
+  if (!headingKeys || headingKeys.size === 0) return paragraphs;
+
+  return paragraphs.filter((p) => !headingKeys.has(normalizeHeadingKey(p)));
 }
 
 function redistributeParagraphsBySentenceCount(
   rewritten: string,
   originalParagraphs: ParagraphStructureBlock[],
+  headingKeys?: Set<string>,
 ): string[] {
-  const flattened = extractFlatParagraphs(rewritten).join(' ');
+  const flattened = extractFlatParagraphs(rewritten, headingKeys).join(' ');
   const rewrittenSentences = splitIntoSentences(flattened);
 
   if (rewrittenSentences.length === 0) {
@@ -240,9 +250,9 @@ export function preserveInputStructure(original: string, rewritten: string): str
     )
     : normalizeNewlines(rewritten);
 
-  let rewrittenParagraphs = extractFlatParagraphs(rewrittenForAlignment);
+  let rewrittenParagraphs = extractFlatParagraphs(rewrittenForAlignment, headingKeys);
   if (rewrittenParagraphs.length !== originalParagraphs.length) {
-    rewrittenParagraphs = redistributeParagraphsBySentenceCount(rewrittenForAlignment, originalParagraphs);
+    rewrittenParagraphs = redistributeParagraphsBySentenceCount(rewrittenForAlignment, originalParagraphs, headingKeys);
   }
 
   let paragraphIndex = 0;

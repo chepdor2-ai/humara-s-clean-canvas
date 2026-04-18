@@ -9,8 +9,8 @@ import { dirname, join, resolve } from "path";
 // Resolve dictionary directory: try multiple possible locations
 function findDictDir(): string {
   const candidates = [
-    join(process.cwd(), "..", "dictionaries"),       // frontend/ as cwd
-    join(process.cwd(), "dictionaries"),               // humanizer-engine/ as cwd
+    join(/* turbopackIgnore: true */ process.cwd(), "..", "dictionaries"),
+    join(/* turbopackIgnore: true */ process.cwd(), "dictionaries"),
     resolve(__dirname, "..", "..", "..", "..", "dictionaries"), // relative to this file
   ];
   for (const dir of candidates) {

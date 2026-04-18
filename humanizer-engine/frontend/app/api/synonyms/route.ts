@@ -2,36 +2,36 @@ import { NextRequest, NextResponse } from 'next/server';
 import fs from 'fs';
 import path from 'path';
 
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
+
 interface SynonymMap {
   [key: string]: string[];
 }
 
 let synonymCache: SynonymMap | null = null;
 
+function getDictionaryPaths(): string[] {
+  return [
+    path.join(/* turbopackIgnore: true */ process.cwd(), '..', 'dictionaries', 'curated_synonyms.json'),
+    path.join(/* turbopackIgnore: true */ process.cwd(), 'dictionaries', 'curated_synonyms.json'),
+  ];
+}
+
 function loadSynonyms(): SynonymMap {
   if (synonymCache) return synonymCache;
-  
-  // Try multiple paths since cwd varies between dev and build
-  const possiblePaths = [
-    path.join(process.cwd(), '..', 'dictionaries', 'curated_synonyms.json'),
-    path.join(process.cwd(), 'dictionaries', 'curated_synonyms.json'),
-    path.join(process.cwd(), '..', '..', 'dictionaries', 'curated_synonyms.json'),
-  ];
 
-  for (const dictPath of possiblePaths) {
+  for (const dictionaryPath of getDictionaryPaths()) {
     try {
-      if (fs.existsSync(dictPath)) {
-        const data = fs.readFileSync(dictPath, 'utf-8');
-        synonymCache = JSON.parse(data);
-        console.log('Loaded synonyms from:', dictPath);
-        return synonymCache || {};
-      }
+      if (!fs.existsSync(dictionaryPath)) continue;
+      const data = fs.readFileSync(dictionaryPath, 'utf-8');
+      synonymCache = JSON.parse(data);
+      return synonymCache || {};
     } catch (error) {
-      console.error('Failed to load synonyms from:', dictPath, error);
+      console.error('Failed to load curated_synonyms.json:', dictionaryPath, error);
     }
   }
 
-  console.error('Could not find curated_synonyms.json in any expected path. CWD:', process.cwd());
   return {};
 }
 

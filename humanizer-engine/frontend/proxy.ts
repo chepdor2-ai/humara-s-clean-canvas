@@ -27,12 +27,10 @@ const PUBLIC_PREFIXES = [
   '/images/',
 ];
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  // ── CORS for public API v1 routes ──────────────────────────────
   if (pathname.startsWith('/api/v1/')) {
-    // Preflight
     if (request.method === 'OPTIONS') {
       return new NextResponse(null, {
         status: 204,
@@ -44,7 +42,7 @@ export async function middleware(request: NextRequest) {
         },
       });
     }
-    // Actual request — add CORS headers
+
     const response = NextResponse.next();
     response.headers.set('Access-Control-Allow-Origin', '*');
     response.headers.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
@@ -52,13 +50,10 @@ export async function middleware(request: NextRequest) {
     return response;
   }
 
-  // Allow public routes
   if (PUBLIC_ROUTES.includes(pathname)) return NextResponse.next();
-  if (PUBLIC_PREFIXES.some(prefix => pathname.startsWith(prefix))) return NextResponse.next();
-  // Allow static files
+  if (PUBLIC_PREFIXES.some((prefix) => pathname.startsWith(prefix))) return NextResponse.next();
   if (pathname.includes('.')) return NextResponse.next();
 
-  // For /app routes, check auth via Supabase SSR
   if (pathname.startsWith('/app')) {
     let response = NextResponse.next({ request });
 
@@ -73,15 +68,17 @@ export async function middleware(request: NextRequest) {
           setAll(cookiesToSet) {
             cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value));
             response = NextResponse.next({ request });
-            cookiesToSet.forEach(({ name, value, options }) =>
-              response.cookies.set(name, value, options)
-            );
+            cookiesToSet.forEach(({ name, value, options }) => {
+              response.cookies.set(name, value, options);
+            });
           },
         },
       },
     );
 
-    const { data: { user } } = await supabase.auth.getUser();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
 
     if (!user) {
       const loginUrl = new URL('/login', request.url);

@@ -32,7 +32,7 @@ const LLM_TIMEOUT = parseInt(process.env.PIPELINE_TIMEOUT ?? "8000", 10);
 
 let CURATED_SYNONYMS: Record<string, string[]> = {};
 try {
-  const dictDir = join(process.cwd(), "..", "dictionaries");
+  const dictDir = join(/* turbopackIgnore: true */ process.cwd(), "..", "dictionaries");
   CURATED_SYNONYMS = JSON.parse(readFileSync(join(dictDir, "curated_synonyms.json"), "utf-8"));
 } catch { /* skip */ }
 

@@ -261,9 +261,9 @@ let _starters: string[] | null = null;
 async function tryLoadJSON<T>(path: string, fallback: T): Promise<T> {
   const candidates = [
     // When running from humanizer-engine/frontend as cwd (Render start/build scripts do this)
-    join(process.cwd(), 'lib', 'engine', 'v11', 'data', path),
+    join(/* turbopackIgnore: true */ process.cwd(), 'lib', 'engine', 'v11', 'data', path),
     // When running from repo root as cwd
-    join(process.cwd(), 'humanizer-engine', 'frontend', 'lib', 'engine', 'v11', 'data', path),
+    join(/* turbopackIgnore: true */ process.cwd(), 'humanizer-engine', 'frontend', 'lib', 'engine', 'v11', 'data', path),
   ];
 
   for (const fullPath of candidates) {

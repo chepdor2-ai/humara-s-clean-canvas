@@ -260,9 +260,9 @@ const phraseCache = new LRUCache<string, string[]>(50000);
 function getDataPath(filename: string): string {
   // Try multiple possible data locations
   const candidates = [
-    path.join(process.cwd(), 'data', 'stealth', filename),
-    path.join(process.cwd(), '..', 'data', 'stealth', filename),
-    path.join(process.cwd(), 'humanizer-engine', 'data', 'stealth', filename),
+    path.join(/* turbopackIgnore: true */ process.cwd(), 'data', 'stealth', filename),
+    path.join(/* turbopackIgnore: true */ process.cwd(), '..', 'data', 'stealth', filename),
+    path.join(/* turbopackIgnore: true */ process.cwd(), 'humanizer-engine', 'data', 'stealth', filename),
   ];
   for (const p of candidates) {
     if (fs.existsSync(p)) return p;

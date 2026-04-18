@@ -3,7 +3,7 @@ import path from "path";
 
 const nextConfig: NextConfig = {
   turbopack: {
-    root: path.resolve(process.cwd()),
+    root: path.resolve(/* turbopackIgnore: true */ process.cwd()),
   },
   images: {
     formats: ['image/avif', 'image/webp'],
@@ -25,7 +25,7 @@ const nextConfig: NextConfig = {
     // (avoids needing to install them separately in frontend)
     config.resolve.modules = [
       ...(config.resolve.modules || []),
-      path.resolve(process.cwd(), "..", "ts-engine", "node_modules"),
+      path.resolve(/* turbopackIgnore: true */ process.cwd(), "..", "ts-engine", "node_modules"),
     ];
     return config;
   },

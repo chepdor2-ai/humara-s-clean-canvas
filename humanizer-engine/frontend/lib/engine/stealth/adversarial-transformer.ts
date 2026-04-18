@@ -44,8 +44,8 @@ let weightsLoaded = false;
 
 function getWeightsPath(): string {
   const candidates = [
-    path.join(process.cwd(), 'data', 'stealth', 'adversarial_weights.json'),
-    path.join(process.cwd(), 'humanizer-engine', 'data', 'stealth', 'adversarial_weights.json'),
+    path.join(/* turbopackIgnore: true */ process.cwd(), 'data', 'stealth', 'adversarial_weights.json'),
+    path.join(/* turbopackIgnore: true */ process.cwd(), 'humanizer-engine', 'data', 'stealth', 'adversarial_weights.json'),
   ];
   for (const p of candidates) {
     if (fs.existsSync(p)) return p;
