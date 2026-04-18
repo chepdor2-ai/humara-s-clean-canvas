@@ -174,10 +174,16 @@ export function reflowParagraphToOriginalLines(originalLines: string[], rewritte
   return lines.filter((line) => line.trim().length > 0).join('\n');
 }
 
-function extractStructuredParagraphs(text: string): string[] {
-  return parseStructuredBlocks(text)
-    .filter(isParagraphBlock)
-    .map((block) => normalizeParagraphText(block.rawLines.join('\n')))
+/**
+ * Extract paragraphs by splitting on blank lines only — no heading detection.
+ * This avoids the mismatch where the engine capitalises short lines (e.g.
+ * "variable descriptions" → "Variable descriptions"), causing them to be
+ * falsely detected as headings and dropped from the rewritten paragraph list.
+ */
+function extractFlatParagraphs(text: string): string[] {
+  return normalizeNewlines(text)
+    .split(/\n\s*\n/)
+    .map((p) => normalizeParagraphText(p))
     .filter(Boolean);
 }
 
@@ -185,7 +191,7 @@ function redistributeParagraphsBySentenceCount(
   rewritten: string,
   originalParagraphs: ParagraphStructureBlock[],
 ): string[] {
-  const flattened = extractStructuredParagraphs(rewritten).join(' ');
+  const flattened = extractFlatParagraphs(rewritten).join(' ');
   const rewrittenSentences = splitIntoSentences(flattened);
 
   if (rewrittenSentences.length === 0) {
@@ -234,7 +240,7 @@ export function preserveInputStructure(original: string, rewritten: string): str
     )
     : normalizeNewlines(rewritten);
 
-  let rewrittenParagraphs = extractStructuredParagraphs(rewrittenForAlignment);
+  let rewrittenParagraphs = extractFlatParagraphs(rewrittenForAlignment);
   if (rewrittenParagraphs.length !== originalParagraphs.length) {
     rewrittenParagraphs = redistributeParagraphsBySentenceCount(rewrittenForAlignment, originalParagraphs);
   }

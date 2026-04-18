@@ -9,6 +9,7 @@ import { ShortcutsOverlay } from '@/components/shortcuts-overlay'
 import { AmbientBackground } from '@/components/ambient-background'
 import { OnboardingTour } from '@/components/onboarding-tour'
 import { Toaster } from '@/components/ui/sonner'
+import { UsageProvider } from './UsageBar'
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
@@ -16,17 +17,19 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   return (
     <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
       <CommandPaletteProvider>
-        <AmbientBackground />
-        <div className="flex min-h-screen">
-          <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
-          <div className="flex flex-1 flex-col min-w-0">
-            <TopBar onMenuToggle={() => setSidebarOpen(o => !o)} />
-            <main className="flex-1 overflow-y-auto">{children}</main>
+        <UsageProvider>
+          <AmbientBackground />
+          <div className="flex min-h-screen">
+            <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+            <div className="flex flex-1 flex-col min-w-0">
+              <TopBar onMenuToggle={() => setSidebarOpen(o => !o)} />
+              <main className="flex-1 overflow-y-auto">{children}</main>
+            </div>
           </div>
-        </div>
-        <ShortcutsOverlay />
-        <OnboardingTour />
-        <Toaster />
+          <ShortcutsOverlay />
+          <OnboardingTour />
+          <Toaster />
+        </UsageProvider>
       </CommandPaletteProvider>
     </ThemeProvider>
   )

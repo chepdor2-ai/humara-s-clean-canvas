@@ -3,7 +3,7 @@ import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 
 import { Copy, Check, Zap, Eraser, RotateCcw, Type, AlignLeft, RefreshCw, AlertTriangle, Clock, ChevronDown, ChevronUp, Shield, Settings, ClipboardPaste, SpellCheck, GitCompare, ShieldCheck, Text, Download, Sparkles } from 'lucide-react';
 import { GrammarChecker } from '@/lib/engine/grammar-corrector';
-import UsageBar, { useUsage, UsageProvider } from './UsageBar';
+import UsageBar, { useUsage } from './UsageBar';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../AuthProvider';
 import Link from 'next/link';
@@ -283,11 +283,7 @@ const TONES = [
 
 /* ── Page ───────────────────────────────────────────────────────────────── */
 export default function EditorPage() {
-  return (
-    <UsageProvider>
-      <EditorPageInner />
-    </UsageProvider>
-  );
+  return <EditorPageInner />;
 }
 
 function EditorPageInner() {
@@ -439,6 +435,9 @@ function EditorPageInner() {
 
   const inputWords = useMemo(() => (text.trim() ? text.trim().split(/\s+/).length : 0), [text]);
   const outputWords = useMemo(() => (result.trim() ? result.trim().split(/\s+/).length : 0), [result]);
+  const remainingDailyWords = usage ? Math.max(0, usage.wordsLimit - usage.wordsUsed) : 0;
+  const isDailyLimitReached = !isAdmin && !!usage && remainingDailyWords <= 0;
+  const isRephraseLimitReached = !isAdmin && !!usage && remainingDailyWords < outputWords;
 
   const stripLeadingPanelLabel = useCallback((value: string): string => {
     const normalized = value.replace(/\r\n/g, '\n');
@@ -465,6 +464,11 @@ function EditorPageInner() {
     (value: string) => stripLeadingPanelLabel(value),
     [stripLeadingPanelLabel],
   );
+
+  /** Capitalise first letter of text and after sentence-ending punctuation. */
+  const capitalizeSentenceStarts = useCallback((value: string): string => {
+    return value.replace(/(^|[.!?]\s+)([a-z])/gm, (_m, pre, ch) => pre + ch.toUpperCase());
+  }, []);
 
   const normalizeOutputText = useCallback(
     (value: string) => stripLeadingPanelLabel(value),
@@ -917,8 +921,7 @@ function EditorPageInner() {
       setError(`Maximum ${MAX_WORDS_PER_REQUEST.toLocaleString()} words per request. You have ${inputWords.toLocaleString()} words. Split your text into smaller sections.`);
       return;
     }
-    const isPremiumPlan = usage?.planName && usage.planName.trim().toLowerCase() !== 'free';
-    if (usage && !isPremiumPlan) {
+    if (!isAdmin && usage) {
       const remaining = usage.wordsLimit - usage.wordsUsed;
       if (remaining < inputWords) {
         setError(`Word limit reached. ${Math.max(0, remaining).toLocaleString()} words remaining of your daily ${usage.wordsLimit.toLocaleString()} words.`);
@@ -969,7 +972,7 @@ function EditorPageInner() {
         addToHistory(text, currentResult, (finalData.engine_used as string) || engine, 0, 0, (finalData.word_count as number) || outputWords);
 
         // Update usage: if backend returned updated counts, use them; otherwise optimistic + refresh
-        if (!isPremiumPlan) {
+        if (!isAdmin) {
           if (typeof finalData.usage_words_used === 'number') {
             // Backend gave us exact counts — handled by refresh below
           } else {
@@ -995,6 +998,13 @@ function EditorPageInner() {
   const handleRephrase = async () => {
     if (!result.trim()) return;
     if (outputWords < 10) { setError('Output too short to rephrase.'); return; }
+    if (!isAdmin && usage) {
+      const remaining = usage.wordsLimit - usage.wordsUsed;
+      if (remaining < outputWords) {
+        setError(`Word limit reached. ${Math.max(0, remaining).toLocaleString()} words remaining of your daily ${usage.wordsLimit.toLocaleString()} words.`);
+        return;
+      }
+    }
     setRephrasing(true); setError('');
     // Reset streaming state and start processing state.
     setStreamGlobalStage('Initializing…');
@@ -1028,9 +1038,8 @@ function EditorPageInner() {
         setMeaningScore(finalData.meaning_similarity as number);
         // Detection disabled — coming soon
 
-        // Update usage: optimistic + server refresh (skip for premium)
-        const isRephrasePremium = usage?.planName && usage.planName.trim().toLowerCase() !== 'free';
-        if (!isRephrasePremium) {
+        // Update usage: optimistic + server refresh (all non-admin users are metered)
+        if (!isAdmin) {
           if (typeof finalData.usage_words_used !== 'number') {
             addWords((finalData.input_word_count as number) || outputWords);
           }
@@ -1059,7 +1068,7 @@ function EditorPageInner() {
 
   const handlePasteFromClipboard = useCallback(async () => {
     const applyPastedText = (candidate: string) => {
-      const normalized = normalizeTypedInput(candidate);
+      const normalized = capitalizeSentenceStarts(normalizeTypedInput(candidate));
       if (!normalized.trim()) {
         setError('Clipboard is empty.');
         return false;
@@ -1082,7 +1091,7 @@ function EditorPageInner() {
     if (manualText !== null && applyPastedText(manualText)) return;
 
     setError('Could not read clipboard automatically. Use Ctrl+V in the input box.');
-  }, [normalizeTypedInput]);
+  }, [normalizeTypedInput, capitalizeSentenceStarts]);
 
   const handleClear = () => {
     setText(''); setResult('');
@@ -1099,6 +1108,13 @@ function EditorPageInner() {
 
   const handleRehumanizeFlagged = async () => {
     if (!result) return;
+    if (!isAdmin && usage) {
+      const remaining = usage.wordsLimit - usage.wordsUsed;
+      if (remaining <= 0) {
+        setError(`Word limit reached. ${Math.max(0, remaining).toLocaleString()} words remaining of your daily ${usage.wordsLimit.toLocaleString()} words.`);
+        return;
+      }
+    }
     setRehumanizing(true); setError('');
     const MAX_ITERATIONS = 5;
     let currentText = result;
@@ -1298,6 +1314,11 @@ function EditorPageInner() {
             <h1 className="text-base sm:text-lg font-black text-cyan-600 dark:text-cyan-100 tracking-tight whitespace-nowrap">Humara Stealth</h1>
             <div className="w-px h-4 bg-slate-300 dark:bg-cyan-900/50 hidden sm:block" />
             <UsageBar />
+            {isDailyLimitReached && (
+              <span className="inline-flex items-center rounded-full border border-red-200 dark:border-red-900/60 bg-red-50 dark:bg-red-950/40 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-red-700 dark:text-red-300">
+                Limit reached
+              </span>
+            )}
           </div>
           <div className="flex items-center gap-1.5">
             {isAdmin && (
@@ -1414,10 +1435,14 @@ function EditorPageInner() {
               className="w-16 h-1.5 accent-cyan-500 cursor-pointer" title={`Humanization rate: ${humanizationRate} (${humanizationRate * 10}% min change)`} />
             <span className="text-[10px] font-bold text-cyan-600 dark:text-cyan-400 min-w-[14px] text-center">{humanizationRate}</span>
           </div>
-          <button onClick={handleHumanize} disabled={!text.trim() || loading || rephrasing}
-            className="w-full sm:w-auto sm:ml-auto bg-gradient-to-r from-cyan-600 to-teal-500 dark:from-cyan-700 dark:to-teal-600 hover:from-cyan-500 hover:to-teal-400 dark:hover:from-cyan-600 dark:hover:to-teal-500 text-white text-[11px] font-bold rounded-lg px-4 py-2 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-1.5 shadow-md hover:shadow-lg">
+          <button onClick={handleHumanize} disabled={!text.trim() || loading || rephrasing || isDailyLimitReached}
+            className={`w-full sm:w-auto sm:ml-auto text-white text-[11px] font-bold rounded-lg px-4 py-2 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-1.5 shadow-md ${
+              isDailyLimitReached
+                ? 'bg-gradient-to-r from-red-600 to-red-500 dark:from-red-700 dark:to-red-600'
+                : 'bg-gradient-to-r from-cyan-600 to-teal-500 dark:from-cyan-700 dark:to-teal-600 hover:from-cyan-500 hover:to-teal-400 dark:hover:from-cyan-600 dark:hover:to-teal-500 hover:shadow-lg'
+            }`}>
             {loading ? <RotateCcw className="w-3 h-3" /> : <Sparkles className="w-3 h-3" />}
-            {loading ? 'Humanizing…' : 'Humanize'}
+            {loading ? 'Humanizing…' : isDailyLimitReached ? 'Limit Reached' : 'Humanize'}
           </button>
         </div>
       </div>
@@ -1596,6 +1621,15 @@ function EditorPageInner() {
           <div className="flex-1 relative">
             <textarea ref={inputRef} value={text}
               onChange={(e) => setText(normalizeTypedInput(e.target.value))}
+              onPaste={(e) => {
+                e.preventDefault();
+                const pasted = e.clipboardData.getData('text/plain');
+                const ta = e.currentTarget;
+                const before = text.slice(0, ta.selectionStart);
+                const after = text.slice(ta.selectionEnd);
+                const full = before + pasted + after;
+                setText(capitalizeSentenceStarts(normalizeTypedInput(full)));
+              }}
               className={`editor-highlight-input relative z-10 w-full ${EDITOR_HEIGHT_CLASS} outline-none resize-y overflow-y-auto text-[14px] leading-[1.8] text-slate-800 dark:text-zinc-200 p-5 placeholder:text-slate-400 dark:placeholder:text-zinc-500`}
               placeholder="Paste text you want to humanize..." />
             {!text && (
@@ -1643,15 +1677,15 @@ function EditorPageInner() {
                       </button>
                     ))}
                   </div>
-                  <button onClick={handleRehumanizeFlagged} disabled={rehumanizing || loading}
+                  <button onClick={handleRehumanizeFlagged} disabled={rehumanizing || loading || isDailyLimitReached}
                     className="text-[11px] font-semibold text-amber-600 dark:text-amber-500 hover:text-amber-700 dark:hover:text-amber-300 px-1.5 sm:px-2 py-1 rounded-lg hover:bg-amber-50 dark:hover:bg-amber-950/30 transition-all flex items-center gap-1 disabled:opacity-50"
-                    title="Fix flagged AI sentences">
+                    title={isDailyLimitReached ? 'Daily limit reached' : 'Fix flagged AI sentences'}>
                     <AlertTriangle className="w-3 h-3" />
                     {rehumanizing ? 'Fixing…' : 'Fix AI'}
                   </button>
-                  <button onClick={handleRephrase} disabled={rephrasing || loading}
+                  <button onClick={handleRephrase} disabled={rephrasing || loading || isRephraseLimitReached}
                     className="text-[11px] font-semibold text-cyan-600 dark:text-cyan-400 hover:text-cyan-700 dark:hover:text-cyan-300 px-1.5 sm:px-2 py-1 rounded-lg hover:bg-cyan-50 dark:hover:bg-cyan-950/30 transition-all flex items-center gap-1 disabled:opacity-50"
-                    title="Rehumanize output">
+                    title={isRephraseLimitReached ? 'Not enough remaining daily words' : 'Rehumanize output'}>
                     <RotateCcw className="w-3 h-3" />
                     {rephrasing ? 'Rehumanizing…' : 'Rehumanize'}
                   </button>

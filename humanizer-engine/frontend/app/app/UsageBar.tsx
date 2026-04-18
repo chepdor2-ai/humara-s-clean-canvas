@@ -22,11 +22,23 @@ interface UsageContextValue {
 
 const UsageContext = createContext<UsageContextValue | null>(null);
 
+const FREE_DEFAULTS: UsageData = {
+  wordsUsed: 0,
+  wordsLimit: 1000,
+  monthlyUsed: 0,
+  monthlyLimit: 30000,
+  daysRemaining: 0,
+  planName: 'Free',
+};
+
 export function useUsage(): UsageContextValue {
   const ctx = useContext(UsageContext);
-  if (ctx) return ctx;
-  // Fallback for components rendered outside the provider (e.g. dashboard, settings)
-  return useFallbackUsage();
+  return ctx ?? {
+    usage: FREE_DEFAULTS,
+    loading: false,
+    refresh: async () => {},
+    addWords: () => {},
+  };
 }
 
 function useCountUp(target: number, duration: number = 1000) {
@@ -57,13 +69,17 @@ function useCountUp(target: number, duration: number = 1000) {
   return count;
 }
 
-function parseUsageResponse(data: any): UsageData {
-  const totalUsed = (data.words_used_fast || 0) + (data.words_used_stealth || 0);
-  const rawLimit = (data.words_limit_fast || 0) + (data.words_limit_stealth || 0);
-  const planName = String(data.plan_name || 'Free');
+function parseUsageResponse(data: Record<string, unknown>): UsageData {
+  const usedFast = Number(data.words_used_fast ?? 0);
+  const usedStealth = Number(data.words_used_stealth ?? 0);
+  const limitFast = Number(data.words_limit_fast ?? 0);
+  const limitStealth = Number(data.words_limit_stealth ?? 0);
+  const totalUsed = usedFast + usedStealth;
+  const rawLimit = limitFast + limitStealth;
+  const planName = String(data.plan_name ?? 'Free');
   const isFree = planName.trim().toLowerCase() === 'free';
   const totalLimit = rawLimit > 0 ? rawLimit : (isFree ? 1000 : 0);
-  const daysRemaining = Number(data.days_remaining || 0);
+  const daysRemaining = Number(data.days_remaining ?? 0);
   const cycleDays = daysRemaining > 0 ? Math.max(1, Math.min(30, daysRemaining)) : 30;
   const monthlyLimit = totalLimit * 30;
   const monthlyUsed = Math.min(monthlyLimit, Math.max(0, totalUsed + (30 - cycleDays) * totalLimit));
@@ -100,15 +116,6 @@ async function fetchUsageData(accessToken: string | undefined, userId: string): 
   console.warn('Usage RPC unavailable:', rpc.error?.message);
   return null;
 }
-
-const FREE_DEFAULTS: UsageData = {
-  wordsUsed: 0,
-  wordsLimit: 1000,
-  monthlyUsed: 0,
-  monthlyLimit: 30000,
-  daysRemaining: 0,
-  planName: 'Free',
-};
 
 function useUsageInternal() {
   const { user, session } = useAuth();
@@ -151,12 +158,6 @@ function useUsageInternal() {
   }, [refresh, user]);
 
   return { usage, loading, refresh, addWords };
-}
-
-/** Standalone hook for pages that are outside the UsageProvider (dashboard, settings) */
-function useFallbackUsage(): UsageContextValue {
-  const internal = useUsageInternal();
-  return internal;
 }
 
 /** Wrap the main /app page with this so UsageBar and page.tsx share one piece of state */

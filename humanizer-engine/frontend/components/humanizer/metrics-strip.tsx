@@ -11,7 +11,7 @@ function easeBand(score: number) {
   return { label: "Very hard", color: "text-rose-500" }
 }
 
-export function MetricsStrip({ text, label }: { text: string; label: string }) {
+export function MetricsStrip({ text }: { text: string; label?: string }) {
   const metrics = useMemo(() => {
     const words = text.trim() ? text.trim().split(/\s+/).length : 0
     const chars = text.length
@@ -26,9 +26,6 @@ export function MetricsStrip({ text, label }: { text: string; label: string }) {
 
   return (
     <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-[11px] text-muted-foreground">
-      <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/80">
-        {label}
-      </span>
       <Cell icon={<Clock className="h-3 w-3" />}>
         <span className="font-mono tabular-nums text-foreground">{metrics.words}</span>
         <span>words</span>
