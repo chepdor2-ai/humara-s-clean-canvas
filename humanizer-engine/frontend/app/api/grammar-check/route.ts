@@ -29,7 +29,7 @@ export async function POST(req: NextRequest) {
 
     // Run domain-specific rules if applicable
     const validDomains: Domain[] = ['academic', 'legal', 'medical', 'technical'];
-    let domainIssues: typeof result.issues = [];
+    const domainIssues: typeof result.issues = [];
     if (validDomains.includes(domain as Domain)) {
       const domainRule = createDomainRule(domain as Domain);
       // Re-parse sentences to run domain rule

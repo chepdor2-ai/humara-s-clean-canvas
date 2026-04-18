@@ -192,8 +192,7 @@ function computeOverallStatus(input: {
   }
 
   if (
-    input.optionalWarnings > 0
-    || input.engineWarnings > 0
+    input.engineWarnings > 0
     || !input.paymentsReady
     || !input.siteConfigured
     || input.supabaseCheckStatus === 'degraded'

@@ -147,8 +147,8 @@ export const voicePhase: Phase = {
   name: 'voice',
   async process(state: DocumentState): Promise<DocumentState> {
     let patternKills = 0;
-    let authorialInserts = 0;
-    let literaryDevices = 0;
+    const authorialInserts = 0;
+    const literaryDevices = 0;
     let punctChanges = 0;
     let qualifierStrips = 0;
 

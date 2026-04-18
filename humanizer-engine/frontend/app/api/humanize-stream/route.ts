@@ -774,10 +774,10 @@ export async function POST(req: Request) {
                 inputSentences.map(async (sentence, i) => {
                   if (isHeadingSentCheck(sentence)) return sentence;
                   try {
-                    let result = await runEngineOnSentence(sentence);
+                    const result = await runEngineOnSentence(sentence);
                     let final = result && result.trim().length > 0 ? result : sentence;
                     // LLM engines: max 1 retry (each call is expensive)
-                    let change = measureSentenceChange(sentence, final);
+                    const change = measureSentenceChange(sentence, final);
                     if (change < minChangeThreshold) {
                       const retried = await runEngineOnSentence(final);
                       if (retried && retried.trim().length > 0) final = retried;
@@ -806,7 +806,7 @@ export async function POST(req: Request) {
                   continue;
                 }
                 try {
-                  let result = await runEngineOnSentence(sentence);
+                  const result = await runEngineOnSentence(sentence);
                   let final = result && result.trim().length > 0 ? result : sentence;
                   let change = measureSentenceChange(sentence, final);
                   let retry = 0;
@@ -842,7 +842,7 @@ export async function POST(req: Request) {
           // ═══════════════════════════════════════════════════════════════
           if (usePhasePipeline) {
             const phaseStart = Date.now();
-            let currentSentences = [...sentenceResults];
+            const currentSentences = [...sentenceResults];
 
             // Phase definitions per engine
             type PhaseSpec =
@@ -1290,6 +1290,7 @@ export async function POST(req: Request) {
           const ozoneKeywordRestoreOnly = eng === 'ozone';
 
           // ── POST-PROCESSING ──
+          const prePostProcessSnapshot = humanized;
           if (!ozoneKeywordRestoreOnly) {
           const _ppWC = (t: string) => t.trim().split(/\s+/).filter(Boolean).length;
 
@@ -1552,6 +1553,27 @@ export async function POST(req: Request) {
           humanized = fixMidSentenceCapitalization(humanized, text);
 
           } // end: post-processing block
+
+          // ── POST-PROCESSING CHANGE CAP (10%) ──
+          // If post-processing mutated the text beyond 10% additional word-level change,
+          // revert to the pre-post-processing snapshot to avoid garbling the output.
+          {
+            const _capWC = (t: string) => t.trim().split(/\s+/).filter(Boolean);
+            const preWords = _capWC(prePostProcessSnapshot);
+            const postWords = _capWC(humanized);
+            const maxLen = Math.max(preWords.length, postWords.length);
+            if (maxLen > 0) {
+              let diffs = 0;
+              for (let i = 0; i < maxLen; i++) {
+                if (!preWords[i] || !postWords[i] || preWords[i] !== postWords[i]) diffs++;
+              }
+              const changeRatio = diffs / maxLen;
+              if (changeRatio > 0.10) {
+                console.warn(`[PostProcess] Change cap exceeded: ${(changeRatio * 100).toFixed(1)}% > 10% — reverting to pre-post-processing output`);
+                humanized = prePostProcessSnapshot;
+              }
+            }
+          }
 
           // Structure preservation (restores heading placement from original)
           // Skip for phased engines — they already called preserveInputStructure at end of pipeline

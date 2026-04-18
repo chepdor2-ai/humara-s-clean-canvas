@@ -1008,9 +1008,9 @@ function enforceBurstiness(text: string): string {
 
 function humanizePunctuation(text: string, features: InputFeatures): string {
   const paragraphs = text.split(/\n\s*\n/);
-  let semicolonBudget = 3;
-  let dashBudget = 4;
-  let parenBudget = 2;
+  const semicolonBudget = 3;
+  const dashBudget = 4;
+  const parenBudget = 2;
 
   const result = paragraphs.map(para => {
     const p = para.trim();
@@ -1020,7 +1020,7 @@ function humanizePunctuation(text: string, features: InputFeatures): string {
     const processed: string[] = [];
 
     for (let i = 0; i < sentences.length; i++) {
-      let sent = sentences[i].trim();
+      const sent = sentences[i].trim();
       if (!sent) continue;
       const words = sent.split(/\s+/);
 
@@ -2128,7 +2128,7 @@ export async function llmHumanize(
   // ── Word count enforcement — DISABLED: would drop sentences, breaking 1-in=1-out ──
   // Instead, log the word count so we can monitor it
   const maxAllowedWords = Math.round(features.wordCount * 1.10);
-  let currentWords = result.trim().split(/\s+/).length;
+  const currentWords = result.trim().split(/\s+/).length;
   if (currentWords > maxAllowedWords) {
     console.log(`  [Ninja] Word count over budget: ${currentWords} > ${maxAllowedWords} (input=${features.wordCount}) — skipping trim to preserve sentence mapping`);
   }

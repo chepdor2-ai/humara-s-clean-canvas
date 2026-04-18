@@ -13,6 +13,7 @@ let synonymCache: SynonymMap | null = null;
 
 function getDictionaryPaths(): string[] {
   return [
+    path.join(/* turbopackIgnore: true */ process.cwd(), 'data', 'curated_synonyms.json'),
     path.join(/* turbopackIgnore: true */ process.cwd(), '..', 'dictionaries', 'curated_synonyms.json'),
     path.join(/* turbopackIgnore: true */ process.cwd(), 'dictionaries', 'curated_synonyms.json'),
   ];

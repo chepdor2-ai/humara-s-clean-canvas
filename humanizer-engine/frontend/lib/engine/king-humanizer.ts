@@ -268,7 +268,7 @@ async function phase3Revise(sentence: string, diagnosis: string): Promise<string
   const raw = await llmCall(PHASE3_SYSTEM, prompt, 0.55, 512);
   if (!raw) return sentence;
 
-  let cleaned = raw
+  const cleaned = raw
     .replace(/^["'\u201C\u201D]+|["'\u201C\u201D]+$/g, "")
     .replace(/^(?:Here(?:'s| is)[^:]*:|Revised[^:]*:|Output[^:]*:)\s*/i, "")
     .trim()

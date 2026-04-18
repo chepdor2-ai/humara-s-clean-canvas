@@ -65,7 +65,7 @@ export function cleanGPTZeroPass(text: string): string {
   // To increase burstiness, forcefully merge two short sentences.
   // Avoids destructive array/join mapping.
   let mergedOnce = false;
-  let cleaned = text.replace(/([a-z]{3,50})\.\s+([A-Z][a-z]{2,50}\s)/g, (match, p1, p2) => {
+  const cleaned = text.replace(/([a-z]{3,50})\.\s+([A-Z][a-z]{2,50}\s)/g, (match, p1, p2) => {
     if (mergedOnce) return match;
     mergedOnce = true;
     return p1 + ', and ' + p2.charAt(0).toLowerCase() + p2.slice(1);

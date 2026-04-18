@@ -195,9 +195,9 @@ export const antiPatternPhase: Phase = {
   async process(state: DocumentState): Promise<DocumentState> {
     let ngramBreaks = 0;
     let registerMixes = 0;
-    let openerChanges = 0;
+    const openerChanges = 0;
     let closerChanges = 0;
-    let reflectives = 0;
+    const reflectives = 0;
 
     const totalParagraphs = state.paragraphs.length;
 

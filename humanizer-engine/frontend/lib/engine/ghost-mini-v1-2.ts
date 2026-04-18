@@ -756,7 +756,7 @@ function injectBurstiness(sentences: string[]): string[] {
       if (relSplit && relSplit[1].split(/\s+/).length >= 4 && relSplit[3].split(/\s+/).length >= 3) {
         const first = relSplit[1].trim().replace(/[.,;:]+$/, "") + ".";
         const connector = relSplit[2].toLowerCase();
-        let rest = relSplit[3].trim();
+        const rest = relSplit[3].trim();
         let secondSentence: string;
         if (connector === "which" || connector === "where") {
           secondSentence = "This " + rest;

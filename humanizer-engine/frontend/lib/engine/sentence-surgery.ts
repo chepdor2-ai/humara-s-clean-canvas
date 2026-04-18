@@ -159,7 +159,7 @@ export function applySentenceSurgery(items: SurgeryItem[]): SurgeryItem[] {
   const skipNext = new Set<number>(); // processable indices to skip (merged into previous)
 
   // Re-iterate original items to preserve titles in correct positions
-  let procIdx = 0;
+  const procIdx = 0;
   for (const item of items) {
     if (item.isTitle) {
       result.push({ ...item, id: newId++ });

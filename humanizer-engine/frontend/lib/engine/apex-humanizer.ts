@@ -260,7 +260,7 @@ async function phase1RewriteSentence(
     if (!result) continue;
 
     // Clean LLM output
-    let cleaned = result
+    const cleaned = result
       .replace(/^["'\u201C\u201D]+|["'\u201C\u201D]+$/g, '')
       .replace(/^(?:Here(?:'s| is)[^:]*:|Rewritten[^:]*:|Output[^:]*:)\s*/i, '')
       .trim();

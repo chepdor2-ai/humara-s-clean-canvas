@@ -150,7 +150,7 @@ function isTitleOrHeading(para: string): boolean {
 }
 
 function syllableCount(word: string): number {
-  let w = word.toLowerCase().replace(/es$/, "").replace(/ed$/, "");
+  const w = word.toLowerCase().replace(/es$/, "").replace(/ed$/, "");
   const vowels = "aeiouy";
   let count = 0;
   let prev = false;
@@ -1579,7 +1579,7 @@ function fixLowStylometric(sentences: string[], intensity: number, inputFeatures
       ];
       let pronounCount = 0;
       let rhetoricalDone = false;
-      let parentheticalCount = 0;
+      const parentheticalCount = 0;
 
       return sentences.map((sent, i) => {
         const words = sent.split(/\s+/);

@@ -1355,7 +1355,7 @@ export async function premiumHumanize(
   const elapsed = (Date.now() - start) / 1000;
 
   // Run detector for final stats
-  let finalScores: Record<string, number> = {};
+  const finalScores: Record<string, number> = {};
   try {
     const detector = getDetector();
     const detection = detector.analyze(result);

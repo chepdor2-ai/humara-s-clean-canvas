@@ -885,9 +885,9 @@ function killModernBuzzwords(text: string): string {
 
 function humanizePunctuation(text: string, features: InputFeatures): string {
   const paragraphs = text.split(/\n\s*\n/);
-  let semicolonBudget = 3;
-  let dashBudget = 4;
-  let parenBudget = 2;
+  const semicolonBudget = 3;
+  const dashBudget = 4;
+  const parenBudget = 2;
 
   const result = paragraphs.map(para => {
     const p = para.trim();
@@ -897,7 +897,7 @@ function humanizePunctuation(text: string, features: InputFeatures): string {
     const processed: string[] = [];
 
     for (let i = 0; i < sentences.length; i++) {
-      let sent = sentences[i].trim();
+      const sent = sentences[i].trim();
       if (!sent) continue;
       const words = sent.split(/\s+/);
 

@@ -337,7 +337,7 @@ function aggressiveSynonymSwap(
 ): string {
   // Protect hyphenated compound words by replacing with placeholders
   const hyphenatedWords: string[] = [];
-  let safeSentence = sentence.replace(/\b([a-zA-Z]{2,})-([a-zA-Z]{2,})\b/g, (full) => {
+  const safeSentence = sentence.replace(/\b([a-zA-Z]{2,})-([a-zA-Z]{2,})\b/g, (full) => {
     hyphenatedWords.push(full);
     return `HYPHCOMP${hyphenatedWords.length - 1}`;
   });
@@ -788,7 +788,7 @@ function processOneSentence(
 ): { text: string; wasRestructured: boolean } {
   let s = sentenceText;
   const clean = isSentenceClean(s);
-  let wasRestructured = false;
+  const wasRestructured = false;
 
   // PASS 1: AI Vocabulary Kill
   if (clean) s = finalAIKill(s);

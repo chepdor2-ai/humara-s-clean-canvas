@@ -208,10 +208,10 @@ export const syntaxPhase: Phase = {
   name: 'syntax',
   async process(state: DocumentState): Promise<DocumentState> {
     let reorders = 0;
-    let questions = 0;
-    let clefts = 0;
-    let fronts = 0;
-    let appositives = 0;
+    const questions = 0;
+    const clefts = 0;
+    const fronts = 0;
+    const appositives = 0;
 
     for (const paragraph of state.paragraphs) {
       const len = paragraph.sentences.length;

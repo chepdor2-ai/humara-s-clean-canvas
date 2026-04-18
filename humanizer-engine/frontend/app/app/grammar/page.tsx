@@ -323,7 +323,7 @@ export default function GrammarPage() {
     const usesRules = engineMode === 'rules' || engineMode === 'both';
 
     // Start with rules-based result as the base (or empty if not using rules)
-    let base: CorrectionResult = usesRules ? { ...r, issues: [...r.issues] } : { ...r, issues: [] as Issue[] };
+    const base: CorrectionResult = usesRules ? { ...r, issues: [...r.issues] } : { ...r, issues: [] as Issue[] };
 
     if (usesAI) setAiLoading(true);
     if (usesRules && !usesAI) {
