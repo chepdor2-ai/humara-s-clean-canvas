@@ -38,7 +38,8 @@ export function getDetectorDomain(name: string): string {
 
 export function getDetectorIconUrl(name: string, size = 64): string {
   const domain = getDetectorDomain(name);
-  const safeSize = Math.max(16, Math.min(256, Math.round(size)));
+  // Always fetch 64px minimum for crisp rendering at any display size
+  const safeSize = Math.max(64, Math.min(256, Math.round(size * 2)));
   return `https://www.google.com/s2/favicons?domain=${encodeURIComponent(domain)}&sz=${safeSize}`;
 }
 

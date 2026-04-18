@@ -27,14 +27,14 @@ export function DetectorRows({ rows }: { rows: DetectorResult[] }) {
           initial={{ opacity: 0, y: 6 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: i * 0.06, duration: 0.35 }}
-          className="grid grid-cols-12 items-center gap-3 px-4 py-3.5 hover:bg-accent/40 transition-colors"
+          className="grid grid-cols-12 items-center gap-3 px-4 py-3.5 hover:bg-white/50 dark:hover:bg-white/5 transition-colors backdrop-blur-sm"
         >
           <div className="col-span-4 flex items-center gap-3">
             <DetectorBrandIcon
               name={r.name}
-              size={36}
-              className="h-9 w-9 rounded-lg border border-border/40"
-              imageClassName="rounded-lg"
+              size={24}
+              className="h-6 w-6 rounded-md border border-border/40"
+              imageClassName="rounded-md"
             />
             <div className="flex flex-col">
               <span className="text-sm font-medium">{r.name}</span>
@@ -42,7 +42,7 @@ export function DetectorRows({ rows }: { rows: DetectorResult[] }) {
             </div>
           </div>
           <div className="col-span-5">
-            <div className="relative h-2 w-full overflow-hidden rounded-full bg-muted">
+            <div className="relative h-1 w-full overflow-hidden rounded-full bg-muted">
               <motion.div
                 initial={{ width: 0 }}
                 animate={{ width: `${r.score}%` }}

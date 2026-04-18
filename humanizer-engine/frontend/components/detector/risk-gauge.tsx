@@ -16,7 +16,7 @@ export function RiskGauge({ score, size = 220 }: Props) {
     return () => cancelAnimationFrame(id)
   }, [score])
 
-  const stroke = 14
+  const stroke = 8
   const radius = (size - stroke) / 2
   const circumference = Math.PI * radius // half circle
   const dash = (animated / 100) * circumference
@@ -68,7 +68,7 @@ export function RiskGauge({ score, size = 220 }: Props) {
           key={score}
           initial={{ opacity: 0, y: 6 }}
           animate={{ opacity: 1, y: 0 }}
-          className="font-mono text-5xl font-semibold tabular-nums"
+          className="font-mono text-4xl font-semibold tabular-nums"
           style={{ color }}
         >
           {Math.round(animated)}

@@ -334,6 +334,7 @@ export async function POST(req: Request) {
             'ninja_2', 'ninja_3', 'ninja_4', 'ninja_5',
             'ghost_trial_2', 'ghost_trial_2_alt',
             'conscusion_1', 'conscusion_12',
+            'phantom',
           ]);
           const usePhasePipeline = PHASED_ENGINES.has(eng);
 
@@ -899,6 +900,14 @@ export async function POST(req: Request) {
               case 'humara_v3_3':
                 phases = [
                   { name: 'Nuru 2.0', type: 'nuru', passes: 10 },
+                  { name: 'Deep Non-LLM Clean', type: 'sync', fn: (s) => deepNonLLMClean(s) },
+                  { name: 'Final Smooth & Grammar', type: 'sync', fn: (s) => finalSmoothGrammar(s) },
+                ];
+                break;
+              case 'phantom':
+                // Phantom = full Humara 2.4 WITHOUT Nuru — Deep Clean + Smooth only
+                // AntiPangram runs separately after phases complete
+                phases = [
                   { name: 'Deep Non-LLM Clean', type: 'sync', fn: (s) => deepNonLLMClean(s) },
                   { name: 'Final Smooth & Grammar', type: 'sync', fn: (s) => finalSmoothGrammar(s) },
                 ];

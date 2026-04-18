@@ -77,7 +77,12 @@ export default function DetectorPage() {
   };
 
   return (
-    <div className="mx-auto flex max-w-6xl flex-col gap-6 p-6 lg:p-8">
+    <div className="mx-auto flex max-w-6xl flex-col gap-6 p-6 lg:p-8 relative">
+      {/* Background decorative gradient blurs */}
+      <div className="pointer-events-none absolute inset-0 overflow-hidden">
+        <div className="absolute -top-32 -left-32 h-80 w-80 rounded-full bg-primary/10 blur-[100px] dark:bg-primary/5" />
+        <div className="absolute -bottom-32 -right-32 h-96 w-96 rounded-full bg-cyan-500/10 blur-[120px] dark:bg-cyan-500/5" />
+      </div>
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
@@ -96,7 +101,7 @@ export default function DetectorPage() {
         </Button>
       </div>
 
-      <Card className="overflow-hidden p-0">
+      <Card className="overflow-hidden p-0 backdrop-blur-xl bg-white/70 dark:bg-zinc-900/60 border-white/30 dark:border-white/10 shadow-lg">
         <div className="flex items-center justify-between border-b border-border bg-muted/40 px-4 py-2.5">
           <span className="text-xs font-medium text-muted-foreground">Text to analyze</span>
           <span className="font-mono text-[11px] tabular-nums text-muted-foreground">
@@ -131,7 +136,7 @@ export default function DetectorPage() {
 
       {(scanning || results) && (
         <div className="grid gap-6 lg:grid-cols-5">
-          <Card className="p-6 lg:col-span-2">
+          <Card className="p-6 lg:col-span-2 backdrop-blur-xl bg-white/70 dark:bg-zinc-900/60 border-white/30 dark:border-white/10 shadow-lg">
             <div className="text-xs font-medium text-muted-foreground">Aggregate score</div>
             <div className="mt-6 flex items-center justify-center">
               {scanning ? (
@@ -155,7 +160,7 @@ export default function DetectorPage() {
             )}
           </Card>
 
-          <Card className="overflow-hidden p-0 lg:col-span-3">
+          <Card className="overflow-hidden p-0 lg:col-span-3 backdrop-blur-xl bg-white/70 dark:bg-zinc-900/60 border-white/30 dark:border-white/10 shadow-lg">
             <div className="flex items-center justify-between border-b border-border px-4 py-3">
               <div className="flex items-center gap-2">
                 <span className="text-sm font-medium">Per-detector breakdown</span>
@@ -171,7 +176,7 @@ export default function DetectorPage() {
               <div className="space-y-3 p-4">
                 {[0, 1, 2, 3, 4, 5].map((i) => (
                   <div key={i} className="flex items-center gap-3 py-2">
-                    <div className="h-9 w-9 animate-pulse rounded-lg bg-muted" />
+                    <div className="h-6 w-6 animate-pulse rounded-md bg-muted" />
                     <div className="flex-1 space-y-1.5">
                       <div className="h-3 w-24 animate-pulse rounded bg-muted" />
                       <div className="h-2 w-full animate-pulse rounded-full bg-muted" />
@@ -187,7 +192,7 @@ export default function DetectorPage() {
       )}
 
       {!scanning && !results && (
-        <Card className="flex flex-col items-center justify-center gap-3 p-12 text-center">
+        <Card className="flex flex-col items-center justify-center gap-3 p-12 text-center backdrop-blur-xl bg-white/70 dark:bg-zinc-900/60 border-white/30 dark:border-white/10 shadow-lg">
           <div className="grid h-12 w-12 place-items-center rounded-full bg-accent">
             <FileSearch className="h-5 w-5 text-primary" />
           </div>

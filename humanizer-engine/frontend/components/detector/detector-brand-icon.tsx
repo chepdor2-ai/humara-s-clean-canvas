@@ -56,7 +56,7 @@ export function DetectorBrandIcon({
           width={size}
           height={size}
           loading="lazy"
-          className={cn("h-full w-full object-cover", imageClassName)}
+          className={cn("h-full w-full object-contain", imageClassName)}
           onError={() => setImageFailed(true)}
         />
       )}

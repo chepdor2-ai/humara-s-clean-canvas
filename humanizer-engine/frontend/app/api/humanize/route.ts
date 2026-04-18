@@ -877,8 +877,28 @@ export async function POST(req: Request) {
     } else if (engine === 'humara_v3_3') {
       humanized = await runHumara24(normalizedText);
     } else if (engine === 'phantom') {
-      // Phantom: Humara 2.4 core → AntiPangram forensic cleanup only (no Nuru, no universal post-processing)
+      // Phantom: full Humara 2.4 → Deep Non-LLM Clean → Final Smooth & Grammar → AntiPangram
+      // (no Nuru, no universal post-processing)
       humanized = await runHumara24(normalizedText);
+
+      // Deep Non-LLM Clean + Final Smooth per sentence (same as streaming phase pipeline)
+      const phantomSents = robustSentenceSplit(humanized);
+      for (let i = 0; i < phantomSents.length; i++) {
+        let s = phantomSents[i];
+        // Deep Non-LLM Clean
+        s = applyAIWordKill(s);
+        s = expandContractions(s);
+        s = removeEmDashes(s);
+        // Final Smooth & Grammar
+        s = postCleanGrammar(s);
+        s = expandContractions(s);
+        s = fixMidSentenceCapitalization(s);
+        s = removeEmDashes(s);
+        phantomSents[i] = s;
+      }
+      humanized = phantomSents.join(' ');
+
+      // AntiPangram forensic cleanup
       const { antiPangramSimple } = await import('@/lib/engine/antipangram');
       humanized = antiPangramSimple(
         humanized,
