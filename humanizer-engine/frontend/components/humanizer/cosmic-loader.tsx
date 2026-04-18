@@ -1,212 +1,314 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 
-/* ── Cosmic Processing Animation ──────────────────────────────────────────
-   Inspired by spiral-vortex energy, ascending light, and black-hole motion.
-   A multi-ring orbital system with flowing particle trails, pulsing core,
-   and cycling status messages — all pure CSS + Framer Motion.
+/* ── Cosmic Processing Animation v2 ──────────────────────────────────────
+   Premium orbital loader — brand-matched cyan/teal palette.
+   Features: canvas particle field, sonar pulse rings, morphing core blob,
+   comet-trail orbiters, animated waveform, smooth light/dark support.
    ─────────────────────────────────────────────────────────────────────── */
 
 interface CosmicLoaderProps {
-  /** Current processing stage label, e.g. "Phase 2/4 – Nuru 2.0" */
   stage: string;
-  /** Descriptive processing message that cycles */
   message: string;
-  /** 0–100 overall progress */
   progress: number;
-  /** Engine display name */
   engineLabel: string;
-  /** Status items shown in the grid (engine, cycle, fill) */
   statusItems: { label: string; value: string }[];
 }
 
-/* Particle positions along rings — 8 dots distributed in a spiral pattern */
-const PARTICLES = Array.from({ length: 12 }, (_, i) => ({
-  id: i,
-  ring: i % 3,                        // which ring (0=inner, 1=mid, 2=outer)
-  offset: (i * 137.5) % 360,          // golden-angle distribution
-  size: 2 + (i % 3),                  // 2–4px
-  duration: 3 + (i % 4) * 0.8,        // 3–6.2s orbit
-  delay: i * 0.25,
-}));
+/* ── Brand palette ── */
+const C = {
+  cyan:   { r: 8,  g: 145, b: 178 },  // #0891b2 — primary
+  teal:   { r: 20, g: 184, b: 166 },   // #14b8a6 — accent
+  sky:    { r: 14, g: 165, b: 233 },    // #0ea5e9 — highlight
+} as const;
 
-const RING_RADII = [32, 52, 72];       // px — inner, mid, outer
+function rgba(c: { r: number; g: number; b: number }, a: number) { return `rgba(${c.r},${c.g},${c.b},${a})`; }
+
+/* ── Orbiter config ── */
+const ORBITERS = [
+  { radius: 42, duration: 4.5,  size: 3.5, color: C.cyan, startAngle: 0,    dir: 1  },
+  { radius: 42, duration: 4.5,  size: 2,   color: C.cyan, startAngle: 180,  dir: 1  },
+  { radius: 60, duration: 6,    size: 3,   color: C.teal, startAngle: 90,   dir: -1 },
+  { radius: 60, duration: 6,    size: 2,   color: C.teal, startAngle: 270,  dir: -1 },
+  { radius: 76, duration: 8,    size: 2.5, color: C.sky,  startAngle: 45,   dir: 1  },
+  { radius: 76, duration: 8,    size: 1.5, color: C.sky,  startAngle: 225,  dir: 1  },
+];
+
+/* ── Waveform bars ── */
+const WAVE_BARS = 24;
+
+/* ── Canvas starfield ── */
+function useStarfield(canvasRef: React.RefObject<HTMLCanvasElement | null>) {
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    const dpr = window.devicePixelRatio || 1;
+    const W = 560, H = 200;
+    canvas.width = W * dpr;
+    canvas.height = H * dpr;
+    ctx.scale(dpr, dpr);
+
+    // Generate 50 ambient particles
+    const stars = Array.from({ length: 50 }, () => ({
+      x: Math.random() * W,
+      y: Math.random() * H,
+      r: 0.3 + Math.random() * 1.2,
+      vx: (Math.random() - 0.5) * 0.15,
+      vy: (Math.random() - 0.5) * 0.1,
+      phase: Math.random() * Math.PI * 2,
+      speed: 0.008 + Math.random() * 0.012,
+    }));
+
+    let raf: number;
+    let t = 0;
+    const draw = () => {
+      t++;
+      ctx.clearRect(0, 0, W, H);
+      for (const s of stars) {
+        s.x += s.vx;
+        s.y += s.vy;
+        if (s.x < -5) s.x = W + 5;
+        if (s.x > W + 5) s.x = -5;
+        if (s.y < -5) s.y = H + 5;
+        if (s.y > H + 5) s.y = -5;
+        const alpha = 0.15 + 0.25 * Math.sin(t * s.speed + s.phase);
+        ctx.beginPath();
+        ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(8,145,178,${alpha})`;
+        ctx.fill();
+      }
+      raf = requestAnimationFrame(draw);
+    };
+    draw();
+    return () => cancelAnimationFrame(raf);
+  }, [canvasRef]);
+}
 
 export function CosmicLoader({ stage, message, progress, engineLabel, statusItems }: CosmicLoaderProps) {
-  /* Cycle a subtle hue rotation on the glow */
-  const [hueShift, setHueShift] = useState(0);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  useStarfield(canvasRef);
+
+  /* Pulse ring counter — emit a new ring every 2.5s */
+  const [pulseKey, setPulseKey] = useState(0);
   useEffect(() => {
-    const iv = setInterval(() => setHueShift(h => (h + 1) % 360), 50);
+    const iv = setInterval(() => setPulseKey(k => k + 1), 2500);
     return () => clearInterval(iv);
   }, []);
 
+  /* Waveform amplitudes — gentle randomised motion */
+  const waveAmps = useMemo(() =>
+    Array.from({ length: WAVE_BARS }, (_, i) => ({
+      base: 0.3 + 0.4 * Math.sin((i / WAVE_BARS) * Math.PI),
+      phase: (i / WAVE_BARS) * Math.PI * 2,
+    })),
+    [],
+  );
+
+  const CX = 90; // center x/y of orbital system (in 180×180 viewport)
+
   return (
     <div className="relative flex flex-col items-center justify-center w-full h-full px-4 py-6 sm:px-5 overflow-hidden select-none">
-      {/* ── Background radial glow ── */}
-      <div
-        className="pointer-events-none absolute inset-0 opacity-30 dark:opacity-40"
-        style={{
-          background: `radial-gradient(ellipse 50% 50% at 50% 45%, hsl(${185 + hueShift * 0.15}, 80%, 55%) 0%, transparent 70%)`,
-        }}
+
+      {/* ── Canvas starfield (ambient particles) ── */}
+      <canvas
+        ref={canvasRef}
+        className="pointer-events-none absolute inset-0 w-full h-full opacity-50 dark:opacity-70"
+        style={{ width: '100%', height: '100%' }}
       />
 
+      {/* ── Ambient radial glow — CSS only, no JS timer ── */}
+      <div className="pointer-events-none absolute inset-0">
+        <div
+          className="absolute inset-0 opacity-20 dark:opacity-35 animate-[cosmicGlow_8s_ease-in-out_infinite]"
+          style={{
+            background: `radial-gradient(ellipse 45% 45% at 50% 42%, ${rgba(C.cyan, 0.6)} 0%, ${rgba(C.teal, 0.2)} 40%, transparent 70%)`,
+          }}
+        />
+      </div>
+
       {/* ── Main card ── */}
-      <div className="relative w-full max-w-[560px] space-y-5 rounded-2xl border border-slate-200/70 dark:border-zinc-800/60 bg-white/90 dark:bg-zinc-900/50 backdrop-blur-sm px-4 py-5">
+      <div className="relative w-full max-w-[560px] space-y-5 rounded-2xl border border-slate-200/60 dark:border-zinc-700/40 bg-white/92 dark:bg-zinc-900/60 backdrop-blur-md px-5 py-6 shadow-lg shadow-cyan-500/5 dark:shadow-cyan-400/5">
 
         {/* ── Orbital system ── */}
-        <div className="relative mx-auto" style={{ width: 160, height: 160 }}>
-          {/* Ambient glow behind everything */}
+        <div className="relative mx-auto" style={{ width: 180, height: 180 }}>
+
+          {/* Soft ambient glow behind rings */}
           <div
-            className="absolute rounded-full blur-2xl"
+            className="absolute rounded-full blur-3xl opacity-60 dark:opacity-80"
             style={{
-              inset: 20,
-              background: `radial-gradient(circle, rgba(8,145,178,.35) 0%, rgba(99,102,241,.2) 50%, transparent 75%)`,
-              filter: `hue-rotate(${hueShift * 0.2}deg)`,
+              inset: 30,
+              background: `radial-gradient(circle, ${rgba(C.cyan, 0.3)} 0%, ${rgba(C.teal, 0.15)} 50%, transparent 80%)`,
             }}
           />
 
-          {/* Ring outlines — three concentric circles rotating at different speeds */}
-          {RING_RADII.map((r, i) => {
-            const size = r * 2;
-            const cx = 80 - r;
-            return (
+          {/* Sonar pulse rings — expand outward and fade */}
+          <AnimatePresence>
+            {[0, 1, 2].map(i => (
               <motion.div
-                key={`ring-${i}`}
+                key={`pulse-${pulseKey}-${i}`}
                 className="absolute rounded-full"
                 style={{
-                  width: size,
-                  height: size,
-                  left: cx,
-                  top: cx,
-                  border: `1px solid`,
-                  borderColor: i === 0
-                    ? 'rgba(8,145,178,0.25)'
-                    : i === 1
-                      ? 'rgba(99,102,241,0.2)'
-                      : 'rgba(168,85,247,0.15)',
+                  width: 40,
+                  height: 40,
+                  left: CX - 20,
+                  top: CX - 20,
+                  border: `1.5px solid ${rgba(C.cyan, 0.4)}`,
                 }}
-                animate={{ rotate: i % 2 === 0 ? 360 : -360 }}
+                initial={{ scale: 1, opacity: 0.5 }}
+                animate={{ scale: 4.5, opacity: 0 }}
                 transition={{
-                  duration: 8 + i * 4,
-                  repeat: Infinity,
-                  ease: 'linear',
+                  duration: 3,
+                  ease: 'easeOut',
+                  delay: i * 0.5,
                 }}
               />
-            );
-          })}
+            ))}
+          </AnimatePresence>
 
-          {/* Dashed orbit path (mid ring) for texture */}
+          {/* Orbit tracks — dashed circles */}
+          {[42, 60, 76].map((r, i) => (
+            <div
+              key={`track-${i}`}
+              className="absolute rounded-full"
+              style={{
+                width: r * 2,
+                height: r * 2,
+                left: CX - r,
+                top: CX - r,
+                border: `1px dashed ${rgba(C.cyan, 0.08 + i * 0.02)}`,
+              }}
+            />
+          ))}
+
+          {/* Rotating conic sweep — gives depth */}
           <motion.div
             className="absolute rounded-full"
             style={{
-              width: 104,
-              height: 104,
-              left: 28,
-              top: 28,
-              border: '1px dashed rgba(8,145,178,0.12)',
-            }}
-            animate={{ rotate: -360 }}
-            transition={{ duration: 20, repeat: Infinity, ease: 'linear' }}
-          />
-
-          {/* Flowing particles on ring orbits */}
-          {PARTICLES.map(p => {
-            const r = RING_RADII[p.ring];
-            return (
-              <motion.div
-                key={`particle-${p.id}`}
-                className="absolute rounded-full"
-                style={{
-                  width: p.size,
-                  height: p.size,
-                  left: 80 - p.size / 2,
-                  top: 80 - r - p.size / 2,
-                  transformOrigin: `${p.size / 2}px ${r + p.size / 2}px`,
-                  background: p.ring === 0
-                    ? 'rgba(8,145,178,0.9)'
-                    : p.ring === 1
-                      ? 'rgba(99,102,241,0.8)'
-                      : 'rgba(168,85,247,0.7)',
-                  boxShadow: p.ring === 0
-                    ? '0 0 6px rgba(8,145,178,0.6)'
-                    : p.ring === 1
-                      ? '0 0 6px rgba(99,102,241,0.5)'
-                      : '0 0 6px rgba(168,85,247,0.4)',
-                }}
-                animate={{ rotate: [p.offset, p.offset + 360] }}
-                transition={{
-                  duration: p.duration,
-                  repeat: Infinity,
-                  ease: 'linear',
-                  delay: p.delay,
-                }}
-              />
-            );
-          })}
-
-          {/* Central pulsing core */}
-          <motion.div
-            className="absolute rounded-full"
-            style={{
-              width: 36,
-              height: 36,
-              left: 62,
-              top: 62,
-              background: 'linear-gradient(135deg, #0891b2, #6366f1)',
-              boxShadow: '0 0 20px rgba(8,145,178,0.5), 0 0 40px rgba(99,102,241,0.3)',
-            }}
-            animate={{
-              scale: [1, 1.15, 1],
-              boxShadow: [
-                '0 0 20px rgba(8,145,178,0.5), 0 0 40px rgba(99,102,241,0.3)',
-                '0 0 30px rgba(8,145,178,0.7), 0 0 60px rgba(99,102,241,0.4)',
-                '0 0 20px rgba(8,145,178,0.5), 0 0 40px rgba(99,102,241,0.3)',
-              ],
-            }}
-            transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
-          />
-
-          {/* Core icon — lightning bolt */}
-          <motion.svg
-            viewBox="0 0 24 24"
-            className="absolute text-white"
-            style={{ width: 16, height: 16, left: 72, top: 72 }}
-            fill="currentColor"
-            animate={{ opacity: [0.85, 1, 0.85] }}
-            transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
-          >
-            <path d="M13 2 4.09 12.97a1 1 0 0 0 .78 1.63h6.13l-2 6.4a1 1 0 0 0 1.77.83l8.91-10.97a1 1 0 0 0-.78-1.63h-6.13l2-6.4a1 1 0 0 0-1.77-.83Z" />
-          </motion.svg>
-
-          {/* Outer spiral trace — a rotating gradient arc */}
-          <motion.div
-            className="absolute rounded-full"
-            style={{
-              width: 152,
-              height: 152,
-              left: 4,
-              top: 4,
-              background: 'conic-gradient(from 0deg, transparent 0%, rgba(8,145,178,0.15) 25%, transparent 50%, rgba(99,102,241,0.1) 75%, transparent 100%)',
+              width: 160,
+              height: 160,
+              left: CX - 80,
+              top: CX - 80,
+              background: `conic-gradient(from 0deg, transparent 0%, ${rgba(C.cyan, 0.08)} 15%, transparent 30%, ${rgba(C.teal, 0.06)} 50%, transparent 65%, ${rgba(C.sky, 0.05)} 80%, transparent 100%)`,
             }}
             animate={{ rotate: 360 }}
-            transition={{ duration: 6, repeat: Infinity, ease: 'linear' }}
+            transition={{ duration: 10, repeat: Infinity, ease: 'linear' }}
           />
+
+          {/* Comet-trail orbiters */}
+          {ORBITERS.map((orb, i) => (
+            <motion.div
+              key={`orb-${i}`}
+              className="absolute rounded-full"
+              style={{
+                width: orb.size,
+                height: orb.size,
+                left: CX - orb.size / 2,
+                top: CX - orb.radius - orb.size / 2,
+                transformOrigin: `${orb.size / 2}px ${orb.radius + orb.size / 2}px`,
+                background: rgba(orb.color, 0.95),
+                boxShadow: `0 0 ${orb.size * 3}px ${rgba(orb.color, 0.6)}, 0 0 ${orb.size * 6}px ${rgba(orb.color, 0.25)}`,
+              }}
+              animate={{ rotate: [orb.startAngle, orb.startAngle + 360 * orb.dir] }}
+              transition={{ duration: orb.duration, repeat: Infinity, ease: 'linear' }}
+            />
+          ))}
+
+          {/* Central core — gradient blob with breathing pulse */}
+          <motion.div
+            className="absolute rounded-full"
+            style={{
+              width: 40,
+              height: 40,
+              left: CX - 20,
+              top: CX - 20,
+              background: `linear-gradient(135deg, ${rgba(C.cyan, 1)}, ${rgba(C.teal, 1)})`,
+            }}
+            animate={{
+              scale: [1, 1.12, 1],
+              boxShadow: [
+                `0 0 16px ${rgba(C.cyan, 0.5)}, 0 0 32px ${rgba(C.teal, 0.2)}, inset 0 0 8px ${rgba(C.sky, 0.15)}`,
+                `0 0 24px ${rgba(C.cyan, 0.7)}, 0 0 48px ${rgba(C.teal, 0.35)}, inset 0 0 12px ${rgba(C.sky, 0.25)}`,
+                `0 0 16px ${rgba(C.cyan, 0.5)}, 0 0 32px ${rgba(C.teal, 0.2)}, inset 0 0 8px ${rgba(C.sky, 0.15)}`,
+              ],
+            }}
+            transition={{ duration: 2.5, repeat: Infinity, ease: 'easeInOut' }}
+          />
+
+          {/* Inner shimmer ring on core */}
+          <motion.div
+            className="absolute rounded-full"
+            style={{
+              width: 48,
+              height: 48,
+              left: CX - 24,
+              top: CX - 24,
+              border: `1px solid ${rgba(C.cyan, 0.2)}`,
+            }}
+            animate={{
+              scale: [1, 1.1, 1],
+              opacity: [0.5, 0.8, 0.5],
+            }}
+            transition={{ duration: 2.5, repeat: Infinity, ease: 'easeInOut' }}
+          />
+
+          {/* Core icon — waveform/pulse */}
+          <motion.svg
+            viewBox="0 0 24 24"
+            className="absolute"
+            style={{ width: 18, height: 18, left: CX - 9, top: CX - 9 }}
+            fill="none"
+            stroke="white"
+            strokeWidth={2}
+            strokeLinecap="round"
+            animate={{ opacity: [0.8, 1, 0.8] }}
+            transition={{ duration: 2.5, repeat: Infinity, ease: 'easeInOut' }}
+          >
+            <path d="M2 12h2l3-7 4 14 4-10 3 6h4" />
+          </motion.svg>
+        </div>
+
+        {/* ── Audio waveform visualiser ── */}
+        <div className="flex items-center justify-center gap-[3px] h-6">
+          {waveAmps.map((bar, i) => (
+            <motion.div
+              key={i}
+              className="w-[2.5px] rounded-full"
+              style={{
+                background: `linear-gradient(to top, ${rgba(C.cyan, 0.7)}, ${rgba(C.teal, 0.9)})`,
+              }}
+              animate={{
+                height: [
+                  `${bar.base * 24}px`,
+                  `${(bar.base * 0.4 + 0.6) * 24}px`,
+                  `${bar.base * 24}px`,
+                ],
+              }}
+              transition={{
+                duration: 0.8 + (i % 5) * 0.15,
+                repeat: Infinity,
+                ease: 'easeInOut',
+                delay: i * 0.04,
+              }}
+            />
+          ))}
         </div>
 
         {/* ── Stage text ── */}
-        <div className="text-center space-y-1">
-          <p className="text-[10px] font-bold uppercase tracking-[0.25em] text-cyan-600 dark:text-cyan-400">
+        <div className="text-center space-y-1.5">
+          <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-cyan-600 dark:text-cyan-400">
             Humanizing
           </p>
           <AnimatePresence mode="wait">
             <motion.p
               key={stage}
-              initial={{ opacity: 0, y: 4 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -4 }}
-              transition={{ duration: 0.2 }}
+              initial={{ opacity: 0, y: 5, filter: 'blur(4px)' }}
+              animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
+              exit={{ opacity: 0, y: -5, filter: 'blur(4px)' }}
+              transition={{ duration: 0.25 }}
               className="text-sm font-semibold text-slate-800 dark:text-zinc-100 truncate"
             >
               {stage}
@@ -215,11 +317,11 @@ export function CosmicLoader({ stage, message, progress, engineLabel, statusItem
           <AnimatePresence mode="wait">
             <motion.p
               key={message}
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
+              initial={{ opacity: 0, filter: 'blur(2px)' }}
+              animate={{ opacity: 1, filter: 'blur(0px)' }}
+              exit={{ opacity: 0, filter: 'blur(2px)' }}
               transition={{ duration: 0.3 }}
-              className="text-xs text-slate-500 dark:text-zinc-400 leading-relaxed max-w-md mx-auto"
+              className="text-xs text-slate-500 dark:text-zinc-400 leading-relaxed max-w-sm mx-auto"
             >
               {message}
             </motion.p>
@@ -230,25 +332,40 @@ export function CosmicLoader({ stage, message, progress, engineLabel, statusItem
         <div className="space-y-2">
           <div className="flex items-center justify-between text-[11px] font-semibold">
             <span className="text-slate-600 dark:text-zinc-300">{engineLabel}</span>
-            <span className="text-cyan-600 dark:text-cyan-400 tabular-nums">{Math.round(progress)}%</span>
+            <span className="text-cyan-600 dark:text-cyan-400 tabular-nums font-mono">{Math.round(progress)}%</span>
           </div>
-          <div className="relative h-1.5 w-full overflow-hidden rounded-full bg-slate-100 dark:bg-zinc-800/60">
+          <div className="relative h-[6px] w-full overflow-hidden rounded-full bg-slate-100 dark:bg-zinc-800/60">
+            {/* Shimmer track */}
             <motion.div
-              className="h-full rounded-full"
+              className="absolute inset-0 rounded-full opacity-30"
               style={{
-                background: 'linear-gradient(90deg, #0891b2, #6366f1, #a855f7, #6366f1, #0891b2)',
+                background: `linear-gradient(90deg, transparent 0%, ${rgba(C.cyan, 0.15)} 50%, transparent 100%)`,
                 backgroundSize: '200% 100%',
               }}
-              initial={false}
-              animate={{
-                width: `${Math.max(2, Math.min(100, progress))}%`,
-                backgroundPosition: ['0% 0%', '200% 0%'],
-              }}
-              transition={{
-                width: { type: 'spring', stiffness: 60, damping: 20 },
-                backgroundPosition: { duration: 3, repeat: Infinity, ease: 'linear' },
-              }}
+              animate={{ backgroundPosition: ['200% 0%', '-200% 0%'] }}
+              transition={{ duration: 2, repeat: Infinity, ease: 'linear' }}
             />
+            {/* Fill */}
+            <motion.div
+              className="h-full rounded-full relative overflow-hidden"
+              style={{
+                background: `linear-gradient(90deg, ${rgba(C.cyan, 1)}, ${rgba(C.teal, 1)})`,
+              }}
+              initial={false}
+              animate={{ width: `${Math.max(2, Math.min(100, progress))}%` }}
+              transition={{ type: 'spring', stiffness: 60, damping: 20 }}
+            >
+              {/* Moving highlight on fill */}
+              <motion.div
+                className="absolute inset-0"
+                style={{
+                  background: `linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.3) 50%, transparent 100%)`,
+                  backgroundSize: '60% 100%',
+                }}
+                animate={{ backgroundPosition: ['-100% 0%', '200% 0%'] }}
+                transition={{ duration: 1.5, repeat: Infinity, ease: 'linear' }}
+              />
+            </motion.div>
           </div>
         </div>
 
@@ -257,7 +374,7 @@ export function CosmicLoader({ stage, message, progress, engineLabel, statusItem
           {statusItems.map((item) => (
             <div
               key={item.label}
-              className="rounded-lg border border-slate-200/70 dark:border-zinc-800/50 bg-white/80 dark:bg-zinc-900/50 px-2.5 py-2 text-center"
+              className="rounded-lg border border-slate-200/60 dark:border-zinc-700/40 bg-slate-50/80 dark:bg-zinc-800/40 px-2.5 py-2 text-center transition-colors"
             >
               <p className="text-[9px] uppercase tracking-wider text-slate-400 dark:text-zinc-500 font-semibold">{item.label}</p>
               <p className="mt-0.5 truncate text-xs font-bold text-slate-700 dark:text-zinc-200">{item.value}</p>
@@ -265,6 +382,20 @@ export function CosmicLoader({ stage, message, progress, engineLabel, statusItem
           ))}
         </div>
       </div>
+
+      {/* ── Keyframe injection ── */}
+      <style>{`
+        @keyframes cosmicGlow {
+          0%, 100% { opacity: 0.2; transform: scale(1); }
+          50% { opacity: 0.35; transform: scale(1.05); }
+        }
+        .dark .animate-\\[cosmicGlow_8s_ease-in-out_infinite\\] {
+          animation: cosmicGlow 8s ease-in-out infinite;
+        }
+        .animate-\\[cosmicGlow_8s_ease-in-out_infinite\\] {
+          animation: cosmicGlow 8s ease-in-out infinite;
+        }
+      `}</style>
     </div>
   );
 }

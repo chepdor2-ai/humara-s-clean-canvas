@@ -123,8 +123,8 @@ function isMeaningPreserved(original: string, transformed: string): boolean {
 function cleanGrammar(text: string): string {
   let result = text;
 
-  // Fix double spaces
-  result = result.replace(/\s{2,}/g, ' ');
+  // Fix double spaces (horizontal only — preserve \n for paragraph structure)
+  result = result.replace(/[^\S\n]{2,}/g, ' ');
 
   // Fix space before punctuation
   result = result.replace(/\s+([.!?,;:])/g, '$1');
