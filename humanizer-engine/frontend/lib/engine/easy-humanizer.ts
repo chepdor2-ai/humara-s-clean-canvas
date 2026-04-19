@@ -19,9 +19,9 @@ function postCleanEasyOutput(text: string): string {
   result = result.replace(/\.{2,}/g, '.');
   // Fix repeated words ("the the", "is is")
   result = result.replace(/\b(\w+)\s+\1\b/gi, '$1');
-  // Fix spacing issues
-  result = result.replace(/\s{2,}/g, ' ');
-  result = result.replace(/\s+([.,;:!?])/g, '$1');
+  // Fix spacing issues — use [ \t] to preserve \n\n paragraph breaks
+  result = result.replace(/[ \t]{2,}/g, ' ');
+  result = result.replace(/[ \t]+([.,;:!?])/g, '$1');
   // Fix AI capitalization
   result = result.replace(/\bAi\b/g, 'AI');
   result = result.replace(/\bai\b/g, 'AI');

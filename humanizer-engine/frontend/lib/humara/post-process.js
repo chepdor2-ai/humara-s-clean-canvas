@@ -488,8 +488,8 @@ export function repairGrammar(text) {
   // Fix orphaned commas at sentence start
   output = output.replace(/^,\s*/g, '');
 
-  // Fix double spaces
-  output = output.replace(/\s{2,}/g, ' ');
+  // Fix double spaces (preserve paragraph breaks)
+  output = output.replace(/[ \t]{2,}/g, ' ');
 
   // Fix space before punctuation (but not before decimals like .05)
   output = output.replace(/\s+([.,;:!?])(?!\d)/g, '$1');
@@ -626,5 +626,5 @@ export function applyCoherenceFixes(text) {
     }
   }
 
-  return (result.join(' ') + trailing).replace(/\s{2,}/g, ' ');
+  return (result.join(' ') + trailing).replace(/[ \t]{2,}/g, ' ');
 }
