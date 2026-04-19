@@ -729,40 +729,42 @@ export async function POST(req: Request) {
               const textContext = analyzeContext(normalizedText);
               const primaryTopic = textContext.primaryTopic;
 
+              // Compute signal-based intelligence: vocabulary richness, pattern score, uniformity
+              const aiSignals = aiAnalysisResult.signals ?? {};
+              const patScore = aiSignals.ai_pattern_score ?? 50;
+              const vocabRich = aiSignals.vocabulary_richness ?? 50;
+              const sentUnif = aiSignals.sentence_uniformity ?? 50;
+
               sendSSE(controller, { type: 'stage', stage: `AI Analysis: ${primaryTopic} paper detected (${Math.round(topAvg)}% AI)` });
               await flushDelay(30);
 
-              // Phase 3: Select best engine pipeline based on topic + AI score
-              // High AI scores (>60%) need aggressive double-engine → Phantom → Nuru
-              // Medium AI scores (30-60%) need single engine → Phantom → Nuru
-              // Lower scores just need Phantom → Nuru
+              // Phase 3: Intelligent engine selection — minimum processing for maximum impact
+              // The goal is to get the LOWEST score without over-processing.
+              // Key principle: only add engines that target the specific signals detected.
               let stage1Result: string;
-              if (topAvg > 60) {
-                // Double engine: pick best two based on topic
-                const topicEngineMap: Record<string, [() => Promise<string> | string, () => Promise<string> | string]> = {
-                  technology: [() => runHumara20(normalizedText), async () => (await runHumara22(normalizedText))],
-                  science: [() => runHumara20(normalizedText), async () => (await runHumara24(normalizedText))],
-                  health: [() => runHumara20(normalizedText), async () => (await runHumara24(normalizedText))],
-                  education: [async () => (await runHumara22(normalizedText)), async () => (await runHumara24(normalizedText))],
-                  economics: [() => runHumara20(normalizedText), async () => (await runHumara22(normalizedText))],
-                  politics: [async () => (await runHumara24(normalizedText)), async () => (await runHumara22(normalizedText))],
-                  environment: [() => runHumara20(normalizedText), async () => (await runHumara24(normalizedText))],
-                  society: [async () => (await runHumara22(normalizedText)), async () => (await runHumara24(normalizedText))],
-                };
-                const engines = topicEngineMap[primaryTopic] ?? topicEngineMap['technology']!;
-                sendSSE(controller, { type: 'stage', stage: 'AI Analysis: Running Stage 1 Engine' });
+
+              if (topAvg <= 15) {
+                // Already nearly human — only light Nuru polish needed, skip heavy engines
+                sendSSE(controller, { type: 'stage', stage: 'AI Analysis: Text is nearly human — light polish only' });
                 await flushDelay(10);
-                const s1 = await engines[0]();
-                sendSSE(controller, { type: 'stage', stage: 'AI Analysis: Running Stage 2 Engine' });
+                stage1Result = applySmartNuruPolish(normalizedText, 5);
+              } else if (topAvg <= 35) {
+                // Low-medium AI — single targeted engine based on which signals are elevated
+                sendSSE(controller, { type: 'stage', stage: 'AI Analysis: Running Targeted Single Engine' });
                 await flushDelay(10);
-                stage1Result = await engines[1]();
-                // Blend: use stage 2 output (already incorporates stage 1 patterns via different approach)
-                // Actually run stage 2 on stage 1 output for true chaining
-                if (typeof engines[1] === 'function') {
-                  stage1Result = runHumara20(s1); // Quick non-LLM pass on first output
+                if (patScore > 55) {
+                  // Pattern-heavy → Humara 2.0 is best for breaking AI patterns (non-LLM, instant)
+                  stage1Result = runHumara20(normalizedText);
+                } else if (vocabRich > 55) {
+                  // Vocabulary too predictable → AntiPangram forensic rewrite
+                  const { antiPangramSimple: apgLight } = await import('@/lib/engine/antipangram');
+                  stage1Result = apgLight(normalizedText, 'medium' as any, (tone ?? 'academic') as any);
+                } else {
+                  // General signals → Humara 2.0 safe bet
+                  stage1Result = runHumara20(normalizedText);
                 }
-              } else if (topAvg > 30) {
-                // Single engine based on topic
+              } else if (topAvg <= 60) {
+                // Medium AI — single engine based on topic, followed by Phantom
                 const topicSingleMap: Record<string, () => Promise<string> | string> = {
                   technology: () => runHumara20(normalizedText),
                   science: async () => (await runHumara24(normalizedText)),
@@ -777,20 +779,48 @@ export async function POST(req: Request) {
                 await flushDelay(10);
                 stage1Result = await (topicSingleMap[primaryTopic] ?? topicSingleMap['technology']!)();
               } else {
-                // Low AI — just light processing
-                stage1Result = runHumara20(normalizedText);
+                // High AI (>60%) — double engine chain: pick best two based on topic + signals
+                sendSSE(controller, { type: 'stage', stage: 'AI Analysis: Running Stage 1 Engine' });
+                await flushDelay(10);
+                let s1: string;
+                // First pass: always use the fastest effective engine for the topic
+                if (sentUnif > 60 || patScore > 60) {
+                  // Uniform/patterned → break structure with Humara 2.0 first
+                  s1 = runHumara20(normalizedText);
+                } else {
+                  // General high AI → LLM rewrite for deep transformation
+                  s1 = await runHumara24(normalizedText);
+                }
+                sendSSE(controller, { type: 'stage', stage: 'AI Analysis: Running Stage 2 Engine' });
+                await flushDelay(10);
+                // Second pass: complement with a different engine targeting remaining signals
+                const topicSecondMap: Record<string, () => Promise<string> | string> = {
+                  technology: () => runHumara20(s1),
+                  science: async () => (await runHumara22(s1)),
+                  health: async () => (await runHumara22(s1)),
+                  education: () => runHumara20(s1),
+                  economics: async () => (await runHumara22(s1)),
+                  politics: () => runHumara20(s1),
+                  environment: () => runHumara20(s1),
+                  society: async () => (await runHumara22(s1)),
+                };
+                stage1Result = await (topicSecondMap[primaryTopic] ?? (() => runHumara20(s1)))();
               }
 
-              // Phase 4: Phantom forensic cleanup
-              sendSSE(controller, { type: 'stage', stage: 'AI Analysis: Phantom Forensic Pass' });
-              await flushDelay(10);
-              const phantomResult = await runHumara24(stage1Result);
-              const { antiPangramSimple: apgSimple } = await import('@/lib/engine/antipangram');
-              fullResult = apgSimple(
-                phantomResult,
-                (strength ?? 'strong') as 'light' | 'medium' | 'strong',
-                (tone ?? 'academic') as 'academic' | 'professional' | 'casual' | 'neutral',
-              );
+              // Phase 4: Phantom forensic cleanup (skip if text was already nearly human)
+              if (topAvg > 15) {
+                sendSSE(controller, { type: 'stage', stage: 'AI Analysis: Phantom Forensic Pass' });
+                await flushDelay(10);
+                const phantomResult = await runHumara24(stage1Result);
+                const { antiPangramSimple: apgSimple } = await import('@/lib/engine/antipangram');
+                fullResult = apgSimple(
+                  phantomResult,
+                  (strength ?? 'strong') as 'light' | 'medium' | 'strong',
+                  (tone ?? 'academic') as 'academic' | 'professional' | 'casual' | 'neutral',
+                );
+              } else {
+                fullResult = stage1Result;
+              }
               // Phase pipeline will add complete Nuru 2.0 flow after this
             } else if (eng === 'humara_v3_3' || eng === 'phantom') {
               fullResult = await runHumara24(normalizedText);
@@ -1404,14 +1434,21 @@ export async function POST(req: Request) {
               sendSSE(controller, { type: 'stage', stage: `AI Analysis: Cleanup loop ${loopIter + 1} (${Math.round(loopAvg)}% AI)` });
               await flushDelay(10);
 
-              if (patternScore > 60 || uniformity > 60) {
-                // High pattern/uniformity → Nuru 2.0 passes
+              // Intelligent engine selection per loop — avoid repeating the same engine
+              // Use decreasing aggressiveness: first loop aggressive, later loops targeted
+              if (loopIter === 0 && loopAvg > 40) {
+                // First loop, still high → Humara 2.0 structural rewrite + Nuru
+                humanized = runHumara20(humanized);
+                humanized = applySmartNuruPolish(humanized, 8);
+              } else if (patternScore > 60 || uniformity > 60) {
+                // High pattern/uniformity → Nuru 2.0 passes only (no structural change)
                 humanized = applySmartNuruPolish(humanized, 10);
               } else if (vocabScore > 55) {
-                // High vocabulary predictability → Humara 2.0
+                // High vocabulary predictability → Humara 2.0 + light Nuru
                 humanized = runHumara20(humanized);
+                humanized = applySmartNuruPolish(humanized, 3);
               } else {
-                // Forensic signals → AntiPangram
+                // Forensic signals or general residual → AntiPangram targeted
                 const { antiPangramSimple: loopApg } = await import('@/lib/engine/antipangram');
                 humanized = loopApg(
                   humanized,

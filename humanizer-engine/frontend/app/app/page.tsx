@@ -421,6 +421,12 @@ function EditorPageInner() {
   // Easy engine controls
   const [easySentenceBySentence, setEasySentenceBySentence] = useState(false);
 
+  // Auto Model controls
+  const [autoModelEnabled, setAutoModelEnabled] = useState(false);
+  const [autoModelConfirmOpen, setAutoModelConfirmOpen] = useState(false);
+  const [autoModelRedPhase, setAutoModelRedPhase] = useState(false); // true = red blink (first 10s)
+  const autoModelTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   // Ozone engine controls — sentence-by-sentence ON by default to protect titles
   const [ozoneSentenceBySentence, setOzoneSentenceBySentence] = useState(true);
   const [ozoneUndetectWarning, setOzoneUndetectWarning] = useState(false);
@@ -546,6 +552,50 @@ function EditorPageInner() {
     }, 15000); // check every 15s
     return () => clearInterval(interval);
   }, [history.length]);
+
+  // Auto Model: 10s red blink → smooth color cycle
+  useEffect(() => {
+    if (!autoModelEnabled) {
+      setAutoModelRedPhase(false);
+      if (autoModelTimerRef.current) { clearTimeout(autoModelTimerRef.current); autoModelTimerRef.current = null; }
+      return;
+    }
+    setAutoModelRedPhase(true);
+    autoModelTimerRef.current = setTimeout(() => { setAutoModelRedPhase(false); }, 10000);
+    return () => { if (autoModelTimerRef.current) clearTimeout(autoModelTimerRef.current); };
+  }, [autoModelEnabled]);
+
+  // Auto Model: when enabled, force engine to ai_analysis + advanced mode
+  useEffect(() => {
+    if (autoModelEnabled) {
+      setMode('advanced_engines');
+      setEngine('ai_analysis');
+    }
+  }, [autoModelEnabled]);
+
+  const handleAutoModelToggle = useCallback(() => {
+    if (autoModelEnabled) {
+      // Turning off — no confirmation needed
+      setAutoModelEnabled(false);
+    } else {
+      // Turning on — show confirmation popup
+      setAutoModelConfirmOpen(true);
+    }
+  }, [autoModelEnabled]);
+
+  const confirmAutoModel = useCallback(() => {
+    setAutoModelConfirmOpen(false);
+    setAutoModelEnabled(true);
+  }, []);
+
+  const cancelAutoModel = useCallback(() => {
+    setAutoModelConfirmOpen(false);
+  }, []);
+
+  // CSS class for the auto model glow phase
+  const autoGlowClass = autoModelEnabled
+    ? (autoModelRedPhase ? 'auto-model-red-blink' : 'auto-model-color-cycle')
+    : '';
 
   // Smooth simulated progress animation that rises gradually
   useEffect(() => {
@@ -1307,15 +1357,80 @@ function EditorPageInner() {
   return (
     <div className="stealth-shell relative flex flex-col gap-4 animate-in fade-in duration-500 w-full p-1 sm:p-2">
 
+      {/* Auto Model Confirmation Popup */}
+      {autoModelConfirmOpen && (
+        <>
+          <div className="fixed inset-0 z-[10000] bg-black/50 backdrop-blur-sm" onClick={cancelAutoModel} />
+          <div className="fixed inset-0 z-[10001] flex items-center justify-center p-4">
+            <div className="bg-white dark:bg-[#0c0c14] border border-slate-200 dark:border-red-900/50 rounded-2xl shadow-2xl w-full max-w-md overflow-hidden animate-in zoom-in-95 fade-in duration-200">
+              <div className="px-6 py-5 border-b border-slate-100 dark:border-red-900/30 bg-gradient-to-r from-red-50 to-orange-50 dark:from-red-950/30 dark:to-orange-950/20">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-red-100 dark:bg-red-900/40 flex items-center justify-center">
+                    <Zap className="w-5 h-5 text-red-600 dark:text-red-400" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold text-slate-900 dark:text-zinc-100">Enable Auto Model?</h3>
+                    <p className="text-[11px] text-slate-500 dark:text-zinc-400 mt-0.5">AI Analysis will auto-select the best engines for your text</p>
+                  </div>
+                </div>
+              </div>
+              <div className="px-6 py-4 space-y-3">
+                <p className="text-xs text-slate-600 dark:text-zinc-300 leading-relaxed">
+                  Auto Model uses intelligent topic analysis to select optimal engines, runs Phantom + full Nuru 2.0 pipeline, and loops until AI detection drops below 20%.
+                </p>
+                <div className="space-y-1.5">
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400">Potential side effects</p>
+                  <ul className="space-y-1">
+                    <li className="flex items-start gap-2 text-[11px] text-slate-600 dark:text-zinc-400">
+                      <AlertTriangle className="w-3 h-3 text-amber-500 shrink-0 mt-0.5" />
+                      <span><span className="font-semibold text-slate-700 dark:text-zinc-300">Over-processing risk:</span> Heavy multi-pass rewriting may alter meaning or tone beyond intent, especially on short texts (&lt;200 words).</span>
+                    </li>
+                    <li className="flex items-start gap-2 text-[11px] text-slate-600 dark:text-zinc-400">
+                      <AlertTriangle className="w-3 h-3 text-amber-500 shrink-0 mt-0.5" />
+                      <span><span className="font-semibold text-slate-700 dark:text-zinc-300">Vocabulary shift:</span> Multiple engine passes can replace domain-specific terms with simpler synonyms.</span>
+                    </li>
+                    <li className="flex items-start gap-2 text-[11px] text-slate-600 dark:text-zinc-400">
+                      <AlertTriangle className="w-3 h-3 text-amber-500 shrink-0 mt-0.5" />
+                      <span><span className="font-semibold text-slate-700 dark:text-zinc-300">Longer processing:</span> The rerun loop (up to 3 iterations) takes more time than single-engine runs.</span>
+                    </li>
+                    <li className="flex items-start gap-2 text-[11px] text-slate-600 dark:text-zinc-400">
+                      <AlertTriangle className="w-3 h-3 text-amber-500 shrink-0 mt-0.5" />
+                      <span><span className="font-semibold text-slate-700 dark:text-zinc-300">Sentence uniformity:</span> Aggressive looping may produce text with unnaturally consistent sentence structures.</span>
+                    </li>
+                    <li className="flex items-start gap-2 text-[11px] text-slate-600 dark:text-zinc-400">
+                      <AlertTriangle className="w-3 h-3 text-amber-500 shrink-0 mt-0.5" />
+                      <span><span className="font-semibold text-slate-700 dark:text-zinc-300">Word count fluctuation:</span> Output may be 10–25% shorter or longer than input due to multi-engine rewriting.</span>
+                    </li>
+                  </ul>
+                </div>
+                <p className="text-[10px] text-slate-500 dark:text-zinc-500 italic">
+                  The system is designed to avoid over-processing — it selects the minimum engines needed and stops the loop once the target score is reached.
+                </p>
+              </div>
+              <div className="px-6 py-4 border-t border-slate-100 dark:border-zinc-800/60 flex items-center justify-end gap-3">
+                <button onClick={cancelAutoModel}
+                  className="px-4 py-2 text-[11px] font-semibold text-slate-600 dark:text-zinc-400 hover:text-slate-800 dark:hover:text-zinc-200 hover:bg-slate-100 dark:hover:bg-zinc-800/50 rounded-lg transition-colors">
+                  Cancel
+                </button>
+                <button onClick={confirmAutoModel}
+                  className="px-4 py-2 text-[11px] font-bold text-white bg-gradient-to-r from-red-600 to-orange-500 hover:from-red-500 hover:to-orange-400 rounded-lg shadow-md hover:shadow-lg transition-all">
+                  Enable Auto Model
+                </button>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
+
       {/* ═══ Combined Control Card ═══ */}
       <div
-        className={`stealth-control-card relative overflow-hidden bg-white dark:bg-[linear-gradient(145deg,rgba(8,11,16,.95),rgba(10,13,19,.92))] border border-slate-200 dark:border-cyan-900/40 rounded-2xl shadow-sm dark:shadow-[0_16px_40px_-22px_rgba(6,182,212,.45)] ${planColor ? 'plan-glow' : ''}`}
+        className={`stealth-control-card relative overflow-hidden bg-white dark:bg-[linear-gradient(145deg,rgba(8,11,16,.95),rgba(10,13,19,.92))] border rounded-2xl shadow-sm dark:shadow-[0_16px_40px_-22px_rgba(6,182,212,.45)] ${autoModelEnabled ? autoGlowClass + ' auto-glow-btn border-transparent' : 'border-slate-200 dark:border-cyan-900/40'} ${planColor && !autoModelEnabled ? 'plan-glow' : ''}`}
       >
         <div className="stealth-top-glow pointer-events-none absolute inset-0 opacity-0 dark:opacity-70" />
         {/* Row 1: Brand + Usage + Nav */}
         <div className="relative flex flex-wrap items-center justify-between gap-2 px-4 sm:px-5 py-3 border-b border-slate-200 dark:border-cyan-900/30">
           <div className="flex flex-wrap items-center gap-3 sm:gap-4 min-w-0">
-            <h1 className="text-base sm:text-lg font-black text-cyan-600 dark:text-cyan-100 tracking-tight whitespace-nowrap">Humara Stealth</h1>
+            <h1 className={`text-base sm:text-lg font-black tracking-tight whitespace-nowrap ${autoModelEnabled ? autoGlowClass + ' auto-glow-text' : 'text-cyan-600 dark:text-cyan-100'}`}>Humara Stealth</h1>
             <div className="w-px h-4 bg-slate-300 dark:bg-cyan-900/50 hidden sm:block" />
             <UsageBar />
             {isDailyLimitReached && (
@@ -1354,10 +1469,11 @@ function EditorPageInner() {
               ] as { id: ModeId; label: string }[]).map((m) => (
                 <button
                   key={m.id}
-                  onClick={() => setMode(m.id)}
+                  onClick={() => { if (!autoModelEnabled) setMode(m.id); }}
+                  disabled={autoModelEnabled}
                   className={`px-2 py-1 text-[10px] font-semibold rounded transition-all ${
                     mode === m.id ? 'bg-cyan-500 dark:bg-cyan-700/70 text-white' : 'text-slate-500 dark:text-zinc-500 hover:text-slate-700 dark:hover:text-zinc-300'
-                  }`}
+                  } ${autoModelEnabled ? 'opacity-50 cursor-not-allowed' : ''} ${autoModelEnabled && mode === m.id ? autoGlowClass + ' auto-glow-btn' : ''}`}
                 >
                   {m.label}
                 </button>
@@ -1365,12 +1481,23 @@ function EditorPageInner() {
             </div>
           </div>
           <div className="w-px h-4 bg-slate-200 dark:bg-cyan-950/70 hidden sm:block" />
+          {/* Auto Model Toggle */}
+          <label className="flex items-center gap-1.5 cursor-pointer select-none">
+            <span className={`text-[10px] font-semibold uppercase ${autoModelEnabled ? autoGlowClass + ' auto-glow-text' : 'text-slate-500 dark:text-zinc-500'}`}>Auto</span>
+            <button onClick={handleAutoModelToggle}
+              className={`w-7 h-[16px] rounded-full transition-all relative ${autoModelEnabled ? autoGlowClass + ' auto-glow-btn' : 'bg-slate-300 dark:bg-zinc-700'}`}
+              style={autoModelEnabled ? { backgroundColor: 'var(--auto-glow, #ef4444)' } : undefined}>
+              <div className={`w-2.5 h-2.5 bg-white rounded-full absolute top-[3px] transition-all shadow-sm ${autoModelEnabled ? 'left-[13px]' : 'left-[3px]'}`} />
+            </button>
+          </label>
+          <div className="w-px h-4 bg-slate-200 dark:bg-cyan-950/70 hidden sm:block" />
           <div className="flex items-center gap-1.5 relative">
             <span className="text-[10px] font-semibold text-slate-500 dark:text-zinc-500 uppercase">Engine</span>
             <div className="relative group">
-              <button ref={engineBtnRef} type="button" onClick={() => setEngineDropdownOpen(!engineDropdownOpen)}
-                className="flex items-center gap-1.5 bg-slate-100 dark:bg-zinc-950/60 border border-slate-200 dark:border-cyan-900/40 rounded-md px-2 py-1 text-[11px] font-semibold text-slate-700 dark:text-zinc-300 outline-none hover:border-slate-300 dark:hover:border-cyan-700/60 transition-colors min-w-[118px]">
-                <span>{ENGINES.find(e => e.id === engine)?.label}</span>
+              <button ref={engineBtnRef} type="button" onClick={() => { if (!autoModelEnabled) setEngineDropdownOpen(!engineDropdownOpen); }}
+                disabled={autoModelEnabled}
+                className={`flex items-center gap-1.5 bg-slate-100 dark:bg-zinc-950/60 border border-slate-200 dark:border-cyan-900/40 rounded-md px-2 py-1 text-[11px] font-semibold text-slate-700 dark:text-zinc-300 outline-none hover:border-slate-300 dark:hover:border-cyan-700/60 transition-colors min-w-[118px] ${autoModelEnabled ? autoGlowClass + ' auto-glow-btn' : ''} ${autoModelEnabled ? 'cursor-not-allowed' : ''}`}>
+                <span className={autoModelEnabled ? autoGlowClass + ' auto-glow-text' : ''}>{ENGINES.find(e => e.id === engine)?.label}</span>
                 <svg className={`ml-auto w-3 h-3 text-slate-400 dark:text-zinc-500 transition-transform ${engineDropdownOpen ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
               </button>
               {ENGINE_GUIDES[engine] && !engineDropdownOpen && (
@@ -1402,8 +1529,8 @@ function EditorPageInner() {
           </div>
           <div className="w-px h-4 bg-slate-200 dark:bg-cyan-950/70 hidden sm:block" />
           <div className="flex items-center gap-1.5">
-            <span className="text-[10px] font-semibold text-slate-500 dark:text-zinc-500 uppercase">Depth</span>
-            <div className="flex bg-slate-100 dark:bg-zinc-950/60 rounded-md p-0.5 border border-slate-200 dark:border-cyan-900/40">
+            <span className={`text-[10px] font-semibold uppercase ${autoModelEnabled ? autoGlowClass + ' auto-glow-text' : 'text-slate-500 dark:text-zinc-500'}`}>Depth</span>
+            <div className={`flex rounded-md p-0.5 border ${autoModelEnabled ? autoGlowClass + ' auto-glow-btn border-transparent' : 'bg-slate-100 dark:bg-zinc-950/60 border-slate-200 dark:border-cyan-900/40'}`}>
               {STRENGTHS.map(s => (
                 <button key={s.id} onClick={() => setStrength(s.id)}
                   className={`px-2 py-1 text-[10px] font-semibold rounded transition-all ${strength === s.id ? 'bg-cyan-500 dark:bg-cyan-700/70 text-white' : 'text-slate-500 dark:text-zinc-500 hover:text-slate-700 dark:hover:text-zinc-300'}`}>
@@ -1414,7 +1541,7 @@ function EditorPageInner() {
           </div>
           <div className="w-px h-4 bg-slate-200 dark:bg-cyan-950/70 hidden sm:block" />
           <div className="flex items-center gap-1.5">
-            <span className="text-[10px] font-semibold text-slate-500 dark:text-zinc-500 uppercase">Tone</span>
+            <span className={`text-[10px] font-semibold uppercase ${autoModelEnabled ? autoGlowClass + ' auto-glow-text' : 'text-slate-500 dark:text-zinc-500'}`}>Tone</span>
             <select value={tone} onChange={(e) => setTone(e.target.value)} title="Tone"
               className="bg-slate-100 dark:bg-zinc-950/60 border border-slate-200 dark:border-cyan-900/40 rounded-md px-2 py-1 text-[10px] font-semibold text-slate-700 dark:text-zinc-300 outline-none focus:border-cyan-500">
               {TONES.map(t => <option key={t.id} value={t.id}>{t.label}</option>)}
@@ -1422,7 +1549,7 @@ function EditorPageInner() {
           </div>
           <div className="w-px h-4 bg-slate-200 dark:bg-cyan-950/70 hidden sm:block" />
           <label className="flex items-center gap-1.5 cursor-pointer select-none">
-            <span className="text-[10px] font-semibold text-slate-500 dark:text-zinc-500 uppercase">Meaning</span>
+            <span className={`text-[10px] font-semibold uppercase ${autoModelEnabled ? autoGlowClass + ' auto-glow-text' : 'text-slate-500 dark:text-zinc-500'}`}>Meaning</span>
             <button onClick={() => setStrictMeaning(!strictMeaning)} title={strictMeaning ? 'On' : 'Off'}
               className={`w-7 h-[16px] rounded-full transition-all relative ${strictMeaning ? 'bg-cyan-500 dark:bg-cyan-600' : 'bg-slate-300 dark:bg-zinc-700'}`}>
               <div className={`w-2.5 h-2.5 bg-white rounded-full absolute top-[3px] transition-all shadow-sm ${strictMeaning ? 'left-[13px]' : 'left-[3px]'}`} />
@@ -1430,8 +1557,8 @@ function EditorPageInner() {
           </label>
           <div className="w-px h-4 bg-slate-200 dark:bg-cyan-950/70 hidden sm:block" />
           <label className="flex items-center gap-1.5 cursor-pointer select-none" title="Auto-correct grammar, punctuation & capitalization in the output">
-            <SpellCheck className={`w-3 h-3 ${grammarCorrection ? 'text-emerald-500' : 'text-slate-400 dark:text-zinc-500'}`} />
-            <span className="text-[10px] font-semibold text-slate-500 dark:text-zinc-500 uppercase">Grammar</span>
+            <SpellCheck className={`w-3 h-3 ${grammarCorrection ? 'text-emerald-500' : autoModelEnabled ? '' : 'text-slate-400 dark:text-zinc-500'}`} />
+            <span className={`text-[10px] font-semibold uppercase ${autoModelEnabled ? autoGlowClass + ' auto-glow-text' : 'text-slate-500 dark:text-zinc-500'}`}>Grammar</span>
             <button onClick={() => setGrammarCorrection(!grammarCorrection)}
               className={`w-7 h-[16px] rounded-full transition-all relative ${grammarCorrection ? 'bg-emerald-500 dark:bg-emerald-600' : 'bg-slate-300 dark:bg-zinc-700'}`}>
               <div className={`w-2.5 h-2.5 bg-white rounded-full absolute top-[3px] transition-all shadow-sm ${grammarCorrection ? 'left-[13px]' : 'left-[3px]'}`} />
@@ -1439,17 +1566,19 @@ function EditorPageInner() {
           </label>
           <div className="w-px h-4 bg-slate-200 dark:bg-cyan-950/70 hidden sm:block" />
           <div className="flex items-center gap-1.5">
-            <span className="text-[10px] font-semibold text-slate-500 dark:text-zinc-500 uppercase">Rate</span>
+            <span className={`text-[10px] font-semibold uppercase ${autoModelEnabled ? autoGlowClass + ' auto-glow-text' : 'text-slate-500 dark:text-zinc-500'}`}>Rate</span>
             <input type="range" min={1} max={10} value={humanizationRate} onChange={(e) => setHumanizationRate(Number(e.target.value))}
               className="w-16 h-1.5 accent-cyan-500 cursor-pointer" title={`Humanization rate: ${humanizationRate} (${humanizationRate * 10}% min change)`} />
             <span className="text-[10px] font-bold text-cyan-600 dark:text-cyan-400 min-w-[14px] text-center">{humanizationRate}</span>
           </div>
           <button onClick={handleHumanize} disabled={!text.trim() || loading || rephrasing || isDailyLimitReached}
             className={`w-full sm:w-auto sm:ml-auto text-white text-[11px] font-bold rounded-lg px-4 py-2 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-1.5 shadow-md ${
+              autoModelEnabled ? autoGlowClass + ' auto-glow-btn auto-glow-bg' :
               isDailyLimitReached
                 ? 'bg-gradient-to-r from-red-600 to-red-500 dark:from-red-700 dark:to-red-600'
                 : 'bg-gradient-to-r from-cyan-600 to-teal-500 dark:from-cyan-700 dark:to-teal-600 hover:from-cyan-500 hover:to-teal-400 dark:hover:from-cyan-600 dark:hover:to-teal-500 hover:shadow-lg'
-            }`}>
+            }`}
+            style={autoModelEnabled ? { backgroundColor: 'var(--auto-glow, #06b6d4)' } : undefined}>
             {loading ? <RotateCcw className="w-3 h-3" /> : <Sparkles className="w-3 h-3" />}
             {loading ? 'Humanizing…' : isDailyLimitReached ? 'Limit Reached' : 'Humanize'}
           </button>
@@ -1457,12 +1586,12 @@ function EditorPageInner() {
       </div>
 
       {/* Stealth Hint Bar */}
-      <div className="stealth-hint-bar flex flex-wrap items-center gap-2.5 px-3 py-2 rounded-xl border border-slate-200 dark:border-cyan-950/60 bg-white dark:bg-[#0a1018] shadow-sm dark:shadow-none">
-        <span className="text-[10px] font-semibold uppercase tracking-wide text-cyan-600 dark:text-cyan-300">Profile</span>
-        <span className="text-[11px] text-slate-600 dark:text-zinc-300 hidden sm:inline">Simple controls, stealth output, editable result.</span>
+      <div className={`stealth-hint-bar flex flex-wrap items-center gap-2.5 px-3 py-2 rounded-xl border shadow-sm dark:shadow-none ${autoModelEnabled ? autoGlowClass + ' auto-glow-btn border-transparent' : 'border-slate-200 dark:border-cyan-950/60'} bg-white dark:bg-[#0a1018]`}>
+        <span className={`text-[10px] font-semibold uppercase tracking-wide ${autoModelEnabled ? autoGlowClass + ' auto-glow-text' : 'text-cyan-600 dark:text-cyan-300'}`}>Profile</span>
+        <span className="text-[11px] text-slate-600 dark:text-zinc-300 hidden sm:inline">{autoModelEnabled ? 'Auto Model — Intelligent multi-engine pipeline active' : 'Simple controls, stealth output, editable result.'}</span>
         <div className="ml-auto flex flex-wrap items-center gap-1.5">
-          <span className="text-[10px] px-2 py-0.5 rounded-full bg-cyan-50 dark:bg-cyan-950/50 border border-cyan-200 dark:border-cyan-900/60 text-cyan-700 dark:text-cyan-200">{MODE_LABELS[mode]}</span>
-          <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-100 dark:bg-zinc-900/70 border border-slate-200 dark:border-zinc-800 text-slate-700 dark:text-zinc-300">{ENGINES.find(e => e.id === engine)?.label}</span>
+          <span className={`text-[10px] px-2 py-0.5 rounded-full border ${autoModelEnabled ? autoGlowClass + ' auto-glow-text auto-glow-btn border-transparent' : 'bg-cyan-50 dark:bg-cyan-950/50 border-cyan-200 dark:border-cyan-900/60 text-cyan-700 dark:text-cyan-200'}`}>{autoModelEnabled ? 'Auto Model' : MODE_LABELS[mode]}</span>
+          <span className={`text-[10px] px-2 py-0.5 rounded-full border ${autoModelEnabled ? autoGlowClass + ' auto-glow-text auto-glow-btn border-transparent' : 'bg-slate-100 dark:bg-zinc-900/70 border-slate-200 dark:border-zinc-800 text-slate-700 dark:text-zinc-300'}`}>{ENGINES.find(e => e.id === engine)?.label}</span>
           <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-100 dark:bg-zinc-900/70 border border-slate-200 dark:border-zinc-800 text-slate-700 dark:text-zinc-300">{TONES.find(t => t.id === tone)?.label}</span>
           {grammarCorrection && (
             <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-900/60 text-emerald-700 dark:text-emerald-200">Grammar ✓</span>
@@ -1512,12 +1641,24 @@ function EditorPageInner() {
           </div>
         </div>
       )}
-      {mode === 'advanced_engines' && (
+      {mode === 'advanced_engines' && !autoModelEnabled && (
         <div className="flex items-start gap-2 px-3 py-2 bg-fuchsia-50 dark:bg-fuchsia-950/30 border border-fuchsia-200 dark:border-fuchsia-800/40 rounded-lg mx-1">
           <span className="text-fuchsia-500 dark:text-fuchsia-300 text-xs mt-0.5">🔴</span>
           <div>
             <p className="text-[10px] font-bold text-fuchsia-700 dark:text-fuchsia-200">Advanced Engines — Maximum Transformation</p>
             <p className="text-[9px] text-fuchsia-600/80 dark:text-fuchsia-100/70 leading-relaxed mt-0.5">Multi-pass pipelines for the deepest AI signal destruction.</p>
+          </div>
+        </div>
+      )}
+      {autoModelEnabled && (
+        <div className={`flex items-start gap-2 px-3 py-2 rounded-lg mx-1 border ${autoGlowClass} auto-glow-btn border-transparent`}
+          style={{ background: 'linear-gradient(135deg, color-mix(in srgb, var(--auto-glow, #ef4444) 8%, transparent), color-mix(in srgb, var(--auto-glow, #ef4444) 4%, transparent))' }}>
+          <span className={`text-xs mt-0.5 ${autoGlowClass} auto-glow-text`}>⚡</span>
+          <div>
+            <p className={`text-[10px] font-bold ${autoGlowClass} auto-glow-text`}>Auto Model — Intelligent AI Analysis Active</p>
+            <p className="text-[9px] text-slate-600/80 dark:text-zinc-300/70 leading-relaxed mt-0.5">
+              Analyzes your text, selects the best engines, runs Phantom + Nuru 2.0, and loops until AI score drops below 20%. Toggle back to Normal to disable.
+            </p>
           </div>
         </div>
       )}

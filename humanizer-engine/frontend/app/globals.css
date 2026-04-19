@@ -180,6 +180,34 @@
     0%, 100% { opacity: 0; transform: scale(0.8); }
     50% { opacity: 1; transform: scale(1.4); }
   }
+
+  /* ── Auto Model: Red blink phase (first 10s) ────────── */
+  @keyframes autoModelRedBlink {
+    0%, 100% { --auto-glow: #ef4444; filter: brightness(1); }
+    50% { --auto-glow: #dc2626; filter: brightness(1.15); }
+  }
+
+  /* ── Auto Model: 16-color smooth cycle ──────────────── */
+  @keyframes autoModelColorCycle {
+    0%      { --auto-glow: #ef4444; } /* red */
+    6.25%   { --auto-glow: #f97316; } /* orange */
+    12.5%   { --auto-glow: #eab308; } /* yellow — shortest hold */
+    14.5%   { --auto-glow: #84cc16; } /* lime */
+    18.75%  { --auto-glow: #22c55e; } /* green */
+    25%     { --auto-glow: #14b8a6; } /* teal */
+    31.25%  { --auto-glow: #06b6d4; } /* cyan */
+    37.5%   { --auto-glow: #0ea5e9; } /* sky */
+    43.75%  { --auto-glow: #3b82f6; } /* blue */
+    50%     { --auto-glow: #6366f1; } /* indigo */
+    56.25%  { --auto-glow: #8b5cf6; } /* violet */
+    62.5%   { --auto-glow: #a855f7; } /* purple */
+    68.75%  { --auto-glow: #d946ef; } /* fuchsia */
+    75%     { --auto-glow: #ec4899; } /* pink */
+    81.25%  { --auto-glow: #f43f5e; } /* rose */
+    87.5%   { --auto-glow: #fb923c; } /* amber */
+    93.75%  { --auto-glow: #fbbf24; } /* gold */
+    100%    { --auto-glow: #ef4444; } /* back to red */
+  }
 }
 
 @layer base {
@@ -260,6 +288,36 @@
   /* ── Glowing brand text ───────────────────────────────── */
   .brand-glow-text {
     text-shadow: 0 0 12px rgba(6, 182, 212, 0.4), 0 0 24px rgba(8, 145, 178, 0.2);
+  }
+
+  /* ── Auto Model glow system ────────────────────────────── */
+  .auto-model-red-blink {
+    animation: autoModelRedBlink 0.8s ease-in-out infinite;
+    --auto-glow: #ef4444;
+  }
+  .auto-model-color-cycle {
+    animation: autoModelColorCycle 12s linear infinite;
+  }
+  /* Apply the glow color to buttons, text, borders */
+  .auto-glow-btn {
+    border-color: var(--auto-glow, #06b6d4) !important;
+    box-shadow: 0 0 12px color-mix(in srgb, var(--auto-glow, #06b6d4) 45%, transparent),
+                0 0 24px color-mix(in srgb, var(--auto-glow, #06b6d4) 20%, transparent),
+                inset 0 1px 0 color-mix(in srgb, var(--auto-glow, #06b6d4) 15%, transparent);
+    transition: border-color 0.4s ease, box-shadow 0.4s ease;
+  }
+  .auto-glow-text {
+    color: var(--auto-glow, #06b6d4) !important;
+    text-shadow: 0 0 8px color-mix(in srgb, var(--auto-glow, #06b6d4) 50%, transparent),
+                 0 0 16px color-mix(in srgb, var(--auto-glow, #06b6d4) 25%, transparent);
+    transition: color 0.4s ease, text-shadow 0.4s ease;
+  }
+  .auto-glow-bg {
+    background: linear-gradient(135deg,
+      color-mix(in srgb, var(--auto-glow, #06b6d4) 15%, transparent),
+      color-mix(in srgb, var(--auto-glow, #06b6d4) 8%, transparent)
+    ) !important;
+    transition: background 0.4s ease;
   }
 
   .brand-wordmark {
