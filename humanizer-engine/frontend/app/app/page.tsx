@@ -33,6 +33,7 @@ interface SynonymOption { word: string; isOriginal: boolean; }
 interface SentenceAlternative { text: string; score: number; }
 interface SelectionInfo { text: string; start: number; end: number; rect: { x: number; y: number }; type: 'word' | 'sentence'; }
 interface ScoredSentence { text: string; start: number; end: number; score: number; }
+type StreamedHumanizeResult = Partial<HumanizeResponse> & { type?: string; partial?: boolean; humanized?: string };
 
 /* ── Temporary History (auto-expires after 4 minutes) ──────────────────── */
 interface HistoryEntry {
@@ -818,7 +819,7 @@ function EditorPageInner() {
     const reader = res.body.getReader();
     const decoder = new TextDecoder();
     let buffer = '';
-    let finalData: Record<string, unknown> | null = null;
+    let finalData: StreamedHumanizeResult | null = null;
     let doneEventReceived = false;
     let streamedSentences: string[] = [];
     let streamedParagraphBoundaries: number[] = [];
@@ -957,7 +958,7 @@ function EditorPageInner() {
           }
         } else if (event.type === 'done') {
           markStreamActivity();
-          finalData = event as Record<string, unknown>;
+          finalData = event as StreamedHumanizeResult;
           setStreamGlobalStage('Complete');
           setStreamProgressTarget(100);
           setStreamPhaseName('Complete');
@@ -977,7 +978,7 @@ function EditorPageInner() {
     // If the stream closed abruptly, do not leave the UI in a perpetual loading state.
     if (!finalData && buffer.trim().startsWith('data: ')) {
       try {
-        const trailingEvent = JSON.parse(buffer.trim().slice(6)) as Record<string, unknown>;
+        const trailingEvent = JSON.parse(buffer.trim().slice(6)) as StreamedHumanizeResult;
         if (trailingEvent.type === 'done') {
           finalData = trailingEvent;
           setStreamGlobalStage('Complete');

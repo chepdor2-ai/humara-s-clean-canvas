@@ -291,7 +291,7 @@ export function IOPanels({
           )}
 
           {view === "confidence" && output && (
-            <SentenceMeter text={output} salt={runSalt} onRerollSentence={onRerollSentence} />
+            <SentenceMeter text={output} salt={runSalt} onFixSentence={onRerollSentence} />
           )}
 
           {/* Empty state */}
