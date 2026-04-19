@@ -516,9 +516,11 @@ function diversifyStarters(text: string): string {
 }
 
 function deepSynonymReplace(text: string, intensity: number = 0.6): string {
-  // Domain strategy caps the effective intensity for precision-sensitive domains
+  // Domain-protected terms are skipped below — no need to cap intensity.
+  // Domain strategy can INCREASE intensity but NEVER reduce below the passed-in baseline
+  // (reducing intensity lets AI patterns survive → higher detection scores)
   const effectiveIntensity = _oxygenStrategy
-    ? Math.min(intensity, _oxygenStrategy.synonymIntensity + 0.15)
+    ? Math.max(intensity, _oxygenStrategy.synonymIntensity + 0.15)
     : intensity;
   for (const [pattern, replacements] of DEEP_SYNONYMS) {
     const m = pattern.exec(text);
@@ -551,7 +553,8 @@ function deepSynonymReplace(text: string, intensity: number = 0.6): string {
 }
 
 function clauseFront(sentence: string): string {
-  const clauseProb = _oxygenStrategy ? _oxygenStrategy.structuralRate * 2.8 : 0.7;
+  // Domain strategy can INCREASE clause fronting rate but never reduce below 0.7 baseline
+  const clauseProb = _oxygenStrategy ? Math.max(0.7, _oxygenStrategy.structuralRate * 2.8) : 0.7;
   const m = sentence.match(/^(.{20,}?)\s+(because|since|although|while|whereas|given that)\s+(.{10,})$/i);
   if (m && Math.random() < clauseProb) {
     const main = m[1].replace(/[.,;]+$/, '');
@@ -593,7 +596,7 @@ function varySentenceLength(sentences: string[]): string[] {
       && s.split(/\s+/).length < 10
       && sentences[i + 1].split(/\s+/).length < 10
       && sentences[i + 1].length > 0
-      && Math.random() < (_oxygenStrategy ? _oxygenStrategy.sentenceMergeRate : 0.3)) {
+      && Math.random() < (_oxygenStrategy ? Math.max(0.3, _oxygenStrategy.sentenceMergeRate) : 0.3)) {
       const connector = pick([', and ', ' — ', '; ']);
       const nextSent = sentences[i + 1];
       const merged = s.replace(/[.!?]+$/, '') + connector + (nextSent.length > 0 ? nextSent[0].toLowerCase() + nextSent.slice(1) : '');
@@ -831,9 +834,9 @@ export function oxygenHumanize(
   const resolvedMode = mode || (strength === 'light' ? 'fast' : strength === 'strong' ? 'aggressive' : 'quality');
   const basePreset = MODE_PRESETS[resolvedMode] || MODE_PRESETS.quality;
 
-  // Blend mode preset with domain strategy — domain can lower the change target for precision-sensitive domains
+  // Domain strategy can RAISE the min change target but never LOWER it below the mode preset
   const preset = _oxygenStrategy
-    ? { minChange: Math.min(basePreset.minChange, Math.max(basePreset.minChange, _oxygenStrategy.minChangeTarget)), maxRetries: basePreset.maxRetries }
+    ? { minChange: Math.max(basePreset.minChange, _oxygenStrategy.minChangeTarget), maxRetries: basePreset.maxRetries }
     : basePreset;
 
   const paragraphs = splitParagraphs(text);
