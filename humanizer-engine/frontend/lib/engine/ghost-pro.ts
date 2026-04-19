@@ -1057,7 +1057,7 @@ function isTitleOrHeading(para: string): boolean {
   if (/^[\d]+[.):]\s/.test(trimmed) || /^[A-Za-z][.):]\s/.test(trimmed)) return true;
   if (/^(?:Introduction|Conclusion|Summary|Abstract|Background|Discussion|Results|Methods|References|Acknowledgments|Appendix)\s*$/i.test(trimmed)) return true;
   const words = trimmed.split(/\s+/);
-  if (words.length <= 10 && !/[.!?]$/.test(trimmed)) return true;
+  if (words.length <= 3 && !/[.!?]$/.test(trimmed) && /^[A-Z]/.test(trimmed)) return true;
   if (words.length <= 12 && trimmed === trimmed.toUpperCase() && /[A-Z]/.test(trimmed)) return true;
   return false;
 }

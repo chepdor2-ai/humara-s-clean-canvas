@@ -460,7 +460,7 @@ function enforceRestructuringThreshold(
   for (const para of humanParas) {
     const trimmed = para.trim();
     if (isHeadingParagraph(trimmed)) {
-      rebuilt.push(humanizeTitle(trimmed)eTitle(trimmed));
+      rebuilt.push(humanizeTitle(trimmed));
       sentIdx++; // skip the heading entry in humanizedSentences
     } else {
       const paraSents = robustSentenceSplit(trimmed);
