@@ -52,7 +52,7 @@ async function authenticateApiKey(request: Request) {
   }
 
   // Get API plan limits (default to hobby if no plan)
-  let plan = { monthly_words: 50000, daily_requests: 100, engines: ['oxygen', 'ozone', 'easy', 'oxygen3', 'humara_v3_3', 'nuru_v2', 'ghost_pro_wiki'], rate_limit_per_minute: 10, display_name: 'Default' };
+  let plan = { monthly_words: 50000, daily_requests: 100, engines: ['oxygen', 'easy', 'oxygen3', 'humara_v3_3', 'nuru_v2', 'ghost_pro_wiki'], rate_limit_per_minute: 10, display_name: 'Default' };
   if (apiPlanId) {
     const { data: planRow } = await supabase
       .from('api_plans')

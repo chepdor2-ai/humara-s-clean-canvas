@@ -3,18 +3,23 @@ import { createServiceClient } from '../../../../lib/supabase';
 
 // Hardcoded engine defaults — must match ALL_ENGINES in page.tsx
 const DEFAULT_ENGINES = [
-  { engine_id: 'ozone', label: 'Humara 2.1', enabled: true, premium: false, sort_order: 1 },
-  { engine_id: 'easy', label: 'Humara 2.2', enabled: true, premium: false, sort_order: 2 },
-  { engine_id: 'oxygen', label: 'Humara 2.0', enabled: true, premium: false, sort_order: 3 },
-  { engine_id: 'humara_v3_3', label: 'Humara 2.4', enabled: true, premium: false, sort_order: 4 },
-  { engine_id: 'ninja_3', label: 'Ninja 3', enabled: true, premium: false, sort_order: 5 },
-  { engine_id: 'ninja_2', label: 'Ninja 2', enabled: true, premium: false, sort_order: 6 },
-  { engine_id: 'ninja_4', label: 'Ninja 4', enabled: true, premium: false, sort_order: 7 },
-  { engine_id: 'ninja_5', label: 'Ninja 5', enabled: true, premium: false, sort_order: 8 },
-  { engine_id: 'ghost_trial_2', label: 'Ghost Trial 2', enabled: true, premium: false, sort_order: 9 },
-  { engine_id: 'ghost_trial_2_alt', label: 'Ghost Trial 2 Alt', enabled: true, premium: false, sort_order: 10 },
-  { engine_id: 'conscusion_1', label: 'Conscusion 1', enabled: true, premium: false, sort_order: 11 },
-  { engine_id: 'conscusion_12', label: 'Conscusion 12', enabled: true, premium: false, sort_order: 12 },
+  // 🟢 Core Engines
+  { engine_id: 'ninja_4', label: 'Nova', enabled: true, premium: false, sort_order: 1 },
+  { engine_id: 'easy', label: 'Swift', enabled: true, premium: false, sort_order: 2 },
+  { engine_id: 'ninja_1', label: 'Ninja', enabled: true, premium: false, sort_order: 3 },
+  { engine_id: 'antipangram', label: 'Pangram', enabled: true, premium: false, sort_order: 4 },
+  // 🟡 Detection Control
+  { engine_id: 'humara_v3_3', label: 'Humarin', enabled: true, premium: false, sort_order: 5 },
+  { engine_id: 'oxygen', label: 'Oxygen', enabled: true, premium: false, sort_order: 6 },
+  { engine_id: 'king', label: 'King', enabled: true, premium: false, sort_order: 7 },
+  { engine_id: 'nuru_v2', label: 'Nuru', enabled: true, premium: false, sort_order: 8 },
+  { engine_id: 'ghost_pro_wiki', label: 'Ghost', enabled: true, premium: false, sort_order: 9 },
+  // 🔴 Advanced Engines
+  { engine_id: 'ninja_3', label: 'Alpha', enabled: true, premium: false, sort_order: 10 },
+  { engine_id: 'ninja_2', label: 'Beta', enabled: true, premium: false, sort_order: 11 },
+  { engine_id: 'ninja_5', label: 'Omega', enabled: true, premium: false, sort_order: 12 },
+  { engine_id: 'ghost_trial_2', label: 'Specter', enabled: true, premium: false, sort_order: 13 },
+  { engine_id: 'phantom', label: 'Phantom', enabled: true, premium: false, sort_order: 14 },
 ];
 
 function getToken(authHeader: string | null) {

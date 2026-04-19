@@ -716,11 +716,6 @@ export async function POST(req: Request) {
       return output;
     };
 
-    const runHumara21 = async (input: string): Promise<string> => {
-      const ozoneSentenceBySentence = body.ozone_sentence_by_sentence === true;
-      const ozoneResult = await ozoneHumanize(input, ozoneSentenceBySentence);
-      return ozoneResult.humanized;
-    };
 
     const runHumara20 = (input: string): string => {
       const oxygenMode = (body.oxygen_mode as string) || (effectiveStrength === 'light' ? 'fast' : effectiveStrength === 'strong' ? 'aggressive' : 'quality');
@@ -846,8 +841,7 @@ export async function POST(req: Request) {
     // Deep Kill engine set — used to skip destructive post-processors
     const DEEP_KILL_ENGINES = new Set([
       'ninja_2', 'ninja_3', 'ninja_4', 'ninja_5',
-      'ghost_trial_2', 'ghost_trial_2_alt',
-      'conscusion_1', 'conscusion_12',
+      'ghost_trial_2',
     ]);
     const isDeepKill = DEEP_KILL_ENGINES.has(engine);
 
@@ -869,8 +863,6 @@ export async function POST(req: Request) {
 
     if (engine === 'easy') {
       humanized = await runHumara22(normalizedText);
-    } else if (engine === 'ozone') {
-      humanized = await runHumara21(normalizedText);
     } else if (engine === 'oxygen') {
       humanized = runHumara20(normalizedText);
     } else if (engine === 'humara_v3_3') {
@@ -918,38 +910,23 @@ export async function POST(req: Request) {
       const stage2 = runHumara20(stage1);
       humanized = applySmartNuruPolish(stage2);
     } else if (engine === 'ninja_2') {
-      // Ninja 2 (Deep Kill Beta): Humara 2.1 → Humara 2.0 → Smart Nuru
-      const stage1 = await runGuarded('ninja_2_stage_1', () => runHumara21(normalizedText), normalizedText, 35_000);
+      // Beta: Easy (Swift) → Humara 2.0 → Smart Nuru
+      const stage1 = await runGuarded('ninja_2_stage_1', () => runHumara22Clean(normalizedText), normalizedText, 35_000);
       const stage2 = runHumara20(stage1);
       humanized = applySmartNuruPolish(stage2);
     } else if (engine === 'ninja_4') {
-      // Ninja 4: Purely Humara 2.1 (fast, no Humara 2.4)
-      humanized = await runGuarded('ninja_4_stage_1', () => runHumara21(normalizedText), normalizedText);
+      // Nova: Ozone backend (Stealth Pro exclusive)
+      const ozResult = await ozoneHumanize(normalizedText, false);
+      humanized = ozResult.humanized;
     } else if (engine === 'ninja_5') {
-      // Ninja 5: Humara 2.4 → 15× Smart Nuru
+      // Omega: Humara 2.4 → 15× Smart Nuru
       const stage1 = await runGuarded('ninja_5_stage_1', () => runHumara24(normalizedText), normalizedText);
       humanized = applySmartNuruPolish(stage1);
     } else if (engine === 'ghost_trial_2') {
-      // Ghost Trial 2 (Deep Kill Ghost): Humara 2.4 → Humara 2.0 → Smart Nuru
+      // Specter: Humara 2.4 → Humara 2.0 → Smart Nuru
       const stage1 = await runGuarded('ghost_trial_2_stage_1', () => runHumara24(normalizedText), normalizedText);
       const stage2 = runHumara20(stage1);
       humanized = applySmartNuruPolish(stage2);
-    } else if (engine === 'ghost_trial_2_alt') {
-      // Ghost Trial 2 Alt: Wikipedia (clean) → Oxygen → 15× Smart Nuru
-      const stage1 = await runGuarded('ghost_trial_2_alt_stage_1', () => runWikipediaClean(normalizedText), normalizedText);
-      const stage2 = runHumara20(stage1);
-      humanized = applySmartNuruPolish(stage2);
-    } else if (engine === 'conscusion_1') {
-      // Conscusion 1: Easy (clean) → Wikipedia (clean) → 15× Smart Nuru
-      const stage1 = await runGuarded('conscusion_1_stage_1', () => runHumara22Clean(normalizedText), normalizedText, 10_000);
-      const stage2 = await runGuarded('conscusion_1_stage_2', () => runWikipediaClean(stage1), stage1);
-      humanized = applySmartNuruPolish(stage2);
-    } else if (engine === 'conscusion_12') {
-      // Conscusion 12: Ozone → Humara 2.4 → Wikipedia (clean) → 15× Smart Nuru
-      const stage1 = await runGuarded('conscusion_12_stage_1', () => runHumara21(normalizedText), normalizedText, 10_000);
-      const stage2 = await runGuarded('conscusion_12_stage_2', () => runHumara24(stage1), stage1);
-      const stage3 = await runGuarded('conscusion_12_stage_3', () => runWikipediaClean(stage2), stage2);
-      humanized = applySmartNuruPolish(stage3);
     } else if (engine === 'humara_v1_3') {
       // Humara v1.3: Stealth Humanizer Engine v5 from coursework-champ
       const { pipeline } = await import('@/lib/engine/humara-v1-3');
@@ -1085,13 +1062,13 @@ export async function POST(req: Request) {
       });
     }
 
-    const ozoneKeywordRestoreOnly = engine === 'ozone' || engine === 'phantom';
+    const ozoneKeywordRestoreOnly = false; // Ozone removed — all engines get full post-processing
 
     // ═══════════════════════════════════════════════════════════════
     // UNIVERSAL NURU POST-PROCESSING: Non-LLM Deep AI Clean
     // Applies to ALL engines EXCEPT ozone (Humara 2.1) and phantom.
     // ═══════════════════════════════════════════════════════════════
-    if (engine !== 'ozone' && engine !== 'phantom') {
+    if (engine !== 'phantom') {
       const nuruPostStart = Date.now();
       humanized = applySmartNuruPolish(humanized, 15);
 
@@ -1144,21 +1121,21 @@ export async function POST(req: Request) {
     const FIRST_PERSON_RE_EARLY = /\b(I|me|my|mine|myself|we|us|our|ours|ourselves)\b/i;
     const earlyFirstPerson = FIRST_PERSON_RE_EARLY.test(text);
     const inputAiScore = inputAnalysis.summary.overall_ai_score;
-    if (engine !== 'humara' && engine !== 'humara_v1_3' && engine !== 'humara_v3_3' && engine !== 'nuru' && engine !== 'nuru_v2' && engine !== 'omega' && engine !== 'oxygen' && engine !== 'ozone' && engine !== 'apex' && engine !== 'king' && engine !== 'ghost_pro_wiki' && !isDeepKill) {
+    if (engine !== 'humara' && engine !== 'humara_v1_3' && engine !== 'humara_v3_3' && engine !== 'nuru' && engine !== 'nuru_v2' && engine !== 'omega' && engine !== 'oxygen' && engine !== 'apex' && engine !== 'king' && engine !== 'ghost_pro_wiki' && !isDeepKill) {
       humanized = unifiedSentenceProcess(humanized, earlyFirstPerson, inputAiScore);
     }
 
     // ── 60% Restructuring Enforcement ──────────────────────────────
     // Ensures at least 60% of sentences show meaningful word-level changes.
     // Applies additional transforms to under-changed sentences.
-    if (engine !== 'oxygen' && engine !== 'ozone' && engine !== 'apex' && engine !== 'king' && engine !== 'nuru_v2' && engine !== 'humara_v3_3' && !isDeepKill) {
+    if (engine !== 'oxygen' && engine !== 'apex' && engine !== 'king' && engine !== 'nuru_v2' && engine !== 'humara_v3_3' && !isDeepKill) {
       humanized = enforceRestructuringThreshold(text, humanized, 0.35);
     }
 
     // Post-capitalization formatting — fix sentence casing for all engine outputs
     // Skip for humara/nuru/omega: they have their own capitalization handling
     // Pass original text so proper nouns from the input are preserved
-    if (engine !== 'humara' && engine !== 'humara_v1_3' && engine !== 'nuru' && engine !== 'nuru_v2' && engine !== 'omega' && engine !== 'oxygen' && engine !== 'ozone' && engine !== 'apex' && engine !== 'king' && !isDeepKill) {
+    if (engine !== 'humara' && engine !== 'humara_v1_3' && engine !== 'nuru' && engine !== 'nuru_v2' && engine !== 'omega' && engine !== 'oxygen' && engine !== 'apex' && engine !== 'king' && !isDeepKill) {
       humanized = fixCapitalization(humanized, text);
     }
 
@@ -1174,14 +1151,14 @@ export async function POST(req: Request) {
 
     // Cross-sentence repetition cleanup — deduplicates phrases repeated across sentences
     // Skip for humara engine: it has its own coherence layer
-    if (engine !== 'humara' && engine !== 'humara_v1_3' && engine !== 'nuru' && engine !== 'nuru_v2' && engine !== 'omega' && engine !== 'oxygen' && engine !== 'ozone' && engine !== 'king' && !isDeepKill) {
+    if (engine !== 'humara' && engine !== 'humara_v1_3' && engine !== 'nuru' && engine !== 'nuru_v2' && engine !== 'omega' && engine !== 'oxygen' && engine !== 'king' && !isDeepKill) {
       humanized = deduplicateRepeatedPhrases(humanized);
     }
 
     // Structural post-processing — attacks document-level statistical signals
     // (spectral_flatness, burstiness, sentence_uniformity, readability_consistency, vocabulary_richness)
     // Skip for humara engine: it has its own structural diversity layer
-    if (engine !== 'humara' && engine !== 'humara_v1_3' && engine !== 'nuru' && engine !== 'nuru_v2' && engine !== 'omega' && engine !== 'ninja' && engine !== 'undetectable' && engine !== 'oxygen' && engine !== 'ozone' && engine !== 'king' && engine !== 'ghost_pro_wiki' && !isDeepKill) {
+    if (engine !== 'humara' && engine !== 'humara_v1_3' && engine !== 'nuru' && engine !== 'nuru_v2' && engine !== 'omega' && engine !== 'ninja' && engine !== 'undetectable' && engine !== 'oxygen' && engine !== 'king' && engine !== 'ghost_pro_wiki' && !isDeepKill) {
       humanized = structuralPostProcess(humanized);
     }
 

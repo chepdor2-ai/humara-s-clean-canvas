@@ -146,31 +146,30 @@ const splitSentences = (text: string): { text: string; start: number; end: numbe
 /* ── Constants ──────────────────────────────────────────────────────────── */
 // Full engine registry — admin controls which are visible/premium via Supabase engine_config
 const ALL_ENGINES: EngineConfig[] = [
-  // Stealth Mode
-  { id: 'ninja_4', label: 'Stealth Pro' },
-  { id: 'easy', label: 'Stealth Quick' },
-  { id: 'ozone', label: 'Stealth Shield' },
-  { id: 'ninja_1', label: 'Stealth Ninja' },
-  { id: 'antipangram', label: 'AntiPangram' },
-  // Anti GPTZero
-  { id: 'humara_v3_3', label: 'GPTZero Killer' },
-  { id: 'oxygen', label: 'GPTZero Shield' },
-  { id: 'king', label: 'Stealth King' },
-  { id: 'nuru_v2', label: 'Nuru Pure' },
-  { id: 'ghost_pro_wiki', label: 'Academic Shield' },
-  // Deep Signal Kill
-  { id: 'ninja_3', label: 'Deep Kill Alpha' },
-  { id: 'ninja_2', label: 'Deep Kill Beta' },
-  { id: 'ninja_5', label: 'Deep Kill Omega' },
-  { id: 'ghost_trial_2', label: 'Deep Kill Ghost' },
+  // 🟢 Core Engines
+  { id: 'ninja_4', label: 'Nova' },
+  { id: 'easy', label: 'Swift' },
+  { id: 'ninja_1', label: 'Ninja' },
+  { id: 'antipangram', label: 'Pangram' },
+  // 🟡 Detection Control
+  { id: 'humara_v3_3', label: 'Humarin' },
+  { id: 'oxygen', label: 'Oxygen' },
+  { id: 'king', label: 'King' },
+  { id: 'nuru_v2', label: 'Nuru' },
+  { id: 'ghost_pro_wiki', label: 'Ghost' },
+  // 🔴 Advanced Engines
+  { id: 'ninja_3', label: 'Alpha' },
+  { id: 'ninja_2', label: 'Beta' },
+  { id: 'ninja_5', label: 'Omega' },
+  { id: 'ghost_trial_2', label: 'Specter' },
   { id: 'phantom', label: 'Phantom' },
 ];
 
-type ModeId = 'stealth_mode' | 'anti_gptzero' | 'deep_signal_kill';
+type ModeId = 'core_engines' | 'detection_control' | 'advanced_engines';
 const MODE_ENGINES: Record<ModeId, Set<string>> = {
-  stealth_mode: new Set(['ninja_4', 'easy', 'ozone', 'ninja_1', 'antipangram']),
-  anti_gptzero: new Set(['humara_v3_3', 'oxygen', 'king', 'nuru_v2', 'ghost_pro_wiki']),
-  deep_signal_kill: new Set([
+  core_engines: new Set(['ninja_4', 'easy', 'ninja_1', 'antipangram']),
+  detection_control: new Set(['humara_v3_3', 'oxygen', 'king', 'nuru_v2', 'ghost_pro_wiki']),
+  advanced_engines: new Set([
     'ninja_3',
     'ninja_2',
     'ninja_5',
@@ -179,29 +178,29 @@ const MODE_ENGINES: Record<ModeId, Set<string>> = {
   ]),
 };
 const MODE_LABELS: Record<ModeId, string> = {
-  stealth_mode: 'Stealth Mode',
-  anti_gptzero: 'Anti GPTZero',
-  deep_signal_kill: 'Deep Signal Kill',
+  core_engines: 'Core Engines',
+  detection_control: 'Detection Control',
+  advanced_engines: 'Advanced Engines',
 };
 
 const ENGINE_GUIDES: Record<string, string> = {
-  ninja_4: 'Top-tier stealth engine. Purely Humara 2.1 with keyword recovery and grammar cleaning for fast, clean output.',
-  easy: 'Fast stealth engine. Quick rewrites with balanced, natural-sounding output.',
-  ozone: 'Stealth engine for detector cleaning. Best for ZeroGPT and Surfer cleanup.',
-  ninja_1: 'LLM-powered stealth rewrite followed by 10 Nuru passes for maximum detector evasion.',
-
-  humara_v3_3: 'High-power Anti GPTZero engine for stubborn GPTZero flags.',
-  oxygen: 'Anti GPTZero engine tuned for GPTZero signal suppression.',
-  king: 'Pure LLM humanizer (Groq). 3-phase pipeline: deep rewrite, self-audit, targeted revision.',
-  nuru_v2: 'Purely non-LLM stealth engine. 10 iterative passes — no AI calls, no external APIs.',
-  ghost_pro_wiki: 'Academic-style rewrite that sounds like encyclopedic human writing.',
-
-  antipangram: 'Forensic AI-signal destroyer. Pure TypeScript — no LLM, no API. Targets Pangram, GPTZero, and all major detectors with surgical precision.',
-  ninja_3: 'Deep Kill: Wikipedia → Humara 2.0 → full Nuru. Aggressive AI signal suppression.',
-  ninja_2: 'Deep Kill: Humara 2.1 → Humara 2.0 → full Nuru. Multi-API chain for deep cleaning.',
-  ninja_5: 'Deep Kill: Humara 2.2 → Humara 2.4 → full Nuru. Maximum transformation depth.',
-  ghost_trial_2: 'Deep Kill: Humara 2.4 → Humara 2.0 → full Nuru. Ghost-grade signal removal.',
-  phantom: 'LLM deep rewrite via Humara 2.4 followed by AntiPangram forensic cleanup. No Nuru post-processing — pure structural signal destruction.',
+  // Core Engines
+  ninja_4: 'Nova — Fast stealth rewrite via Easy engine + keyword recovery + grammar cleaning.',
+  easy: 'Swift — Quick balanced rewrites with natural-sounding output and 10× Nuru polish.',
+  ninja_1: 'Ninja — LLM-powered stealth rewrite → Humara 2.0 → 10× Nuru for maximum evasion.',
+  antipangram: 'Pangram — Forensic AI-signal destroyer. Pure TypeScript. No LLM, no API. Surgical precision.',
+  // Detection Control
+  humara_v3_3: 'Humarin — High-power engine for stubborn GPTZero flags via Humara 2.4 + Nuru.',
+  oxygen: 'Oxygen — Tuned for GPTZero signal suppression with adaptive iteration.',
+  king: 'King — Pure LLM humanizer (Groq). 3-phase: deep rewrite → self-audit → targeted revision + Nuru.',
+  nuru_v2: 'Nuru — Purely non-LLM stealth engine. 10 iterative passes — no AI calls, no external APIs.',
+  ghost_pro_wiki: 'Ghost — Academic-style rewrite that sounds like encyclopedic human writing.',
+  // Advanced Engines
+  ninja_3: 'Alpha — Wikipedia → Humara 2.0 → full 10× Nuru. Aggressive AI signal suppression.',
+  ninja_2: 'Beta — Easy → Humara 2.0 → full 10× Nuru. Multi-pass chain for deep cleaning.',
+  ninja_5: 'Omega — Easy → Humara 2.4 → full 10× Nuru. Maximum transformation depth.',
+  ghost_trial_2: 'Specter — Humara 2.4 → Humara 2.0 → full 10× Nuru. Ghost-grade signal removal.',
+  phantom: 'Phantom — Humara 2.4 → 10× Nuru → deep clean → AntiPangram forensic cleanup.',
 };
 
 const DEFAULT_PROCESSING_MESSAGES = [
@@ -308,7 +307,7 @@ function EditorPageInner() {
   const [strictMeaning, setStrictMeaning] = useState(true);
   const [humanizationRate, setHumanizationRate] = useState(8);
   const [grammarCorrection, setGrammarCorrection] = useState(false);
-  const [mode, setMode] = useState<ModeId>('anti_gptzero');
+  const [mode, setMode] = useState<ModeId>('detection_control');
 
   // Admin-controlled engine visibility
   const [engineConfig, setEngineConfig] = useState<Record<string, { enabled: boolean; premium: boolean; sort_order: number }>>({});
@@ -358,9 +357,9 @@ function EditorPageInner() {
   // Auto-switch engine when mode changes
   useEffect(() => {
     const fallbackByMode: Record<ModeId, string> = {
-      stealth_mode: 'ninja_4',
-      anti_gptzero: 'humara_v3_3',
-      deep_signal_kill: 'ninja_5',
+      core_engines: 'ninja_4',
+      detection_control: 'humara_v3_3',
+      advanced_engines: 'ninja_5',
     };
     if (!MODE_ENGINES[mode].has(engine)) setEngine(fallbackByMode[mode]);
   }, [mode]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -704,10 +703,6 @@ function EditorPageInner() {
       requestBody.easy_sentence_by_sentence = easySentenceBySentence;
     }
 
-    // Add Ozone controls if Ozone engine is selected
-    if (engine === 'ozone') {
-      requestBody.ozone_sentence_by_sentence = ozoneSentenceBySentence;
-    }
 
     // Add Oxygen v2 controls if Oxygen engine is selected
     if (engine === 'oxygen') {
@@ -1352,9 +1347,9 @@ function EditorPageInner() {
             <span className="text-[10px] font-semibold uppercase text-slate-500 dark:text-zinc-500">Mode</span>
             <div className="flex bg-slate-100 dark:bg-zinc-950/60 rounded-md p-0.5 border border-slate-200 dark:border-cyan-900/40">
               {([
-                { id: 'stealth_mode', label: 'Stealth' },
-                { id: 'anti_gptzero', label: 'Anti GPTZero' },
-                { id: 'deep_signal_kill', label: 'Deep Kill' },
+                { id: 'core_engines', label: 'Core' },
+                { id: 'detection_control', label: 'Detection' },
+                { id: 'advanced_engines', label: 'Advanced' },
               ] as { id: ModeId; label: string }[]).map((m) => (
                 <button
                   key={m.id}
@@ -1475,30 +1470,18 @@ function EditorPageInner() {
       </div>
 
       {/* Compact Engine-Specific Controls (inline) */}
-      {(engine === 'easy' || engine === 'ozone') && (
+      {engine === 'easy' && (
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1 px-1">
-          {engine === 'ozone' && (
-            <>
-              <div className="flex items-center gap-1.5">
-                <span className="text-[9px] font-semibold text-slate-500 dark:text-zinc-500 uppercase">🛡️ Undetectable</span>
-                <div className="relative inline-flex h-4 w-7 items-center rounded-full bg-teal-500 dark:bg-teal-600 opacity-90">
-                  <span className="inline-block h-2.5 w-2.5 transform rounded-full bg-white translate-x-3.5" />
-                </div>
-                <span className="text-[8px] px-1 py-0.5 rounded-full bg-teal-100 dark:bg-teal-900/60 text-teal-700 dark:text-teal-300 font-bold uppercase">On</span>
-              </div>
-              <div className="w-px h-3 bg-slate-200 dark:bg-zinc-800" />
-            </>
-          )}
           <label className="flex items-center gap-1.5 cursor-pointer">
             <span className="text-[9px] font-semibold text-slate-500 dark:text-zinc-500">Sentence-by-Sentence</span>
             <button
-              onClick={() => engine === 'easy' ? setEasySentenceBySentence(!easySentenceBySentence) : setOzoneSentenceBySentence(!ozoneSentenceBySentence)}
+              onClick={() => setEasySentenceBySentence(!easySentenceBySentence)}
               className={`relative inline-flex h-4 w-7 items-center rounded-full transition-colors ${
-                (engine === 'easy' ? easySentenceBySentence : ozoneSentenceBySentence) ? 'bg-cyan-500 dark:bg-cyan-600' : 'bg-slate-300 dark:bg-zinc-700'
+                easySentenceBySentence ? 'bg-cyan-500 dark:bg-cyan-600' : 'bg-slate-300 dark:bg-zinc-700'
               }`}
             >
               <span className={`inline-block h-2.5 w-2.5 transform rounded-full bg-white transition-transform ${
-                (engine === 'easy' ? easySentenceBySentence : ozoneSentenceBySentence) ? 'translate-x-3.5' : 'translate-x-0.5'
+                easySentenceBySentence ? 'translate-x-3.5' : 'translate-x-0.5'
               }`} />
             </button>
           </label>
@@ -1510,38 +1493,30 @@ function EditorPageInner() {
           <p className="text-[9px] text-amber-600 dark:text-amber-400"><span className="font-bold">Strong:</span> Prioritizes detection bypass over meaning</p>
         </div>
       )}
-      {ozoneUndetectWarning && (
-        <div className="flex items-center gap-1.5 px-1">
-          <span className="text-amber-500 text-[9px]">⚠️</span>
-          <p className="text-[9px] text-amber-600 dark:text-amber-400 font-medium">Undetectability always enabled for Humara 2.1</p>
-        </div>
-      )}
-
-      {/* Mode Info Banner */}
-      {mode === 'anti_gptzero' && (
+      {mode === 'detection_control' && (
         <div className="flex items-start gap-2 px-3 py-2 bg-orange-50 dark:bg-orange-950/30 border border-orange-200 dark:border-orange-800/40 rounded-lg mx-1">
           <span className="text-orange-500 dark:text-orange-400 text-xs mt-0.5">⚡</span>
           <div>
-            <p className="text-[10px] font-bold text-orange-700 dark:text-orange-300">AntiGPTZero Mode — Tuned to Beat GPTZero</p>
-            <p className="text-[9px] text-orange-600/80 dark:text-orange-200/70 leading-relaxed mt-0.5">Use <span className="font-semibold text-orange-600 dark:text-orange-200">2.0</span>, <span className="font-semibold text-orange-600 dark:text-orange-200">2.4</span>, <span className="font-semibold text-orange-600 dark:text-orange-200">Nuru 2.0</span>, or <span className="font-semibold text-orange-600 dark:text-orange-200">Wikipedia</span> for GPTZero-focused suppression.</p>
+            <p className="text-[10px] font-bold text-orange-700 dark:text-orange-300">Detection Control — Tuned to Beat AI Detectors</p>
+            <p className="text-[9px] text-orange-600/80 dark:text-orange-200/70 leading-relaxed mt-0.5">Use <span className="font-semibold text-orange-600 dark:text-orange-200">Oxygen</span>, <span className="font-semibold text-orange-600 dark:text-orange-200">Humarin</span>, <span className="font-semibold text-orange-600 dark:text-orange-200">Nuru</span>, or <span className="font-semibold text-orange-600 dark:text-orange-200">Ghost</span> for precision suppression.</p>
           </div>
         </div>
       )}
-      {mode === 'stealth_mode' && (
+      {mode === 'core_engines' && (
         <div className="flex items-start gap-2 px-3 py-2 bg-teal-50 dark:bg-teal-950/30 border border-teal-200 dark:border-teal-800/40 rounded-lg mx-1">
-          <span className="text-teal-500 dark:text-teal-400 text-xs mt-0.5">🛡️</span>
+          <span className="text-teal-500 dark:text-teal-400 text-xs mt-0.5">🟢</span>
           <div>
-            <p className="text-[10px] font-bold text-teal-700 dark:text-teal-300">Stealth Mode — 2.1, 2.2 & Stealth</p>
-            <p className="text-[9px] text-teal-600/80 dark:text-teal-200/70 leading-relaxed mt-0.5">General detector cleaning for natural output. Use <span className="font-semibold text-teal-600 dark:text-teal-200">2.1</span> for stronger external rewrite or <span className="font-semibold text-teal-600 dark:text-teal-200">2.2</span> for balanced broad coverage.</p>
+            <p className="text-[10px] font-bold text-teal-700 dark:text-teal-300">Core Engines — Fast & Balanced</p>
+            <p className="text-[9px] text-teal-600/80 dark:text-teal-200/70 leading-relaxed mt-0.5">Everyday use. <span className="font-semibold text-teal-600 dark:text-teal-200">Nova</span> for fast rewrites, <span className="font-semibold text-teal-600 dark:text-teal-200">Ninja</span> for deep LLM stealth.</p>
           </div>
         </div>
       )}
-      {mode === 'deep_signal_kill' && (
+      {mode === 'advanced_engines' && (
         <div className="flex items-start gap-2 px-3 py-2 bg-fuchsia-50 dark:bg-fuchsia-950/30 border border-fuchsia-200 dark:border-fuchsia-800/40 rounded-lg mx-1">
-          <span className="text-fuchsia-500 dark:text-fuchsia-300 text-xs mt-0.5">🧪</span>
+          <span className="text-fuchsia-500 dark:text-fuchsia-300 text-xs mt-0.5">🔴</span>
           <div>
-            <p className="text-[10px] font-bold text-fuchsia-700 dark:text-fuchsia-200">Deep Signal Kill</p>
-            <p className="text-[9px] text-fuchsia-600/80 dark:text-fuchsia-100/70 leading-relaxed mt-0.5">High-intensity profile set for deeper detector suppression.</p>
+            <p className="text-[10px] font-bold text-fuchsia-700 dark:text-fuchsia-200">Advanced Engines — Maximum Transformation</p>
+            <p className="text-[9px] text-fuchsia-600/80 dark:text-fuchsia-100/70 leading-relaxed mt-0.5">Multi-pass pipelines for the deepest AI signal destruction.</p>
           </div>
         </div>
       )}
@@ -1719,6 +1694,9 @@ function EditorPageInner() {
                 progress={streamProgress}
                 engineLabel={activeEngineLabel}
                 statusItems={processingStatusItems}
+                engineId={engine}
+                phaseIndex={streamPhaseIndex}
+                totalPhases={streamTotalPhases}
               />
             </div>
           ) : result ? (

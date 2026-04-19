@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { HexagonalHealth, buildPipelineLayers } from './hexagonal-health';
 
 /* ── Cosmic Processing Animation v2 ──────────────────────────────────────
    Premium orbital loader — brand-matched cyan/teal palette.
@@ -15,6 +16,12 @@ interface CosmicLoaderProps {
   progress: number;
   engineLabel: string;
   statusItems: { label: string; value: string }[];
+  /** Internal engine ID for hex grid layout mapping */
+  engineId?: string;
+  /** 1-indexed current phase from SSE */
+  phaseIndex?: number;
+  /** Total phases in pipeline */
+  totalPhases?: number;
 }
 
 /* ── Brand palette ── */
@@ -88,9 +95,15 @@ function useStarfield(canvasRef: React.RefObject<HTMLCanvasElement | null>) {
   }, [canvasRef]);
 }
 
-export function CosmicLoader({ stage, message, progress, engineLabel, statusItems }: CosmicLoaderProps) {
+export function CosmicLoader({ stage, message, progress, engineLabel, statusItems, engineId, phaseIndex, totalPhases }: CosmicLoaderProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   useStarfield(canvasRef);
+
+  /* Build hex pipeline layers from engine config + current phase */
+  const hexLayers = useMemo(() => {
+    if (!engineId || !totalPhases || totalPhases <= 1) return null;
+    return buildPipelineLayers(engineId, phaseIndex ?? 0, totalPhases);
+  }, [engineId, phaseIndex, totalPhases]);
 
   /* Pulse ring counter — emit a new ring every 2.5s */
   const [pulseKey, setPulseKey] = useState(0);
@@ -369,18 +382,35 @@ export function CosmicLoader({ stage, message, progress, engineLabel, statusItem
           </div>
         </div>
 
-        {/* ── Status grid ── */}
-        <div className="grid grid-cols-3 gap-2">
-          {statusItems.map((item) => (
-            <div
-              key={item.label}
-              className="rounded-lg border border-slate-200/60 dark:border-zinc-700/40 bg-slate-50/80 dark:bg-zinc-800/40 px-2.5 py-2 text-center transition-colors"
-            >
-              <p className="text-[9px] uppercase tracking-wider text-slate-400 dark:text-zinc-500 font-semibold">{item.label}</p>
-              <p className="mt-0.5 truncate text-xs font-bold text-slate-700 dark:text-zinc-200">{item.value}</p>
+        {/* ── Hexagonal Health Tracker / Status grid ── */}
+        {hexLayers && hexLayers.length > 0 ? (
+          <div className="space-y-2">
+            <HexagonalHealth layers={hexLayers} compact />
+            <div className="grid grid-cols-3 gap-1.5">
+              {statusItems.map((item) => (
+                <div
+                  key={item.label}
+                  className="rounded-md border border-slate-200/40 dark:border-zinc-700/30 bg-slate-50/60 dark:bg-zinc-800/30 px-2 py-1.5 text-center"
+                >
+                  <p className="text-[8px] uppercase tracking-wider text-slate-400 dark:text-zinc-500 font-semibold">{item.label}</p>
+                  <p className="mt-0.5 truncate text-[10px] font-bold text-slate-700 dark:text-zinc-200">{item.value}</p>
+                </div>
+              ))}
             </div>
-          ))}
-        </div>
+          </div>
+        ) : (
+          <div className="grid grid-cols-3 gap-2">
+            {statusItems.map((item) => (
+              <div
+                key={item.label}
+                className="rounded-lg border border-slate-200/60 dark:border-zinc-700/40 bg-slate-50/80 dark:bg-zinc-800/40 px-2.5 py-2 text-center transition-colors"
+              >
+                <p className="text-[9px] uppercase tracking-wider text-slate-400 dark:text-zinc-500 font-semibold">{item.label}</p>
+                <p className="mt-0.5 truncate text-xs font-bold text-slate-700 dark:text-zinc-200">{item.value}</p>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* ── Keyframe injection ── */}

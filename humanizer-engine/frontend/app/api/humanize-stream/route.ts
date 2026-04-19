@@ -309,16 +309,16 @@ export async function POST(req: Request) {
 
           // Engine display names for phase labels
           const ENGINE_DISPLAY: Record<string, string> = {
-            ghost_pro_wiki: 'Wikipedia', ninja_1: 'Ninja', ninja: 'Ninja', undetectable: 'Ninja',
-            oxygen: 'Humara 2.0', nuru_v2: 'Nuru 2.0', humara_v3_3: 'Humara 2.4',
-            easy: 'Humara 2.2', ozone: 'Humara 2.1', ghost_pro: 'Ghost Pro',
+            ghost_pro_wiki: 'Ghost', ninja_1: 'Ninja', ninja: 'Ninja', undetectable: 'Ninja',
+            oxygen: 'Oxygen', nuru_v2: 'Nuru', humara_v3_3: 'Humarin',
+            easy: 'Swift', ghost_pro: 'Ghost Pro',
             humara: 'Humara', nuru: 'Nuru', omega: 'Omega',
-            ninja_2: 'Ninja 2', ninja_3: 'Ninja 3', ninja_4: 'Ninja 4', ninja_5: 'Ninja 5',
-            ghost_trial_2: 'Ghost Trial', ghost_trial_2_alt: 'Ghost Trial',
-            conscusion_1: 'Conscusion', conscusion_12: 'Conscusion',
-            phantom: 'Phantom',
+            ninja_2: 'Beta', ninja_3: 'Alpha', ninja_4: 'Nova', ninja_5: 'Omega',
+            ghost_trial_2: 'Specter',
+            phantom: 'Phantom', king: 'King',
             dipper: 'Dipper', humarin: 'Humarin', oxygen3: 'Oxygen 3', oxygen_t5: 'Oxygen T5',
             fast_v11: 'Fast V11', humara_v1_3: 'Humara 1.3', ghost_mini_v1_2: 'Ghost Mini',
+            antipangram: 'Pangram',
           };
           const engineDisplayName = ENGINE_DISPLAY[eng] || eng;
 
@@ -329,8 +329,7 @@ export async function POST(req: Request) {
           const PHASED_ENGINES = new Set([
             ...FAST_REHUMANIZE_ENGINES,
             'ninja_2', 'ninja_3', 'ninja_4', 'ninja_5',
-            'ghost_trial_2', 'ghost_trial_2_alt',
-            'conscusion_1', 'conscusion_12',
+            'ghost_trial_2',
             'phantom',
           ]);
           const usePhasePipeline = PHASED_ENGINES.has(eng);
@@ -360,12 +359,6 @@ export async function POST(req: Request) {
             return easyResult.humanized;
           };
 
-          const runHumara21 = async (input: string): Promise<string> => {
-            // Use whole-text mode to prevent per-sentence expansion bloat.
-            // SBS was causing each short sentence to expand into a paragraph.
-            const ozoneResult = await ozoneHumanize(input, false);
-            return ozoneResult.humanized;
-          };
 
           // ── Sentence-level change measurement ──
           const measureSentenceChange = (original: string, modified: string): number => {
@@ -602,8 +595,7 @@ export async function POST(req: Request) {
           // Deep Kill engine set — used to skip destructive post-processors
           const DEEP_KILL_ENGINES = new Set([
             'ninja_2', 'ninja_3', 'ninja_4', 'ninja_5',
-            'ghost_trial_2', 'ghost_trial_2_alt',
-            'conscusion_1', 'conscusion_12',
+            'ghost_trial_2',
           ]);
           const isDeepKill = DEEP_KILL_ENGINES.has(eng);
 
@@ -629,8 +621,6 @@ export async function POST(req: Request) {
           const runEngineOnSentence = async (sentence: string): Promise<string> => {
             if (eng === 'easy') {
               return await runHumara22(sentence);
-            } else if (eng === 'ozone') {
-              return await runHumara21(sentence);
             } else if (eng === 'oxygen') {
               return runHumara20(sentence);
             } else if (eng === 'oxygen3') {
@@ -654,26 +644,19 @@ export async function POST(req: Request) {
               // Phase 1 only: Wikipedia — remaining phases handled in pipeline
               return await runGuarded('ninja3_s1', () => runWikipediaClean(sentence), sentence);
             } else if (eng === 'ninja_2') {
-              // Phase 1 only: Humara 2.1 — remaining phases handled in pipeline
-              return await runGuarded('ninja_2_s1', () => runHumara21(sentence), sentence, 35_000);
+              // Phase 1 only: Easy (Swift) — remaining phases handled in pipeline
+              return await runGuarded('ninja_2_s1', () => runHumara22Clean(sentence), sentence, 35_000);
             } else if (eng === 'ninja_4') {
-              // Phase 1 only: Humara 2.1 — remaining phases handled in pipeline
-              return await runGuarded('ninja_4_s1', () => runHumara21(sentence), sentence, 35_000);
+              // Phase 1 only: Ozone (Nova exclusive) — remaining phases handled in pipeline
+              return await runGuarded('ninja_4_s1', () => {
+                return ozoneHumanize(sentence, false).then(r => r.humanized);
+              }, sentence, 35_000);
             } else if (eng === 'ninja_5') {
               // Phase 1 only: Humara 2.2 — remaining phases handled in pipeline
               return await runGuarded('ninja_5_s1', () => runHumara22(sentence), sentence, 35_000);
             } else if (eng === 'ghost_trial_2') {
               // Phase 1 only: Humara 2.4 — remaining phases handled in pipeline
               return await runGuarded('gt2_s1', () => runHumara24Full(sentence), sentence);
-            } else if (eng === 'ghost_trial_2_alt') {
-              // Phase 1 only: Wikipedia — remaining phases handled in pipeline
-              return await runGuarded('gt2a_s1', () => runWikipediaClean(sentence), sentence);
-            } else if (eng === 'conscusion_1') {
-              // Phase 1 only: Humara 2.2 — remaining phases handled in pipeline
-              return await runGuarded('con1_s1', () => runHumara22Clean(sentence), sentence, 35_000);
-            } else if (eng === 'conscusion_12') {
-              // Phase 1 only: Humara 2.1 — remaining phases handled in pipeline
-              return await runGuarded('con12_s1', () => runHumara21(sentence), sentence, 35_000);
             } else if (eng === 'humara_v1_3') {
               const { pipeline } = await import('@/lib/engine/humara-v1-3');
               return await pipeline(sentence, (tone ?? 'academic') as string, strength === 'strong' ? 10 : strength === 'light' ? 4 : 7);
@@ -708,7 +691,7 @@ export async function POST(req: Request) {
 
           // ── Full-text engines (Ozone / Humara 2.1, Easy / Humara 2.2) ──
           // These LLM APIs work best on the entire text, not sentence-by-sentence.
-          const FULL_TEXT_ENGINES = new Set(['easy', 'ozone', 'king', 'ghost_pro_wiki', 'humara_v3_3', 'phantom', 'antipangram']);
+          const FULL_TEXT_ENGINES = new Set(['easy', 'king', 'ghost_pro_wiki', 'humara_v3_3', 'phantom', 'antipangram']);
           let sentenceResults: string[];
 
           if (FULL_TEXT_ENGINES.has(eng)) {
@@ -724,14 +707,6 @@ export async function POST(req: Request) {
               }
             } else if (eng === 'ghost_pro_wiki') {
               fullResult = await runWikipedia(normalizedText);
-            } else if (eng === 'ozone') {
-              try {
-                fullResult = await runHumara21(normalizedText);
-              } catch (ozoneErr) {
-                console.warn('[Ozone] API failed — falling back to oxygen:', ozoneErr instanceof Error ? ozoneErr.message : ozoneErr);
-                const { oxygenHumanize } = await import('@/lib/engine/oxygen-humanizer');
-                fullResult = oxygenHumanize(normalizedText, effectiveStrength, 'quality', false);
-              }
             } else if (eng === 'antipangram') {
               // Standalone AntiPangram engine: forensic signal destruction on full text + Nuru post-processing
               const { antiPangramSimple } = await import('@/lib/engine/antipangram');
@@ -745,7 +720,8 @@ export async function POST(req: Request) {
             } else if (eng === 'easy') {
               fullResult = (await runHumara22(normalizedText));
             } else {
-              fullResult = (await runHumara21(normalizedText));
+              // Default fallback: use Easy (Swift) engine
+              fullResult = (await runHumara22(normalizedText));
             }
             if (!fullResult || fullResult.trim().length === 0) fullResult = normalizedText;
 
@@ -939,9 +915,9 @@ export async function POST(req: Request) {
                 break;
               // Deep Kill engines — multi-step pipelines with visible phases
               case 'ninja_2':
-                // Humara 2.1 → Humara 2.0 → Nuru 2.0 → Deep Non-LLM Clean → Final Smooth
+                // Beta: Easy (Swift) → Humara 2.0 → Nuru 2.0 → Deep Non-LLM Clean → Final Smooth
                 phases = [
-                  { name: 'Humara 2.1', type: 'emit' },
+                  { name: 'Swift', type: 'emit' },
                   { name: 'Humara 2.0 (Full)', type: 'async', fn: (s) => runHumara20Full(s) },
                   { name: 'Nuru 2.0', type: 'nuru', passes: CHAIN_TS },
                   { name: 'Deep Non-LLM Clean', type: 'sync', fn: (s) => deepNonLLMClean(s) },
@@ -959,9 +935,9 @@ export async function POST(req: Request) {
                 ];
                 break;
               case 'ninja_4':
-                // Purely Humara 2.1 → Keyword Recovery → Grammar Clean (fast, no Humara 2.4)
+                // Nova: Ozone (Stealth Pro exclusive) → Keyword Recovery → Grammar Clean
                 phases = [
-                  { name: 'Humara 2.1', type: 'emit' },
+                  { name: 'Ozone', type: 'emit' },
                   { name: 'Deep Non-LLM Clean', type: 'sync', fn: (s) => deepNonLLMClean(s) },
                   { name: 'Final Smooth & Grammar', type: 'sync', fn: (s) => finalSmoothGrammar(s) },
                 ];
@@ -981,37 +957,6 @@ export async function POST(req: Request) {
                 phases = [
                   { name: 'Humara 2.4', type: 'emit' },
                   { name: 'Humara 2.0 (Full)', type: 'async', fn: (s) => runHumara20Full(s) },
-                  { name: 'Nuru 2.0', type: 'nuru', passes: CHAIN_TS },
-                  { name: 'Deep Non-LLM Clean', type: 'sync', fn: (s) => deepNonLLMClean(s) },
-                  { name: 'Final Smooth & Grammar', type: 'sync', fn: (s) => finalSmoothGrammar(s) },
-                ];
-                break;
-              case 'ghost_trial_2_alt':
-                // Wikipedia → Humara 2.0 (Full) → Nuru 2.0 → Deep Non-LLM Clean → Final Smooth
-                phases = [
-                  { name: 'Wikipedia', type: 'emit' },
-                  { name: 'Humara 2.0 (Full)', type: 'async', fn: (s) => runHumara20Full(s) },
-                  { name: 'Nuru 2.0', type: 'nuru', passes: CHAIN_TS },
-                  { name: 'Deep Non-LLM Clean', type: 'sync', fn: (s) => deepNonLLMClean(s) },
-                  { name: 'Final Smooth & Grammar', type: 'sync', fn: (s) => finalSmoothGrammar(s) },
-                ];
-                break;
-              case 'conscusion_1':
-                // Humara 2.2 → Wikipedia → Nuru 2.0 → Deep Non-LLM Clean → Final Smooth
-                phases = [
-                  { name: 'Humara 2.2', type: 'emit' },
-                  { name: 'Wikipedia', type: 'async', fn: (s) => runWikipediaClean(s) },
-                  { name: 'Nuru 2.0', type: 'nuru', passes: CHAIN_TS },
-                  { name: 'Deep Non-LLM Clean', type: 'sync', fn: (s) => deepNonLLMClean(s) },
-                  { name: 'Final Smooth & Grammar', type: 'sync', fn: (s) => finalSmoothGrammar(s) },
-                ];
-                break;
-              case 'conscusion_12':
-                // Humara 2.1 → Humara 2.4 (Full) → Wikipedia → Nuru 2.0 → Deep Non-LLM Clean → Final Smooth
-                phases = [
-                  { name: 'Humara 2.1', type: 'emit' },
-                  { name: 'Humara 2.4 (Full)', type: 'async', fn: (s) => runHumara24Full(s) },
-                  { name: 'Wikipedia', type: 'async', fn: (s) => runWikipediaClean(s) },
                   { name: 'Nuru 2.0', type: 'nuru', passes: CHAIN_TS },
                   { name: 'Deep Non-LLM Clean', type: 'sync', fn: (s) => deepNonLLMClean(s) },
                   { name: 'Final Smooth & Grammar', type: 'sync', fn: (s) => finalSmoothGrammar(s) },
@@ -1252,7 +1197,7 @@ export async function POST(req: Request) {
           // 5 baseline passes but still get AI detection + targeted cleanup.
           // Hard time budget: 10 seconds max.
           // ═══════════════════════════════════════════════════════════════
-          if (eng !== 'ozone' && !(deadlineReached || Date.now() - startTime > DEADLINE_MS - 12000)) {
+          if (!(deadlineReached || Date.now() - startTime > DEADLINE_MS - 12000)) {
             const nuruPostStart = Date.now();
             const NURU_POST_DEADLINE_MS = 10_000; // 10s hard budget
             const nuruPostTimeOk = () => Date.now() - nuruPostStart < NURU_POST_DEADLINE_MS && !(deadlineReached || Date.now() - startTime > DEADLINE_MS - 8000);
@@ -1339,19 +1284,17 @@ export async function POST(req: Request) {
             }
           }
 
-          const ozoneKeywordRestoreOnly = eng === 'ozone';
 
           // ── POST-PROCESSING ──
           const prePostProcessSnapshot = humanized;
-          if (!ozoneKeywordRestoreOnly) {
+          {
           const _ppWC = (t: string) => t.trim().split(/\s+/).filter(Boolean).length;
-
           // 4. Unified Sentence Process
           const FIRST_PERSON_RE_EARLY = /\b(I|me|my|mine|myself|we|us|our|ours|ourselves)\b/i;
           const earlyFirstPerson = FIRST_PERSON_RE_EARLY.test(text);
           const inputAiScore = inputAnalysis.summary.overall_ai_score;
 
-          if (eng !== 'humara' && eng !== 'humara_v1_3' && eng !== 'nuru' && eng !== 'omega' && eng !== 'oxygen' && eng !== 'ozone' && !isDeepKill) {
+          if (eng !== 'humara' && eng !== 'humara_v1_3' && eng !== 'nuru' && eng !== 'omega' && eng !== 'oxygen' && !isDeepKill) {
             humanized = unifiedSentenceProcess(humanized, earlyFirstPerson, inputAiScore);
             if (!usePhasePipeline) {
               sendSSE(controller, { type: 'stage', stage: 'Sentence Processing' });
@@ -1469,12 +1412,12 @@ export async function POST(req: Request) {
           }
 
           // 8. Repetition cleanup
-          if (eng !== 'humara' && eng !== 'humara_v1_3' && eng !== 'nuru' && eng !== 'omega' && eng !== 'ozone' && !isDeepKill) {
+          if (eng !== 'humara' && eng !== 'humara_v1_3' && eng !== 'nuru' && eng !== 'omega' && !isDeepKill) {
             humanized = deduplicateRepeatedPhrases(humanized);
           }
 
           // 9. Structural post-processing
-          if (eng !== 'humara' && eng !== 'humara_v1_3' && eng !== 'nuru' && eng !== 'omega' && eng !== 'ninja' && eng !== 'undetectable' && eng !== 'ozone' && !isDeepKill) {
+          if (eng !== 'humara' && eng !== 'humara_v1_3' && eng !== 'nuru' && eng !== 'omega' && eng !== 'ninja' && eng !== 'undetectable' && !isDeepKill) {
             humanized = structuralPostProcess(humanized);
           }
 
@@ -1541,8 +1484,8 @@ export async function POST(req: Request) {
           }
 
           // Last-mile meaning validation (2 iterations max)
-          // Skip for ozone/phantom — they bypass universal post-processing entirely.
-          if (!isDeepKill && eng !== 'ozone' && eng !== 'phantom') {
+          // Skip for phantom — uses AntiPangram instead of universal post-processing.
+          if (!isDeepKill && eng !== 'phantom') {
             const { sentences: origSentsM } = splitIntoIndexedSentences(normalizedText);
             const isHeadingM = (s: string) => looksLikeHeadingLine(s.trim());
             const STOPWORDS_M = new Set(['the','a','an','is','are','was','were','be','been','being','have','has','had','do','does','did','will','would','could','should','may','might','can','shall','to','of','in','for','on','with','at','by','from','as','into','through','during','before','after','above','below','between','out','off','over','under','again','further','then','once','here','there','when','where','why','how','all','each','every','both','few','more','most','other','some','such','no','nor','not','only','own','same','so','than','too','very','just','because','but','and','or','if','while','that','this','these','those','it','its','they','them','their','we','our','he','she','his','her','which','what','who','whom','about','also']);
@@ -1606,55 +1549,6 @@ export async function POST(req: Request) {
 
           } // end: post-processing block
 
-          // ── Ozone: keyword-only restoration — NO other post-processing ──
-          // Only restore critical proper nouns and technical terms (Climate Change, AI, etc.)
-          if (eng === 'ozone') {
-            humanized = humanized
-              .replace(/\bai-(\w)/gi, (_m: string, c: string) => `AI-${c}`)
-              .replace(/\bai\b/g, 'AI');
-            const OZONE_KEYWORDS: [RegExp, string][] = [
-              [/\bartificial intelligence\b/gi, 'Artificial Intelligence'],
-              [/\bclimate change\b/gi, 'Climate Change'],
-              [/\bglobal warming\b/gi, 'Global Warming'],
-              [/\bmachine learning\b/gi, 'Machine Learning'],
-              [/\bdeep learning\b/gi, 'Deep Learning'],
-              [/\bnatural language processing\b/gi, 'Natural Language Processing'],
-              [/\bworld health organization\b/gi, 'World Health Organization'],
-              [/\bunited nations\b/gi, 'United Nations'],
-              [/\bunited states\b/gi, 'United States'],
-              [/\bunited kingdom\b/gi, 'United Kingdom'],
-              [/\beuropean union\b/gi, 'European Union'],
-              [/\bnorth america\b/gi, 'North America'],
-              [/\bsouth america\b/gi, 'South America'],
-              [/\bmiddle east\b/gi, 'Middle East'],
-              [/\binternet of things\b/gi, 'Internet of Things'],
-              [/\bcybersecurity\b/gi, 'Cybersecurity'],
-              [/\bmental health\b/gi, 'Mental Health'],
-              [/\bpublic health\b/gi, 'Public Health'],
-              [/\bcivil rights\b/gi, 'Civil Rights'],
-              [/\bhuman rights\b/gi, 'Human Rights'],
-              [/\bworld bank\b/gi, 'World Bank'],
-              [/\bsupreme court\b/gi, 'Supreme Court'],
-              [/\bclimate crisis\b/gi, 'Climate Crisis'],
-              [/\bsoutheast asia\b/gi, 'Southeast Asia'],
-              [/\bsub-saharan africa\b/gi, 'Sub-Saharan Africa'],
-            ];
-            for (const [pattern, replacement] of OZONE_KEYWORDS) {
-              humanized = humanized.replace(pattern, replacement);
-            }
-            // Restore capitalized proper nouns found in the original input
-            const ozoneInputWords = normalizedText.split(/\s+/);
-            for (const word of ozoneInputWords) {
-              const clean = word.replace(/[^a-zA-Z'-]/g, '');
-              if (!clean || clean.length < 2) continue;
-              if (/^[A-Z][a-z]/.test(clean) && clean !== clean.toLowerCase() && clean !== clean.toUpperCase()) {
-                const re = new RegExp('\\b' + clean.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b', 'gi');
-                humanized = humanized.replace(re, clean);
-              }
-            }
-            latestHumanized = humanized;
-          }
-
           // ── POST-PROCESSING CHANGE CAP (10%) ──
           // If post-processing mutated the text beyond 10% additional word-level change,
           // revert to the pre-post-processing snapshot to avoid garbling the output.
@@ -1678,14 +1572,14 @@ export async function POST(req: Request) {
 
           // Structure preservation (restores heading placement from original)
           // Skip for phased engines — they already called preserveInputStructure at end of pipeline
-          if (!ozoneKeywordRestoreOnly && !usePhasePipeline) {
+          if (!usePhasePipeline) {
             humanized = preserveInputStructure(normalizedText, humanized);
           }
 
-          // ── EXTERNAL API SANITIZATION (ozone, easy, etc.) ─────────────
+          // ── EXTERNAL API SANITIZATION ───────────────────────────────
           // External APIs can return LLM refusals, garbled phrases, and bad synonyms.
           // This lightweight pass cleans the worst artifacts without full post-processing.
-          if (!ozoneKeywordRestoreOnly) {
+          {
             // 1. Strip LLM refusal/instruction leaks (anywhere in text)
             const REFUSAL_PATTERNS = [
               /Sorry,?\s+I\s+(?:cannot|can't|am unable to|couldn't)\s+(?:complete|do|help|assist|process|fulfill|generate|write|rewrite|paraphrase)[^.!?\n]*[.!?]?\s*/gi,
@@ -1832,7 +1726,7 @@ export async function POST(req: Request) {
           // NOTE: do NOT re-run the generic input-word scan here — sentence-initial common
           // words (The, While, From, This…) would be treated as proper nouns and Title-Cased
           // throughout the output. The input scan already ran in step 7 above.
-          if (!ozoneKeywordRestoreOnly) {
+          {
             const ALWAYS_CAP_DEMONYMS: [RegExp, string][] = [
               [/\bamerican\b/gi, 'American'],
               [/\bmexican\b/gi, 'Mexican'],
