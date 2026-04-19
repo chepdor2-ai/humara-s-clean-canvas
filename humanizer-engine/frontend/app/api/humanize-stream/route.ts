@@ -691,9 +691,15 @@ export async function POST(req: Request) {
             } else if (eng === 'nuru') {
               return nuruHumanize(sentence, strength ?? 'medium', tone ?? 'academic');
             } else if (eng === 'humara') {
+              const humaraToneNarrow: 'neutral' | 'academic' | 'professional' | 'casual' =
+                tone === 'academic' || tone === 'academic_blog'
+                  ? 'academic'
+                  : tone === 'professional' || tone === 'casual'
+                    ? tone
+                    : 'neutral';
               return humaraHumanize(sentence, {
                 strength: strength === 'high' ? 'heavy' : strength === 'low' ? 'light' : (strength ?? 'medium') as 'light' | 'medium' | 'heavy',
-                tone: (tone ?? 'neutral') as 'neutral' | 'academic' | 'professional' | 'casual',
+                tone: humaraToneNarrow,
                 strictMeaning: (strict_meaning ?? false) as boolean,
               });
             } else if (premium) {
@@ -736,10 +742,16 @@ export async function POST(req: Request) {
             } else if (eng === 'antipangram') {
               // Standalone AntiPangram engine: forensic signal destruction on full text + Nuru post-processing
               const { antiPangramSimple } = await import('@/lib/engine/antipangram');
+              const apgToneA: 'academic' | 'professional' | 'casual' | 'neutral' =
+                tone === 'academic' || tone === 'academic_blog'
+                  ? 'academic'
+                  : tone === 'professional' || tone === 'casual'
+                    ? tone
+                    : 'neutral';
               fullResult = antiPangramSimple(
                 normalizedText,
                 (strength ?? 'strong') as 'light' | 'medium' | 'strong',
-                (tone ?? 'academic') as 'academic' | 'professional' | 'casual' | 'neutral',
+                apgToneA,
               );
             } else if (eng === 'ninja_3') {
               // Alpha (stealth loop optimized): Wiki → Nuru → Phantom until score < 20
@@ -838,10 +850,16 @@ export async function POST(req: Request) {
                   sendSSE(controller, { type: 'stage', stage: 'AI Analysis: Pangram Forensic Clean' });
                   await flushDelay(10);
                   const { antiPangramSimple } = await import('@/lib/engine/antipangram');
+                  const apgToneB: 'academic' | 'professional' | 'casual' | 'neutral' =
+                    tone === 'academic' || tone === 'academic_blog'
+                      ? 'academic'
+                      : tone === 'professional' || tone === 'casual'
+                        ? tone
+                        : 'neutral';
                   working = antiPangramSimple(
                     working,
                     (strength ?? 'strong') as 'light' | 'medium' | 'strong',
-                    (tone ?? 'academic') as 'academic' | 'professional' | 'casual' | 'neutral',
+                    apgToneB,
                   );
                 } else {
                   sendSSE(controller, { type: 'stage', stage: 'AI Analysis: Nuru 2.0 Full Post-Processing' });
@@ -1386,10 +1404,16 @@ export async function POST(req: Request) {
             sendSSE(controller, { type: 'stage', stage: 'AntiPangram Forensic Clean' });
             await flushDelay(10);
             const { antiPangramSimple } = await import('@/lib/engine/antipangram');
+            const apgToneC: 'academic' | 'professional' | 'casual' | 'neutral' =
+              tone === 'academic' || tone === 'academic_blog'
+                ? 'academic'
+                : tone === 'professional' || tone === 'casual'
+                  ? tone
+                  : 'neutral';
             humanized = antiPangramSimple(
               humanized,
               (strength ?? 'strong') as 'light' | 'medium' | 'strong',
-              (tone ?? 'academic') as 'academic' | 'professional' | 'casual' | 'neutral',
+              apgToneC,
             );
             latestHumanized = humanized;
             const { sentences: phantomSents } = splitIntoIndexedSentences(humanized);
@@ -1920,6 +1944,8 @@ export async function POST(req: Request) {
             } catch {
               // Oxygen polish is best-effort — never block the pipeline
             }
+            // Re-apply structure preservation after Oxygen Polish to restore paragraph count
+            humanized = preserveInputStructure(normalizedText, humanized);
             await flushDelay(30);
           }
 
@@ -2002,6 +2028,22 @@ export async function POST(req: Request) {
             // Clean leftover protection placeholders that weren't restored
             humanized = humanized.replace(/\u27E6\s*PROT\d+\s*\u27E7/gi, '');
             humanized = humanized.replace(/XPROT\d+X/g, '');
+          }
+
+          // ── UNIVERSAL CONTENT PRESERVATION GUARD ─────────────────
+          // Ensures ALL engines output all paragraphs and sentences from the input.
+          // If the pipeline lost paragraphs or significant sentence count, restore
+          // structure from the original by re-running preserveInputStructure.
+          if (eng !== 'ai_analysis') {
+            const inputParas = normalizedText.split(/\n\s*\n/).filter(p => p.trim());
+            const outputParas = humanized.split(/\n\s*\n/).filter(p => p.trim());
+            const inputSentCount = inputParas.reduce((sum, p) => sum + robustSentenceSplit(p.replace(/\n/g, ' ')).length, 0);
+            const outputSentCount = outputParas.reduce((sum, p) => sum + robustSentenceSplit(p.replace(/\n/g, ' ')).length, 0);
+
+            if (outputParas.length < inputParas.length || outputSentCount < inputSentCount * 0.80) {
+              console.warn(`[ContentGuard] Content loss detected: paragraphs ${outputParas.length}/${inputParas.length}, sentences ${outputSentCount}/${inputSentCount} — restoring structure`);
+              humanized = preserveInputStructure(normalizedText, humanized);
+            }
           }
 
           // ── OUTPUT SIZE MONITORING ──────────────────────────────────

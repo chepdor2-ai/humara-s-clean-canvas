@@ -60,7 +60,16 @@ function stripHeadingEchoSentences(rewritten: string, headingKeys: Set<string>):
       const sentences = robustSentenceSplit(flattened);
       if (sentences.length === 0) return flattened;
 
-      const kept = sentences.filter((sentence) => !headingKeys.has(normalizeHeadingKey(sentence)));
+      // Only strip sentences that are short (≤12 words) AND exactly match a heading key.
+      // This prevents stripping legitimate body sentences that merely share vocabulary
+      // with a heading.
+      const kept = sentences.filter((sentence) => {
+        const words = sentence.trim().split(/\s+/);
+        if (words.length > 12) return true; // Never strip long sentences
+        return !headingKeys.has(normalizeHeadingKey(sentence));
+      });
+      // If ALL sentences would be removed, preserve the paragraph as-is
+      if (kept.length === 0) return flattened;
       return kept.join(' ').trim();
     })
     .filter(Boolean);

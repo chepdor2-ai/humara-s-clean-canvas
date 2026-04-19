@@ -288,6 +288,7 @@ const STRENGTHS = [
 const TONES = [
   { id: 'neutral', label: 'Natural' },
   { id: 'academic', label: 'Academic' },
+  { id: 'academic_blog', label: 'Academic Blog' },
   { id: 'professional', label: 'Business' },
   { id: 'simple', label: 'Direct' },
 ];
@@ -1264,70 +1265,69 @@ function EditorPageInner() {
       }
     }
     setRehumanizing(true); setError(''); setOutputView('confidence');
-    const MAX_ITERATIONS = 5;
     let currentText = result;
 
     try {
-      for (let iteration = 0; iteration < MAX_ITERATIONS; iteration++) {
-        // Re-score sentences against current text
-        const detectRes = await fetch('/api/detect', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: currentText }) });
-        const detectData = await detectRes.json();
-        if (!detectRes.ok || detectData.error) break;
+      // Single call to /api/deep-clean which runs the iterative
+      // detect → targeted-fix → forensic-sweep loop server-side (faster + atomic).
+      const deepRes = await fetch('/api/deep-clean', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          text: currentText,
+          tone,
+          strength: 'strong',
+          threshold: 15,    // stop when overall AI score < 15%
+          maxIterations: 5,
+        }),
+      });
+      const deepData = await deepRes.json();
 
-        const currentOverallAi = detectData.summary.overall_ai_score;
-        setOutputDetection({ overallAi: currentOverallAi, overallHuman: detectData.summary.overall_human_score, detectors: detectData.detectors });
-
-        // Score each sentence
-        const currentSentences = splitSentences(currentText);
-        const scored = currentSentences.map(s => ({ ...s, score: scoreSentence(s.text, currentOverallAi) }));
-        setSentenceScores(scored);
-
-        // Find flagged sentences (score > 35)
-        const flagged = scored.filter(s => s.score > 35);
-        if (flagged.length === 0) {
-          // All green — done
-          setResult(currentText);
-          break;
-        }
-
-        console.log(`[FixFlagged] Iteration ${iteration + 1}: ${flagged.length} flagged sentences, re-humanizing...`);
-
-        // Aggressively re-humanize each flagged sentence with strong strength
-        const fixes = await Promise.all(
-          flagged.map(s =>
-            fetch('/api/humanize', {
-              method: 'POST', headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                text: s.text.trim(),
-                engine: engine === 'ghost_mini' ? 'ghost_pro' : engine,
-                strength: 'strong',
-                tone,
-                strict_meaning: strictMeaning,
-                enable_post_processing: true,
-              }),
-            }).then(r => r.json()).then((d: HumanizeResponse) => ({
-              original: s.text,
-              humanized: d.success && d.humanized ? d.humanized.trim() : s.text,
-            })).catch(() => ({ original: s.text, humanized: s.text }))
-          )
-        );
-
-        // Apply fixes to the text
-        let updated = currentText;
-        let anyChanged = false;
-        for (const f of fixes) {
-          if (f.humanized !== f.original && updated.includes(f.original)) {
-            updated = updated.replace(f.original, f.humanized);
-            anyChanged = true;
-          }
-        }
-
-        if (!anyChanged) break; // Nothing changed, stop iterating
-        currentText = updated;
+      if (deepRes.ok && deepData.success && typeof deepData.humanized === 'string') {
+        currentText = deepData.humanized;
         setResult(currentText);
+        console.log(`[DeepClean] ${deepData.initial_score_pct}% → ${deepData.final_score_pct}% in ${deepData.iterations} iteration(s); flagged ${deepData.flagged_sentences_initial} → ${deepData.flagged_sentences_final}`);
+      } else if (!deepRes.ok || deepData.error) {
+        // Fall back to the legacy per-sentence /api/humanize loop if deep-clean fails
+        console.warn('[DeepClean] Deep clean failed; falling back to per-sentence loop:', deepData.error);
+        const MAX_ITERATIONS = 4;
+        for (let iteration = 0; iteration < MAX_ITERATIONS; iteration++) {
+          const detectRes = await fetch('/api/detect', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: currentText }) });
+          const detectData = await detectRes.json();
+          if (!detectRes.ok || detectData.error) break;
+          const currentOverallAi = detectData.summary.overall_ai_score;
+          setOutputDetection({ overallAi: currentOverallAi, overallHuman: detectData.summary.overall_human_score, detectors: detectData.detectors });
+          const currentSentences = splitSentences(currentText);
+          const scored = currentSentences.map(s => ({ ...s, score: scoreSentence(s.text, currentOverallAi) }));
+          setSentenceScores(scored);
+          const flagged = scored.filter(s => s.score > 35);
+          if (flagged.length === 0) { setResult(currentText); break; }
+          const fixes = await Promise.all(
+            flagged.map(s =>
+              fetch('/api/rehumanize-sentence', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ sentence: s.text.trim(), tone, strength: 'strong', threshold: 0.30, maxIterations: 3 }),
+              }).then(r => r.json()).then((d) => ({
+                original: s.text,
+                humanized: d?.success && typeof d?.humanized === 'string' ? d.humanized.trim() : s.text,
+              })).catch(() => ({ original: s.text, humanized: s.text }))
+            )
+          );
+          let updated = currentText;
+          let anyChanged = false;
+          for (const f of fixes) {
+            if (f.humanized !== f.original && updated.includes(f.original)) {
+              updated = updated.replace(f.original, f.humanized);
+              anyChanged = true;
+            }
+          }
+          if (!anyChanged) break;
+          currentText = updated;
+          setResult(currentText);
+        }
       }
 
-      // Final detection pass
+      // Final detection pass (always) — updates the overall AI score display
       const finalRes = await fetch('/api/detect', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: currentText }) });
       const finalData = await finalRes.json();
       if (finalRes.ok && !finalData.error) {
@@ -1364,24 +1364,50 @@ function EditorPageInner() {
     setOutputView('confidence');
 
     try {
-      const response = await fetch('/api/humanize', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          text: target.text.trim(),
-          engine: engine === 'ghost_mini' ? 'ghost_pro' : engine,
-          strength: 'strong',
-          tone,
-          strict_meaning: strictMeaning,
-          enable_post_processing: true,
-        }),
-      });
-      const data = await response.json() as HumanizeResponse;
-      if (!response.ok || data.error || !data.humanized) {
-        throw new Error(data.error || 'Sentence fix failed');
+      // Primary: /api/rehumanize-sentence — targeted deep clean using the
+      // shared AI-signal dictionary + forensic detector passes.
+      let replacement: string | null = null;
+      try {
+        const rehumanRes = await fetch('/api/rehumanize-sentence', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            sentence: target.text.trim(),
+            tone,
+            strength: 'strong',
+            threshold: 0.30,
+            maxIterations: 4,
+          }),
+        });
+        const rehumanData = await rehumanRes.json();
+        if (rehumanRes.ok && rehumanData.success && typeof rehumanData.humanized === 'string' && rehumanData.humanized.trim().length > 0) {
+          replacement = normalizeOutputText(rehumanData.humanized.trim());
+        }
+      } catch {
+        // fall through to legacy pipeline
       }
 
-      let replacement = normalizeOutputText(data.humanized.trim());
+      // Fallback: /api/humanize with the active engine
+      if (!replacement) {
+        const response = await fetch('/api/humanize', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            text: target.text.trim(),
+            engine: engine === 'ghost_mini' ? 'ghost_pro' : engine,
+            strength: 'strong',
+            tone,
+            strict_meaning: strictMeaning,
+            enable_post_processing: true,
+          }),
+        });
+        const data = await response.json() as HumanizeResponse;
+        if (!response.ok || data.error || !data.humanized) {
+          throw new Error(data.error || 'Sentence fix failed');
+        }
+        replacement = normalizeOutputText(data.humanized.trim());
+      }
+
       if (grammarCorrection) {
         const checker = new GrammarChecker();
         replacement = checker.correctAll(replacement);

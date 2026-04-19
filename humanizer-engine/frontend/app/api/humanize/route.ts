@@ -955,8 +955,15 @@ export async function POST(req: Request) {
         strength === 'high' || strength === 'strong' ? 'heavy'
           : strength === 'low' || strength === 'light' ? 'light'
             : 'medium';
+      // academic_blog maps to 'academic' for legacy humara engine (which does
+      // not know the new id). The final Nuru 2.0 polish still applies the
+      // blog cadence because it gets the original tone string elsewhere.
       const humaraTone: 'neutral' | 'academic' | 'professional' | 'casual' =
-        tone === 'academic' || tone === 'professional' || tone === 'casual' ? tone : 'neutral';
+        tone === 'academic' || tone === 'academic_blog'
+          ? 'academic'
+          : tone === 'professional' || tone === 'casual'
+            ? tone
+            : 'neutral';
       humanized = humaraHumanize(normalizedText, {
         strength: humaraStrength,
         tone: humaraTone,
@@ -1039,12 +1046,19 @@ export async function POST(req: Request) {
       // AntiPangram: Forensic AI-signal-aware pure-TypeScript humanizer
       // Specifically engineered to defeat Pangram and similar detectors
       const { antiPangramSimple } = await import('@/lib/engine/antipangram');
+      // Map academic_blog → academic for AntiPangram (narrow tone union)
+      const apgTone: 'academic' | 'professional' | 'casual' | 'neutral' =
+        tone === 'academic' || tone === 'academic_blog'
+          ? 'academic'
+          : tone === 'professional' || tone === 'casual'
+            ? tone
+            : 'neutral';
       humanized = antiPangramSimple(
         normalizedText,
         (strength ?? 'strong') as 'light' | 'medium' | 'strong',
-        (tone ?? 'academic') as 'academic' | 'professional' | 'casual' | 'neutral',
+        apgTone,
       );
-      // Add Nuru post-processing for Pangram
+      // Add Nuru post-processing for Pangram (receives raw tone → academic_blog polish applies)
       humanized = applySmartNuruPolish(humanized);
     } else if (engine === 'ai_analysis') {
       // AI Analysis: Analyze topic → pick offline engines → forensic cleanup → full Nuru
@@ -1053,7 +1067,11 @@ export async function POST(req: Request) {
       const ctx = analyze(normalizedText);
       const topic = ctx.primaryTopic;
       const autoTone: 'academic' | 'professional' | 'casual' | 'neutral' =
-        tone === 'academic' || tone === 'professional' || tone === 'casual' ? tone : 'neutral';
+        tone === 'academic' || tone === 'academic_blog'
+          ? 'academic'
+          : tone === 'professional' || tone === 'casual'
+            ? tone
+            : 'neutral';
       const autoStrength: 'light' | 'medium' | 'strong' =
         strength === 'light' || strength === 'medium' || strength === 'strong' ? strength : 'strong';
       const runAutoOfflinePass = (

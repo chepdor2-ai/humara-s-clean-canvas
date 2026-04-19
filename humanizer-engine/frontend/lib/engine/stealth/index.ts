@@ -17,12 +17,99 @@
 
 import { AI_WORD_REPLACEMENTS } from '../shared-dictionaries';
 import { getBestReplacement } from './dictionary-service';
-import { runFullDetectorForensicsCleanup } from './forensics';
+import { runFullDetectorForensicsCleanup, deepSignalClean } from './forensics';
 import { detectDomain, getProtectedTermsForDomain } from '../domain-detector';
 import { resolveStrategy, type DomainStrategy } from '../domain-strategies';
+import { resolveTone, type ToneSettings } from '../ai-signal-dictionary';
 
 // Module-level strategy populated per-call by stealthHumanize
 let _stealthStrategy: DomainStrategy | null = null;
+// Module-level tone settings populated per-call by stealthHumanize
+let _activeTone: ToneSettings | null = null;
+
+/* ── Tone Adjustment ─────────────────────────────────────────────── */
+
+/**
+ * Apply tone-specific polish to a fully-processed string.
+ * Implements the user-visible differences between tones without
+ * rebuilding the sentence (so meaning is preserved).
+ */
+function applyToneAdjustment(text: string, tone: ToneSettings): string {
+  if (!text) return text;
+  let result = text;
+
+  // Contraction policy
+  if (tone.expandContractions) {
+    const CONTRACTION_EXPANSIONS: Record<string, string> = {
+      "don't": "do not", "doesn't": "does not", "didn't": "did not",
+      "can't": "cannot", "couldn't": "could not", "wouldn't": "would not",
+      "shouldn't": "should not", "won't": "will not", "isn't": "is not",
+      "aren't": "are not", "wasn't": "was not", "weren't": "were not",
+      "hasn't": "has not", "haven't": "have not", "hadn't": "had not",
+      "it's": "it is", "that's": "that is", "there's": "there is",
+      "what's": "what is", "who's": "who is", "let's": "let us",
+      "i'm": "I am", "i've": "I have", "i'd": "I would", "i'll": "I will",
+      "we're": "we are", "we've": "we have", "we'd": "we would",
+      "we'll": "we will", "they're": "they are", "they've": "they have",
+      "you're": "you are", "you've": "you have",
+    };
+    for (const [c, e] of Object.entries(CONTRACTION_EXPANSIONS)) {
+      result = result.replace(new RegExp(`\\b${c}\\b`, 'gi'), (m) =>
+        m[0] === m[0].toUpperCase() ? e.charAt(0).toUpperCase() + e.slice(1) : e);
+    }
+  }
+  // (Intentionally no contraction *injection* path — academic_blog keeps the
+  // input's natural register; full contractions are only expanded when the
+  // tone explicitly requires it.)
+
+  // First-person policy — for tones that do not allow first person, the
+  // rest of the pipeline (processSentence) already handles removal. For
+  // tones that allow it, we do nothing additional here.
+
+  // Blog cadence: introduce short "aside" sentences by splitting over-long
+  // sentences in academic_blog / casual tones, using the same safe splitter
+  // as the GPTZero burstiness pass.
+  if (tone.id === 'academic_blog' || tone.id === 'casual') {
+    result = result.split(/(\n\s*\n)/).map((para) => {
+      if (/^\n\s*\n$/.test(para)) return para;
+      const sents = para.match(/[^.!?]+[.!?]+/g);
+      if (!sents) return para;
+      let splitDone = 0;
+      const out: string[] = [];
+      for (const s of sents) {
+        const trimmed = s.trim();
+        const words = trimmed.split(/\s+/).length;
+        // Only split if sentence exceeds tone's max length and we haven't
+        // split too much already (prevent run-on choppy paragraphs)
+        if (words > tone.maxSentenceLength && splitDone < 2) {
+          const splitRe = /(,\s+(?:which|and|but)\s+)/;
+          const m = trimmed.match(splitRe);
+          if (m && m.index && m.index > 25 && m.index < trimmed.length - 15) {
+            const before = trimmed.slice(0, m.index).trim();
+            const connector = m[1].replace(/^,\s+/, '').replace(/\s+$/, '');
+            let after = trimmed.slice(m.index + m[0].length).trim();
+            after = after.charAt(0).toUpperCase() + after.slice(1);
+            out.push(/[.!?]$/.test(before) ? before : before + '.');
+            const starterMap: Record<string, string> = {
+              which: 'This',
+              and: 'Plus,',
+              but: 'Still,',
+            };
+            const starter = starterMap[connector.toLowerCase()] ?? '';
+            out.push(starter ? `${starter} ${after.charAt(0).toLowerCase() + after.slice(1)}` : after);
+            splitDone++;
+            continue;
+          }
+        }
+        out.push(trimmed);
+      }
+      const trailing = para.match(/\s+$/)?.[0] ?? '';
+      return out.join(' ') + trailing;
+    }).join('');
+  }
+
+  return result;
+}
 
 /* ── Sentence Splitter ────────────────────────────────────────────── */
 
@@ -1704,6 +1791,10 @@ export function stealthHumanize(
   console.log('[NURU_V2] === NEW ENGINE ACTIVE === Input length:', text.length);
   if (!text || text.trim().length === 0) return text;
 
+  // Resolve tone — determines contraction policy, openers, max length, etc.
+  _activeTone = resolveTone(_tone);
+  console.log(`[NURU_V2] Tone: ${_activeTone.id} (${_activeTone.label})`);
+
   // Detect domain and merge domain-specific protected terms into the static set
   const domainResult = detectDomain(text);
   const domainProtected = getProtectedTermsForDomain(domainResult);
@@ -1816,6 +1907,11 @@ export function stealthHumanize(
   // Independent detector specific deep cleaning phases
   result = runFullDetectorForensicsCleanup(result);
 
+  // Apply tone-specific polish (contractions, cadence, openers)
+  if (_activeTone) {
+    result = applyToneAdjustment(result, _activeTone);
+  }
+
   return result;
 }
 
@@ -1927,7 +2023,10 @@ export function stealthHumanizeTargeted(
 
   let result = resultTokens.join('');
 
-  // Expand contractions (academic standard)
+  // Expand contractions (academic standard) — respected by all tones that
+  // have `expandContractions: true`. For `academic_blog`/`casual` we keep
+  // contractions intact; those tones usually won't call this function
+  // because it is sentence-level targeted cleanup.
   for (const [contraction, expanded] of Object.entries(CONTRACTIONS)) {
     result = result.replace(new RegExp(`\\b${contraction}\\b`, 'gi'), expanded);
   }
@@ -1935,6 +2034,10 @@ export function stealthHumanizeTargeted(
   // Fix AI/acronym capitalization
   result = result.replace(/\bAi\b/g, 'AI');
   result = result.replace(/\bai\b/g, 'AI');
+
+  // Run aggressive forensic cleanup on this single flagged sentence
+  // (phrase-level AI signals that survived word-level replacement).
+  result = deepSignalClean(result, { aggressive: true, skipBurstiness: true, skipStarterStrip: false });
 
   return result;
 }
