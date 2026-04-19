@@ -12,7 +12,13 @@
     "start": "cd humanizer-engine/frontend && npx next start --hostname 0.0.0.0 --port ${PORT:-10000}"
   },
   "dependencies": {
+    "compromise": "^14.15.0",
+    "docx": "^9.6.1",
+    "lucide-react": "^1.8.0",
     "next": "16.2.2",
-    "compromise": "^14.15.0"
+    "openai": "^6.34.0",
+    "react": "^19.2.5",
+    "react-dom": "^19.2.5",
+    "recharts": "^3.8.1"
   }
 }
