@@ -321,7 +321,7 @@ export async function POST(req: Request) {
             'phantom',
             'ai_analysis',
           ]);
-          const usePhasePipeline = PHASED_ENGINES.has(eng);
+          const usePhasePipeline = PHASED_ENGINES.has(eng) && eng !== 'ai_analysis';
 
           // Emit initial stage for non-phased engines only
           // (phased engines emit their own Phase labels inside the pipeline below)
@@ -613,6 +613,41 @@ export async function POST(req: Request) {
             return false;
           };
 
+          const getDetectorAverage = (analysis: ReturnType<ReturnType<typeof getDetector>['analyze']>) => {
+            const scores = analysis.detectors.map((item) => item.ai_score).filter((score) => Number.isFinite(score));
+            if (!scores.length) return analysis.summary.overall_ai_score;
+            return scores.reduce((sum, score) => sum + score, 0) / scores.length;
+          };
+
+          const getFlaggedSentenceDetails = (sentences: string[]) => {
+            const nonHeadingIndices: number[] = [];
+            const contentSentences: string[] = [];
+            for (let i = 0; i < sentences.length; i++) {
+              if (!isHeadingSentCheck(sentences[i])) {
+                nonHeadingIndices.push(i);
+                contentSentences.push(sentences[i]);
+              }
+            }
+
+            const joined = contentSentences.join(' ');
+            const analysis = getDetector().analyze(joined);
+            const textSignals = new TextSignals(joined);
+            const perSentence = textSignals.perSentenceDetails();
+            const flagged = perSentence
+              .map((detail) => ({
+                index: nonHeadingIndices[detail.index] ?? detail.index,
+                aiScore: detail.ai_score,
+                flaggedPhrases: detail.flagged_phrases,
+              }))
+              .filter((detail) => detail.index >= 0 && detail.index < sentences.length && detail.aiScore > 35);
+
+            return {
+              analysis,
+              detectorAverage: getDetectorAverage(analysis),
+              flagged,
+            };
+          };
+
           const runEngineOnSentence = async (sentence: string): Promise<string> => {
             if (eng === 'easy') {
               return await runHumara22(sentence);
@@ -735,115 +770,58 @@ export async function POST(req: Request) {
               
               fullResult = tmp;
             } else if (eng === 'ai_analysis') {
-              // AI Analysis: System analyzes input and selects best engine pipeline
-              // Phase 1: Run detection to understand AI score distribution
-              const aiAnalysisDetector = getDetector();
-              const aiAnalysisResult = aiAnalysisDetector.analyze(normalizedText);
-              const avgScore = aiAnalysisResult.summary.overall_ai_score;
-              const topDetectors = [...aiAnalysisResult.detectors]
-                .sort((a, b) => b.ai_score - a.ai_score)
-                .slice(0, 6);
-              const topAvg = topDetectors.reduce((s, d) => s + d.ai_score, 0) / Math.max(1, topDetectors.length);
+              const MAX_AUTO_ANALYSIS_ITERATIONS = 5;
+              let workingSentences = [...inputSentences];
+              let currentScan = getFlaggedSentenceDetails(workingSentences);
 
-              // Phase 2: Analyze topic/subject for engine affinity
-              const { analyze: analyzeContext } = await import('@/lib/engine/context-analyzer');
-              const textContext = analyzeContext(normalizedText);
-              const primaryTopic = textContext.primaryTopic;
+              sendSSE(controller, { type: 'stage', stage: `AI Analysis: detector average ${Math.round(currentScan.detectorAverage)}%` });
+              await flushDelay(20);
 
-              // Compute signal-based intelligence: vocabulary richness, pattern score, uniformity
-              const aiSignals = aiAnalysisResult.signals ?? {};
-              const patScore = aiSignals.ai_pattern_score ?? 50;
-              const vocabRich = aiSignals.vocabulary_richness ?? 50;
-              const sentUnif = aiSignals.sentence_uniformity ?? 50;
-
-              sendSSE(controller, { type: 'stage', stage: `AI Analysis: ${primaryTopic} paper detected (${Math.round(topAvg)}% AI)` });
-              await flushDelay(30);
-
-              // Phase 3: Intelligent engine selection — minimum processing for maximum impact
-              // The goal is to get the LOWEST score without over-processing.
-              // Key principle: only add engines that target the specific signals detected.
-              const { antiPangramSimple: autoApg } = await import('@/lib/engine/antipangram');
-              const autoTone: 'academic' | 'professional' | 'casual' | 'neutral' =
-                tone === 'academic' || tone === 'professional' || tone === 'casual' ? tone : 'neutral';
-              const autoStrength: 'light' | 'medium' | 'strong' =
-                strength === 'light' || strength === 'medium' || strength === 'strong' ? strength : 'strong';
-              const runAutoOfflinePass = (
-                input: string,
-                passStrength: 'light' | 'medium' | 'strong' = 'medium',
-              ): string => {
-                const oxygenPass = runHumara20(input);
-                return autoApg(oxygenPass, passStrength, autoTone);
-              };
-
-              let stage1Result: string;
-
-              if (topAvg <= 15) {
-                // Already nearly human — only light Nuru polish needed, skip heavy engines
-                sendSSE(controller, { type: 'stage', stage: 'AI Analysis: Text is nearly human — light polish only' });
-                await flushDelay(10);
-                stage1Result = applySmartNuruPolish(normalizedText, 5);
-              } else if (topAvg <= 35) {
-                // Low-medium AI — single targeted engine based on which signals are elevated
-                sendSSE(controller, { type: 'stage', stage: 'AI Analysis: Running Targeted Single Engine' });
-                await flushDelay(10);
-                if (patScore > 55 || sentUnif > 55) {
-                  // Pattern-heavy output benefits from an offline two-step break + forensic pass.
-                  stage1Result = runAutoOfflinePass(normalizedText, 'strong');
-                } else if (vocabRich > 55) {
-                  stage1Result = runAutoOfflinePass(normalizedText, 'medium');
-                } else {
-                  // General signals → Humara 2.0 safe bet
-                  stage1Result = runHumara20(normalizedText);
+              for (let iteration = 0; iteration < MAX_AUTO_ANALYSIS_ITERATIONS; iteration++) {
+                if (currentScan.detectorAverage <= 20 || currentScan.flagged.length === 0) {
+                  sendSSE(controller, { type: 'stage', stage: `AI Analysis: score ${Math.round(currentScan.detectorAverage)}% — target met` });
+                  await flushDelay(12);
+                  break;
                 }
-              } else if (topAvg <= 60) {
-                // Medium AI — topic-aware offline single pass
-                const topicSingleMap: Record<string, () => string> = {
-                  technology: () => runHumara20(normalizedText),
-                  science: () => runAutoOfflinePass(normalizedText, 'medium'),
-                  health: () => runAutoOfflinePass(normalizedText, 'medium'),
-                  education: () => runAutoOfflinePass(normalizedText, 'medium'),
-                  economics: () => runHumara20(normalizedText),
-                  politics: () => runHumara20(normalizedText),
-                  environment: () => runAutoOfflinePass(normalizedText, 'medium'),
-                  society: () => runAutoOfflinePass(normalizedText, 'medium'),
-                };
-                sendSSE(controller, { type: 'stage', stage: 'AI Analysis: Running Primary Offline Engine' });
-                await flushDelay(10);
-                stage1Result = (topicSingleMap[primaryTopic] ?? topicSingleMap['technology']!)();
-              } else {
-                // High AI (>60%) — double offline chain: pick best two based on topic + signals
-                sendSSE(controller, { type: 'stage', stage: 'AI Analysis: Running Stage 1 Engine' });
-                await flushDelay(10);
-                let s1: string;
-                if (sentUnif > 60 || patScore > 60) {
-                  s1 = runAutoOfflinePass(normalizedText, 'strong');
-                } else {
-                  s1 = runHumara20(normalizedText);
+
+                if (deadlineReached || Date.now() - startTime > DEADLINE_MS - 10000) break;
+
+                const useDualPass = currentScan.detectorAverage >= 40;
+                sendSSE(controller, {
+                  type: 'stage',
+                  stage: `AI Analysis: flagged sentence loop ${iteration + 1} (${Math.round(currentScan.detectorAverage)}%)`,
+                });
+                await flushDelay(12);
+
+                for (const flagged of currentScan.flagged) {
+                  if (isHeadingSentCheck(workingSentences[flagged.index])) continue;
+                  let updatedSentence = workingSentences[flagged.index];
+
+                  if (useDualPass) {
+                    updatedSentence = await runHumara24Full(updatedSentence);
+                  }
+
+                  updatedSentence = await runNuru20Full(updatedSentence);
+                  updatedSentence = finalSmoothGrammar(updatedSentence);
+
+                  if (flagged.flaggedPhrases.length > 0) {
+                    updatedSentence = stealthHumanizeTargeted(updatedSentence, flagged.flaggedPhrases, strength ?? 'medium');
+                  }
+
+                  workingSentences[flagged.index] = updatedSentence;
+                  sendSSE(controller, {
+                    type: 'sentence',
+                    index: flagged.index,
+                    text: updatedSentence,
+                    stage: useDualPass ? 'Phantom → Nuru 2.0 Full' : 'Nuru 2.0 Full',
+                  });
                 }
-                sendSSE(controller, { type: 'stage', stage: 'AI Analysis: Running Stage 2 Engine' });
-                await flushDelay(10);
-                const topicSecondMap: Record<string, () => string> = {
-                  technology: () => runAutoOfflinePass(s1, 'medium'),
-                  science: () => runAutoOfflinePass(s1, 'strong'),
-                  health: () => runAutoOfflinePass(s1, 'strong'),
-                  education: () => runHumara20(s1),
-                  economics: () => runAutoOfflinePass(s1, 'strong'),
-                  politics: () => runAutoOfflinePass(s1, 'medium'),
-                  environment: () => runAutoOfflinePass(s1, 'medium'),
-                  society: () => runAutoOfflinePass(s1, 'strong'),
-                };
-                stage1Result = (topicSecondMap[primaryTopic] ?? (() => runAutoOfflinePass(s1, 'medium')))();
+
+                currentScan = getFlaggedSentenceDetails(workingSentences);
+                await flushDelay(12);
               }
 
-              // Phase 4: Offline forensic cleanup (skip if text was already nearly human)
-              if (topAvg > 15) {
-                sendSSE(controller, { type: 'stage', stage: 'AI Analysis: Offline Forensic Pass' });
-                await flushDelay(10);
-                fullResult = runAutoOfflinePass(stage1Result, autoStrength);
-              } else {
-                fullResult = stage1Result;
-              }
-              // Phase pipeline will add complete Nuru 2.0 flow after this
+              fullResult = reassembleText(workingSentences, inputParaBounds.length ? inputParaBounds : [0]);
             } else if (eng === 'humara_v3_3' || eng === 'phantom') {
               fullResult = await runHumara24(normalizedText);
             } else if (eng === 'easy') {
@@ -1334,7 +1312,7 @@ export async function POST(req: Request) {
           // 5 baseline passes but still get AI detection + targeted cleanup.
           // Hard time budget: 10 seconds max.
           // ═══════════════════════════════════════════════════════════════
-          if (!(deadlineReached || Date.now() - startTime > DEADLINE_MS - 12000)) {
+          if (eng !== 'ai_analysis' && !(deadlineReached || Date.now() - startTime > DEADLINE_MS - 12000)) {
             const nuruPostStart = Date.now();
             const NURU_POST_DEADLINE_MS = 10_000; // 10s hard budget
             const nuruPostTimeOk = () => Date.now() - nuruPostStart < NURU_POST_DEADLINE_MS && !(deadlineReached || Date.now() - startTime > DEADLINE_MS - 8000);
@@ -1428,79 +1406,9 @@ export async function POST(req: Request) {
           // with Nuru post-processing until score drops below threshold.
           // Max 3 loop iterations to prevent infinite processing.
           // ═══════════════════════════════════════════════════════════════
-          if (eng === 'ai_analysis' && !(deadlineReached || Date.now() - startTime > DEADLINE_MS - 15000)) {
-            const AI_ANALYSIS_THRESHOLD = 20;
-            const AI_ANALYSIS_MAX_LOOPS = 3;
-            const loopDetector = getDetector();
-
-            for (let loopIter = 0; loopIter < AI_ANALYSIS_MAX_LOOPS; loopIter++) {
-              const loopResult = loopDetector.analyze(humanized);
-              const loopAvg = loopResult.summary.overall_ai_score;
-              console.log(`[AI Analysis Loop ${loopIter + 1}] Avg AI score: ${loopAvg.toFixed(1)}%`);
-
-              if (loopAvg <= AI_ANALYSIS_THRESHOLD) {
-                sendSSE(controller, { type: 'stage', stage: `AI Analysis: Score ${Math.round(loopAvg)}% — Target met` });
-                await flushDelay(20);
-                break;
-              }
-
-              if (deadlineReached || Date.now() - startTime > DEADLINE_MS - 10000) break;
-
-              // Find the best cleanup engine for this loop: use the detector signals to pick
-              // Nuru for high-pattern-score, Humara 2.0 for high-vocabulary, AntiPangram for forensic signals
-              const loopSignals = loopResult.signals ?? {};
-              const patternScore = loopSignals.ai_pattern_score ?? 50;
-              const vocabScore = loopSignals.vocabulary_richness ?? 50;
-              const uniformity = loopSignals.sentence_uniformity ?? 50;
-
-              sendSSE(controller, { type: 'stage', stage: `AI Analysis: Cleanup loop ${loopIter + 1} (${Math.round(loopAvg)}% AI)` });
-              await flushDelay(10);
-
-              // Intelligent engine selection per loop — avoid repeating the same engine
-              // Use decreasing aggressiveness: first loop aggressive, later loops targeted
-              if (loopIter === 0 && loopAvg > 40) {
-                // First loop, still high → Humara 2.0 structural rewrite + Nuru
-                humanized = runHumara20(humanized);
-                humanized = applySmartNuruPolish(humanized, 8);
-              } else if (patternScore > 60 || uniformity > 60) {
-                // High pattern/uniformity → Nuru 2.0 passes only (no structural change)
-                humanized = applySmartNuruPolish(humanized, 10);
-              } else if (vocabScore > 55) {
-                // High vocabulary predictability → Humara 2.0 + light Nuru
-                humanized = runHumara20(humanized);
-                humanized = applySmartNuruPolish(humanized, 3);
-              } else {
-                // Forensic signals or general residual → AntiPangram targeted
-                const { antiPangramSimple: loopApg } = await import('@/lib/engine/antipangram');
-                humanized = loopApg(
-                  humanized,
-                  (strength ?? 'strong') as 'light' | 'medium' | 'strong',
-                  (tone ?? 'academic') as 'academic' | 'professional' | 'casual' | 'neutral',
-                );
-              }
-
-              // Always follow with Nuru post-processing in every loop
-              humanized = applySmartNuruPolish(humanized, 5);
-              latestHumanized = humanized;
-
-              // Apply document phases
-              const { sentences: loopSents, paragraphBoundaries: loopBounds } = splitIntoIndexedSentences(humanized);
-              const { sentences: loopSource } = splitIntoIndexedSentences(normalizedText);
-              applySentenceStartersDistribution(loopSents);
-              applyNuruDocumentFlowCalibration(loopSents, loopBounds, loopSource);
-              humanized = reassembleText(loopSents, loopBounds.length ? loopBounds : [0]);
-              latestHumanized = humanized;
-
-              const { sentences: loopEmitSents } = splitIntoIndexedSentences(humanized);
-              await emitSentencesStaggered(controller, loopEmitSents, `AI Analysis Loop ${loopIter + 1}`, 15);
-              await flushDelay(10);
-            }
-          }
-
-
           // ── POST-PROCESSING ──
           const prePostProcessSnapshot = humanized;
-          {
+          if (eng !== 'ai_analysis') {
           const _ppWC = (t: string) => t.trim().split(/\s+/).filter(Boolean).length;
           // 4. Unified Sentence Process
           const FIRST_PERSON_RE_EARLY = /\b(I|me|my|mine|myself|we|us|our|ours|ourselves)\b/i;
@@ -1765,7 +1673,7 @@ export async function POST(req: Request) {
           // ── POST-PROCESSING CHANGE CAP (10%) ──
           // If post-processing mutated the text beyond 10% additional word-level change,
           // revert to the pre-post-processing snapshot to avoid garbling the output.
-          {
+          if (eng !== 'ai_analysis') {
             const _capWC = (t: string) => t.trim().split(/\s+/).filter(Boolean);
             const preWords = _capWC(prePostProcessSnapshot);
             const postWords = _capWC(humanized);
@@ -1792,7 +1700,7 @@ export async function POST(req: Request) {
           // ── EXTERNAL API SANITIZATION ───────────────────────────────
           // External APIs can return LLM refusals, garbled phrases, and bad synonyms.
           // This lightweight pass cleans the worst artifacts without full post-processing.
-          {
+          if (eng !== 'ai_analysis') {
             // 1. Strip LLM refusal/instruction leaks (anywhere in text)
             const REFUSAL_PATTERNS = [
               /Sorry,?\s+I\s+(?:cannot|can't|am unable to|couldn't)\s+(?:complete|do|help|assist|process|fulfill|generate|write|rewrite|paraphrase)[^.!?\n]*[.!?]?\s*/gi,
@@ -1916,7 +1824,7 @@ export async function POST(req: Request) {
           }
 
           // Emit polished sentences (skip for phased engines)
-          if (!usePhasePipeline) {
+          if (!usePhasePipeline && eng !== 'ai_analysis') {
             sendSSE(controller, { type: 'stage', stage: 'Polishing' });
             await flushDelay(20);
             const { sentences: polishedSents } = splitIntoIndexedSentences(humanized);
@@ -1926,11 +1834,15 @@ export async function POST(req: Request) {
 
           // 14. Meaning check (detection disabled — coming soon)
           // Final cleanup: collapse double spaces
-          humanized = humanized.replace(/ {2,}/g, ' ');
+          if (eng !== 'ai_analysis') {
+            humanized = humanized.replace(/ {2,}/g, ' ');
+          }
 
           // Final safety net after Oxygen polish and external cleanup.
           // These late passes can reintroduce Title Case inside body text.
-          humanized = fixMidSentenceCapitalization(humanized, text);
+          if (eng !== 'ai_analysis') {
+            humanized = fixMidSentenceCapitalization(humanized, text);
+          }
 
           // ── FINAL DEMONYM/NATIONALITY RESTORATION ───────────────────
           // fixMidSentenceCapitalization lowercases nationality adjectives that NLP doesn't
@@ -1939,7 +1851,7 @@ export async function POST(req: Request) {
           // NOTE: do NOT re-run the generic input-word scan here — sentence-initial common
           // words (The, While, From, This…) would be treated as proper nouns and Title-Cased
           // throughout the output. The input scan already ran in step 7 above.
-          {
+          if (eng !== 'ai_analysis') {
             const ALWAYS_CAP_DEMONYMS: [RegExp, string][] = [
               [/\bamerican\b/gi, 'American'],
               [/\bmexican\b/gi, 'Mexican'],

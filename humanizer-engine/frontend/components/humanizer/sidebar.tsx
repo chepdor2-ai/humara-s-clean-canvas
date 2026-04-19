@@ -60,7 +60,7 @@ function NavRow({ item, active, onNavigate }: { item: NavItem; active: boolean; 
   const baseClass = cn(
     "group relative flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors",
     active
-      ? "bg-sidebar-accent text-sidebar-accent-foreground font-medium"
+      ? "sidebar-active-link bg-sidebar-accent text-sidebar-accent-foreground font-medium"
       : "text-sidebar-foreground/70 hover:bg-sidebar-accent/60 hover:text-sidebar-foreground",
   )
   const body = (
@@ -166,7 +166,7 @@ export function Sidebar({ open, onClose }: { open?: boolean; onClose?: () => voi
           </div>
         </div>
 
-        <div className="relative overflow-hidden rounded-xl border border-sidebar-border bg-gradient-to-br from-sidebar-accent/60 to-transparent p-4">
+        <div className="sidebar-auto-glow-card relative overflow-hidden rounded-xl border border-sidebar-border bg-gradient-to-br from-sidebar-accent/60 to-transparent p-4">
           <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Monthly Usage</div>
           <div className="mt-2 flex items-baseline gap-1">
             <span className="text-xl font-semibold text-sidebar-foreground tabular-nums">{usageLoading ? '—' : (usage?.monthlyUsed ?? 0).toLocaleString()}</span>

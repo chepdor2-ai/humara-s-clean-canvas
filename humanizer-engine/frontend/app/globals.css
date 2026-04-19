@@ -14,10 +14,20 @@
   inherits: true;
   initial-value: 0deg;
 }
-@property --auto-glow-rgb {
-  syntax: '<number> <number> <number>';
+@property --auto-glow-r {
+  syntax: '<number>';
   inherits: true;
-  initial-value: 6 182 212;
+  initial-value: 6;
+}
+@property --auto-glow-g {
+  syntax: '<number>';
+  inherits: true;
+  initial-value: 182;
+}
+@property --auto-glow-b {
+  syntax: '<number>';
+  inherits: true;
+  initial-value: 212;
 }
 
 :root {
@@ -56,7 +66,9 @@
   --sidebar-ring: oklch(0.7 0.13 195);
   --auto-glow: #06b6d4;
   --auto-hue: 0deg;
-  --auto-glow-rgb: 6 182 212;
+  --auto-glow-r: 6;
+  --auto-glow-g: 182;
+  --auto-glow-b: 212;
   --auto-glow-speed: 30s;
   --auto-glow-transition: 220ms linear;
 }
@@ -205,30 +217,30 @@
 
   /* ── Auto Model: Red blink phase (first 10s) ────────── */
   @keyframes autoModelRedBlink {
-    0%, 100% { --auto-glow: #ff2f2f; --auto-hue: 0deg; --auto-glow-rgb: 255 47 47; }
-    50% { --auto-glow: #c81e1e; --auto-hue: -8deg; --auto-glow-rgb: 200 30 30; }
+    0%, 100% { --auto-glow: #ff2f2f; --auto-hue: 0deg; --auto-glow-r: 255; --auto-glow-g: 47; --auto-glow-b: 47; }
+    50% { --auto-glow: #c81e1e; --auto-hue: -8deg; --auto-glow-r: 200; --auto-glow-g: 30; --auto-glow-b: 30; }
   }
 
   /* ── Auto Model: clean 17-color cycle over 30s; yellow gets the shortest hold ───────── */
   @keyframes autoModelColorCycle {
-    0%       { --auto-glow: #ff4d4d; --auto-hue: 0deg; --auto-glow-rgb: 255 77 77; }
-    6.25%    { --auto-glow: #ff8a5b; --auto-hue: 18deg; --auto-glow-rgb: 255 138 91; }
-    9.375%   { --auto-glow: #ffd84d; --auto-hue: 48deg; --auto-glow-rgb: 255 216 77; }
-    12.5%    { --auto-glow: #b7f05a; --auto-hue: 78deg; --auto-glow-rgb: 183 240 90; }
-    18.75%   { --auto-glow: #64e97c; --auto-hue: 118deg; --auto-glow-rgb: 100 233 124; }
-    25%      { --auto-glow: #34d399; --auto-hue: 152deg; --auto-glow-rgb: 52 211 153; }
-    31.25%   { --auto-glow: #2dd4bf; --auto-hue: 170deg; --auto-glow-rgb: 45 212 191; }
-    37.5%    { --auto-glow: #22d3ee; --auto-hue: 188deg; --auto-glow-rgb: 34 211 238; }
-    43.75%   { --auto-glow: #38bdf8; --auto-hue: 198deg; --auto-glow-rgb: 56 189 248; }
-    50%      { --auto-glow: #4f8cff; --auto-hue: 218deg; --auto-glow-rgb: 79 140 255; }
-    56.25%   { --auto-glow: #6d78ff; --auto-hue: 235deg; --auto-glow-rgb: 109 120 255; }
-    62.5%    { --auto-glow: #8b5cf6; --auto-hue: 258deg; --auto-glow-rgb: 139 92 246; }
-    68.75%   { --auto-glow: #a855f7; --auto-hue: 274deg; --auto-glow-rgb: 168 85 247; }
-    75%      { --auto-glow: #d946ef; --auto-hue: 302deg; --auto-glow-rgb: 217 70 239; }
-    81.25%   { --auto-glow: #f472b6; --auto-hue: 326deg; --auto-glow-rgb: 244 114 182; }
-    87.5%    { --auto-glow: #fb7185; --auto-hue: 344deg; --auto-glow-rgb: 251 113 133; }
-    93.75%   { --auto-glow: #ff5f6d; --auto-hue: 356deg; --auto-glow-rgb: 255 95 109; }
-    100%     { --auto-glow: #ff4d4d; --auto-hue: 0deg; --auto-glow-rgb: 255 77 77; }
+    0%       { --auto-glow: #ff4d4d; --auto-hue: 0deg; --auto-glow-r: 255; --auto-glow-g: 77; --auto-glow-b: 77; }
+    6.25%    { --auto-glow: #ff8a5b; --auto-hue: 18deg; --auto-glow-r: 255; --auto-glow-g: 138; --auto-glow-b: 91; }
+    9.375%   { --auto-glow: #ffd84d; --auto-hue: 48deg; --auto-glow-r: 255; --auto-glow-g: 216; --auto-glow-b: 77; }
+    12.5%    { --auto-glow: #b7f05a; --auto-hue: 78deg; --auto-glow-r: 183; --auto-glow-g: 240; --auto-glow-b: 90; }
+    18.75%   { --auto-glow: #64e97c; --auto-hue: 118deg; --auto-glow-r: 100; --auto-glow-g: 233; --auto-glow-b: 124; }
+    25%      { --auto-glow: #34d399; --auto-hue: 152deg; --auto-glow-r: 52; --auto-glow-g: 211; --auto-glow-b: 153; }
+    31.25%   { --auto-glow: #2dd4bf; --auto-hue: 170deg; --auto-glow-r: 45; --auto-glow-g: 212; --auto-glow-b: 191; }
+    37.5%    { --auto-glow: #22d3ee; --auto-hue: 188deg; --auto-glow-r: 34; --auto-glow-g: 211; --auto-glow-b: 238; }
+    43.75%   { --auto-glow: #38bdf8; --auto-hue: 198deg; --auto-glow-r: 56; --auto-glow-g: 189; --auto-glow-b: 248; }
+    50%      { --auto-glow: #4f8cff; --auto-hue: 218deg; --auto-glow-r: 79; --auto-glow-g: 140; --auto-glow-b: 255; }
+    56.25%   { --auto-glow: #6d78ff; --auto-hue: 235deg; --auto-glow-r: 109; --auto-glow-g: 120; --auto-glow-b: 255; }
+    62.5%    { --auto-glow: #8b5cf6; --auto-hue: 258deg; --auto-glow-r: 139; --auto-glow-g: 92; --auto-glow-b: 246; }
+    68.75%   { --auto-glow: #a855f7; --auto-hue: 274deg; --auto-glow-r: 168; --auto-glow-g: 85; --auto-glow-b: 247; }
+    75%      { --auto-glow: #d946ef; --auto-hue: 302deg; --auto-glow-r: 217; --auto-glow-g: 70; --auto-glow-b: 239; }
+    81.25%   { --auto-glow: #f472b6; --auto-hue: 326deg; --auto-glow-r: 244; --auto-glow-g: 114; --auto-glow-b: 182; }
+    87.5%    { --auto-glow: #fb7185; --auto-hue: 344deg; --auto-glow-r: 251; --auto-glow-g: 113; --auto-glow-b: 133; }
+    93.75%   { --auto-glow: #ff5f6d; --auto-hue: 356deg; --auto-glow-r: 255; --auto-glow-g: 95; --auto-glow-b: 109; }
+    100%     { --auto-glow: #ff4d4d; --auto-hue: 0deg; --auto-glow-r: 255; --auto-glow-g: 77; --auto-glow-b: 77; }
   }
 }
 
@@ -351,18 +363,18 @@
   .auto-glow-surface {
     background: linear-gradient(
       145deg,
-      rgb(var(--auto-glow-rgb, 6 182 212) / 0.10),
-      rgb(var(--auto-glow-rgb, 6 182 212) / 0.03)
+      rgb(var(--auto-glow-r, 6) var(--auto-glow-g, 182) var(--auto-glow-b, 212) / 0.10),
+      rgb(var(--auto-glow-r, 6) var(--auto-glow-g, 182) var(--auto-glow-b, 212) / 0.03)
     ) !important;
     transition: background var(--auto-glow-transition, 220ms linear);
   }
   .auto-glow-divider {
-    background-color: rgb(var(--auto-glow-rgb, 6 182 212) / 0.32) !important;
+    background-color: rgb(var(--auto-glow-r, 6) var(--auto-glow-g, 182) var(--auto-glow-b, 212) / 0.32) !important;
     transition: background-color var(--auto-glow-transition, 220ms linear);
   }
   .auto-glow-select {
-    border-color: rgb(var(--auto-glow-rgb, 6 182 212) / 0.36) !important;
-    box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.06), 0 0 0 1px rgb(var(--auto-glow-rgb, 6 182 212) / 0.10);
+    border-color: rgb(var(--auto-glow-r, 6) var(--auto-glow-g, 182) var(--auto-glow-b, 212) / 0.36) !important;
+    box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.06), 0 0 0 1px rgb(var(--auto-glow-r, 6) var(--auto-glow-g, 182) var(--auto-glow-b, 212) / 0.10);
     transition: border-color var(--auto-glow-transition, 220ms linear), box-shadow var(--auto-glow-transition, 220ms linear);
   }
 
@@ -398,21 +410,37 @@
   :root[data-auto-mode='on'] .auto-glow-surface {
     background: linear-gradient(
       145deg,
-      rgb(var(--auto-glow-rgb) / 0.10),
-      rgb(var(--auto-glow-rgb) / 0.03)
+      rgb(var(--auto-glow-r) var(--auto-glow-g) var(--auto-glow-b) / 0.10),
+      rgb(var(--auto-glow-r) var(--auto-glow-g) var(--auto-glow-b) / 0.03)
     ) !important;
   }
 
   :root[data-auto-mode='on'] .auto-glow-divider {
-    background-color: rgb(var(--auto-glow-rgb) / 0.32) !important;
+    background-color: rgb(var(--auto-glow-r) var(--auto-glow-g) var(--auto-glow-b) / 0.32) !important;
   }
 
   :root[data-auto-mode='on'] .auto-glow-select {
-    border-color: rgb(var(--auto-glow-rgb) / 0.36) !important;
-    box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.06), 0 0 0 1px rgb(var(--auto-glow-rgb) / 0.10);
+    border-color: rgb(var(--auto-glow-r) var(--auto-glow-g) var(--auto-glow-b) / 0.36) !important;
+    box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.06), 0 0 0 1px rgb(var(--auto-glow-r) var(--auto-glow-g) var(--auto-glow-b) / 0.10);
+  }
+
+  :root[data-auto-mode='on'] .usage-auto-glow-chip {
+    color: color-mix(in srgb, var(--auto-glow) 88%, white 12%) !important;
+    border-color: color-mix(in srgb, var(--auto-glow) 34%, transparent) !important;
+    background: color-mix(in srgb, var(--auto-glow) 12%, transparent) !important;
+    box-shadow: 0 0 12px color-mix(in srgb, var(--auto-glow) 16%, transparent);
+  }
+
+  :root[data-auto-mode='on'] .usage-auto-glow-fill {
+    background: linear-gradient(90deg, var(--auto-glow), color-mix(in srgb, var(--auto-glow) 72%, white 28%)) !important;
+    box-shadow: 0 0 14px color-mix(in srgb, var(--auto-glow) 26%, transparent);
   }
 
   /* Sidebar: Upgrade Plan button + progress bar follow the glow */
+  :root[data-auto-mode='on'] .sidebar-auto-glow-card {
+    border-color: color-mix(in srgb, var(--auto-glow) 20%, transparent) !important;
+    box-shadow: inset 0 1px 0 color-mix(in srgb, white 22%, transparent), 0 0 24px color-mix(in srgb, var(--auto-glow) 10%, transparent);
+  }
   :root[data-auto-mode='on'] .sidebar-auto-glow-link {
     color: var(--auto-glow) !important;
     border-color: color-mix(in srgb, var(--auto-glow) 40%, transparent) !important;
@@ -445,6 +473,10 @@
     box-shadow: 0 0 12px color-mix(in srgb, var(--auto-glow) 40%, transparent) !important;
     transition: background-color var(--auto-glow-transition, 220ms linear),
                 box-shadow var(--auto-glow-transition, 220ms linear);
+  }
+
+  :root[data-auto-mode='on'] .sidebar-active-link {
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--auto-glow) 20%, transparent);
   }
 
   /* Sidebar logo pulse follows glow */

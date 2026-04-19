@@ -1059,9 +1059,9 @@ function EditorPageInner() {
         setMeaningScore(finalData.meaning_similarity as number);
         setPreGeneratedAlts(
           Object.fromEntries(
-            Object.entries(finalData.sentence_alternatives ?? {}).map(([key, values]) => [
+            Object.entries(finalData.sentence_alternatives ?? {}).map(([key, values]: [string, SentenceAlternative[]]) => [
               key,
-              values.map((value) => ({ text: value.text, score: value.score })),
+              values.map((value: SentenceAlternative) => ({ text: value.text, score: value.score })),
             ]),
           ),
         );
@@ -1153,9 +1153,9 @@ function EditorPageInner() {
         setMeaningScore(finalData.meaning_similarity as number);
         setPreGeneratedAlts(
           Object.fromEntries(
-            Object.entries(finalData.sentence_alternatives ?? {}).map(([key, values]) => [
+            Object.entries(finalData.sentence_alternatives ?? {}).map(([key, values]: [string, SentenceAlternative[]]) => [
               key,
-              values.map((value) => ({ text: value.text, score: value.score })),
+              values.map((value: SentenceAlternative) => ({ text: value.text, score: value.score })),
             ]),
           ),
         );
@@ -1585,14 +1585,14 @@ function EditorPageInner() {
 
       {/* ═══ Combined Control Card ═══ */}
       <div
-        className={`stealth-control-card relative overflow-hidden bg-white dark:bg-[linear-gradient(145deg,rgba(8,11,16,.95),rgba(10,13,19,.92))] border rounded-2xl shadow-sm dark:shadow-[0_16px_40px_-22px_rgba(6,182,212,.45)] ${autoModelEnabled ? autoGlowClass + ' auto-glow-btn auto-glow-surface border-transparent' : 'border-slate-200 dark:border-cyan-900/40'} ${planColor && !autoModelEnabled ? 'plan-glow' : ''}`}
+        className={`stealth-control-card relative overflow-hidden bg-white dark:bg-[linear-gradient(145deg,rgba(8,11,16,.95),rgba(10,13,19,.92))] border rounded-2xl shadow-sm dark:shadow-[0_16px_40px_-22px_rgba(6,182,212,.45)] ${autoModelEnabled ? 'border-slate-200 dark:border-cyan-900/40' : 'border-slate-200 dark:border-cyan-900/40'} ${planColor && !autoModelEnabled ? 'plan-glow' : ''}`}
       >
         <div className="stealth-top-glow pointer-events-none absolute inset-0 opacity-0 dark:opacity-70" />
         {/* Row 1: Brand + Usage + Nav */}
-        <div className={`relative flex flex-wrap items-center justify-between gap-2 px-4 sm:px-5 py-3 border-b ${autoModelEnabled ? 'border-transparent auto-glow-divider' : 'border-slate-200 dark:border-cyan-900/30'}`}>
+        <div className={`relative flex flex-wrap items-center justify-between gap-2 px-4 sm:px-5 py-3 border-b ${autoModelEnabled ? 'border-slate-200 dark:border-cyan-900/30' : 'border-slate-200 dark:border-cyan-900/30'}`}>
           <div className="flex flex-wrap items-center gap-3 sm:gap-4 min-w-0">
-            <h1 className={`text-base sm:text-lg font-black tracking-tight whitespace-nowrap ${autoModelEnabled ? autoGlowClass + ' auto-glow-text' : 'text-cyan-600 dark:text-cyan-100'}`}>Humara Stealth</h1>
-            <div className={`w-px h-4 hidden sm:block ${autoModelEnabled ? 'auto-glow-divider' : 'bg-slate-300 dark:bg-cyan-900/50'}`} />
+            <h1 className={`auto-sync-title text-base sm:text-lg font-black tracking-tight whitespace-nowrap ${autoModelEnabled ? autoGlowClass + ' auto-glow-text' : 'text-cyan-600 dark:text-cyan-100'}`}>Humara Stealth</h1>
+            <div className={`auto-sync-divider w-px h-4 hidden sm:block ${autoModelEnabled ? 'auto-glow-divider' : 'bg-slate-300 dark:bg-cyan-900/50'}`} />
             <UsageBar />
             {isDailyLimitReached && (
               <span className="inline-flex items-center rounded-full border border-red-200 dark:border-red-900/60 bg-red-50 dark:bg-red-950/40 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-red-700 dark:text-red-300">
@@ -1612,7 +1612,7 @@ function EditorPageInner() {
                 <Shield className="w-3 h-3" /> Admin
               </Link>
             )}
-            <Link href="/app/settings" className={`p-1.5 rounded-lg transition-colors ${autoModelEnabled ? autoGlowClass + ' auto-glow-text hover:bg-slate-100/70 dark:hover:bg-zinc-900/40' : 'text-slate-400 dark:text-zinc-500 hover:text-cyan-600 dark:hover:text-cyan-100 hover:bg-slate-100 dark:hover:bg-cyan-950/30'}`}>
+            <Link href="/app/settings" className={`p-1.5 rounded-lg transition-colors ${autoModelEnabled ? 'text-slate-400 dark:text-zinc-500 hover:text-slate-700 dark:hover:text-zinc-300 hover:bg-slate-100/70 dark:hover:bg-zinc-900/40' : 'text-slate-400 dark:text-zinc-500 hover:text-cyan-600 dark:hover:text-cyan-100 hover:bg-slate-100 dark:hover:bg-cyan-950/30'}`}>
               <Settings className="w-3.5 h-3.5" />
             </Link>
           </div>
@@ -1621,8 +1621,8 @@ function EditorPageInner() {
         {/* Row 2: Mode + Engine + Depth + Tone + Meaning + Humanize */}
         <div className="relative flex flex-wrap items-center gap-x-4 gap-y-2 px-4 sm:px-5 py-3">
           <div className="flex items-center gap-1.5">
-            <span className={`text-[10px] font-semibold uppercase ${autoModelEnabled ? autoGlowClass + ' auto-glow-text' : 'text-slate-500 dark:text-zinc-500'}`}>Mode</span>
-            <div className={`flex rounded-md p-0.5 border ${autoModelEnabled ? autoGlowClass + ' auto-glow-btn auto-glow-surface border-transparent' : 'bg-slate-100 dark:bg-zinc-950/60 border-slate-200 dark:border-cyan-900/40'}`}>
+            <span className="text-[10px] font-semibold uppercase text-slate-500 dark:text-zinc-500">Mode</span>
+            <div className="auto-sync-button-group flex rounded-md p-0.5 border bg-slate-100 dark:bg-zinc-950/60 border-slate-200 dark:border-cyan-900/40">
               {([
                 { id: 'core_engines', label: 'Core' },
                 { id: 'detection_control', label: 'Detection' },
@@ -1643,29 +1643,29 @@ function EditorPageInner() {
               ))}
             </div>
           </div>
-          <div className={`w-px h-4 hidden sm:block ${autoModelEnabled ? 'auto-glow-divider' : 'bg-slate-200 dark:bg-cyan-950/70'}`} />
+          <div className={`auto-sync-divider w-px h-4 hidden sm:block ${autoModelEnabled ? 'auto-glow-divider' : 'bg-slate-200 dark:bg-cyan-950/70'}`} />
           {/* Auto Model Toggle */}
           <label className="flex items-center gap-1.5 cursor-pointer select-none">
-            <span className={`text-[10px] font-semibold uppercase ${autoModelEnabled ? autoGlowClass + ' auto-glow-text' : 'text-slate-500 dark:text-zinc-500'}`}>Auto</span>
+            <span className="text-[10px] font-semibold uppercase text-slate-500 dark:text-zinc-500">Auto</span>
             <button onClick={handleAutoModelToggle}
               className={`w-7 h-[16px] rounded-full transition-all relative ${autoModelEnabled ? autoGlowClass + ' auto-glow-btn' : 'bg-slate-300 dark:bg-zinc-700'}`}
               style={autoModelEnabled ? { backgroundColor: 'var(--auto-glow, #ef4444)' } : undefined}>
               <div className={`w-2.5 h-2.5 bg-white rounded-full absolute top-[3px] transition-all shadow-sm ${autoModelEnabled ? 'left-[13px]' : 'left-[3px]'}`} />
             </button>
           </label>
-          <div className={`w-px h-4 hidden sm:block ${autoModelEnabled ? 'auto-glow-divider' : 'bg-slate-200 dark:bg-cyan-950/70'}`} />
+          <div className={`auto-sync-divider w-px h-4 hidden sm:block ${autoModelEnabled ? 'auto-glow-divider' : 'bg-slate-200 dark:bg-cyan-950/70'}`} />
           <div className="flex items-center gap-1.5 relative">
-            <span className={`text-[10px] font-semibold uppercase ${autoModelEnabled ? autoGlowClass + ' auto-glow-text' : 'text-slate-500 dark:text-zinc-500'}`}>Engine</span>
+            <span className="text-[10px] font-semibold uppercase text-slate-500 dark:text-zinc-500">Engine</span>
             <div className="relative group">
               <button ref={engineBtnRef} type="button" onClick={() => { if (!autoModelEnabled) setEngineDropdownOpen(!engineDropdownOpen); }}
                 disabled={autoModelEnabled}
-                className={`flex items-center gap-1.5 bg-slate-100 dark:bg-zinc-950/60 border border-slate-200 dark:border-cyan-900/40 rounded-md px-2 py-1 text-[11px] font-semibold text-slate-700 dark:text-zinc-300 outline-none hover:border-slate-300 dark:hover:border-cyan-700/60 transition-colors min-w-[118px] ${autoModelEnabled ? autoGlowClass + ' auto-glow-btn auto-glow-surface border-transparent' : ''} ${autoModelEnabled ? 'cursor-not-allowed' : ''}`}>
-                <span className={autoModelEnabled ? autoGlowClass + ' auto-glow-text' : ''}>{ENGINES.find(e => e.id === engine)?.label}</span>
+                className={`flex items-center gap-1.5 bg-slate-100 dark:bg-zinc-950/60 border border-slate-200 dark:border-cyan-900/40 rounded-md px-2 py-1 text-[11px] font-semibold text-slate-700 dark:text-zinc-300 outline-none hover:border-slate-300 dark:hover:border-cyan-700/60 transition-colors min-w-[118px] ${autoModelEnabled ? 'cursor-not-allowed' : ''}`}>
+                <span>{ENGINES.find(e => e.id === engine)?.label}</span>
                 <svg className={`ml-auto w-3 h-3 text-slate-400 dark:text-zinc-500 transition-transform ${engineDropdownOpen ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
               </button>
               {ENGINE_GUIDES[engine] && !engineDropdownOpen && (
                 <div className="absolute left-0 top-full mt-2 z-30 w-[260px] bg-white dark:bg-[#0c0c14] border border-slate-200 dark:border-cyan-800/60 rounded-lg px-3 py-2 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none shadow-lg">
-                  <p className="text-[10px] text-slate-600 dark:text-zinc-400 leading-relaxed"><span className={`font-bold ${autoModelEnabled ? autoGlowClass + ' auto-glow-text' : 'text-cyan-600 dark:text-cyan-400'}`}>{ENGINES.find(e => e.id === engine)?.label}:</span> {ENGINE_GUIDES[engine]}</p>
+                  <p className="text-[10px] text-slate-600 dark:text-zinc-400 leading-relaxed"><span className="font-bold text-cyan-600 dark:text-cyan-400">{ENGINES.find(e => e.id === engine)?.label}:</span> {ENGINE_GUIDES[engine]}</p>
                 </div>
               )}
               {engineDropdownOpen && (
@@ -1690,10 +1690,10 @@ function EditorPageInner() {
               )}
             </div>
           </div>
-          <div className={`w-px h-4 hidden sm:block ${autoModelEnabled ? 'auto-glow-divider' : 'bg-slate-200 dark:bg-cyan-950/70'}`} />
+          <div className={`auto-sync-divider w-px h-4 hidden sm:block ${autoModelEnabled ? 'auto-glow-divider' : 'bg-slate-200 dark:bg-cyan-950/70'}`} />
           <div className="flex items-center gap-1.5">
-            <span className={`text-[10px] font-semibold uppercase ${autoModelEnabled ? autoGlowClass + ' auto-glow-text' : 'text-slate-500 dark:text-zinc-500'}`}>Depth</span>
-            <div className={`flex rounded-md p-0.5 border ${autoModelEnabled ? autoGlowClass + ' auto-glow-btn auto-glow-surface border-transparent' : 'bg-slate-100 dark:bg-zinc-950/60 border-slate-200 dark:border-cyan-900/40'}`}>
+            <span className="text-[10px] font-semibold uppercase text-slate-500 dark:text-zinc-500">Depth</span>
+            <div className="auto-sync-button-group flex rounded-md p-0.5 border bg-slate-100 dark:bg-zinc-950/60 border-slate-200 dark:border-cyan-900/40">
               {STRENGTHS.map(s => (
                 <button key={s.id} onClick={() => setStrength(s.id)}
                   className={`px-2 py-1 text-[10px] font-semibold rounded transition-all ${
@@ -1706,17 +1706,17 @@ function EditorPageInner() {
               ))}
             </div>
           </div>
-          <div className={`w-px h-4 hidden sm:block ${autoModelEnabled ? 'auto-glow-divider' : 'bg-slate-200 dark:bg-cyan-950/70'}`} />
+          <div className={`auto-sync-divider w-px h-4 hidden sm:block ${autoModelEnabled ? 'auto-glow-divider' : 'bg-slate-200 dark:bg-cyan-950/70'}`} />
           <div className="flex items-center gap-1.5">
-            <span className={`text-[10px] font-semibold uppercase ${autoModelEnabled ? autoGlowClass + ' auto-glow-text' : 'text-slate-500 dark:text-zinc-500'}`}>Tone</span>
+            <span className="text-[10px] font-semibold uppercase text-slate-500 dark:text-zinc-500">Tone</span>
             <select value={tone} onChange={(e) => setTone(e.target.value)} title="Tone"
-              className={`bg-slate-100 dark:bg-zinc-950/60 border rounded-md px-2 py-1 text-[10px] font-semibold text-slate-700 dark:text-zinc-300 outline-none ${autoModelEnabled ? autoGlowClass + ' auto-glow-select auto-glow-surface auto-glow-text border-transparent' : 'border-slate-200 dark:border-cyan-900/40 focus:border-cyan-500'}`}>
+              className="auto-sync-rate-select bg-slate-100 dark:bg-zinc-950/60 border rounded-md px-2 py-1 text-[10px] font-semibold text-slate-700 dark:text-zinc-300 outline-none border-slate-200 dark:border-cyan-900/40 focus:border-cyan-500">
               {TONES.map(t => <option key={t.id} value={t.id}>{t.label}</option>)}
             </select>
           </div>
-          <div className={`w-px h-4 hidden sm:block ${autoModelEnabled ? 'auto-glow-divider' : 'bg-slate-200 dark:bg-cyan-950/70'}`} />
+          <div className={`auto-sync-divider w-px h-4 hidden sm:block ${autoModelEnabled ? 'auto-glow-divider' : 'bg-slate-200 dark:bg-cyan-950/70'}`} />
           <label className="flex items-center gap-1.5 cursor-pointer select-none">
-            <span className={`text-[10px] font-semibold uppercase ${autoModelEnabled ? autoGlowClass + ' auto-glow-text' : 'text-slate-500 dark:text-zinc-500'}`}>Meaning</span>
+            <span className="text-[10px] font-semibold uppercase text-slate-500 dark:text-zinc-500">Meaning</span>
             <button onClick={() => setStrictMeaning(!strictMeaning)} title={strictMeaning ? 'On' : 'Off'}
               className={`w-7 h-[16px] rounded-full transition-all relative ${
                 strictMeaning
@@ -1726,24 +1726,24 @@ function EditorPageInner() {
               <div className={`w-2.5 h-2.5 bg-white rounded-full absolute top-[3px] transition-all shadow-sm ${strictMeaning ? 'left-[13px]' : 'left-[3px]'}`} />
             </button>
           </label>
-          <div className={`w-px h-4 hidden sm:block ${autoModelEnabled ? 'auto-glow-divider' : 'bg-slate-200 dark:bg-cyan-950/70'}`} />
+          <div className={`auto-sync-divider w-px h-4 hidden sm:block ${autoModelEnabled ? 'auto-glow-divider' : 'bg-slate-200 dark:bg-cyan-950/70'}`} />
           <label className="flex items-center gap-1.5 cursor-pointer select-none" title="Auto-correct grammar, punctuation & capitalization in the output">
             <SpellCheck className={`w-3 h-3 ${grammarCorrection ? 'text-emerald-500' : autoModelEnabled ? '' : 'text-slate-400 dark:text-zinc-500'}`} />
-            <span className={`text-[10px] font-semibold uppercase ${autoModelEnabled ? autoGlowClass + ' auto-glow-text' : 'text-slate-500 dark:text-zinc-500'}`}>Grammar</span>
+            <span className="text-[10px] font-semibold uppercase text-slate-500 dark:text-zinc-500">Grammar</span>
             <button onClick={() => setGrammarCorrection(!grammarCorrection)}
               className={`w-7 h-[16px] rounded-full transition-all relative ${grammarCorrection ? 'bg-emerald-500 dark:bg-emerald-600' : 'bg-slate-300 dark:bg-zinc-700'}`}>
               <div className={`w-2.5 h-2.5 bg-white rounded-full absolute top-[3px] transition-all shadow-sm ${grammarCorrection ? 'left-[13px]' : 'left-[3px]'}`} />
             </button>
           </label>
-          <div className={`w-px h-4 hidden sm:block ${autoModelEnabled ? 'auto-glow-divider' : 'bg-slate-200 dark:bg-cyan-950/70'}`} />
+          <div className={`auto-sync-divider w-px h-4 hidden sm:block ${autoModelEnabled ? 'auto-glow-divider' : 'bg-slate-200 dark:bg-cyan-950/70'}`} />
           <div className="flex items-center gap-1.5">
-            <span className={`text-[10px] font-semibold uppercase ${autoModelEnabled ? autoGlowClass + ' auto-glow-text' : 'text-slate-500 dark:text-zinc-500'}`}>Rate</span>
+            <span className="text-[10px] font-semibold uppercase text-slate-500 dark:text-zinc-500">Rate</span>
             <input type="range" min={1} max={10} value={humanizationRate} onChange={(e) => setHumanizationRate(Number(e.target.value))}
               className={`w-16 h-1.5 cursor-pointer ${autoModelEnabled ? 'auto-glow-accent' : 'accent-cyan-500'}`} title={`Humanization rate: ${humanizationRate} (${humanizationRate * 10}% min change)`} />
             <span className={`text-[10px] font-bold min-w-[14px] text-center ${autoModelEnabled ? autoGlowClass + ' auto-glow-text' : 'text-cyan-600 dark:text-cyan-400'}`}>{humanizationRate}</span>
           </div>
           <button onClick={handleHumanize} disabled={!text.trim() || loading || rephrasing || isDailyLimitReached}
-            className={`w-full sm:w-auto sm:ml-auto text-white text-[11px] font-bold rounded-lg px-4 py-2 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-1.5 shadow-md ${
+            className={`auto-sync-humanize-btn w-full sm:w-auto sm:ml-auto text-white text-[11px] font-bold rounded-lg px-4 py-2 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-1.5 shadow-md ${
               autoModelEnabled ? autoGlowClass + ' auto-glow-btn auto-glow-bg' :
               isDailyLimitReached
                 ? 'bg-gradient-to-r from-red-600 to-red-500 dark:from-red-700 dark:to-red-600'
@@ -1756,12 +1756,12 @@ function EditorPageInner() {
         </div>
 
         {/* Row 3: Engine-specific settings + active config badges */}
-        <div className={`relative flex flex-wrap items-center gap-x-3 gap-y-1.5 px-4 sm:px-5 py-2 border-t ${autoModelEnabled ? 'border-transparent auto-glow-divider' : 'border-slate-100 dark:border-cyan-900/20'}`}>
+        <div className={`relative flex flex-wrap items-center gap-x-3 gap-y-1.5 px-4 sm:px-5 py-2 border-t ${autoModelEnabled ? 'border-slate-100 dark:border-cyan-900/20' : 'border-slate-100 dark:border-cyan-900/20'}`}>
           {/* Active config badges (left side) */}
           <div className="flex flex-wrap items-center gap-1.5">
-            <span className={`text-[9px] px-2 py-0.5 rounded-full border ${autoModelEnabled ? autoGlowClass + ' auto-glow-text auto-glow-btn auto-glow-surface border-transparent' : 'bg-cyan-50 dark:bg-cyan-950/50 border-cyan-200 dark:border-cyan-900/60 text-cyan-700 dark:text-cyan-200'}`}>{autoModelEnabled ? 'Auto Model' : MODE_LABELS[mode]}</span>
-            <span className={`text-[9px] px-2 py-0.5 rounded-full border ${autoModelEnabled ? autoGlowClass + ' auto-glow-text auto-glow-btn border-transparent' : 'bg-slate-100 dark:bg-zinc-900/70 border-slate-200 dark:border-zinc-800 text-slate-700 dark:text-zinc-300'}`}>{ENGINES.find(e => e.id === engine)?.label}</span>
-            <span className={`text-[9px] px-2 py-0.5 rounded-full border ${autoModelEnabled ? autoGlowClass + ' auto-glow-text auto-glow-btn auto-glow-surface border-transparent' : 'bg-slate-100 dark:bg-zinc-900/70 border-slate-200 dark:border-zinc-800 text-slate-700 dark:text-zinc-300'}`}>{TONES.find(t => t.id === tone)?.label}</span>
+            <span className="text-[9px] px-2 py-0.5 rounded-full border bg-cyan-50 dark:bg-cyan-950/50 border-cyan-200 dark:border-cyan-900/60 text-cyan-700 dark:text-cyan-200">{autoModelEnabled ? 'Auto Model' : MODE_LABELS[mode]}</span>
+            <span className="text-[9px] px-2 py-0.5 rounded-full border bg-slate-100 dark:bg-zinc-900/70 border-slate-200 dark:border-zinc-800 text-slate-700 dark:text-zinc-300">{ENGINES.find(e => e.id === engine)?.label}</span>
+            <span className="text-[9px] px-2 py-0.5 rounded-full border bg-slate-100 dark:bg-zinc-900/70 border-slate-200 dark:border-zinc-800 text-slate-700 dark:text-zinc-300">{TONES.find(t => t.id === tone)?.label}</span>
             {grammarCorrection && (
               <span className="text-[9px] px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-900/60 text-emerald-700 dark:text-emerald-200">Grammar ✓</span>
             )}
@@ -1814,14 +1814,14 @@ function EditorPageInner() {
                   <input type="range" min="0.2" max="0.8" step="0.05" value={oxygenMinChangeRatio}
                     onChange={(e) => setOxygenMinChangeRatio(parseFloat(e.target.value))}
                     title="Threshold" aria-label="Oxygen threshold"
-                    className={`w-12 h-1 rounded appearance-none cursor-pointer ${autoModelEnabled ? 'auto-glow-accent auto-glow-surface' : 'bg-cyan-200 dark:bg-cyan-900/50 accent-cyan-600'}`} />
+                    className={`w-12 h-1 rounded appearance-none cursor-pointer ${autoModelEnabled ? 'auto-glow-accent' : 'bg-cyan-200 dark:bg-cyan-900/50 accent-cyan-600'}`} />
                 </div>
                 <div className="flex items-center gap-1">
                   <span className={`text-[8px] ${autoModelEnabled ? autoGlowClass + ' auto-glow-text' : 'text-cyan-600 dark:text-cyan-400'}`}>×{oxygenMaxRetries}</span>
                   <input type="range" min="1" max="15" step="1" value={oxygenMaxRetries}
                     onChange={(e) => setOxygenMaxRetries(parseInt(e.target.value))}
                     title="Retries" aria-label="Oxygen retries"
-                    className={`w-12 h-1 rounded appearance-none cursor-pointer ${autoModelEnabled ? 'auto-glow-accent auto-glow-surface' : 'bg-cyan-200 dark:bg-cyan-900/50 accent-cyan-600'}`} />
+                    className={`w-12 h-1 rounded appearance-none cursor-pointer ${autoModelEnabled ? 'auto-glow-accent' : 'bg-cyan-200 dark:bg-cyan-900/50 accent-cyan-600'}`} />
                 </div>
               </>
             )}
@@ -1838,8 +1838,8 @@ function EditorPageInner() {
       )}
       {inputWords > 0 && inputWords <= MAX_WORDS_PER_REQUEST && (inputWords < RECOMMENDED_MIN_WORDS || inputWords > RECOMMENDED_MAX_WORDS) && (
         <div className="flex items-center gap-1.5 px-1">
-          <span className="text-blue-400 text-[9px]">💡</span>
-          <p className="text-[9px] text-blue-400">Best results with {RECOMMENDED_MIN_WORDS}–{RECOMMENDED_MAX_WORDS.toLocaleString()} words. You have {inputWords.toLocaleString()}.</p>
+          <span className={`text-[9px] ${autoModelEnabled ? autoGlowClass + ' auto-glow-text' : 'text-blue-400'}`}>💡</span>
+          <p className={`text-[9px] ${autoModelEnabled ? autoGlowClass + ' auto-glow-text' : 'text-blue-400'}`}>Best results with {RECOMMENDED_MIN_WORDS}–{RECOMMENDED_MAX_WORDS.toLocaleString()} words. You have {inputWords.toLocaleString()}.</p>
         </div>
       )}
 
@@ -1847,10 +1847,10 @@ function EditorPageInner() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-stretch">
         {/* Input Panel */}
         <div className="stealth-editor-panel bg-[linear-gradient(145deg,rgba(255,255,255,.95),rgba(255,255,255,.94))] dark:bg-[linear-gradient(145deg,rgba(9,14,22,.95),rgba(9,12,19,.94))] border border-slate-200 dark:border-cyan-900/30 rounded-2xl overflow-hidden flex flex-col hover:border-slate-300 dark:hover:border-cyan-800/40 transition-all shadow-sm dark:shadow-[0_20px_40px_-28px_rgba(8,145,178,.5)]">
-          <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100 dark:border-cyan-900/25 gap-3">
+          <div className={`flex items-center justify-between px-4 py-3 border-b gap-3 ${autoModelEnabled ? 'auto-sync-pane-line border-transparent auto-glow-divider' : 'border-slate-100 dark:border-cyan-900/25'}`}>
             <div className="flex items-center gap-2.5">
-              <div className="w-2 h-2 rounded-full bg-cyan-500 dark:bg-cyan-400" />
-              <span className="text-sm font-semibold text-slate-800 dark:text-zinc-100 tracking-tight">Input</span>
+              <div className={`auto-sync-pane-icon w-2 h-2 rounded-full ${autoModelEnabled ? 'bg-[var(--auto-glow)] shadow-[0_0_12px_var(--auto-glow)]' : 'bg-cyan-500 dark:bg-cyan-400'}`} />
+              <span className={`text-sm font-semibold tracking-tight ${autoModelEnabled ? autoGlowClass + ' auto-glow-text' : 'text-slate-800 dark:text-zinc-100'}`}>Input</span>
             </div>
             <div className="flex items-center gap-2.5 shrink-0">
               <span className="text-[11px] text-slate-500 dark:text-zinc-500 tabular-nums font-medium">{inputWords} words</span>
@@ -1887,7 +1887,7 @@ function EditorPageInner() {
                 <button
                   type="button"
                   onClick={handlePasteFromClipboard}
-                  className="pointer-events-auto flex items-center gap-2 px-5 py-3 rounded-xl bg-cyan-50 dark:bg-cyan-950/35 border border-cyan-200 dark:border-cyan-900/50 text-cyan-700 dark:text-cyan-200 hover:bg-cyan-100 dark:hover:bg-cyan-900/35 hover:border-cyan-300 dark:hover:border-cyan-700/60 transition-all text-sm font-medium cursor-pointer"
+                  className={`pointer-events-auto flex items-center gap-2 px-5 py-3 rounded-xl border transition-all text-sm font-medium cursor-pointer ${autoModelEnabled ? autoGlowClass + ' auto-glow-btn auto-glow-text auto-sync-paste-btn border-transparent bg-slate-50 dark:bg-zinc-900/40' : 'bg-cyan-50 dark:bg-cyan-950/35 border-cyan-200 dark:border-cyan-900/50 text-cyan-700 dark:text-cyan-200 hover:bg-cyan-100 dark:hover:bg-cyan-900/35 hover:border-cyan-300 dark:hover:border-cyan-700/60'}`}
                 >
                   <ClipboardPaste className="w-4 h-4" />
                   Paste from clipboard
@@ -1900,10 +1900,10 @@ function EditorPageInner() {
 
         {/* Output Panel */}
         <div className={`stealth-editor-panel bg-[linear-gradient(145deg,rgba(255,255,255,.95),rgba(255,255,255,.94))] dark:bg-[linear-gradient(145deg,rgba(9,14,22,.95),rgba(9,12,19,.94))] border rounded-2xl overflow-hidden flex flex-col relative transition-all shadow-sm dark:shadow-[0_20px_40px_-28px_rgba(8,145,178,.5)] ${result && !loading && !rephrasing ? 'border-emerald-200 dark:border-emerald-500/25 hover:border-emerald-300 dark:hover:border-emerald-500/40' : 'border-slate-200 dark:border-cyan-900/30 hover:border-slate-300 dark:hover:border-cyan-800/40'}`}>
-          <div className={`flex items-center justify-between px-4 py-3 border-b gap-3 ${result && !loading && !rephrasing ? 'border-emerald-100 dark:border-emerald-900/30' : 'border-slate-100 dark:border-cyan-900/25'}`}>
+          <div className={`flex items-center justify-between px-4 py-3 border-b gap-3 ${autoModelEnabled ? 'auto-sync-pane-line border-transparent auto-glow-divider' : result && !loading && !rephrasing ? 'border-emerald-100 dark:border-emerald-900/30' : 'border-slate-100 dark:border-cyan-900/25'}`}>
             <div className="flex items-center gap-2.5 min-w-0">
-              <div className={`w-2 h-2 rounded-full ${result && !loading ? 'bg-emerald-500 dark:bg-emerald-400' : 'bg-slate-300 dark:bg-zinc-600'}`} />
-              <span className="text-sm font-semibold text-slate-800 dark:text-zinc-100 tracking-tight">Output</span>
+              <div className={`auto-sync-pane-icon w-2 h-2 rounded-full ${autoModelEnabled ? 'bg-[var(--auto-glow)] shadow-[0_0_12px_var(--auto-glow)]' : result && !loading ? 'bg-emerald-500 dark:bg-emerald-400' : 'bg-slate-300 dark:bg-zinc-600'}`} />
+              <span className={`text-sm font-semibold tracking-tight ${autoModelEnabled ? autoGlowClass + ' auto-glow-text' : 'text-slate-800 dark:text-zinc-100'}`}>Output</span>
               {result && !loading && !rephrasing && (
                 <div className="flex items-center gap-1.5 min-w-0">
                   <span className="text-[10px] font-medium text-emerald-700 dark:text-emerald-300/80 bg-emerald-50 dark:bg-emerald-900/20 px-2 py-0.5 rounded-full whitespace-nowrap overflow-hidden text-ellipsis max-w-[230px] hidden sm:inline-block">
@@ -1917,11 +1917,11 @@ function EditorPageInner() {
               {result && !isAnimating && (
                 <>
                   {/* View Switcher */}
-                  <div className="flex items-center rounded-lg bg-slate-100 dark:bg-zinc-800/60 p-0.5 gap-0.5">
+                  <div className={`flex items-center rounded-lg p-0.5 gap-0.5 ${autoModelEnabled ? autoGlowClass + ' auto-sync-button-group auto-glow-btn border border-transparent' : 'bg-slate-100 dark:bg-zinc-800/60'}`}>
                     {(['result', 'diff', 'confidence'] as const).map(v => (
                       <button key={v} onClick={() => setOutputView(v)}
                         className={`px-2 py-0.5 rounded-md text-[10px] font-semibold capitalize transition-all ${outputView === v
-                          ? 'bg-white dark:bg-zinc-700 text-slate-800 dark:text-zinc-100 shadow-sm'
+                          ? autoModelEnabled ? 'auto-glow-active-pill text-white shadow-sm' : 'bg-white dark:bg-zinc-700 text-slate-800 dark:text-zinc-100 shadow-sm'
                           : 'text-slate-500 dark:text-zinc-400 hover:text-slate-700 dark:hover:text-zinc-300'}`}>
                         {v === 'result' ? <><Text className="w-3 h-3 inline mr-0.5" />Result</> : v === 'diff' ? <><GitCompare className="w-3 h-3 inline mr-0.5" />Diff</> : <><ShieldCheck className="w-3 h-3 inline mr-0.5" />Risk</>}
                       </button>
@@ -1987,8 +1987,8 @@ function EditorPageInner() {
             </div>
           ) : (
             <div className="flex flex-col items-center justify-center min-h-[260px] text-slate-400 dark:text-zinc-700 gap-4 px-8 text-center">
-              <div className="w-12 h-12 rounded-2xl bg-cyan-100 dark:bg-cyan-950/35 flex items-center justify-center border border-cyan-200 dark:border-cyan-900/40">
-                <Zap className="w-5 h-5 text-cyan-500 dark:text-cyan-400" />
+              <div className={`w-12 h-12 rounded-2xl flex items-center justify-center border ${autoModelEnabled ? autoGlowClass + ' auto-glow-btn auto-sync-output-empty-icon border-transparent bg-slate-50 dark:bg-zinc-900/40' : 'bg-cyan-100 dark:bg-cyan-950/35 border-cyan-200 dark:border-cyan-900/40'}`}>
+                <Zap className={`w-5 h-5 ${autoModelEnabled ? autoGlowClass + ' auto-glow-text' : 'text-cyan-500 dark:text-cyan-400'}`} />
               </div>
               <div className="space-y-1">
                 <span className="text-sm font-medium text-slate-700 dark:text-zinc-300 block">Stealth humanized text appears here</span>
