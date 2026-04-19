@@ -3,6 +3,18 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* ── Register custom properties so browsers can interpolate them in keyframes ── */
+@property --auto-glow {
+  syntax: '<color>';
+  inherits: true;
+  initial-value: #06b6d4;
+}
+@property --auto-hue {
+  syntax: '<angle>';
+  inherits: true;
+  initial-value: 0deg;
+}
+
 :root {
   --background: oklch(0.985 0.004 200);
   --foreground: oklch(0.2 0.02 230);
@@ -246,6 +258,14 @@
     animation: autoModelColorCycle var(--auto-glow-speed, 28s) linear infinite;
   }
 
+  /* Override theme color tokens so every text-primary / bg-primary / border-primary follows the glow */
+  :root[data-auto-mode='on'] {
+    --primary: var(--auto-glow);
+    --ring: var(--auto-glow);
+    --sidebar-primary: var(--auto-glow);
+    --sidebar-ring: var(--auto-glow);
+  }
+
   /* Faster button/link interactions */
   a, button {
     -webkit-tap-highlight-color: transparent;
@@ -303,13 +323,11 @@
   }
 
   /* ── Auto Model glow system ────────────────────────────── */
-  .auto-model-red-blink {
-    animation: autoModelRedBlink 0.8s ease-in-out infinite;
-    --auto-glow: #ef4444;
-    --auto-hue: 0deg;
-  }
+  /* Marker classes only — :root[data-auto-mode] drives the animation globally
+     so every element inherits the same --auto-glow value in sync. */
+  .auto-model-red-blink,
   .auto-model-color-cycle {
-    animation: autoModelColorCycle var(--auto-glow-speed, 28s) linear infinite;
+    /* intentionally empty – styling via auto-glow-btn / auto-glow-text */
   }
 
   .auto-glow-btn {
@@ -333,51 +351,56 @@
     transition: background var(--auto-glow-transition, 220ms linear);
   }
 
+  /* ── Global auto-glow propagation ─────────────────────── */
+  /* text-primary already follows --primary override on :root.
+     These selectors cover explicit cyan-* Tailwind utilities & marker classes. */
+
   :root[data-auto-mode='on'] .uniform-auto-glow,
   :root[data-auto-mode='on'] .auto-glow-text,
-  :root[data-auto-mode='on'] [class~='text-primary'],
   :root[data-auto-mode='on'] [class*='text-cyan-'],
   :root[data-auto-mode='on'] [class*='text-brand-'] {
-    color: var(--auto-glow, #06b6d4) !important;
-    text-shadow: 0 0 8px color-mix(in srgb, var(--auto-glow, #06b6d4) 50%, transparent),
-                 0 0 16px color-mix(in srgb, var(--auto-glow, #06b6d4) 20%, transparent);
+    color: var(--auto-glow) !important;
+    text-shadow: 0 0 8px color-mix(in srgb, var(--auto-glow) 50%, transparent),
+                 0 0 16px color-mix(in srgb, var(--auto-glow) 20%, transparent);
     transition: color var(--auto-glow-transition, 220ms linear), text-shadow var(--auto-glow-transition, 220ms linear);
   }
 
   :root[data-auto-mode='on'] .uniform-auto-button,
   :root[data-auto-mode='on'] .auto-glow-btn,
-  :root[data-auto-mode='on'] [class*='border-primary'],
   :root[data-auto-mode='on'] [class*='border-cyan-'],
-  :root[data-auto-mode='on'] [class*='shadow-primary'],
   :root[data-auto-mode='on'] [class*='shadow-cyan-'] {
-    border-color: color-mix(in srgb, var(--auto-glow, #06b6d4) 60%, transparent) !important;
-    box-shadow: 0 0 12px color-mix(in srgb, var(--auto-glow, #06b6d4) 35%, transparent),
-                0 0 28px color-mix(in srgb, var(--auto-glow, #06b6d4) 14%, transparent);
+    border-color: color-mix(in srgb, var(--auto-glow) 60%, transparent) !important;
+    box-shadow: 0 0 12px color-mix(in srgb, var(--auto-glow) 35%, transparent),
+                0 0 28px color-mix(in srgb, var(--auto-glow) 14%, transparent);
     transition: border-color var(--auto-glow-transition, 220ms linear), box-shadow var(--auto-glow-transition, 220ms linear);
   }
 
   :root[data-auto-mode='on'] .uniform-auto-bg,
   :root[data-auto-mode='on'] .auto-glow-bg,
-  :root[data-auto-mode='on'] [class*='bg-primary'],
   :root[data-auto-mode='on'] [class*='bg-cyan-'] {
-    background-color: color-mix(in srgb, var(--auto-glow, #06b6d4) 18%, transparent) !important;
+    background-color: color-mix(in srgb, var(--auto-glow) 18%, transparent) !important;
     transition: background-color var(--auto-glow-transition, 220ms linear);
   }
 
-  :root[data-auto-mode='on'] [class*='from-primary'],
-  :root[data-auto-mode='on'] [class*='from-cyan-'] {
-    --tw-gradient-from: color-mix(in srgb, var(--auto-glow, #06b6d4) 96%, white 4%) var(--tw-gradient-from-position) !important;
-    --tw-gradient-to: color-mix(in srgb, var(--auto-glow, #06b6d4) 12%, transparent) var(--tw-gradient-to-position) !important;
+  :root[data-auto-mode='on'] [class*='from-cyan-'],
+  :root[data-auto-mode='on'] [class*='from-teal-'] {
+    --tw-gradient-from: color-mix(in srgb, var(--auto-glow) 96%, white 4%) var(--tw-gradient-from-position) !important;
+    --tw-gradient-to: color-mix(in srgb, var(--auto-glow) 12%, transparent) var(--tw-gradient-to-position) !important;
   }
 
-  :root[data-auto-mode='on'] [class*='to-primary'],
   :root[data-auto-mode='on'] [class*='to-cyan-'],
   :root[data-auto-mode='on'] [class*='to-teal-'] {
-    --tw-gradient-to: color-mix(in srgb, var(--auto-glow, #06b6d4) 82%, black 18%) var(--tw-gradient-to-position) !important;
+    --tw-gradient-to: color-mix(in srgb, var(--auto-glow) 82%, black 18%) var(--tw-gradient-to-position) !important;
   }
 
+  /* Accent color for range sliders */
+  :root[data-auto-mode='on'] [class*='accent-cyan-'] {
+    accent-color: var(--auto-glow) !important;
+  }
+
+  /* Processing animation hue shift */
   :root[data-auto-mode='on'] .auto-uniform-processing {
-    filter: hue-rotate(var(--auto-hue, 0deg)) saturate(1.2);
+    filter: hue-rotate(var(--auto-hue, 0deg)) saturate(1.15);
     transition: filter var(--auto-glow-transition, 220ms linear);
   }
 

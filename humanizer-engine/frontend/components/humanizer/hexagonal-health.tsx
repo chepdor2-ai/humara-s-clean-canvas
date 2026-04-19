@@ -375,6 +375,13 @@ export const ENGINE_PIPELINE_CONFIGS: Record<string, EnginePipelineConfig> = {
       { label: 'Clean', count: 2, cellLabels: ['CLN', 'GRM'] },
     ],
   },
+  shield: {  // Shield
+    layers: [
+      { label: 'Engine', count: 1, cellLabels: ['SHD'] },
+      { label: 'Nuru 2.0', count: 10, cellLabels: ['1','2','3','4','5','6','7','8','9','10'] },
+      { label: 'Clean', count: 2, cellLabels: ['CLN', 'GRM'] },
+    ],
+  },
   ninja_1: {  // Ninja
     layers: [
       { label: 'Engine', count: 4, cellLabels: ['LLM', 'H20', 'NRU', 'SNR'] },

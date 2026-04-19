@@ -101,8 +101,8 @@ export function CosmicLoader({ stage, message, progress, engineLabel, statusItem
 
   /* Build hex pipeline layers from engine config + current phase */
   const hexLayers = useMemo(() => {
-    if (!engineId || !totalPhases || totalPhases <= 1) return null;
-    return buildPipelineLayers(engineId, phaseIndex ?? 0, totalPhases);
+    if (!engineId || totalPhases === undefined) return null;
+    return buildPipelineLayers(engineId, phaseIndex ?? 0, Math.max(1, totalPhases));
   }, [engineId, phaseIndex, totalPhases]);
 
   /* Pulse ring counter — emit a new ring every 2.5s */
