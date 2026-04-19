@@ -31,6 +31,7 @@ import { applyAIWordKill } from '@/lib/engine/shared-dictionaries';
 import { postCleanGrammar } from '@/lib/engine/grammar-cleaner';
 import { fixMidSentenceCapitalization } from '@/lib/engine/validation-post-process';
 import { createServiceClient } from '@/lib/supabase';
+import { getUsageStatsCompat, incrementUsageCompat } from '@/lib/server/usage-tracking';
 
 export const maxDuration = 120;
 
@@ -207,25 +208,11 @@ export async function POST(req: Request) {
     if (userId && !isAdmin) {
       try {
         const supa = createServiceClient();
-        const inputWordCount = text.trim().split(/\s+/).length;
-        const { data: stats, error: statsError } = await supa.rpc('get_usage_stats', { p_user_id: userId });
-
-        if (statsError) {
-          console.error('get_usage_stats RPC failed:', statsError.message, statsError.details);
-        }
-
-        // Enforce quota for every non-admin user
-        // Default free-tier limits when RPC fails or missing
-        let totalUsed = 0;
-        let totalLimit = 1000;
-
-        if (!statsError && stats) {
-          totalUsed = (stats.words_used_fast || 0) + (stats.words_used_stealth || 0);
-          const rawLimit = (stats.words_limit_fast || 0) + (stats.words_limit_stealth || 0);
-          hasUnlimitedDailyWords = Boolean(stats.is_unlimited) || rawLimit < 0;
-          // Use DB limit if user has active subscription, otherwise free tier (1000)
-          totalLimit = hasUnlimitedDailyWords ? -1 : (rawLimit > 0 ? rawLimit : 1000);
-        }
+        const stats = await getUsageStatsCompat(supa, userId);
+        const totalUsed = Number(stats.words_used_fast ?? 0) + Number(stats.words_used_stealth ?? 0);
+        const rawLimit = Number(stats.words_limit_fast ?? 0) + Number(stats.words_limit_stealth ?? 0);
+        hasUnlimitedDailyWords = Boolean(stats.is_unlimited) || rawLimit < 0;
+        const totalLimit = hasUnlimitedDailyWords ? -1 : (rawLimit > 0 ? rawLimit : 1000);
 
         if (!hasUnlimitedDailyWords) {
           const remaining = Math.max(0, totalLimit - totalUsed);
@@ -716,9 +703,37 @@ export async function POST(req: Request) {
                 (tone ?? 'academic') as 'academic' | 'professional' | 'casual' | 'neutral',
               );
             } else if (eng === 'ninja_3') {
-              // Alpha (speed-optimized): Humara 2.0 on full text (non-LLM, instant)
-              // Phase pipeline handles Nuru 2.0 + Deep Clean + Final Smooth
-              fullResult = runHumara20(normalizedText);
+              // Alpha (stealth loop optimized): Wiki → Nuru → Phantom until score < 20
+              sendSSE(controller, { type: 'stage', stage: 'Alpha: Wikipedia Pass' });
+              await flushDelay(10);
+              let tmp = await runWikipedia(normalizedText);
+              
+              sendSSE(controller, { type: 'stage', stage: 'Alpha: Nuru Initial Clean' });
+              await flushDelay(10);
+              tmp = runHumara20(tmp);
+              
+              sendSSE(controller, { type: 'stage', stage: 'Alpha: Phantom Restructure' });
+              await flushDelay(10);
+              tmp = await runHumara24(tmp);
+              
+              const detector = getDetector();
+              let aiScore = detector.analyze(tmp).summary.overall_ai_score;
+              let iterations = 0;
+              
+              while (aiScore > 20 && iterations < 5) {
+                sendSSE(controller, { type: 'stage', stage: `Alpha Core Loop ${iterations + 1}: Phantom Sweep` });
+                await flushDelay(10);
+                tmp = await runHumara24(tmp);
+                
+                sendSSE(controller, { type: 'stage', stage: `Alpha Core Loop ${iterations + 1}: Nuru Sweep` });
+                await flushDelay(10);
+                tmp = runHumara20(tmp);
+                
+                aiScore = detector.analyze(tmp).summary.overall_ai_score;
+                iterations++;
+              }
+              
+              fullResult = tmp;
             } else if (eng === 'ai_analysis') {
               // AI Analysis: System analyzes input and selects best engine pipeline
               // Phase 1: Run detection to understand AI score distribution
@@ -1991,72 +2006,24 @@ export async function POST(req: Request) {
                 if (docResult.error) console.error('Document insert failed:', docResult.error.message, docResult.error.details);
               } else {
                 const [usageResult, docResult] = await Promise.all([
-                  supa.rpc('increment_usage', { p_user_id: userId, p_words: inputWords, p_engine_type: engineType }),
+                  incrementUsageCompat(supa, userId, inputWords, engineType),
                   docPromise,
                 ]);
 
-              if (usageResult.error) {
-                console.error('increment_usage RPC failed:', usageResult.error.message, usageResult.error.details);
-                // Fallback: direct upsert if RPC doesn't exist or fails
-                try {
-                  const today = new Date().toISOString().slice(0, 10);
-                  const { data: existingUsage } = await supa
-                    .from('usage')
-                    .select('words_used_fast, words_limit_fast')
-                    .eq('user_id', userId)
-                    .eq('usage_date', today)
-                    .maybeSingle();
+                if (docResult.error) console.error('Document insert failed:', docResult.error.message, docResult.error.details);
 
-                  if (existingUsage) {
-                    await supa.from('usage').update({
-                      words_used_fast: (existingUsage.words_used_fast || 0) + inputWords,
-                      updated_at: new Date().toISOString(),
-                    }).eq('user_id', userId).eq('usage_date', today);
-                    usageUpdate = {
-                      words_used: (existingUsage.words_used_fast || 0) + inputWords,
-                      words_limit: existingUsage.words_limit_fast || 1000,
-                    };
-                  } else {
-                    // Determine limit from subscription
-                    let wordLimit = 1000;
-                    const { data: subRow } = await supa
-                      .from('subscriptions')
-                      .select('plan_id, plans(daily_words_fast)')
-                      .eq('user_id', userId)
-                      .eq('status', 'active')
-                      .order('created_at', { ascending: false })
-                      .limit(1)
-                      .maybeSingle();
-                    if (subRow?.plans && typeof (subRow.plans as any).daily_words_fast === 'number') {
-                      wordLimit = (subRow.plans as any).daily_words_fast;
-                    }
-                    await supa.from('usage').insert({
-                      user_id: userId,
-                      usage_date: today,
-                      words_used_fast: inputWords,
-                      words_used_stealth: 0,
-                      words_limit_fast: wordLimit,
-                      words_limit_stealth: 0,
-                      requests: 1,
-                    });
-                    usageUpdate = { words_used: inputWords, words_limit: wordLimit };
-                  }
-                } catch (fallbackErr) {
-                  console.error('Usage fallback upsert failed:', fallbackErr);
+                const usageSnapshot = usageResult ?? (!docResult.error ? await getUsageStatsCompat(supa, userId) : null);
+                if (usageSnapshot) {
+                  const d = usageSnapshot as Record<string, unknown>;
+                  const usedFast = Number(d.words_used_fast ?? 0);
+                  const usedStealth = Number(d.words_used_stealth ?? 0);
+                  const limitFast = Number(d.words_limit_fast ?? 0);
+                  const limitStealth = Number(d.words_limit_stealth ?? 0);
+                  usageUpdate = {
+                    words_used: usedFast + usedStealth,
+                    words_limit: (limitFast + limitStealth) || 1000,
+                  };
                 }
-              } else if (usageResult.data) {
-                // Extract updated totals from the RPC response
-                const d = usageResult.data as Record<string, unknown>;
-                const usedFast = Number(d.words_used_fast ?? 0);
-                const usedStealth = Number(d.words_used_stealth ?? 0);
-                const limitFast = Number(d.words_limit_fast ?? 0);
-                const limitStealth = Number(d.words_limit_stealth ?? 0);
-                usageUpdate = {
-                  words_used: usedFast + usedStealth,
-                  words_limit: (limitFast + limitStealth) || 1000,
-                };
-              }
-              if (docResult.error) console.error('Document insert failed:', docResult.error.message, docResult.error.details);
               } // end else (non-admin usage tracking)
             } catch (e) {
               console.error('Usage tracking error:', e);

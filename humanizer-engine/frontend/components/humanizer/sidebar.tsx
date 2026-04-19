@@ -173,12 +173,12 @@ export function Sidebar({ open, onClose }: { open?: boolean; onClose?: () => voi
             <span className="text-xs text-muted-foreground">/ {usageLoading ? '—' : (usage?.monthlyLimit ?? 0).toLocaleString()}</span>
           </div>
           <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-muted">
-            <div className="h-full rounded-full bg-gradient-to-r from-primary to-cyan-500 transition-all" style={{ width: `${usage ? Math.min(100, Math.round(((usage.monthlyUsed ?? 0) / Math.max(1, usage.monthlyLimit ?? 0)) * 100)) : 0}%` }} />
+            <div className="sidebar-auto-glow-bar h-full rounded-full bg-gradient-to-r from-primary to-cyan-500 transition-all" style={{ width: `${usage ? Math.min(100, Math.round(((usage.monthlyUsed ?? 0) / Math.max(1, usage.monthlyLimit ?? 0)) * 100)) : 0}%` }} />
           </div>
           <Link
             href="/pricing"
             onClick={onClose}
-            className="uniform-brand-glow mt-3 block w-full rounded-lg border border-primary/30 bg-primary/10 px-3 py-1.5 text-center text-xs font-semibold text-primary transition-colors hover:bg-primary/15"
+            className="sidebar-auto-glow-link mt-3 block w-full rounded-lg border border-primary/30 bg-primary/10 px-3 py-1.5 text-center text-xs font-semibold text-primary transition-colors hover:bg-primary/15"
           >
             Upgrade Plan
           </Link>

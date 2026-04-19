@@ -258,14 +258,6 @@
     animation: autoModelColorCycle var(--auto-glow-speed, 28s) linear infinite;
   }
 
-  /* Override theme color tokens so every text-primary / bg-primary / border-primary follows the glow */
-  :root[data-auto-mode='on'] {
-    --primary: var(--auto-glow);
-    --ring: var(--auto-glow);
-    --sidebar-primary: var(--auto-glow);
-    --sidebar-ring: var(--auto-glow);
-  }
-
   /* Faster button/link interactions */
   a, button {
     -webkit-tap-highlight-color: transparent;
@@ -351,51 +343,46 @@
     transition: background var(--auto-glow-transition, 220ms linear);
   }
 
-  /* ── Global auto-glow propagation ─────────────────────── */
-  /* text-primary already follows --primary override on :root.
-     These selectors cover explicit cyan-* Tailwind utilities & marker classes. */
+  /* ── Global auto-glow propagation (opt-in only) ─────────── */
+  /* Only elements with explicit marker classes participate.
+     The animation runs on :root so --auto-glow is inherited everywhere,
+     but only marker-classed elements actually USE it. */
 
-  :root[data-auto-mode='on'] .uniform-auto-glow,
-  :root[data-auto-mode='on'] .auto-glow-text,
-  :root[data-auto-mode='on'] [class*='text-cyan-'],
-  :root[data-auto-mode='on'] [class*='text-brand-'] {
+  :root[data-auto-mode='on'] .auto-glow-text {
     color: var(--auto-glow) !important;
     text-shadow: 0 0 8px color-mix(in srgb, var(--auto-glow) 50%, transparent),
                  0 0 16px color-mix(in srgb, var(--auto-glow) 20%, transparent);
     transition: color var(--auto-glow-transition, 220ms linear), text-shadow var(--auto-glow-transition, 220ms linear);
   }
 
-  :root[data-auto-mode='on'] .uniform-auto-button,
-  :root[data-auto-mode='on'] .auto-glow-btn,
-  :root[data-auto-mode='on'] [class*='border-cyan-'],
-  :root[data-auto-mode='on'] [class*='shadow-cyan-'] {
+  :root[data-auto-mode='on'] .auto-glow-btn {
     border-color: color-mix(in srgb, var(--auto-glow) 60%, transparent) !important;
     box-shadow: 0 0 12px color-mix(in srgb, var(--auto-glow) 35%, transparent),
                 0 0 28px color-mix(in srgb, var(--auto-glow) 14%, transparent);
     transition: border-color var(--auto-glow-transition, 220ms linear), box-shadow var(--auto-glow-transition, 220ms linear);
   }
 
-  :root[data-auto-mode='on'] .uniform-auto-bg,
-  :root[data-auto-mode='on'] .auto-glow-bg,
-  :root[data-auto-mode='on'] [class*='bg-cyan-'] {
-    background-color: color-mix(in srgb, var(--auto-glow) 18%, transparent) !important;
-    transition: background-color var(--auto-glow-transition, 220ms linear);
+  :root[data-auto-mode='on'] .auto-glow-bg {
+    background: linear-gradient(135deg,
+      color-mix(in srgb, var(--auto-glow) 15%, transparent),
+      color-mix(in srgb, var(--auto-glow) 8%, transparent)
+    ) !important;
+    transition: background var(--auto-glow-transition, 220ms linear);
   }
 
-  :root[data-auto-mode='on'] [class*='from-cyan-'],
-  :root[data-auto-mode='on'] [class*='from-teal-'] {
-    --tw-gradient-from: color-mix(in srgb, var(--auto-glow) 96%, white 4%) var(--tw-gradient-from-position) !important;
-    --tw-gradient-to: color-mix(in srgb, var(--auto-glow) 12%, transparent) var(--tw-gradient-to-position) !important;
+  /* Sidebar: Upgrade Plan button + progress bar follow the glow */
+  :root[data-auto-mode='on'] .sidebar-auto-glow-link {
+    color: var(--auto-glow) !important;
+    border-color: color-mix(in srgb, var(--auto-glow) 40%, transparent) !important;
+    background: color-mix(in srgb, var(--auto-glow) 12%, transparent) !important;
+    text-shadow: 0 0 6px color-mix(in srgb, var(--auto-glow) 40%, transparent);
+    transition: color var(--auto-glow-transition, 220ms linear),
+                border-color var(--auto-glow-transition, 220ms linear),
+                background var(--auto-glow-transition, 220ms linear);
   }
-
-  :root[data-auto-mode='on'] [class*='to-cyan-'],
-  :root[data-auto-mode='on'] [class*='to-teal-'] {
-    --tw-gradient-to: color-mix(in srgb, var(--auto-glow) 82%, black 18%) var(--tw-gradient-to-position) !important;
-  }
-
-  /* Accent color for range sliders */
-  :root[data-auto-mode='on'] [class*='accent-cyan-'] {
-    accent-color: var(--auto-glow) !important;
+  :root[data-auto-mode='on'] .sidebar-auto-glow-bar {
+    background: linear-gradient(90deg, var(--auto-glow), color-mix(in srgb, var(--auto-glow) 70%, white 30%)) !important;
+    transition: background var(--auto-glow-transition, 220ms linear);
   }
 
   /* Processing animation hue shift */

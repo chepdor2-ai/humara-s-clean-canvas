@@ -24,6 +24,8 @@ interface HumanizeResponse {
   input_detector_results: { overall: number; detectors: DetectorScore[] };
   output_detector_results: { overall: number; detectors: DetectorScore[] };
   sentence_alternatives?: Record<string, { text: string; score: number }[]>;
+  usage_words_used?: number;
+  usage_words_limit?: number;
   error?: string;
 }
 interface SynonymOption { word: string; isOriginal: boolean; }
@@ -377,7 +379,7 @@ function EditorPageInner() {
   const [_sentenceScores, setSentenceScores] = useState<ScoredSentence[]>([]);
   const [_meaningScore, setMeaningScore] = useState<number | null>(null);
 
-  const { usage, refresh: refreshUsage, addWords } = useUsage();
+  const { usage, refresh: refreshUsage, addWords, setUsageTotals } = useUsage();
   const PLAN_COLORS: Record<string, string> = { Starter: '#64748b', Creator: '#a855f7', Professional: '#10b981', Business: '#f59e0b' };
   const planColor = usage ? PLAN_COLORS[usage.planName] || '' : '';
 
@@ -1048,12 +1050,15 @@ function EditorPageInner() {
         // Update usage: if backend returned updated counts, use them; otherwise optimistic + refresh
         if (!isAdmin) {
           if (typeof finalData.usage_words_used === 'number') {
-            // Backend gave us exact counts — handled by refresh below
+            const exactLimit = typeof finalData.usage_words_limit === 'number'
+              ? finalData.usage_words_limit
+              : undefined;
+            setUsageTotals(finalData.usage_words_used, exactLimit);
           } else {
             // Optimistic: add input word count immediately
             addWords((finalData.input_word_count as number) || inputWords);
           }
-          refreshUsage();
+          void refreshUsage();
         }
 
         setStreamProgressTarget(100);
@@ -1114,10 +1119,15 @@ function EditorPageInner() {
 
         // Update usage: optimistic + server refresh (all non-admin users are metered)
         if (!isAdmin) {
-          if (typeof finalData.usage_words_used !== 'number') {
+          if (typeof finalData.usage_words_used === 'number') {
+            const exactLimit = typeof finalData.usage_words_limit === 'number'
+              ? finalData.usage_words_limit
+              : undefined;
+            setUsageTotals(finalData.usage_words_used, exactLimit);
+          } else {
             addWords((finalData.input_word_count as number) || outputWords);
           }
-          refreshUsage();
+          void refreshUsage();
         }
 
         setStreamProgressTarget(100);

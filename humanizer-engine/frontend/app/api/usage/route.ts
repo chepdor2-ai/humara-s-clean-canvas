@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createServiceClient } from '../../../lib/supabase';
+import { getUsageStatsCompat } from '@/lib/server/usage-tracking';
 
 export async function GET(request: Request) {
   try {
@@ -14,13 +15,7 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { data, error } = await supabase.rpc('get_usage_stats', { p_user_id: user.id });
-
-    if (error) {
-      console.error('Usage stats error:', error);
-      return NextResponse.json({ error: 'Failed to fetch usage.' }, { status: 500 });
-    }
-
+    const data = await getUsageStatsCompat(supabase, user.id);
     return NextResponse.json(data);
   } catch {
     return NextResponse.json({ error: 'Invalid request.' }, { status: 400 });

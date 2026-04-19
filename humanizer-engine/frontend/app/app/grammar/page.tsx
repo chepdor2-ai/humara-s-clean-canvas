@@ -717,63 +717,11 @@ export default function GrammarPage() {
             </div>
           </div>
 
-          <div className="shrink-0 border-b border-slate-100 bg-slate-50/80 px-4 py-3 dark:border-zinc-800/60 dark:bg-zinc-950/30 sm:px-6">
-            <div className="flex flex-wrap items-center gap-2 text-[11px]">
-              <button
-                onClick={() => setStrictMinimalEdits((value) => !value)}
-                className={`rounded-full border px-3 py-1.5 font-semibold transition-colors ${
-                  strictMinimalEdits
-                    ? 'border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300'
-                    : 'border-slate-200 bg-white text-slate-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-400'
-                }`}
-              >
-                {strictMinimalEdits ? 'Strict edits on' : 'Strict edits off'}
-              </button>
-              <button
-                onClick={() => setPreserveQuotes((value) => !value)}
-                className={`rounded-full border px-3 py-1.5 font-semibold transition-colors ${
-                  preserveQuotes
-                    ? 'border-cyan-300 bg-cyan-50 text-cyan-700 dark:border-cyan-700 dark:bg-cyan-950/30 dark:text-cyan-300'
-                    : 'border-slate-200 bg-white text-slate-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-400'
-                }`}
-              >
-                {preserveQuotes ? 'Protect quotes' : 'Quotes editable'}
-              </button>
-              <button
-                onClick={() => setPreserveCitations((value) => !value)}
-                className={`rounded-full border px-3 py-1.5 font-semibold transition-colors ${
-                  preserveCitations
-                    ? 'border-violet-300 bg-violet-50 text-violet-700 dark:border-violet-700 dark:bg-violet-950/30 dark:text-violet-300'
-                    : 'border-slate-200 bg-white text-slate-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-400'
-                }`}
-              >
-                {preserveCitations ? 'Protect citations' : 'Citations editable'}
-              </button>
-              <label className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-slate-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-400">
-                <span className="font-semibold">Sentence edit budget</span>
-                <input
-                  type="range"
-                  min={12}
-                  max={50}
-                  step={2}
-                  value={Math.round(maxSentenceChangeRatio * 100)}
-                  onChange={(event) => setMaxSentenceChangeRatio(Number(event.target.value) / 100)}
-                  className="accent-emerald-500"
-                />
-                <span className="font-bold text-emerald-600 dark:text-emerald-400">{Math.round(maxSentenceChangeRatio * 100)}%</span>
-              </label>
+          {analysisError && (
+            <div className="shrink-0 border-b border-slate-100 bg-red-50/80 px-4 py-3 dark:border-red-900/10 dark:bg-zinc-950/30 sm:px-6">
+              <p className="text-[12px] font-medium text-red-500">{analysisError}</p>
             </div>
-            {(analysisError || backendWarnings.length > 0) && (
-              <div className="mt-2 space-y-1">
-                {analysisError && (
-                  <p className="text-[11px] font-medium text-red-500">{analysisError}</p>
-                )}
-                {!analysisError && backendWarnings.slice(0, 2).map((warning) => (
-                  <p key={warning} className="text-[11px] font-medium text-amber-600 dark:text-amber-400">{warning}</p>
-                ))}
-              </div>
-            )}
-          </div>
+          )}
 
           {/* Editor area */}
           <div className="min-h-0 flex-1 relative bg-[#eef2f7] dark:bg-[#0e1118]">
@@ -826,10 +774,22 @@ export default function GrammarPage() {
                     }
                   }}
                   onRewriteSelection={async (text, mode) => {
-                    // Hook into actual routing if desired
-                    return new Promise((resolve) => {
-                      setTimeout(() => resolve(text + ' (Rewritten)'), 1000);
-                    });
+                    try {
+                      const res = await fetch('/api/humanize', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ 
+                          text, 
+                          engine: mode === 'phantom' ? 'phantom' : 'easy', 
+                          strength: mode === 'phantom' ? 'strong' : 'medium' 
+                        })
+                      });
+                      const data = await res.json();
+                      return data.humanized ? data.humanized.replace(/^["']|["']$/g, '').trim() : null;
+                    } catch (e) {
+                      console.error("Rewrite failed", e);
+                      return null;
+                    }
                   }}
                 />
               )}

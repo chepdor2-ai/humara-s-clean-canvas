@@ -19,6 +19,8 @@ interface UsageContextValue {
   refresh: () => Promise<void>;
   /** Optimistically add words to the count without waiting for a server round-trip */
   addWords: (count: number) => void;
+  /** Apply exact totals returned by the backend immediately. */
+  setUsageTotals: (wordsUsed: number, wordsLimit?: number) => void;
 }
 
 const UsageContext = createContext<UsageContextValue | null>(null);
@@ -40,6 +42,7 @@ export function useUsage(): UsageContextValue {
     loading: false,
     refresh: async () => {},
     addWords: () => {},
+    setUsageTotals: () => {},
   };
 }
 
@@ -153,6 +156,24 @@ function useUsageInternal() {
     });
   }, []);
 
+  const setUsageTotals = useCallback((wordsUsed: number, wordsLimit?: number) => {
+    setUsage(prev => {
+      const base = prev ?? FREE_DEFAULTS;
+      const nextLimit = typeof wordsLimit === 'number' && Number.isFinite(wordsLimit)
+        ? wordsLimit
+        : base.wordsLimit;
+      const nextUnlimited = nextLimit < 0 || base.isUnlimited;
+      return {
+        ...base,
+        wordsUsed,
+        wordsLimit: nextLimit,
+        isUnlimited: nextUnlimited,
+        monthlyUsed: nextUnlimited ? wordsUsed : Math.max(base.monthlyUsed, wordsUsed),
+        monthlyLimit: nextUnlimited ? -1 : Math.max(base.monthlyLimit, nextLimit > 0 ? nextLimit * 30 : base.monthlyLimit),
+      };
+    });
+  }, []);
+
   useEffect(() => { 
     if (!user) {
       setUsage(FREE_DEFAULTS);
@@ -193,7 +214,7 @@ function useUsageInternal() {
     };
   }, [refresh, user?.id]);
 
-  return { usage, loading, refresh, addWords };
+  return { usage, loading, refresh, addWords, setUsageTotals };
 }
 
 /** Wrap the main /app page with this so UsageBar and page.tsx share one piece of state */
