@@ -5,6 +5,12 @@
 
 import { sentTokenize, wordTokenize } from "./utils";
 import { robustSentenceSplit } from "./content-protection";
+import {
+  scoreSentenceDeep,
+  AI_MARKER_WORDS as DEEP_AI_MARKER_WORDS,
+  AI_PHRASE_PATTERNS as DEEP_AI_PHRASE_PATTERNS,
+  type DetectorName,
+} from "./ai-signal-dictionary";
 
 // ── Math helpers ──
 
@@ -731,31 +737,49 @@ export class TextSignals {
     return scored === 0 ? 50 : clamp((aiCount / scored) * 100);
   }
 
-  /** Return per-sentence AI scores + flagged marker phrases (non-LLM detection) */
-  perSentenceDetails(): { index: number; ai_score: number; flagged_phrases: string[] }[] {
-    const results: { index: number; ai_score: number; flagged_phrases: string[] }[] = [];
+  /** Return per-sentence AI scores + flagged marker phrases (non-LLM detection)
+   *
+   * Enriched with the shared `ai-signal-dictionary` so callers get the same
+   * flagged words/phrases that power the UI meter and targeted cleanup.
+   */
+  perSentenceDetails(): {
+    index: number;
+    ai_score: number;
+    flagged_phrases: string[];
+    flagged_words: string[];
+    flagged_starter: string | null;
+    likely_detectors: DetectorName[];
+  }[] {
+    type Row = {
+      index: number;
+      ai_score: number;
+      flagged_phrases: string[];
+      flagged_words: string[];
+      flagged_starter: string | null;
+      likely_detectors: DetectorName[];
+    };
+    const results: Row[] = [];
     const formalLinks = new Set(["however", "therefore", "furthermore", "moreover", "consequently", "additionally", "conversely", "similarly", "specifically", "particularly", "notably", "indeed", "essentially", "fundamentally", "accordingly", "thus"]);
 
     for (let i = 0; i < this.sentWords.length; i++) {
       const ws = this.sentWords[i];
       if (ws.length < 4) continue;
       let miniScore = 0;
-      const sentText = (this.sentences[i] ?? "").trim().toLowerCase();
-      const flagged: string[] = [];
+      const rawSent = (this.sentences[i] ?? "").trim();
+      const sentText = rawSent.toLowerCase();
+      const flaggedPhrases = new Set<string>();
+      const flaggedWords = new Set<string>();
 
-      // Collect AI marker words as flagged phrases
+      // ── Local-set marker words (legacy scoring profile) ──
       for (const w of ws) {
-        if (AI_MARKER_WORDS.has(w)) flagged.push(w);
-      }
-      // Collect formal link words
-      for (const w of ws) {
-        if (formalLinks.has(w)) flagged.push(w);
+        if (AI_MARKER_WORDS.has(w) || DEEP_AI_MARKER_WORDS.has(w)) flaggedWords.add(w);
+        if (formalLinks.has(w)) flaggedWords.add(w);
       }
 
-      // Score signals (same as perSentenceAiRatio)
+      // ── Legacy signal scoring (keeps existing detector calibration) ──
       if (AI_SENTENCE_STARTERS.some((s) => sentText.startsWith(s))) miniScore += 0.20;
-      const markerD = ws.filter((w) => AI_MARKER_WORDS.has(w)).length / ws.length;
-      miniScore += Math.min(markerD * 5.0, 0.20);
+      const markerD = ws.filter((w) => AI_MARKER_WORDS.has(w) || DEEP_AI_MARKER_WORDS.has(w)).length / ws.length;
+      miniScore += Math.min(markerD * 5.0, 0.22);
       if (cv(ws.map((w) => w.length)) < 0.35) miniScore += 0.12;
       if (ws.length >= 13 && ws.length <= 30) miniScore += 0.10;
       const fwR = ws.filter((w) => FUNCTION_WORDS.has(w)).length / ws.length;
@@ -776,15 +800,35 @@ export class TextSignals {
       if (avgWL >= 4.5 && avgWL <= 6.0) miniScore += 0.06;
       if (/^[a-z]+ly,/i.test(sentText)) miniScore += 0.05;
 
-      // Convert miniScore to 0-100
+      // ── Deep-dictionary enrichment: full AI phrase + starter match ──
+      const deepReport = scoreSentenceDeep(rawSent);
+      for (const w of deepReport.flaggedWords) flaggedWords.add(w);
+      for (const p of deepReport.flaggedPhrases) flaggedPhrases.add(p);
+      // Blend deep dictionary score so sentences flagged by extended rules
+      // (e.g. Pangram / Originality-specific patterns) still register
+      miniScore = Math.max(miniScore, deepReport.score);
+
+      // Convert to 0-100
       const aiScore = clamp(miniScore * 100);
       if (aiScore >= 28) {
-        // Also collect AI phrase pattern matches as flagged phrases
+        // Also collect local AI phrase pattern matches as flagged phrases
         for (const p of AI_PHRASE_PATTERNS.slice(0, 15)) {
           const m = sentText.match(p);
-          if (m) flagged.push(m[0]);
+          if (m) flaggedPhrases.add(m[0]);
         }
-        results.push({ index: i, ai_score: aiScore, flagged_phrases: [...new Set(flagged)].slice(0, 5) });
+        // And the fuller deep dictionary
+        for (const rule of DEEP_AI_PHRASE_PATTERNS) {
+          const m = rawSent.match(rule.pattern);
+          if (m) flaggedPhrases.add(m[0].toLowerCase());
+        }
+        results.push({
+          index: i,
+          ai_score: aiScore,
+          flagged_phrases: [...flaggedPhrases].slice(0, 8),
+          flagged_words: [...flaggedWords].slice(0, 12),
+          flagged_starter: deepReport.flaggedStarter,
+          likely_detectors: deepReport.likelyDetectors,
+        });
       }
     }
     return results;

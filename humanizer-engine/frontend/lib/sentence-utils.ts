@@ -1,3 +1,5 @@
+import { scoreSentenceDeep } from "@/lib/engine/ai-signal-dictionary"
+
 export function splitSentences(text: string): string[] {
   if (!text) return []
   const parts = text.match(/[^.!?]+[.!?]+[\s]*|[^.!?]+$/g) ?? [text]
@@ -115,71 +117,18 @@ const _FORMAL_LINKS = new Set([
 
 /**
  * Deterministic per-sentence AI-risk score (0–1).
- * Uses real linguistic signals: AI marker words, sentence starters,
- * function-word ratio, phrase patterns, and structural cues.
- * The `salt` parameter is accepted for API compatibility but ignored —
- * scores are now fully deterministic for the same text.
+ *
+ * Now a thin wrapper over the shared `scoreSentenceDeep` from
+ * `lib/engine/ai-signal-dictionary`, so the SentenceMeter UI and the
+ * backend `multi-detector` apply the same linguistic rules.
+ *
+ * The legacy marker/starter/phrase sets below are kept for any consumer
+ * that imports this file directly but are no longer used for scoring.
+ *
+ * The `salt` parameter is accepted for API compatibility but ignored.
  */
 export function sentenceRisk(sentence: string, _salt = 0): number {
-  const lower = sentence.trim().toLowerCase()
-  const words = lower.match(/[a-z']+/g) ?? []
-  if (words.length < 3) return 0.05
-
-  let score = 0
-
-  // AI sentence starters (+0.20)
-  if (_STARTERS.some(s => lower.startsWith(s))) score += 0.20
-
-  // AI marker-word density (+up to 0.20)
-  const markerCount = words.filter(w => _MARKER_WORDS.has(w)).length
-  score += Math.min((markerCount / words.length) * 5.0, 0.20)
-
-  // Low CV of word lengths = AI-like uniformity (+0.12)
-  if (words.length >= 5) {
-    const lens = words.map(w => w.length)
-    const m = lens.reduce((a, b) => a + b, 0) / lens.length
-    const s = Math.sqrt(lens.reduce((a, x) => a + (x - m) ** 2, 0) / lens.length)
-    if (m > 0 && s / m < 0.35) score += 0.12
-  }
-
-  // AI-typical sentence length 13–30 words (+0.10)
-  if (words.length >= 13 && words.length <= 30) score += 0.10
-
-  // Function-word ratio in AI sweet-spot 0.35–0.55 (+0.10)
-  const fwR = words.filter(w => _FN_WORDS.has(w)).length / words.length
-  if (fwR >= 0.35 && fwR <= 0.55) score += 0.10
-
-  // AI phrase patterns (+0.12)
-  if (_PHRASES.some(p => p.test(lower))) score += 0.12
-
-  // No contractions = more formal/AI-like (+0.03)
-  if (!words.some(w => w.includes("'"))) score += 0.03
-
-  // Formal linking word present (+0.10)
-  if (words.some(w => _FORMAL_LINKS.has(w))) score += 0.10
-
-  // No first/second-person pronouns = more AI-like (+0.02)
-  const personalPronouns = new Set(["i","we","you","my","me","your","our","us"])
-  if (!words.some(w => personalPronouns.has(w))) score += 0.02
-
-  // Bigram repetition within sentence (+0.08)
-  const seen = new Set<string>()
-  let biRepeat = false
-  for (let j = 0; j < words.length - 1; j++) {
-    const bi = words[j] + " " + words[j + 1]
-    if (seen.has(bi)) { biRepeat = true; break }
-    seen.add(bi)
-  }
-  if (biRepeat) score += 0.08
-
-  // Average word length in AI sweet-spot 4.5–6.0 (+0.06)
-  const avgWL = words.reduce((s, w) => s + w.length, 0) / words.length
-  if (avgWL >= 4.5 && avgWL <= 6.0) score += 0.06
-
-  // Adverb-first pattern: "Importantly, ..." (+0.05)
-  if (/^[a-z]+ly,/i.test(lower)) score += 0.05
-
-  return Math.max(0, Math.min(1, score))
+  return scoreSentenceDeep(sentence).score
 }
 
 export function toneLabel(text: string): string {

@@ -591,17 +591,21 @@ function varySentenceLength(sentences: string[]): string[] {
   if (sentences.length < 4) return sentences;
   const result: string[] = [];
   let i = 0;
+  let mergeCount = 0;
+  const maxMerges = Math.floor(sentences.length * 0.15); // Never merge more than 15% of sentences
   while (i < sentences.length) {
     const s = sentences[i];
-    if (i + 1 < sentences.length
-      && s.split(/\s+/).length < 10
-      && sentences[i + 1].split(/\s+/).length < 10
+    if (mergeCount < maxMerges
+      && i + 1 < sentences.length
+      && s.split(/\s+/).length < 8
+      && sentences[i + 1].split(/\s+/).length < 8
       && sentences[i + 1].length > 0
-      && Math.random() < (_oxygenStrategy ? Math.max(0.3, _oxygenStrategy.sentenceMergeRate) : 0.3)) {
+      && Math.random() < (_oxygenStrategy ? Math.max(0.2, _oxygenStrategy.sentenceMergeRate) : 0.2)) {
       const connector = pick([', and ', ' — ', '; ']);
       const nextSent = sentences[i + 1];
       const merged = s.replace(/[.!?]+$/, '') + connector + (nextSent.length > 0 ? nextSent[0].toLowerCase() + nextSent.slice(1) : '');
       result.push(merged);
+      mergeCount++;
       i += 2;
     } else {
       result.push(s);
@@ -918,7 +922,9 @@ export function oxygenHumanize(
   humanized = humanized.replace(/—/g, ' -- ').replace(/–/g, ' -- ');
   humanized = humanized.replace(/\s*--\s*/g, ', ');
 
-  // Deduplicate near-identical consecutive sentences
+  // Deduplicate only near-exact consecutive sentences (threshold 0.92)
+  // Previously 0.65 which aggressively removed legitimate sentences in academic
+  // writing where consecutive sentences discuss the same topic with similar vocabulary.
   const dedupedParas: string[] = [];
   for (const para of humanized.split('\n\n')) {
     const sents = para.split(/(?<=[.!?])\s+(?=[A-Z])/);
@@ -932,7 +938,7 @@ export function oxygenHumanize(
         const union = new Set([...prevWords, ...curWords]);
         const intersection = [...prevWords].filter(w => curWords.has(w));
         const overlap = intersection.length / Math.max(union.size, 1);
-        if (overlap > 0.65) continue;
+        if (overlap > 0.92) continue;
       }
       unique.push(s);
     }
