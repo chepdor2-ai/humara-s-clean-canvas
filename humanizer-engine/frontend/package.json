@@ -3,8 +3,8 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
+    "dev": "cross-env NODE_OPTIONS=--max-old-space-size=8192 next dev --turbopack=false",
+    "build": "cross-env NODE_OPTIONS=--max-old-space-size=8192 next build",
     "start": "next start",
     "lint": "eslint",
     "test:validation-post-process": "npx tsx lib/engine/validation-post-process.test.ts",
@@ -78,6 +78,7 @@
     "vaul": "^1.1.2"
   },
   "devDependencies": {
+    "cross-env": "^10.1.0",
     "eslint": "^9",
     "eslint-config-next": "16.2.2",
     "pg": "^8.20.0"

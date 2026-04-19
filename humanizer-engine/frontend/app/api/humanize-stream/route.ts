@@ -1034,20 +1034,6 @@ export async function POST(req: Request) {
             const phaseStart = Date.now();
             const currentSentences = [...sentenceResults];
 
-            // ── Pipeline-level content protection ──────────────────────
-            // Protect numbers, brackets, citations, quoted terms, underscore
-            // variables, etc. BEFORE any phase processing.  This prevents
-            // LLM restructuring and rule-based transforms from mangling
-            // figures like 52,446 or parenthetical content like (EDA).
-            // The placeholders (⟦PROTn⟧) survive through all phases and
-            // are restored after the pipeline completes.
-            const pipelineProtectionMap: ProtectionMap = new Map();
-            for (let i = 0; i < currentSentences.length; i++) {
-              const { text: protectedSent, map: sentMap } = protectSpecialContent(currentSentences[i]);
-              currentSentences[i] = protectedSent;
-              for (const [k, v] of sentMap) pipelineProtectionMap.set(k, v);
-            }
-
             // Phase definitions per engine
             type PhaseSpec =
               | { name: string; type: 'emit' }
@@ -1205,14 +1191,21 @@ export async function POST(req: Request) {
                   sendSSE(controller, { type: 'sentence', index: i, text: currentSentences[i], stage: phaseLabel });
                 }
               } else if (phase.type === 'sync') {
+                // Protect special content (numbers, brackets, citations, etc.) around
+                // non-Nuru phases so deepNonLLMClean / smoothing / grammar repair
+                // cannot mangle figures like 52,446 or parenthetical content like (EDA).
                 for (let i = 0; i < currentSentences.length; i++) {
                   if (!isHeadingSentCheck(currentSentences[i])) {
                     const original = phaseInputSentences[i];
-                    let result = phase.fn(currentSentences[i]);
+                    const { text: protectedSent, map: sentMap } = protectSpecialContent(currentSentences[i]);
+                    let result = phase.fn(protectedSent);
+                    result = restoreSpecialContent(result, sentMap);
                     let change = measureSentenceChange(original, result);
                     let retry = 0;
                     while (change < MIN_CHANGE && retry < MAX_RETRIES) {
-                      result = phase.fn(result);
+                      const { text: rp, map: rm } = protectSpecialContent(result);
+                      result = phase.fn(rp);
+                      result = restoreSpecialContent(result, rm);
                       change = measureSentenceChange(original, result);
                       retry++;
                     }
@@ -1223,16 +1216,22 @@ export async function POST(req: Request) {
               } else if (phase.type === 'async') {
                 // Parallel processing for async/LLM phases — per-sentence error isolation
                 // so a single LLM call failure cannot abort the whole pipeline.
+                // Content protection wraps each sentence so LLM restructuring
+                // cannot mangle numbers, brackets, citations, etc.
                 const asyncResults = await Promise.all(
                   currentSentences.map(async (sent, i) => {
                     if (isHeadingSentCheck(sent)) return sent;
                     const original = phaseInputSentences[i];
                     try {
-                      let result = await phase.fn(sent);
+                      const { text: protectedSent, map: sentMap } = protectSpecialContent(sent);
+                      let result = await phase.fn(protectedSent);
+                      result = restoreSpecialContent(result, sentMap);
                       let change = measureSentenceChange(original, result);
                       let retry = 0;
                       while (change < MIN_CHANGE && retry < MAX_RETRIES) {
-                        result = await phase.fn(result);
+                        const { text: rp, map: rm } = protectSpecialContent(result);
+                        result = await phase.fn(rp);
+                        result = restoreSpecialContent(result, rm);
                         change = measureSentenceChange(original, result);
                         retry++;
                       }
@@ -1370,8 +1369,6 @@ export async function POST(req: Request) {
             }
             // Restore paragraph/heading structure after all phases complete
             humanized = preserveInputStructure(normalizedText, humanized);
-            // Restore pipeline-level protected content (numbers, brackets, citations)
-            humanized = restoreSpecialContent(humanized, pipelineProtectionMap);
             latestHumanized = humanized;
             console.log(`[Pipeline] Complete: ${humanized.split(/\s+/).length} words in ${Date.now() - phaseStart}ms`);
           }

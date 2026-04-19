@@ -4,9 +4,9 @@
   "description": "AI Text Humanizer - Bypass AI Detection with Ghost Engine",
   "main": "index.js",
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start"
+    "dev": "next dev ./frontend",
+    "build": "next build ./frontend",
+    "start": "next start ./frontend"
   },
   "keywords": [
     "ai-detector",
