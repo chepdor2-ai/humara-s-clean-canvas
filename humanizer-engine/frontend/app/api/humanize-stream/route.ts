@@ -448,6 +448,12 @@ export async function POST(req: Request) {
             return out;
           };
 
+          // Smart Nuru polish: wraps stealthHumanize for N-pass full-text polish
+          const applySmartNuruPolish = (input: string, maxPasses = 15): string => {
+            const output = stealthHumanize(input, strength ?? 'medium', tone ?? 'academic', maxPasses);
+            return output && output.trim().length > 0 ? output : input;
+          };
+
           // ══════════════════════════════════════════════════════════════
           // ACADEMIC-GRADE CLEANING & SMOOTHING FUNCTIONS
           // All functions preserve formal academic register.

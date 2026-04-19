@@ -1067,9 +1067,8 @@ export async function POST(req: Request) {
         stage1 = await runGuarded('ai_analysis_stage_1', () => runHumara24(normalizedText), normalizedText);
       }
 
-      // Phantom pass
-      const { phantomHumanize } = await import('@/lib/engine/phantom');
-      const stage2 = phantomHumanize(stage1, (tone ?? 'academic') as any, (strength ?? 'strong') as any);
+      // Phantom pass (Phantom = Humara 2.4)
+      const stage2 = await runHumara24(stage1);
 
       // AntiPangram forensic pass
       const { antiPangramSimple: apg } = await import('@/lib/engine/antipangram');

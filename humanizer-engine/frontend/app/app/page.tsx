@@ -1583,85 +1583,72 @@ function EditorPageInner() {
             {loading ? 'Humanizing…' : isDailyLimitReached ? 'Limit Reached' : 'Humanize'}
           </button>
         </div>
-      </div>
 
-      {/* Stealth Hint Bar */}
-      <div className={`stealth-hint-bar flex flex-wrap items-center gap-2.5 px-3 py-2 rounded-xl border shadow-sm dark:shadow-none ${autoModelEnabled ? autoGlowClass + ' auto-glow-btn border-transparent' : 'border-slate-200 dark:border-cyan-950/60'} bg-white dark:bg-[#0a1018]`}>
-        <span className={`text-[10px] font-semibold uppercase tracking-wide ${autoModelEnabled ? autoGlowClass + ' auto-glow-text' : 'text-cyan-600 dark:text-cyan-300'}`}>Profile</span>
-        <span className="text-[11px] text-slate-600 dark:text-zinc-300 hidden sm:inline">{autoModelEnabled ? 'Auto Model — Intelligent multi-engine pipeline active' : 'Simple controls, stealth output, editable result.'}</span>
-        <div className="ml-auto flex flex-wrap items-center gap-1.5">
-          <span className={`text-[10px] px-2 py-0.5 rounded-full border ${autoModelEnabled ? autoGlowClass + ' auto-glow-text auto-glow-btn border-transparent' : 'bg-cyan-50 dark:bg-cyan-950/50 border-cyan-200 dark:border-cyan-900/60 text-cyan-700 dark:text-cyan-200'}`}>{autoModelEnabled ? 'Auto Model' : MODE_LABELS[mode]}</span>
-          <span className={`text-[10px] px-2 py-0.5 rounded-full border ${autoModelEnabled ? autoGlowClass + ' auto-glow-text auto-glow-btn border-transparent' : 'bg-slate-100 dark:bg-zinc-900/70 border-slate-200 dark:border-zinc-800 text-slate-700 dark:text-zinc-300'}`}>{ENGINES.find(e => e.id === engine)?.label}</span>
-          <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-100 dark:bg-zinc-900/70 border border-slate-200 dark:border-zinc-800 text-slate-700 dark:text-zinc-300">{TONES.find(t => t.id === tone)?.label}</span>
-          {grammarCorrection && (
-            <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-900/60 text-emerald-700 dark:text-emerald-200">Grammar ✓</span>
-          )}
+        {/* Row 3: Engine-specific settings + active config badges */}
+        <div className="relative flex flex-wrap items-center gap-x-3 gap-y-1.5 px-4 sm:px-5 py-2 border-t border-slate-100 dark:border-cyan-900/20">
+          {/* Active config badges (left side) */}
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className={`text-[9px] px-2 py-0.5 rounded-full border ${autoModelEnabled ? autoGlowClass + ' auto-glow-text auto-glow-btn border-transparent' : 'bg-cyan-50 dark:bg-cyan-950/50 border-cyan-200 dark:border-cyan-900/60 text-cyan-700 dark:text-cyan-200'}`}>{autoModelEnabled ? 'Auto Model' : MODE_LABELS[mode]}</span>
+            <span className={`text-[9px] px-2 py-0.5 rounded-full border ${autoModelEnabled ? autoGlowClass + ' auto-glow-text auto-glow-btn border-transparent' : 'bg-slate-100 dark:bg-zinc-900/70 border-slate-200 dark:border-zinc-800 text-slate-700 dark:text-zinc-300'}`}>{ENGINES.find(e => e.id === engine)?.label}</span>
+            <span className="text-[9px] px-2 py-0.5 rounded-full bg-slate-100 dark:bg-zinc-900/70 border border-slate-200 dark:border-zinc-800 text-slate-700 dark:text-zinc-300">{TONES.find(t => t.id === tone)?.label}</span>
+            {grammarCorrection && (
+              <span className="text-[9px] px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-900/60 text-emerald-700 dark:text-emerald-200">Grammar ✓</span>
+            )}
+            {strength === 'strong' && (
+              <span className="text-[9px] px-2 py-0.5 rounded-full bg-amber-50 dark:bg-amber-950/50 border border-amber-200 dark:border-amber-900/60 text-amber-700 dark:text-amber-200 flex items-center gap-1">
+                <AlertTriangle className="w-2.5 h-2.5" /> Strong
+              </span>
+            )}
+          </div>
+
+          {/* Engine-specific controls (right side) */}
+          <div className="ml-auto flex flex-wrap items-center gap-x-3 gap-y-1.5">
+            {engine === 'easy' && (
+              <label className="flex items-center gap-1.5 cursor-pointer">
+                <span className="text-[9px] font-semibold text-slate-500 dark:text-zinc-500">SBS</span>
+                <button onClick={() => setEasySentenceBySentence(!easySentenceBySentence)}
+                  className={`relative inline-flex h-3.5 w-6 items-center rounded-full transition-colors ${easySentenceBySentence ? 'bg-cyan-500 dark:bg-cyan-600' : 'bg-slate-300 dark:bg-zinc-700'}`}>
+                  <span className={`inline-block h-2 w-2 transform rounded-full bg-white transition-transform ${easySentenceBySentence ? 'translate-x-3' : 'translate-x-0.5'}`} />
+                </button>
+              </label>
+            )}
+            {engine === 'oxygen' && (
+              <>
+                <div className="flex items-center gap-1">
+                  <span className="text-[9px] font-bold text-cyan-600 dark:text-cyan-400 uppercase">Pipe</span>
+                  <div className="flex gap-0.5">
+                    {(['quality', 'fast', 'aggressive'] as const).map(m => (
+                      <button key={m} onClick={() => setOxygenMode(m)}
+                        className={`px-1.5 py-0.5 rounded text-[8px] font-semibold transition-all ${oxygenMode === m ? 'bg-cyan-600 text-white' : 'bg-slate-100 dark:bg-zinc-800/60 text-slate-500 dark:text-zinc-500'}`}>{m[0].toUpperCase() + m.slice(1)}</button>
+                    ))}
+                  </div>
+                </div>
+                <label className="flex items-center gap-1 cursor-pointer">
+                  <span className="text-[9px] text-slate-500 dark:text-zinc-500">Sent</span>
+                  <button onClick={() => setOxygenSentenceBySentence(!oxygenSentenceBySentence)}
+                    className={`relative inline-flex h-3.5 w-6 items-center rounded-full transition-colors ${oxygenSentenceBySentence ? 'bg-cyan-600' : 'bg-slate-300 dark:bg-zinc-700'}`}>
+                    <span className={`inline-block h-2 w-2 transform rounded-full bg-white transition-transform ${oxygenSentenceBySentence ? 'translate-x-3' : 'translate-x-0.5'}`} />
+                  </button>
+                </label>
+                <div className="flex items-center gap-1">
+                  <span className="text-[8px] text-cyan-600 dark:text-cyan-400">{(oxygenMinChangeRatio * 100).toFixed(0)}%</span>
+                  <input type="range" min="0.2" max="0.8" step="0.05" value={oxygenMinChangeRatio}
+                    onChange={(e) => setOxygenMinChangeRatio(parseFloat(e.target.value))}
+                    title="Threshold" aria-label="Oxygen threshold"
+                    className="w-12 h-1 bg-cyan-200 dark:bg-cyan-900/50 rounded appearance-none cursor-pointer accent-cyan-600" />
+                </div>
+                <div className="flex items-center gap-1">
+                  <span className="text-[8px] text-cyan-600 dark:text-cyan-400">×{oxygenMaxRetries}</span>
+                  <input type="range" min="1" max="15" step="1" value={oxygenMaxRetries}
+                    onChange={(e) => setOxygenMaxRetries(parseInt(e.target.value))}
+                    title="Retries" aria-label="Oxygen retries"
+                    className="w-12 h-1 bg-cyan-200 dark:bg-cyan-900/50 rounded appearance-none cursor-pointer accent-cyan-600" />
+                </div>
+              </>
+            )}
+          </div>
         </div>
       </div>
-
-      {/* Compact Engine-Specific Controls (inline) */}
-      {engine === 'easy' && (
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 px-1">
-          <label className="flex items-center gap-1.5 cursor-pointer">
-            <span className="text-[9px] font-semibold text-slate-500 dark:text-zinc-500">Sentence-by-Sentence</span>
-            <button
-              onClick={() => setEasySentenceBySentence(!easySentenceBySentence)}
-              className={`relative inline-flex h-4 w-7 items-center rounded-full transition-colors ${
-                easySentenceBySentence ? 'bg-cyan-500 dark:bg-cyan-600' : 'bg-slate-300 dark:bg-zinc-700'
-              }`}
-            >
-              <span className={`inline-block h-2.5 w-2.5 transform rounded-full bg-white transition-transform ${
-                easySentenceBySentence ? 'translate-x-3.5' : 'translate-x-0.5'
-              }`} />
-            </button>
-          </label>
-        </div>
-      )}
-      {strength === 'strong' && (
-        <div className="flex items-center gap-1.5 px-1">
-          <AlertTriangle className="w-2.5 h-2.5 text-amber-500 shrink-0" />
-          <p className="text-[9px] text-amber-600 dark:text-amber-400"><span className="font-bold">Strong:</span> Prioritizes detection bypass over meaning</p>
-        </div>
-      )}
-      {mode === 'detection_control' && (
-        <div className="flex items-start gap-2 px-3 py-2 bg-orange-50 dark:bg-orange-950/30 border border-orange-200 dark:border-orange-800/40 rounded-lg mx-1">
-          <span className="text-orange-500 dark:text-orange-400 text-xs mt-0.5">⚡</span>
-          <div>
-            <p className="text-[10px] font-bold text-orange-700 dark:text-orange-300">Detection Control — Tuned to Beat AI Detectors</p>
-            <p className="text-[9px] text-orange-600/80 dark:text-orange-200/70 leading-relaxed mt-0.5">Use <span className="font-semibold text-orange-600 dark:text-orange-200">Oxygen</span>, <span className="font-semibold text-orange-600 dark:text-orange-200">Humarin</span>, <span className="font-semibold text-orange-600 dark:text-orange-200">Nuru</span>, or <span className="font-semibold text-orange-600 dark:text-orange-200">Ghost</span> for precision suppression.</p>
-          </div>
-        </div>
-      )}
-      {mode === 'core_engines' && (
-        <div className="flex items-start gap-2 px-3 py-2 bg-teal-50 dark:bg-teal-950/30 border border-teal-200 dark:border-teal-800/40 rounded-lg mx-1">
-          <span className="text-teal-500 dark:text-teal-400 text-xs mt-0.5">🟢</span>
-          <div>
-            <p className="text-[10px] font-bold text-teal-700 dark:text-teal-300">Core Engines — Fast & Balanced</p>
-            <p className="text-[9px] text-teal-600/80 dark:text-teal-200/70 leading-relaxed mt-0.5">Everyday use. <span className="font-semibold text-teal-600 dark:text-teal-200">Nova</span> for fast rewrites, <span className="font-semibold text-teal-600 dark:text-teal-200">Ninja</span> for deep LLM stealth.</p>
-          </div>
-        </div>
-      )}
-      {mode === 'advanced_engines' && !autoModelEnabled && (
-        <div className="flex items-start gap-2 px-3 py-2 bg-fuchsia-50 dark:bg-fuchsia-950/30 border border-fuchsia-200 dark:border-fuchsia-800/40 rounded-lg mx-1">
-          <span className="text-fuchsia-500 dark:text-fuchsia-300 text-xs mt-0.5">🔴</span>
-          <div>
-            <p className="text-[10px] font-bold text-fuchsia-700 dark:text-fuchsia-200">Advanced Engines — Maximum Transformation</p>
-            <p className="text-[9px] text-fuchsia-600/80 dark:text-fuchsia-100/70 leading-relaxed mt-0.5">Multi-pass pipelines for the deepest AI signal destruction.</p>
-          </div>
-        </div>
-      )}
-      {autoModelEnabled && (
-        <div className={`flex items-start gap-2 px-3 py-2 rounded-lg mx-1 border ${autoGlowClass} auto-glow-btn border-transparent`}
-          style={{ background: 'linear-gradient(135deg, color-mix(in srgb, var(--auto-glow, #ef4444) 8%, transparent), color-mix(in srgb, var(--auto-glow, #ef4444) 4%, transparent))' }}>
-          <span className={`text-xs mt-0.5 ${autoGlowClass} auto-glow-text`}>⚡</span>
-          <div>
-            <p className={`text-[10px] font-bold ${autoGlowClass} auto-glow-text`}>Auto Model — Intelligent AI Analysis Active</p>
-            <p className="text-[9px] text-slate-600/80 dark:text-zinc-300/70 leading-relaxed mt-0.5">
-              Analyzes your text, selects the best engines, runs Phantom + Nuru 2.0, and loops until AI score drops below 20%. Toggle back to Normal to disable.
-            </p>
-          </div>
-        </div>
-      )}
 
       {/* Word Count Warnings */}
       {inputWords > MAX_WORDS_PER_REQUEST && (
@@ -1674,52 +1661,6 @@ function EditorPageInner() {
         <div className="flex items-center gap-1.5 px-1">
           <span className="text-blue-400 text-[9px]">💡</span>
           <p className="text-[9px] text-blue-400">Best results with {RECOMMENDED_MIN_WORDS}–{RECOMMENDED_MAX_WORDS.toLocaleString()} words. You have {inputWords.toLocaleString()}.</p>
-        </div>
-      )}
-
-      {/* Oxygen Advanced Controls (Inline) */}
-      {engine === 'oxygen' && (
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-1">
-          <div className="flex items-center gap-1.5">
-            <span className="text-[9px] font-bold text-cyan-600 dark:text-cyan-400 uppercase">Pipeline</span>
-            <div className="flex gap-1">
-              {[
-                { id: 'quality', label: 'Quality' },
-                { id: 'fast', label: 'Fast' },
-                { id: 'aggressive', label: 'Aggressive' },
-              ].map(mode => (
-                <button key={mode.id} onClick={() => setOxygenMode(mode.id as typeof oxygenMode)}
-                  className={`px-2 py-0.5 rounded text-[9px] font-semibold transition-all ${
-                    oxygenMode === mode.id ? 'bg-cyan-600 text-white' : 'bg-slate-100 dark:bg-zinc-800/60 text-slate-500 dark:text-zinc-500 hover:text-slate-700 dark:hover:text-zinc-300'
-                  }`}>{mode.label}</button>
-              ))}
-            </div>
-          </div>
-          <div className="w-px h-3 bg-slate-200 dark:bg-zinc-800" />
-          <label className="flex items-center gap-1.5 cursor-pointer">
-            <span className="text-[9px] font-semibold text-slate-500 dark:text-zinc-500">Sentence</span>
-            <button onClick={() => setOxygenSentenceBySentence(!oxygenSentenceBySentence)}
-              className={`relative inline-flex h-4 w-7 items-center rounded-full transition-colors ${oxygenSentenceBySentence ? 'bg-cyan-600' : 'bg-slate-300 dark:bg-zinc-700'}`}>
-              <span className={`inline-block h-2.5 w-2.5 transform rounded-full bg-white transition-transform ${oxygenSentenceBySentence ? 'translate-x-3.5' : 'translate-x-0.5'}`} />
-            </button>
-          </label>
-          <div className="w-px h-3 bg-slate-200 dark:bg-zinc-800" />
-          <div className="flex items-center gap-2">
-            <span className="text-[9px] text-cyan-600 dark:text-cyan-400">Threshold <span className="font-bold">{(oxygenMinChangeRatio * 100).toFixed(0)}%</span></span>
-            <input type="range" min="0.2" max="0.8" step="0.05" value={oxygenMinChangeRatio}
-              onChange={(e) => setOxygenMinChangeRatio(parseFloat(e.target.value))}
-              title="Oxygen threshold"
-              aria-label="Oxygen threshold"
-              className="w-16 h-1 bg-cyan-200 dark:bg-cyan-900/50 rounded appearance-none cursor-pointer accent-cyan-600" />
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="text-[9px] text-cyan-600 dark:text-cyan-400">Retries <span className="font-bold">{oxygenMaxRetries}</span></span>
-            <input type="range" min="1" max="15" step="1" value={oxygenMaxRetries}
-              onChange={(e) => setOxygenMaxRetries(parseInt(e.target.value))}
-              title="Oxygen retries"
-              aria-label="Oxygen retries"
-              className="w-16 h-1 bg-cyan-200 dark:bg-cyan-900/50 rounded appearance-none cursor-pointer accent-cyan-600" />
-          </div>
         </div>
       )}
 
