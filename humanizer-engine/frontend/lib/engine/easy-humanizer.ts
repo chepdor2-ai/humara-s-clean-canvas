@@ -5,7 +5,28 @@
  * Supports sentence-by-sentence concurrent processing.
  */
 
+import { protectSpecialContent, restoreSpecialContent, type ProtectionMap } from './content-protection';
+
 const EASY_API_BASE = 'https://www.essaywritingsupport.com/api/v1';
+
+/**
+ * Post-clean output from the EssayWritingSupport API.
+ * Fixes common issues: double dots, repeated words, spacing.
+ */
+function postCleanEasyOutput(text: string): string {
+  let result = text;
+  // Fix double/triple dots
+  result = result.replace(/\.{2,}/g, '.');
+  // Fix repeated words ("the the", "is is")
+  result = result.replace(/\b(\w+)\s+\1\b/gi, '$1');
+  // Fix spacing issues
+  result = result.replace(/\s{2,}/g, ' ');
+  result = result.replace(/\s+([.,;:!?])/g, '$1');
+  // Fix AI capitalization
+  result = result.replace(/\bAi\b/g, 'AI');
+  result = result.replace(/\bai\b/g, 'AI');
+  return result;
+}
 
 // Map internal strength to API aggressiveness (1–10)
 function mapAggressiveness(strength: string): number {
@@ -169,11 +190,14 @@ export async function easyHumanize(
 
   try {
   if (!sentenceBySentence) {
-    // Whole-paper mode: single API call
-    const data = await callEasyAPI(text, apiKey, strength, tone);
+    // Whole-paper mode: single API call with content protection
+    const { text: protectedText, map: protectionMap } = protectSpecialContent(text);
+    const data = await callEasyAPI(protectedText, apiKey, strength, tone);
+    let output = restoreSpecialContent(data.data.output, protectionMap);
+    output = postCleanEasyOutput(output);
 
     return {
-      humanized: data.data.output,
+      humanized: output,
       inputWords: data.data.input_words,
       outputWords: data.data.output_words,
       processingTimeMs: data.meta?.processing_time_ms ?? 0,
@@ -184,7 +208,9 @@ export async function easyHumanize(
   }
 
   // Sentence-by-sentence mode: concurrent processing, preserving titles/paragraphs
-  const segments = segmentText(text);
+  // Protect special content (numbers, brackets, citations) BEFORE segmenting
+  const { text: protectedText, map: protectionMap } = protectSpecialContent(text);
+  const segments = segmentText(protectedText);
   const sentenceSegments = segments.filter(seg => seg.type === 'sentence');
 
   const BATCH_SIZE = 10;
@@ -217,7 +243,10 @@ export async function easyHumanize(
     }
   }
 
-  const humanized = reassembleSegments(segments);
+  let humanized = reassembleSegments(segments);
+  // Restore protected content and clean up output
+  humanized = restoreSpecialContent(humanized, protectionMap);
+  humanized = postCleanEasyOutput(humanized);
 
   return {
     humanized,

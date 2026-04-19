@@ -1,4 +1,4 @@
-import { robustSentenceSplit } from '@/lib/engine/content-protection';
+import { robustSentenceSplit, protectSpecialContent, restoreSpecialContent, type ProtectionMap } from '@/lib/engine/content-protection';
 import { getDetector, TextSignals } from '@/lib/engine/multi-detector';
 import { isMeaningPreserved, isMeaningPreservedSync } from '@/lib/engine/semantic-guard';
 import { fixCapitalization, applyPhrasePatterns, fixPunctuation, expandAllContractions } from '@/lib/engine/shared-dictionaries';
@@ -48,8 +48,12 @@ export const maxDuration = 300;
 //   → final result with scores
 
 function sendSSE(controller: ReadableStreamDefaultController, data: unknown) {
-  const encoder = new TextEncoder();
-  controller.enqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`));
+  try {
+    const encoder = new TextEncoder();
+    controller.enqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`));
+  } catch {
+    // Controller already closed — deadline timer or client disconnect
+  }
 }
 
 /** Small delay to allow the stream to flush so the browser can render intermediate states */
@@ -1030,6 +1034,20 @@ export async function POST(req: Request) {
             const phaseStart = Date.now();
             const currentSentences = [...sentenceResults];
 
+            // ── Pipeline-level content protection ──────────────────────
+            // Protect numbers, brackets, citations, quoted terms, underscore
+            // variables, etc. BEFORE any phase processing.  This prevents
+            // LLM restructuring and rule-based transforms from mangling
+            // figures like 52,446 or parenthetical content like (EDA).
+            // The placeholders (⟦PROTn⟧) survive through all phases and
+            // are restored after the pipeline completes.
+            const pipelineProtectionMap: ProtectionMap = new Map();
+            for (let i = 0; i < currentSentences.length; i++) {
+              const { text: protectedSent, map: sentMap } = protectSpecialContent(currentSentences[i]);
+              currentSentences[i] = protectedSent;
+              for (const [k, v] of sentMap) pipelineProtectionMap.set(k, v);
+            }
+
             // Phase definitions per engine
             type PhaseSpec =
               | { name: string; type: 'emit' }
@@ -1352,6 +1370,8 @@ export async function POST(req: Request) {
             }
             // Restore paragraph/heading structure after all phases complete
             humanized = preserveInputStructure(normalizedText, humanized);
+            // Restore pipeline-level protected content (numbers, brackets, citations)
+            humanized = restoreSpecialContent(humanized, pipelineProtectionMap);
             latestHumanized = humanized;
             console.log(`[Pipeline] Complete: ${humanized.split(/\s+/).length} words in ${Date.now() - phaseStart}ms`);
           }
@@ -1953,6 +1973,38 @@ export async function POST(req: Request) {
             for (const [_dRe, _dRep] of ALWAYS_CAP_DEMONYMS) {
               humanized = humanized.replace(_dRe, _dRep);
             }
+          }
+
+          // ── FINAL SAFETY-NET CLEANUP ───────────────────────────────
+          // Catches residual mangling artifacts from the multi-pass pipeline:
+          // double-dot, period-comma, split numbers, orphan punctuation.
+          if (eng !== 'ai_analysis') {
+            // Fix period-comma artifacts: "services., for" → "services, for"
+            humanized = humanized.replace(/\.\s*,/g, ',');
+            // Fix double periods: "services.." → "services."
+            humanized = humanized.replace(/\.{2,}/g, '.');
+            // Fix comma-period: ",." → "."
+            humanized = humanized.replace(/,\s*\./g, '.');
+            // Fix space before comma/period: "word , next" → "word, next"
+            humanized = humanized.replace(/\s+([,.])/g, '$1');
+            // Fix comma-separated numbers that got a space inserted: "52, 446" → "52,446"
+            // Only when both parts look like number fragments (not "in 2019, 446 students")
+            humanized = humanized.replace(/\b(\d{1,3}),\s+(\d{3})\b/g, (match, p1, p2, offset, str) => {
+              // Check the char AFTER the 3-digit group — if it's followed by another
+              // 3-digit comma group or end of number context, rejoin
+              const after = str.slice(offset + match.length);
+              const isCommaNumber = /^(?:,\d{3}|\b)/.test(after);
+              // Check the char BEFORE — should not be preceded by a year-like pattern
+              const before = str.slice(Math.max(0, offset - 5), offset);
+              const isAfterYear = /\b\d{4}\b/.test(before);
+              if (isCommaNumber && !isAfterYear) return `${p1},${p2}`;
+              return match;
+            });
+            // Fix stray closing parenthesis in numbers: "52) 446" → "52,446"
+            humanized = humanized.replace(/\b(\d{1,3})\)\s*(\d{3})\b/g, '$1,$2');
+            // Clean leftover protection placeholders that weren't restored
+            humanized = humanized.replace(/\u27E6\s*PROT\d+\s*\u27E7/gi, '');
+            humanized = humanized.replace(/XPROT\d+X/g, '');
           }
 
           // ── OUTPUT SIZE MONITORING ──────────────────────────────────

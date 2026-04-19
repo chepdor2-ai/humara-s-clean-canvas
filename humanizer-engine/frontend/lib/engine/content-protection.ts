@@ -40,7 +40,14 @@ const PROTECTION_PATTERNS: RegExp[] = [
   /\b\d+(?:,\d{3})+\b/g,                                  // large numbers with commas: 1,234,567
   /\b\d+-[a-zA-Z]+(?:-[a-zA-Z]+)*\b/g,                    // number-word compounds: 360-degree, 24-hour
 
-  // ── Phase 8: Standalone decimals (LAST — catches any remaining X.Y not already protected) ──
+  // ── Phase 8: Underscore variables ──
+  /\b[a-zA-Z]+(?:_[a-zA-Z]+)+\b/g,                        // underscore variables: traffic_source, traffic_channel
+
+  // ── Phase 9: Quoted terms ──
+  /\u201C[^\u201D]+\u201D/g,                               // smart-quoted: "organic"
+  /"[^"]+"/g,                                              // straight-quoted: "organic"
+
+  // ── Phase 10: Standalone decimals (LAST — catches any remaining X.Y not already protected) ──
   /\b\d+\.\d+\b/g,                                        // standalone decimals: 0.53, 2.5, 3.14
 ];
 

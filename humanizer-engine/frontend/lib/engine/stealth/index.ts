@@ -262,6 +262,15 @@ const PROTECTED = new Set([
   'focus', 'focused', 'focusing',
   'provide', 'provides', 'provided', 'providing',
   'concerns', 'concern', 'create', 'creates', 'created',
+  // Analytics/data/financial domain terms
+  'traffic', 'organic', 'conversion', 'engagement', 'metrics',
+  'revenue', 'acquisition', 'channel', 'channels', 'dataset',
+  'records', 'variables', 'variable', 'column', 'columns',
+  'source', 'sources', 'referral', 'navigation', 'search',
+  'optimization', 'keyword', 'keywords', 'visibility',
+  'marketing', 'advertisers', 'advertising', 'expenditure',
+  'credibility', 'personalization', 'leads', 'qualified',
+  'sustainable', 'actionable',
 ]);
 
 /* ── Helper: check if a token is a proper noun (capitalized, non-sentence-start) ── */
@@ -390,6 +399,18 @@ const REPLACEMENT_BLACKLIST = new Set([
   'latest', // causes "more latest" double comparative
   'built', // wrong sense for "emerged/established"
   'raiss', 'holmed', 'poss', // known garbled morphology outputs
+  // Meaning-distorting synonyms found in testing
+  'critique', 'critiques', // wrong sense for "analysis" (implies negative review)
+  'confronting', 'confront', 'confronted', // wrong for "handling" (too aggressive)
+  'arrangement', 'arrangements', // wrong for "organization" (means layout, not company)
+  'fortify', 'fortified', 'fortifying', // wrong register for academic "strengthen"
+  'appreciate', // wrong for "understand" in technical context (means value, not comprehend)
+  'employs', 'employ', 'employed', // overused replacement, creates repetition
+  'locate', 'locating', // wrong for "identify" in analytical context
+  'cover', 'covering', 'covers', // wrong for "contain" / "include" (too casual)
+  'chief', // wrong for "main"/"primary" (old-fashioned for academic text)
+  'tackle', 'tackling', 'tackled', // too informal for academic
+  'oversee', 'overseeing', 'oversaw', // wrong sense for "handle"
 ]);
 
 /* ── Stopwords (skip for synonym replacement) ─────────────────────── */
@@ -444,7 +465,7 @@ const EXTRA_REPLACEMENTS: Record<string, string[]> = {
   opportunity: ['prospect', 'opening', 'possibility', 'occasion'],
   community: ['group', 'network', 'collective', 'population'],
   individual: ['particular', 'distinct', 'specific', 'separate'],
-  organization: ['structure', 'arrangement', 'framework', 'body'],
+  organization: ['institution', 'entity', 'company', 'firm'],
   program: ['initiative', 'plan', 'project', 'effort'],
   activity: ['task', 'endeavor', 'undertaking', 'pursuit'],
   improvement: ['enhancement', 'advancement', 'refinement', 'gain'],
@@ -465,7 +486,7 @@ const EXTRA_REPLACEMENTS: Record<string, string[]> = {
   present: ['introduce', 'pose', 'show', 'display'],
   revolutionize: ['overhaul', 'reshape', 'redefine', 'modernize'],
   acknowledge: ['recognize', 'accept', 'concede', 'admit'],
-  identify: ['detect', 'recognize', 'locate', 'determine'],
+  identify: ['detect', 'recognize', 'pinpoint', 'determine'],
   // ── More academic nouns that WordNet garbles ──
   care: ['treatment', 'attention', 'support', 'service'],
   setting: ['context', 'environment', 'domain', 'space'],
@@ -491,7 +512,7 @@ const EXTRA_REPLACEMENTS: Record<string, string[]> = {
   neglect: ['overlook', 'disregard', 'ignore', 'abandon'],
   neglected: ['overlooked', 'disregarded', 'ignored', 'abandoned'],
   previously: ['formerly', 'earlier', 'once', 'before'],
-  especially: ['particularly', 'notably', 'specifically', 'chiefly'],
+  especially: ['particularly', 'notably', 'specifically', 'mainly'],
   decline: ['decrease', 'reduction', 'drop', 'downturn'],
   poverty: ['deprivation', 'hardship', 'destitution', 'disadvantage'],
   wealth: ['prosperity', 'affluence', 'fortune', 'riches'],
@@ -545,7 +566,7 @@ const EXTRA_REPLACEMENTS: Record<string, string[]> = {
   traditional: ['conventional', 'established', 'classical', 'customary'],
   fundamental: ['core', 'basic', 'essential', 'primary'],
   substantial: ['considerable', 'meaningful', 'sizable', 'large'],
-  primary: ['chief', 'main', 'principal', 'foremost'],
+  primary: ['main', 'leading', 'principal', 'foremost'],
   critical: ['vital', 'pivotal', 'essential', 'crucial'],
   comprehensive: ['thorough', 'complete', 'extensive', 'wide-ranging'],
   increasing: ['growing', 'rising', 'expanding', 'mounting'],
@@ -570,7 +591,7 @@ const EXTRA_REPLACEMENTS: Record<string, string[]> = {
   relevant: ['pertinent', 'applicable', 'fitting', 'suitable'],
   clear: ['definite', 'distinct', 'apparent', 'evident'],
   broad: ['wide', 'expansive', 'general', 'sweeping'],
-  main: ['chief', 'principal', 'primary', 'leading'],
+  main: ['central', 'principal', 'primary', 'leading'],
   key: ['central', 'vital', 'crucial', 'essential'],
   certain: ['particular', 'definite', 'precise', 'specified'],
   strong: ['robust', 'powerful', 'solid', 'firm'],
@@ -592,7 +613,7 @@ const EXTRA_REPLACEMENTS: Record<string, string[]> = {
   entire: ['whole', 'complete', 'full', 'total'],
   obvious: ['clear', 'apparent', 'plain', 'evident'],
   recent: ['new', 'current', 'fresh'],
-  major: ['chief', 'principal', 'leading', 'primary'],
+  major: ['significant', 'principal', 'leading', 'primary'],
   numerous: ['many', 'several', 'multiple', 'abundant'],
   distinct: ['separate', 'unique', 'individual', 'different'],
   ongoing: ['continuing', 'persistent', 'sustained', 'active'],
@@ -619,7 +640,7 @@ const EXTRA_REPLACEMENTS: Record<string, string[]> = {
   augment: ['supplement', 'expand', 'bolster', 'strengthen'],
   replace: ['substitute', 'displace', 'supplant', 'swap'],
   struggle: ['grapple', 'contend', 'wrestle', 'strain'],
-  handle: ['manage', 'address', 'tackle', 'oversee'],
+  handle: ['manage', 'address', 'deal with', 'process'],
   guide: ['steer', 'direct', 'lead', 'channel'],
   prompt: ['motivate', 'spur', 'encourage', 'push'],
   raise: ['pose', 'introduce', 'spark', 'bring'],
@@ -635,10 +656,10 @@ const EXTRA_REPLACEMENTS: Record<string, string[]> = {
   perpetuate: ['sustain', 'prolong', 'continue', 'maintain'],
   amplify: ['intensify', 'magnify', 'heighten', 'increase'],
   combine: ['unite', 'merge', 'blend', 'fuse'],
-  address: ['tackle', 'confront', 'resolve', 'manage'],
+  address: ['resolve', 'manage', 'deal with', 'work through'],
   assist: ['aid', 'support', 'help', 'facilitate'],
   help: ['aid', 'assist', 'support', 'enable'],
-  understand: ['grasp', 'comprehend', 'appreciate', 'recognize'],
+  understand: ['grasp', 'comprehend', 'recognize', 'follow'],
   discuss: ['examine', 'explore', 'consider', 'cover'],
   describe: ['depict', 'portray', 'outline', 'detail'],
   illustrate: ['show', 'demonstrate', 'highlight', 'display'],
@@ -676,7 +697,7 @@ const EXTRA_REPLACEMENTS: Record<string, string[]> = {
   tackle: ['address', 'confront', 'handle', 'deal'],
   undermine: ['weaken', 'erode', 'damage', 'compromise'],
   foster: ['promote', 'cultivate', 'nurture', 'support'],
-  strengthen: ['fortify', 'reinforce', 'bolster', 'enhance'],
+  strengthen: ['reinforce', 'bolster', 'improve', 'enhance'],
   lean: ['rely', 'depend', 'rest', 'count'],
   // ── Nouns ──
   rise: ['growth', 'surge', 'expansion', 'climb'],
@@ -720,7 +741,7 @@ const EXTRA_REPLACEMENTS: Record<string, string[]> = {
   barrier: ['obstacle', 'impediment', 'hurdle', 'hindrance'],
   analyst: ['examiner', 'evaluator', 'reviewer', 'assessor'],
   capacity: ['capability', 'ability', 'competence', 'aptitude'],
-  review: ['assessment', 'evaluation', 'critique', 'appraisal'],
+  review: ['assessment', 'evaluation', 'examination', 'appraisal'],
   assessment: ['evaluation', 'review', 'appraisal', 'analysis'],
   position: ['role', 'place', 'standing', 'status'],
   discipline: ['field', 'domain', 'branch', 'specialty'],
@@ -765,7 +786,7 @@ const EXTRA_REPLACEMENTS: Record<string, string[]> = {
   particularly: ['especially', 'specifically', 'notably', 'chiefly'],
   effectively: ['efficiently', 'capably', 'productively', 'successfully'],
   increasingly: ['progressively', 'steadily', 'gradually', 'continually'],
-  primarily: ['mainly', 'chiefly', 'largely', 'mostly'],
+  primarily: ['mainly', 'largely', 'mostly', 'predominantly'],
   directly: ['immediately', 'straight', 'squarely', 'firsthand'],
   often: ['frequently', 'regularly', 'commonly', 'routinely'],
   thereby: ['thus', 'consequently', 'hence', 'accordingly'],
@@ -1089,12 +1110,18 @@ function applySentenceRestructuring(sentence: string, strategy: number): string 
   }
 
   // Strategy 1: Clause reorder (move prepositional phrase to front)
+  // Only reorder when the main clause is a complete independent thought
+  // to prevent orphaning fragments or creating meaningless sentences.
   if (strategy === 1 || strategy === 3) {
     const ppMatch = text.match(/^(.{20,}?)\s+((?:in|on|at|for|through|during|within|across|by|under|over|between|among|after|before|since|until|without)\s+[^,]+)[.!?]?\s*$/i);
     if (ppMatch && ppMatch[2].split(/\s+/).length >= 3 && ppMatch[2].split(/\s+/).length <= 10) {
       const pp = ppMatch[2].trim();
       const rest = ppMatch[1].trim().replace(/[,.]$/, '');
-      text = pp.charAt(0).toUpperCase() + pp.slice(1) + ', ' + rest.charAt(0).toLowerCase() + rest.slice(1) + '.';
+      // Only reorder if rest is a complete clause (has subject + verb + 5+ words)
+      // and the PP doesn't contain sentence-ending punctuation
+      if (isIndependentClause(rest) && !/[.!?]/.test(pp)) {
+        text = pp.charAt(0).toUpperCase() + pp.slice(1) + ', ' + rest.charAt(0).toLowerCase() + rest.slice(1) + '.';
+      }
     }
   }
 
@@ -1109,15 +1136,11 @@ function applySentenceRestructuring(sentence: string, strategy: number): string 
     }
   }
 
-  // Strategy 3: Break parallel structures ("X, Y, and Z" → "X and Y. Z also...")
-  if (strategy === 3) {
-    const tripleList = text.match(/\b(\w[\w\s]+?),\s+(\w[\w\s]+?),?\s+and\s+(\w[\w\s]+?)([.!?])\s*$/i);
-    if (tripleList) {
-      const [fullMatch, item1, item2, item3, punct] = tripleList;
-      const prefix = text.slice(0, text.indexOf(fullMatch));
-      text = prefix + item1.trim() + ' and ' + item2.trim() + punct + ' ' + item3.trim().charAt(0).toUpperCase() + item3.trim().slice(1) + ' also applies' + punct;
-    }
-  }
+  // Strategy 3: Break parallel structures — DISABLED
+  // This was producing garbled output like "also uses also employs also applies"
+  // and mangling numbers (52,446 → "52 and 446"). Parallel structure breaking
+  // requires deep syntactic understanding that regex cannot provide safely.
+  // if (strategy === 3) { ... }
 
   // Strategy 4: Connector disruption (strip or downgrade formal connectors)
   if (strategy >= 2) {
@@ -1283,13 +1306,58 @@ function processSentence(
   // Normalize em-dashes and en-dashes to spaced hyphens so tokenizer handles them
   let text = sentence.replace(/\u2014/g, ' \u2014 ').replace(/\u2013/g, ' \u2013 ').replace(/  +/g, ' ');
 
-  // Protect abbreviations like D.C., U.S., U.K., U.S.A. from being mangled
-  const abbrevMap: Record<string, string> = {};
-  let abbrevIdx = 0;
+  // ─── Protection: shield numbers, brackets, abbreviations from mangling ───
+  const protectionMap: Record<string, string> = {};
+  let protIdx = 0;
+
+  // Protect abbreviations like D.C., U.S., U.K., U.S.A.
   text = text.replace(/\b(?:[A-Z]\.){2,}/g, (m) => {
-    const placeholder = `ABBR_${abbrevIdx++}_XQ`;
-    abbrevMap[placeholder] = m;
-    return placeholder;
+    const ph = `XPROT${protIdx++}X`;
+    protectionMap[ph] = m;
+    return ph;
+  });
+
+  // Protect numbers with commas/decimals (e.g. 52,446 or 3.14 or 18,732)
+  text = text.replace(/\b\d[\d,]+(?:\.\d+)?\b/g, (m) => {
+    const ph = `XPROT${protIdx++}X`;
+    protectionMap[ph] = m;
+    return ph;
+  });
+
+  // Protect percentages (e.g. 35.7%, 100%)
+  text = text.replace(/\b\d+(?:\.\d+)?%/g, (m) => {
+    const ph = `XPROT${protIdx++}X`;
+    protectionMap[ph] = m;
+    return ph;
+  });
+
+  // Protect parenthetical abbreviation definitions: "word (ABBR)" or "phrase (abbr)"
+  // e.g. "exploratory data analysis (EDA)" → protect "(EDA)"
+  text = text.replace(/\(([A-Z]{2,}[a-z]?)\)/g, (m) => {
+    const ph = `XPROT${protIdx++}X`;
+    protectionMap[ph] = m;
+    return ph;
+  });
+
+  // Protect in-text citations: "(Author, Year)" or "(Author & Author, Year)"
+  text = text.replace(/\([A-Z][a-z]+(?:\s+(?:and|&)\s+[A-Z][a-z]+)?,?\s*\d{4}(?:[a-z])?\)/g, (m) => {
+    const ph = `XPROT${protIdx++}X`;
+    protectionMap[ph] = m;
+    return ph;
+  });
+
+  // Protect quoted terms: "organic", "Organic", "ORG"
+  text = text.replace(/[\u201C\u201D"](.*?)[\u201C\u201D"]/g, (m) => {
+    const ph = `XPROT${protIdx++}X`;
+    protectionMap[ph] = m;
+    return ph;
+  });
+
+  // Protect variable names with underscores: traffic_source, traffic_channel
+  text = text.replace(/\b[a-z]+_[a-z_]+\b/gi, (m) => {
+    const ph = `XPROT${protIdx++}X`;
+    protectionMap[ph] = m;
+    return ph;
   });
 
   // ─── Step 0.5: Sentence-level restructuring ─────────────────
@@ -1601,10 +1669,18 @@ function processSentence(
     text = text.charAt(0).toUpperCase() + text.slice(1);
   }
 
-  // Restore protected abbreviations (BEFORE quality gate so overlap calc is accurate)
-  for (const [placeholder, abbrev] of Object.entries(abbrevMap)) {
-    text = text.replace(new RegExp(placeholder, 'g'), abbrev);
+  // Restore ALL protected tokens (numbers, brackets, abbreviations, citations, quotes)
+  for (const [placeholder, original_text] of Object.entries(protectionMap)) {
+    text = text.replace(new RegExp(placeholder, 'g'), original_text);
   }
+
+  // ─── Fix double/triple dots (e.g. "services..." → "services.") ───
+  text = text.replace(/\.{2,}/g, '.');
+
+  // ─── Fix repeated words/phrases ("also uses also uses also employs") ───
+  // Catch repeated 1-3 word phrases
+  text = text.replace(/\b(\w+(?:\s+\w+){0,2})\s+(?:also\s+)?\1\b/gi, '$1');
+  text = text.replace(/\b(also\s+\w+)\s+also\s+/gi, '$1 ');
 
   // ─── Step 9: Quality gate ──────────────────────────────────
   // Disabled: with curated-only replacements, lexical overlap is
@@ -1726,6 +1802,16 @@ export function stealthHumanize(
   let result = outputParagraphs.join('\n\n');
   result = result.replace(/\bAi\b/g, 'AI');
   result = result.replace(/\bai\b/g, 'AI');
+
+  // Fix double/triple dots across entire output
+  result = result.replace(/\.{2,}/g, '.');
+
+  // Fix repeated word/phrase patterns across entire output
+  result = result.replace(/\b(\w+)\s+\1\b/gi, '$1');
+
+  // Fix spacing issues
+  result = result.replace(/\s{2,}/g, ' ');
+  result = result.replace(/\s+([.,;:!?])/g, '$1');
   
   // Independent detector specific deep cleaning phases
   result = runFullDetectorForensicsCleanup(result);
