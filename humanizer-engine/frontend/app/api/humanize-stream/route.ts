@@ -747,6 +747,19 @@ export async function POST(req: Request) {
               // Phase 3: Intelligent engine selection — minimum processing for maximum impact
               // The goal is to get the LOWEST score without over-processing.
               // Key principle: only add engines that target the specific signals detected.
+              const { antiPangramSimple: autoApg } = await import('@/lib/engine/antipangram');
+              const autoTone: 'academic' | 'professional' | 'casual' | 'neutral' =
+                tone === 'academic' || tone === 'professional' || tone === 'casual' ? tone : 'neutral';
+              const autoStrength: 'light' | 'medium' | 'strong' =
+                strength === 'light' || strength === 'medium' || strength === 'strong' ? strength : 'strong';
+              const runAutoOfflinePass = (
+                input: string,
+                passStrength: 'light' | 'medium' | 'strong' = 'medium',
+              ): string => {
+                const oxygenPass = runHumara20(input);
+                return autoApg(oxygenPass, passStrength, autoTone);
+              };
+
               let stage1Result: string;
 
               if (topAvg <= 15) {
@@ -758,72 +771,60 @@ export async function POST(req: Request) {
                 // Low-medium AI — single targeted engine based on which signals are elevated
                 sendSSE(controller, { type: 'stage', stage: 'AI Analysis: Running Targeted Single Engine' });
                 await flushDelay(10);
-                if (patScore > 55) {
-                  // Pattern-heavy → Humara 2.0 is best for breaking AI patterns (non-LLM, instant)
-                  stage1Result = runHumara20(normalizedText);
+                if (patScore > 55 || sentUnif > 55) {
+                  // Pattern-heavy output benefits from an offline two-step break + forensic pass.
+                  stage1Result = runAutoOfflinePass(normalizedText, 'strong');
                 } else if (vocabRich > 55) {
-                  // Vocabulary too predictable → AntiPangram forensic rewrite
-                  const { antiPangramSimple: apgLight } = await import('@/lib/engine/antipangram');
-                  stage1Result = apgLight(normalizedText, 'medium' as any, (tone ?? 'academic') as any);
+                  stage1Result = runAutoOfflinePass(normalizedText, 'medium');
                 } else {
                   // General signals → Humara 2.0 safe bet
                   stage1Result = runHumara20(normalizedText);
                 }
               } else if (topAvg <= 60) {
-                // Medium AI — single engine based on topic, followed by Phantom
-                const topicSingleMap: Record<string, () => Promise<string> | string> = {
+                // Medium AI — topic-aware offline single pass
+                const topicSingleMap: Record<string, () => string> = {
                   technology: () => runHumara20(normalizedText),
-                  science: async () => (await runHumara24(normalizedText)),
-                  health: async () => (await runHumara24(normalizedText)),
-                  education: async () => (await runHumara22(normalizedText)),
+                  science: () => runAutoOfflinePass(normalizedText, 'medium'),
+                  health: () => runAutoOfflinePass(normalizedText, 'medium'),
+                  education: () => runAutoOfflinePass(normalizedText, 'medium'),
                   economics: () => runHumara20(normalizedText),
-                  politics: async () => (await runHumara24(normalizedText)),
-                  environment: async () => (await runHumara22(normalizedText)),
-                  society: async () => (await runHumara22(normalizedText)),
+                  politics: () => runHumara20(normalizedText),
+                  environment: () => runAutoOfflinePass(normalizedText, 'medium'),
+                  society: () => runAutoOfflinePass(normalizedText, 'medium'),
                 };
-                sendSSE(controller, { type: 'stage', stage: 'AI Analysis: Running Primary Engine' });
+                sendSSE(controller, { type: 'stage', stage: 'AI Analysis: Running Primary Offline Engine' });
                 await flushDelay(10);
-                stage1Result = await (topicSingleMap[primaryTopic] ?? topicSingleMap['technology']!)();
+                stage1Result = (topicSingleMap[primaryTopic] ?? topicSingleMap['technology']!)();
               } else {
-                // High AI (>60%) — double engine chain: pick best two based on topic + signals
+                // High AI (>60%) — double offline chain: pick best two based on topic + signals
                 sendSSE(controller, { type: 'stage', stage: 'AI Analysis: Running Stage 1 Engine' });
                 await flushDelay(10);
                 let s1: string;
-                // First pass: always use the fastest effective engine for the topic
                 if (sentUnif > 60 || patScore > 60) {
-                  // Uniform/patterned → break structure with Humara 2.0 first
-                  s1 = runHumara20(normalizedText);
+                  s1 = runAutoOfflinePass(normalizedText, 'strong');
                 } else {
-                  // General high AI → LLM rewrite for deep transformation
-                  s1 = await runHumara24(normalizedText);
+                  s1 = runHumara20(normalizedText);
                 }
                 sendSSE(controller, { type: 'stage', stage: 'AI Analysis: Running Stage 2 Engine' });
                 await flushDelay(10);
-                // Second pass: complement with a different engine targeting remaining signals
-                const topicSecondMap: Record<string, () => Promise<string> | string> = {
-                  technology: () => runHumara20(s1),
-                  science: async () => (await runHumara22(s1)),
-                  health: async () => (await runHumara22(s1)),
+                const topicSecondMap: Record<string, () => string> = {
+                  technology: () => runAutoOfflinePass(s1, 'medium'),
+                  science: () => runAutoOfflinePass(s1, 'strong'),
+                  health: () => runAutoOfflinePass(s1, 'strong'),
                   education: () => runHumara20(s1),
-                  economics: async () => (await runHumara22(s1)),
-                  politics: () => runHumara20(s1),
-                  environment: () => runHumara20(s1),
-                  society: async () => (await runHumara22(s1)),
+                  economics: () => runAutoOfflinePass(s1, 'strong'),
+                  politics: () => runAutoOfflinePass(s1, 'medium'),
+                  environment: () => runAutoOfflinePass(s1, 'medium'),
+                  society: () => runAutoOfflinePass(s1, 'strong'),
                 };
-                stage1Result = await (topicSecondMap[primaryTopic] ?? (() => runHumara20(s1)))();
+                stage1Result = (topicSecondMap[primaryTopic] ?? (() => runAutoOfflinePass(s1, 'medium')))();
               }
 
-              // Phase 4: Phantom forensic cleanup (skip if text was already nearly human)
+              // Phase 4: Offline forensic cleanup (skip if text was already nearly human)
               if (topAvg > 15) {
-                sendSSE(controller, { type: 'stage', stage: 'AI Analysis: Phantom Forensic Pass' });
+                sendSSE(controller, { type: 'stage', stage: 'AI Analysis: Offline Forensic Pass' });
                 await flushDelay(10);
-                const phantomResult = await runHumara24(stage1Result);
-                const { antiPangramSimple: apgSimple } = await import('@/lib/engine/antipangram');
-                fullResult = apgSimple(
-                  phantomResult,
-                  (strength ?? 'strong') as 'light' | 'medium' | 'strong',
-                  (tone ?? 'academic') as 'academic' | 'professional' | 'casual' | 'neutral',
-                );
+                fullResult = runAutoOfflinePass(stage1Result, autoStrength);
               } else {
                 fullResult = stage1Result;
               }

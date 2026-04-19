@@ -124,7 +124,7 @@ export function CosmicLoader({ stage, message, progress, engineLabel, statusItem
   const CX = 90; // center x/y of orbital system (in 180×180 viewport)
 
   return (
-    <div className="relative flex flex-col items-center justify-center w-full h-full px-4 py-6 sm:px-5 overflow-hidden select-none">
+    <div className="auto-uniform-processing relative flex flex-col items-center justify-center w-full h-full px-4 py-6 sm:px-5 overflow-hidden select-none">
 
       {/* ── Canvas starfield (ambient particles) ── */}
       <canvas

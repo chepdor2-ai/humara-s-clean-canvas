@@ -127,7 +127,7 @@ export function Sidebar({ open, onClose }: { open?: boolean; onClose?: () => voi
       )}
 
       <aside className={cn(
-        "fixed top-0 left-0 z-50 h-screen w-64 shrink-0 flex-col border-r border-sidebar-border bg-sidebar/95 backdrop-blur-md transition-transform duration-200 lg:static lg:z-auto lg:flex",
+        "premium-sidebar fixed top-0 left-0 z-50 h-screen w-64 shrink-0 flex-col border-r border-sidebar-border bg-sidebar/95 backdrop-blur-md transition-transform duration-200 lg:static lg:z-auto lg:flex",
         open ? "flex translate-x-0" : "-translate-x-full lg:translate-x-0 lg:flex hidden"
       )}>
         {/* Header */}
@@ -178,7 +178,7 @@ export function Sidebar({ open, onClose }: { open?: boolean; onClose?: () => voi
           <Link
             href="/pricing"
             onClick={onClose}
-            className="mt-3 block w-full rounded-lg border border-primary/30 bg-primary/10 px-3 py-1.5 text-center text-xs font-semibold text-primary transition-colors hover:bg-primary/15"
+            className="uniform-auto-button uniform-auto-glow mt-3 block w-full rounded-lg border border-primary/30 bg-primary/10 px-3 py-1.5 text-center text-xs font-semibold text-primary transition-colors hover:bg-primary/15"
           >
             Upgrade Plan
           </Link>

@@ -37,6 +37,10 @@
   --sidebar-accent-foreground: oklch(0.25 0.03 200);
   --sidebar-border: oklch(0.92 0.008 200);
   --sidebar-ring: oklch(0.7 0.13 195);
+  --auto-glow: #06b6d4;
+  --auto-hue: 0deg;
+  --auto-glow-speed: 28s;
+  --auto-glow-transition: 220ms linear;
 }
 
 .dark {
@@ -183,30 +187,31 @@
 
   /* ── Auto Model: Red blink phase (first 10s) ────────── */
   @keyframes autoModelRedBlink {
-    0%, 100% { --auto-glow: #ef4444; filter: brightness(1); }
-    50% { --auto-glow: #dc2626; filter: brightness(1.15); }
+    0%, 100% { --auto-glow: #ef4444; --auto-hue: 0deg; }
+    50% { --auto-glow: #dc2626; --auto-hue: -10deg; }
   }
 
-  /* ── Auto Model: 16-color smooth cycle ──────────────── */
+  /* ── Auto Model: 16+ color smooth cycle (slower, yellow is shortest hold) ──────────────── */
   @keyframes autoModelColorCycle {
-    0%      { --auto-glow: #ef4444; } /* red */
-    6.25%   { --auto-glow: #f97316; } /* orange */
-    12.5%   { --auto-glow: #eab308; } /* yellow — shortest hold */
-    14.5%   { --auto-glow: #84cc16; } /* lime */
-    18.75%  { --auto-glow: #22c55e; } /* green */
-    25%     { --auto-glow: #14b8a6; } /* teal */
-    31.25%  { --auto-glow: #06b6d4; } /* cyan */
-    37.5%   { --auto-glow: #0ea5e9; } /* sky */
-    43.75%  { --auto-glow: #3b82f6; } /* blue */
-    50%     { --auto-glow: #6366f1; } /* indigo */
-    56.25%  { --auto-glow: #8b5cf6; } /* violet */
-    62.5%   { --auto-glow: #a855f7; } /* purple */
-    68.75%  { --auto-glow: #d946ef; } /* fuchsia */
-    75%     { --auto-glow: #ec4899; } /* pink */
-    81.25%  { --auto-glow: #f43f5e; } /* rose */
-    87.5%   { --auto-glow: #fb923c; } /* amber */
-    93.75%  { --auto-glow: #fbbf24; } /* gold */
-    100%    { --auto-glow: #ef4444; } /* back to red */
+    0%      { --auto-glow: #ef4444; --auto-hue: 0deg; }
+    5.88%   { --auto-glow: #f97316; --auto-hue: 22deg; }
+    11.76%  { --auto-glow: #eab308; --auto-hue: 45deg; }
+    13.2%   { --auto-glow: #facc15; --auto-hue: 52deg; }
+    17.64%  { --auto-glow: #84cc16; --auto-hue: 80deg; }
+    23.52%  { --auto-glow: #22c55e; --auto-hue: 112deg; }
+    29.4%   { --auto-glow: #10b981; --auto-hue: 145deg; }
+    35.28%  { --auto-glow: #14b8a6; --auto-hue: 170deg; }
+    41.16%  { --auto-glow: #06b6d4; --auto-hue: 188deg; }
+    47.04%  { --auto-glow: #0ea5e9; --auto-hue: 202deg; }
+    52.92%  { --auto-glow: #3b82f6; --auto-hue: 220deg; }
+    58.8%   { --auto-glow: #6366f1; --auto-hue: 238deg; }
+    64.68%  { --auto-glow: #8b5cf6; --auto-hue: 258deg; }
+    70.56%  { --auto-glow: #a855f7; --auto-hue: 274deg; }
+    76.44%  { --auto-glow: #d946ef; --auto-hue: 302deg; }
+    82.32%  { --auto-glow: #ec4899; --auto-hue: 330deg; }
+    88.2%   { --auto-glow: #f43f5e; --auto-hue: 350deg; }
+    94.1%   { --auto-glow: #fb923c; --auto-hue: 16deg; }
+    100%    { --auto-glow: #ef4444; --auto-hue: 0deg; }
   }
 }
 
@@ -232,6 +237,13 @@
     color: #fafafa;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+  }
+
+  :root[data-auto-mode='on'][data-auto-glow-phase='blink'] {
+    animation: autoModelRedBlink 0.8s ease-in-out infinite;
+  }
+  :root[data-auto-mode='on'][data-auto-glow-phase='cycle'] {
+    animation: autoModelColorCycle var(--auto-glow-speed, 28s) linear infinite;
   }
 
   /* Faster button/link interactions */
@@ -294,30 +306,79 @@
   .auto-model-red-blink {
     animation: autoModelRedBlink 0.8s ease-in-out infinite;
     --auto-glow: #ef4444;
+    --auto-hue: 0deg;
   }
   .auto-model-color-cycle {
-    animation: autoModelColorCycle 12s linear infinite;
+    animation: autoModelColorCycle var(--auto-glow-speed, 28s) linear infinite;
   }
-  /* Apply the glow color to buttons, text, borders */
+
   .auto-glow-btn {
     border-color: var(--auto-glow, #06b6d4) !important;
     box-shadow: 0 0 12px color-mix(in srgb, var(--auto-glow, #06b6d4) 45%, transparent),
                 0 0 24px color-mix(in srgb, var(--auto-glow, #06b6d4) 20%, transparent),
                 inset 0 1px 0 color-mix(in srgb, var(--auto-glow, #06b6d4) 15%, transparent);
-    transition: border-color 0.4s ease, box-shadow 0.4s ease;
+    transition: border-color var(--auto-glow-transition, 220ms linear), box-shadow var(--auto-glow-transition, 220ms linear);
   }
   .auto-glow-text {
     color: var(--auto-glow, #06b6d4) !important;
     text-shadow: 0 0 8px color-mix(in srgb, var(--auto-glow, #06b6d4) 50%, transparent),
                  0 0 16px color-mix(in srgb, var(--auto-glow, #06b6d4) 25%, transparent);
-    transition: color 0.4s ease, text-shadow 0.4s ease;
+    transition: color var(--auto-glow-transition, 220ms linear), text-shadow var(--auto-glow-transition, 220ms linear);
   }
   .auto-glow-bg {
     background: linear-gradient(135deg,
       color-mix(in srgb, var(--auto-glow, #06b6d4) 15%, transparent),
       color-mix(in srgb, var(--auto-glow, #06b6d4) 8%, transparent)
     ) !important;
-    transition: background 0.4s ease;
+    transition: background var(--auto-glow-transition, 220ms linear);
+  }
+
+  :root[data-auto-mode='on'] .uniform-auto-glow,
+  :root[data-auto-mode='on'] .auto-glow-text,
+  :root[data-auto-mode='on'] [class~='text-primary'],
+  :root[data-auto-mode='on'] [class*='text-cyan-'],
+  :root[data-auto-mode='on'] [class*='text-brand-'] {
+    color: var(--auto-glow, #06b6d4) !important;
+    text-shadow: 0 0 8px color-mix(in srgb, var(--auto-glow, #06b6d4) 50%, transparent),
+                 0 0 16px color-mix(in srgb, var(--auto-glow, #06b6d4) 20%, transparent);
+    transition: color var(--auto-glow-transition, 220ms linear), text-shadow var(--auto-glow-transition, 220ms linear);
+  }
+
+  :root[data-auto-mode='on'] .uniform-auto-button,
+  :root[data-auto-mode='on'] .auto-glow-btn,
+  :root[data-auto-mode='on'] [class*='border-primary'],
+  :root[data-auto-mode='on'] [class*='border-cyan-'],
+  :root[data-auto-mode='on'] [class*='shadow-primary'],
+  :root[data-auto-mode='on'] [class*='shadow-cyan-'] {
+    border-color: color-mix(in srgb, var(--auto-glow, #06b6d4) 60%, transparent) !important;
+    box-shadow: 0 0 12px color-mix(in srgb, var(--auto-glow, #06b6d4) 35%, transparent),
+                0 0 28px color-mix(in srgb, var(--auto-glow, #06b6d4) 14%, transparent);
+    transition: border-color var(--auto-glow-transition, 220ms linear), box-shadow var(--auto-glow-transition, 220ms linear);
+  }
+
+  :root[data-auto-mode='on'] .uniform-auto-bg,
+  :root[data-auto-mode='on'] .auto-glow-bg,
+  :root[data-auto-mode='on'] [class*='bg-primary'],
+  :root[data-auto-mode='on'] [class*='bg-cyan-'] {
+    background-color: color-mix(in srgb, var(--auto-glow, #06b6d4) 18%, transparent) !important;
+    transition: background-color var(--auto-glow-transition, 220ms linear);
+  }
+
+  :root[data-auto-mode='on'] [class*='from-primary'],
+  :root[data-auto-mode='on'] [class*='from-cyan-'] {
+    --tw-gradient-from: color-mix(in srgb, var(--auto-glow, #06b6d4) 96%, white 4%) var(--tw-gradient-from-position) !important;
+    --tw-gradient-to: color-mix(in srgb, var(--auto-glow, #06b6d4) 12%, transparent) var(--tw-gradient-to-position) !important;
+  }
+
+  :root[data-auto-mode='on'] [class*='to-primary'],
+  :root[data-auto-mode='on'] [class*='to-cyan-'],
+  :root[data-auto-mode='on'] [class*='to-teal-'] {
+    --tw-gradient-to: color-mix(in srgb, var(--auto-glow, #06b6d4) 82%, black 18%) var(--tw-gradient-to-position) !important;
+  }
+
+  :root[data-auto-mode='on'] .auto-uniform-processing {
+    filter: hue-rotate(var(--auto-hue, 0deg)) saturate(1.2);
+    transition: filter var(--auto-glow-transition, 220ms linear);
   }
 
   .brand-wordmark {
@@ -349,6 +410,20 @@
     color: transparent;
     animation: gptShine 3s ease-in-out infinite;
     filter: drop-shadow(0 0 14px rgba(34, 211, 238, 0.6)) drop-shadow(0 0 28px rgba(6, 182, 212, 0.3));
+  }
+  :root[data-auto-mode='on'] .brand-wordmark .brand-gpt {
+    animation: none !important;
+    background: linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--auto-glow, #06b6d4) 90%, white 10%),
+      var(--auto-glow, #06b6d4),
+      color-mix(in srgb, var(--auto-glow, #06b6d4) 76%, black 24%)
+    ) !important;
+    background-size: 220% 100%;
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    filter: drop-shadow(0 0 10px color-mix(in srgb, var(--auto-glow, #06b6d4) 65%, transparent));
   }
   @keyframes gptShine {
     0% { background-position: 0% 50%; filter: drop-shadow(0 0 6px rgba(6, 182, 212, 0.3)); }

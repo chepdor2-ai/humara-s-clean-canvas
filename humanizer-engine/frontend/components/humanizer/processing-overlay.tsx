@@ -31,7 +31,7 @@ export function ProcessingOverlay({
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           transition={{ duration: 0.2 }}
-          className="absolute inset-0 z-20 flex flex-col items-center justify-center overflow-hidden rounded-b-2xl bg-card/80 backdrop-blur-md"
+          className="auto-uniform-processing absolute inset-0 z-20 flex flex-col items-center justify-center overflow-hidden rounded-b-2xl bg-card/80 backdrop-blur-md"
         >
           {/* scanning line (CSS-only) */}
           <div className="pointer-events-none absolute inset-x-0 h-24 bg-gradient-to-b from-transparent via-primary/15 to-transparent scan-line" />

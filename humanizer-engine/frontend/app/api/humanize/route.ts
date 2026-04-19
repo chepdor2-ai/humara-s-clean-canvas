@@ -1047,39 +1047,35 @@ export async function POST(req: Request) {
       // Add Nuru post-processing for Pangram
       humanized = applySmartNuruPolish(humanized);
     } else if (engine === 'ai_analysis') {
-      // AI Analysis: Analyze topic → pick engines → Phantom → AntiPangram → full Nuru
+      // AI Analysis: Analyze topic → pick offline engines → forensic cleanup → full Nuru
       const { analyze } = await import('@/lib/engine/context-analyzer');
+      const { antiPangramSimple: autoApg } = await import('@/lib/engine/antipangram');
       const ctx = analyze(normalizedText);
       const topic = ctx.primaryTopic;
+      const autoTone: 'academic' | 'professional' | 'casual' | 'neutral' =
+        tone === 'academic' || tone === 'professional' || tone === 'casual' ? tone : 'neutral';
+      const autoStrength: 'light' | 'medium' | 'strong' =
+        strength === 'light' || strength === 'medium' || strength === 'strong' ? strength : 'strong';
+      const runAutoOfflinePass = (
+        input: string,
+        passStrength: 'light' | 'medium' | 'strong' = 'medium',
+      ): string => autoApg(runHumara20(input), passStrength, autoTone);
 
       // Topic-based engine selection
       let stage1: string;
       if (['technology', 'science'].includes(topic)) {
         stage1 = runHumara20(normalizedText);
       } else if (['health', 'education'].includes(topic)) {
-        const { antiPangramSimple } = await import('@/lib/engine/antipangram');
-        stage1 = antiPangramSimple(
-          normalizedText,
-          (strength ?? 'strong') as 'light' | 'medium' | 'strong',
-          (tone ?? 'academic') as 'academic' | 'professional' | 'casual' | 'neutral',
-        );
+        stage1 = runAutoOfflinePass(normalizedText, 'medium');
       } else {
-        stage1 = await runGuarded('ai_analysis_stage_1', () => runHumara24(normalizedText), normalizedText);
+        stage1 = runAutoOfflinePass(normalizedText, 'strong');
       }
 
-      // Phantom pass (Phantom = Humara 2.4)
-      const stage2 = await runHumara24(stage1);
-
-      // AntiPangram forensic pass
-      const { antiPangramSimple: apg } = await import('@/lib/engine/antipangram');
-      const stage3 = apg(
-        stage2,
-        (strength ?? 'strong') as 'light' | 'medium' | 'strong',
-        (tone ?? 'academic') as 'academic' | 'professional' | 'casual' | 'neutral',
-      );
+      // Offline forensic pass
+      const stage2 = runAutoOfflinePass(stage1, autoStrength);
 
       // Full Nuru 2.0 polish
-      humanized = applySmartNuruPolish(stage3);
+      humanized = applySmartNuruPolish(stage2);
     } else {
       // Ghost Mini: Statistical-only pipeline (no LLM)
       humanized = humanize(normalizedText, {

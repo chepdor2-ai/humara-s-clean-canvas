@@ -201,7 +201,7 @@ const ENGINE_GUIDES: Record<string, string> = {
   ninja_5: 'Omega — Easy → Humara 2.4 → full 10× Nuru. Maximum transformation depth.',
   ghost_trial_2: 'Specter — Humara 2.4 → Humara 2.0 → full 10× Nuru. Ghost-grade signal removal.',
   phantom: 'Phantom — Humara 2.4 → 10× Nuru → deep clean → AntiPangram forensic cleanup.',
-  ai_analysis: 'AI Analysis — Smart auto-selector. Analyzes your text, picks the best engines, runs Phantom + full Nuru 2.0, and loops until under 20% AI across all detectors.',
+  ai_analysis: 'AI Analysis — Smart auto-selector. Uses API-free offline passes (Oxygen + AntiPangram + Nuru), then loops until under 20% AI across all detectors.',
 };
 
 const DEFAULT_PROCESSING_MESSAGES = [
@@ -572,6 +572,26 @@ function EditorPageInner() {
       setEngine('ai_analysis');
     }
   }, [autoModelEnabled]);
+
+  // Auto Model: publish global state to <html> so all UI color targets stay synchronized
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    const root = document.documentElement;
+
+    if (!autoModelEnabled) {
+      root.removeAttribute('data-auto-mode');
+      root.removeAttribute('data-auto-glow-phase');
+      return;
+    }
+
+    root.setAttribute('data-auto-mode', 'on');
+    root.setAttribute('data-auto-glow-phase', autoModelRedPhase ? 'blink' : 'cycle');
+
+    return () => {
+      root.removeAttribute('data-auto-mode');
+      root.removeAttribute('data-auto-glow-phase');
+    };
+  }, [autoModelEnabled, autoModelRedPhase]);
 
   const handleAutoModelToggle = useCallback(() => {
     if (autoModelEnabled) {
@@ -1370,13 +1390,13 @@ function EditorPageInner() {
                   </div>
                   <div>
                     <h3 className="text-sm font-bold text-slate-900 dark:text-zinc-100">Enable Auto Model?</h3>
-                    <p className="text-[11px] text-slate-500 dark:text-zinc-400 mt-0.5">AI Analysis will auto-select the best engines for your text</p>
+                    <p className="text-[11px] text-slate-500 dark:text-zinc-400 mt-0.5">AI Analysis will auto-select the best offline engines for your text</p>
                   </div>
                 </div>
               </div>
               <div className="px-6 py-4 space-y-3">
                 <p className="text-xs text-slate-600 dark:text-zinc-300 leading-relaxed">
-                  Auto Model uses intelligent topic analysis to select optimal engines, runs Phantom + full Nuru 2.0 pipeline, and loops until AI detection drops below 20%.
+                  Auto Model uses intelligent topic analysis to select API-free offline passes, runs Oxygen + AntiPangram + full Nuru 2.0, and loops until AI detection drops below 20%.
                 </p>
                 <div className="space-y-1.5">
                   <p className="text-[10px] font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400">Potential side effects</p>
