@@ -1,4 +1,4 @@
-import { robustSentenceSplit } from './content-protection';
+import { robustSentenceSplit, humanizeTitle } from './content-protection';
 
 export type StructureBlockType = 'blank' | 'heading' | 'paragraph';
 
@@ -72,17 +72,27 @@ export function looksLikeHeadingLine(line: string): boolean {
   const trimmed = line.trim();
   if (!trimmed) return false;
 
+  // Markdown headings
   if (/^#{1,6}\s/.test(trimmed)) return true;
-  if (/^\d+(?:[.)]|(?:\.\d+)+)\s+[A-Z]/.test(trimmed)) return true;
-  if (/^[A-Z][A-Z\s0-9:&()\-–—\/,'".]{4,}$/.test(trimmed)) return true;
+  // Numbered headings: "1." "2.3" "10.2.1" followed by capitalized text
+  if (/^\d+(?:[.)]|(?:\.\d+)+)\s+[A-Z]/.test(trimmed)) {
+    const words = trimmed.split(/\s+/);
+    if (words.length <= 12 && !/[.!?]$/.test(trimmed)) return true;
+  }
+  // ALL-CAPS lines (4+ chars in uppercase)
+  if (/^[A-Z][A-Z\s0-9:&()\-–—\/,'".]{4,}$/.test(trimmed)) {
+    const words = trimmed.split(/\s+/);
+    if (words.length <= 12) return true;
+  }
 
   const words = trimmed.split(/\s+/);
   const capitalizedWords = words.filter(w => /^[A-Z]/.test(w)).length;
-  // If it's a short line, require at least 50% of words to be capitalized
   const isMajorityCapitalized = capitalizedWords / Math.max(1, words.length) >= 0.5;
 
+  // Only classify as heading if very short (<=5 words), no ending punctuation,
+  // starts with uppercase, and most words capitalized
   return (
-    words.length <= 12 &&
+    words.length <= 5 &&
     !/[.!?]$/.test(trimmed) &&
     /^[A-Z0-9]/.test(trimmed) &&
     isMajorityCapitalized
@@ -257,8 +267,12 @@ export function preserveInputStructure(original: string, rewritten: string): str
 
   let paragraphIndex = 0;
   const rebuilt = blocks.map((block) => {
-    if (block.type === 'blank' || block.type === 'heading') {
+    if (block.type === 'blank') {
       return block.rawLines.join('\n');
+    }
+    if (block.type === 'heading') {
+      // Humanize titles >6 words; pass short titles through unchanged
+      return humanizeTitle(block.rawLines.join('\n'));
     }
 
     const alignedParagraph = rewrittenParagraphs[paragraphIndex] ?? normalizeParagraphText(block.rawLines.join('\n'));

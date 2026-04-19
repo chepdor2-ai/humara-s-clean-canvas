@@ -31,7 +31,7 @@
  */
 
 import { getDetector } from "./multi-detector";
-import { robustSentenceSplit } from "./content-protection";
+import { robustSentenceSplit, humanizeTitle } from "./content-protection";
 import { validateAndRepairOutput } from "./validation-post-process";
 import OpenAI from "openai";
 
@@ -129,12 +129,22 @@ function extractParagraphs(text: string): string[] {
 function isProtectedLine(line: string): boolean {
   const t = line.trim();
   if (!t) return true;
+  // Markdown headings
   if (/^#{1,6}\s/.test(t)) return true;
+  // Roman numeral headings: I. II. III. etc.
   if (/^[IVXLCDM]+[.)]\s/i.test(t)) return true;
-  if (/^(?:Part|Section|Chapter|Abstract|Introduction|Conclusion|References|Bibliography|Appendix)\b/i.test(t)) return true;
-  if (/^[\d]+[.):\-]\s/.test(t) || /^[A-Za-z][.)]\s/.test(t)) return true;
+  // Section keyword headings (standalone only)
+  if (/^(?:Part|Section|Chapter|Abstract|Introduction|Conclusion|References|Bibliography|Appendix)\s*$/i.test(t)) return true;
+  // Numbered/lettered headings: "1." "2)" "A." etc.
+  if (/^[\d]+[.):\-]\s/.test(t) || /^[A-Za-z][.)]\s/.test(t)) {
+    const words = t.split(/\s+/);
+    if (words.length <= 10 && !/[.!?]$/.test(t)) return true;
+  }
   const words = t.split(/\s+/);
-  if (words.length <= 5 && !/[.!?]$/.test(t)) return true;
+  // ALL-CAPS lines (4+ chars) that are short
+  if (words.length <= 12 && t === t.toUpperCase() && /[A-Z]/.test(t) && t.length >= 4) return true;
+  // Short lines (<=3 words) without ending punctuation — likely headings
+  if (words.length <= 3 && !/[.!?]$/.test(t)) return true;
   return false;
 }
 
@@ -973,9 +983,10 @@ export async function omegaHumanize(
   const reassembledParagraphs: string[] = [];
 
   for (let pIdx = 0; pIdx < paragraphs.length; pIdx++) {
-    // Protected paragraphs (headings, empty lines)
+    // Protected paragraphs (headings, empty lines) — humanize titles >6 words
     if (protectedParagraphs.has(pIdx)) {
-      reassembledParagraphs.push(protectedParagraphs.get(pIdx)!);
+      const heading = protectedParagraphs.get(pIdx)!;
+      reassembledParagraphs.push(humanizeTitle(heading));
       continue;
     }
 

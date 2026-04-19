@@ -552,6 +552,84 @@ export function cleanOutputRepetitions(text: string): string {
 
 // ══════════════════════════════════════════════════════════════════════════
 // ROBUST SENTENCE SPLITTING
+// ══════════════════════════════════════════════════════════════════════════
+// TITLE HUMANIZATION
+// Titles with more than 6 words get light humanization (AI word replacement)
+// while preserving keywords, proper nouns, and structure.
+// Titles with 6 or fewer words pass through unchanged.
+// ══════════════════════════════════════════════════════════════════════════
+
+/** Common AI-flagged words that can be replaced even in titles */
+const TITLE_AI_WORD_SWAPS: [RegExp, string][] = [
+  [/\butiliz(?:e|ing|ation)\b/gi, (m: string) => m.toLowerCase().includes('ation') ? 'use' : m.toLowerCase().includes('ing') ? 'using' : 'use'],
+  [/\bleverage\b/gi, 'use'],
+  [/\bleveraging\b/gi, 'using'],
+  [/\bfacilitat(?:e|ing)\b/gi, (m: string) => m.toLowerCase().includes('ing') ? 'supporting' : 'support'],
+  [/\bcomprehensive\b/gi, 'thorough'],
+  [/\bmultifaceted\b/gi, 'complex'],
+  [/\bpivotal\b/gi, 'key'],
+  [/\bparamount\b/gi, 'critical'],
+  [/\bdelving\b/gi, 'exploring'],
+  [/\bdelve\b/gi, 'explore'],
+  [/\benhance\b/gi, 'improve'],
+  [/\benhancing\b/gi, 'improving'],
+  [/\bfoster\b/gi, 'promote'],
+  [/\bfostering\b/gi, 'promoting'],
+  [/\btransformative\b/gi, 'significant'],
+  [/\bholistic\b/gi, 'complete'],
+  [/\brobust\b/gi, 'strong'],
+  [/\binnovative\b/gi, 'new'],
+  [/\bgroundbreaking\b/gi, 'pioneering'],
+  [/\bcrucial\b/gi, 'important'],
+  [/\bparadigm\b/gi, 'model'],
+  [/\bnuanced\b/gi, 'detailed'],
+  [/\boverarching\b/gi, 'broad'],
+  [/\bintricate\b/gi, 'complex'],
+  [/\bmeticulous\b/gi, 'careful'],
+] as unknown as [RegExp, string][];
+
+/**
+ * Humanize a title/heading line. Only applies light AI word swaps.
+ * Titles with 6 or fewer words are returned unchanged.
+ * Keywords (capitalized words, proper nouns, domain terms) are preserved.
+ */
+export function humanizeTitle(title: string): string {
+  const trimmed = title.trim();
+  if (!trimmed) return trimmed;
+
+  const words = trimmed.split(/\s+/);
+  // Titles with 6 or fewer words: pass through unchanged
+  if (words.length <= 6) return trimmed;
+
+  // Preserve prefix markers (e.g., "## ", "1. ", "I. ")
+  let prefix = '';
+  let body = trimmed;
+  const prefixMatch = trimmed.match(/^(#{1,6}\s+|\d+[.):\-]\s+|[IVXLCDM]+[.)]\s+|[A-Za-z][.)]\s+)/);
+  if (prefixMatch) {
+    prefix = prefixMatch[1];
+    body = trimmed.slice(prefix.length);
+  }
+
+  // Apply only safe AI word swaps (no structural changes)
+  let result = body;
+  for (const [pattern, replacement] of TITLE_AI_WORD_SWAPS) {
+    if (typeof replacement === 'function') {
+      result = result.replace(pattern, replacement as unknown as (...args: string[]) => string);
+    } else {
+      result = result.replace(pattern, (match: string) => {
+        // Preserve original capitalization
+        if (match[0] === match[0].toUpperCase()) {
+          return (replacement as string).charAt(0).toUpperCase() + (replacement as string).slice(1);
+        }
+        return replacement as string;
+      });
+    }
+  }
+
+  return prefix + result;
+}
+
+// ══════════════════════════════════════════════════════════════════════════
 // Correctly handles decimals, percentages, abbreviations, and references.
 // Never breaks on decimal points (0.53), abbreviations (e.g., Dr., etc.),
 // or mid-sentence periods in references (Fig. 1, Eq. 3.2).

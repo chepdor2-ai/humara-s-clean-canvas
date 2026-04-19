@@ -56,7 +56,7 @@ import {
   deepRestructure,
   tenseVariation,
 } from './advanced-transforms';
-import { robustSentenceSplit } from './content-protection';
+import { robustSentenceSplit, humanizeTitle } from './content-protection';
 import { enforceSingleSentence } from './sentence-surgery';
 
 // ══════════════════════════════════════════════════════════════════════════
@@ -112,15 +112,23 @@ function extractParagraphs(text: string): string[] {
 function isProtectedLine(line: string): boolean {
   const t = line.trim();
   if (!t) return true;
+  // Markdown headings
   if (/^#{1,6}\s/.test(t)) return true;
+  // Roman numeral headings: I. II. III. etc.
   if (/^[IVXLCDM]+[.)]\s/i.test(t)) return true;
-  if (/^(?:Part|Section|Chapter|Abstract|Introduction|Conclusion|References|Bibliography|Appendix)\b/i.test(t)) return true;
-  if (/^[\d]+[.):\-]\s/.test(t) || /^[A-Za-z][.)]\s/.test(t)) return true;
+  // Section keyword headings (standalone only, not followed by body text)
+  if (/^(?:Part|Section|Chapter|Abstract|Introduction|Conclusion|References|Bibliography|Appendix)\s*$/i.test(t)) return true;
+  // Numbered/lettered headings: "1." "2)" "A." etc.
+  if (/^[\d]+[.):\-]\s/.test(t) || /^[A-Za-z][.)]\s/.test(t)) {
+    const words = t.split(/\s+/);
+    // Only treat as heading if short (<=10 words) and no ending punctuation
+    if (words.length <= 10 && !/[.!?]$/.test(t)) return true;
+  }
   const words = t.split(/\s+/);
-  if (words.length <= 5 && !/[.!?]$/.test(t)) return true;
-  // Detect title-like lines: no terminal punctuation, or contains colons/dashes typical of titles
-  if (!/[.!?]$/.test(t) && words.length <= 15) return true;
-  if (/[:–—]\s/.test(t) && !/[.!?]$/.test(t)) return true;
+  // ALL-CAPS lines (4+ chars) that are short
+  if (words.length <= 12 && t === t.toUpperCase() && /[A-Z]/.test(t) && t.length >= 4) return true;
+  // Short lines (<=3 words) without ending punctuation — likely headings
+  if (words.length <= 3 && !/[.!?]$/.test(t)) return true;
   return false;
 }
 
@@ -931,7 +939,9 @@ export function nuruHumanize(
 
   for (let pIdx = 0; pIdx < paragraphs.length; pIdx++) {
     if (protectedParagraphs.has(pIdx)) {
-      reassembledParagraphs.push(protectedParagraphs.get(pIdx)!);
+      // Humanize titles with >6 words; pass short titles through unchanged
+      const heading = protectedParagraphs.get(pIdx)!;
+      reassembledParagraphs.push(humanizeTitle(heading));
       continue;
     }
 

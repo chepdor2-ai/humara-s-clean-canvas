@@ -24,7 +24,7 @@ import { easyHumanize } from '@/lib/engine/easy-humanizer';
 import { oxygenHumanize } from '@/lib/engine/oxygen-humanizer';
 import { humarinHumanize } from '@/lib/engine/humarin-humanizer';
 import { oxygen3Humanize } from '@/lib/engine/oxygen3-humanizer';
-import { robustSentenceSplit } from '@/lib/engine/content-protection';
+import { robustSentenceSplit, humanizeTitle } from '@/lib/engine/content-protection';
 // deepRestructure, voiceShift, tenseVariation disabled — they garble sentence structure
 // import { deepRestructure, voiceShift, tenseVariation } from '@/lib/engine/advanced-transforms';
 import { synonymReplace } from '@/lib/engine/utils';
@@ -344,14 +344,24 @@ function measureSentenceChange(original: string, modified: string): number {
 function isHeadingParagraph(para: string): boolean {
   const trimmed = para.trim();
   if (!trimmed) return false;
+  // Markdown headings
   if (/^#{1,6}\s/.test(trimmed)) return true;
+  // Roman numeral headings
   if (/^[IVXLCDM]+\.\s/i.test(trimmed)) return true;
+  // Part/Section/Chapter headings
   if (/^(?:Part|Section|Chapter)\s+\d+/i.test(trimmed)) return true;
-  if (/^[\d]+[.):]\s/.test(trimmed) || /^[A-Za-z][.):]\s/.test(trimmed)) return true;
+  // Numbered/lettered list items: "1." "2)" "A."
+  if (/^[\d]+[.):]\s/.test(trimmed) || /^[A-Za-z][.):]\s/.test(trimmed)) {
+    const words = trimmed.split(/\s+/);
+    if (words.length <= 10 && !/[.!?]$/.test(trimmed)) return true;
+  }
+  // Standalone academic section keywords
   if (/^(?:Introduction|Conclusion|Summary|Abstract|Background|Discussion|Results|Methods|References|Acknowledgments|Appendix)\s*$/i.test(trimmed)) return true;
   const words = trimmed.split(/\s+/);
-  if (words.length <= 10 && !/[.!?]$/.test(trimmed)) return true;
+  // ALL-CAPS short lines
   if (words.length <= 12 && trimmed === trimmed.toUpperCase() && /[A-Z]/.test(trimmed)) return true;
+  // Short lines (<=3 words) without ending punctuation — likely headings
+  if (words.length <= 3 && !/[.!?]$/.test(trimmed)) return true;
   // Standalone citation references: "Author, A. B. (2012)." or "Author & Author (2012)."
   if (/^[A-Z][a-zA-Z]+[,.].*\(\d{4}\)\s*\.?\s*$/.test(trimmed) && words.length <= 20) return true;
   return false;
@@ -444,13 +454,13 @@ function enforceRestructuringThreshold(
     }
   }
 
-  // Reconstruct text preserving paragraph structure — headings stay as-is
+  // Reconstruct text preserving paragraph structure — humanize titles >6 words
   const rebuilt: string[] = [];
   let sentIdx = 0;
   for (const para of humanParas) {
     const trimmed = para.trim();
     if (isHeadingParagraph(trimmed)) {
-      rebuilt.push(trimmed);
+      rebuilt.push(humanizeTitle(trimmed)eTitle(trimmed));
       sentIdx++; // skip the heading entry in humanizedSentences
     } else {
       const paraSents = robustSentenceSplit(trimmed);
@@ -521,116 +531,84 @@ function lastMileMeaningValidator(
   humanizedText: string,
   minOverlap: number = 0.35,
 ): string {
-  const origSentences = robustSentenceSplit(originalText);
-  const humanizedSentences = robustSentenceSplit(humanizedText);
+  // Work paragraph-by-paragraph to preserve structure and avoid sentence loss
+  const origParas = originalText.split(/\n\s*\n/).filter(p => p.trim());
+  const humanParas = humanizedText.split(/\n\s*\n/).filter(p => p.trim());
 
-  if (humanizedSentences.length < 1 || origSentences.length < 1) return humanizedText;
+  if (humanParas.length < 1 || origParas.length < 1) return humanizedText;
 
-  // Step 1: Build best-match mapping from output → original
-  const matches: { origIdx: number; overlap: number }[] = [];
-  for (let i = 0; i < humanizedSentences.length; i++) {
-    let bestOrigIdx = 0;
-    let bestOverlap = 0;
-    for (let j = 0; j < origSentences.length; j++) {
-      const overlap = contentWordOverlap(origSentences[j], humanizedSentences[i]);
-      if (overlap > bestOverlap) {
-        bestOverlap = overlap;
-        bestOrigIdx = j;
-      }
-    }
-    matches.push({ origIdx: bestOrigIdx, overlap: bestOverlap });
-  }
-
-  // Step 2: Track which original sentences are already well-covered
-  const coveredOriginals = new Set<number>();
-  for (let i = 0; i < matches.length; i++) {
-    if (matches[i].overlap >= minOverlap) {
-      coveredOriginals.add(matches[i].origIdx);
-    }
-  }
-
-  // Step 3: Fix or remove bad sentences — each original used at most once to prevent duplication
-  const usedOriginals = new Set<number>(coveredOriginals);
   let anyFixed = false;
-  const fixedSentences: string[] = [];
+  const resultParas: string[] = [];
 
-  for (let i = 0; i < humanizedSentences.length; i++) {
-    const { origIdx, overlap } = matches[i];
+  // Process each paragraph independently, aligning by index
+  const paraCount = Math.max(origParas.length, humanParas.length);
+  for (let pIdx = 0; pIdx < paraCount; pIdx++) {
+    const origPara = origParas[Math.min(pIdx, origParas.length - 1)]?.trim() ?? '';
+    const humanPara = humanParas[pIdx]?.trim() ?? '';
 
-    if (overlap >= minOverlap) {
-      // Sentence preserves meaning — keep it
-      fixedSentences.push(humanizedSentences[i]);
-    } else if (coveredOriginals.has(origIdx)) {
-      // Original already covered — check if there's a different uncovered original
-      // that this sentence might actually correspond to (positional fallback)
-      const positionalIdx = Math.min(i, origSentences.length - 1);
-      const positionalOrig = origSentences[positionalIdx];
-      const positionalOverlap = contentWordOverlap(positionalOrig, humanizedSentences[i]);
-      if (positionalOverlap >= minOverlap) {
-        fixedSentences.push(humanizedSentences[i]);
-      } else if (!usedOriginals.has(positionalIdx)) {
-        // Keep a lightly-transformed version of the positional original instead of dropping
-        let fixed = applyAIWordKill(positionalOrig);
-        const usedWords = new Set<string>();
-        fixed = synonymReplace(fixed, 0.35, usedWords);
-        fixedSentences.push(fixed);
-        usedOriginals.add(positionalIdx);
-        anyFixed = true;
-      } else {
-        // Both best-match and positional already used — keep existing sentence as-is
-        fixedSentences.push(humanizedSentences[i]);
-      }
-    } else {
-      // Original sentence not yet covered — reprocess with light transforms
-      const origSent = origSentences[origIdx];
-      let fixed = applyAIWordKill(origSent);
+    // If humanized paragraph is missing, use lightly-transformed original
+    if (!humanPara && origPara) {
+      let fixed = applyAIWordKill(origPara);
       const usedWords = new Set<string>();
       fixed = synonymReplace(fixed, 0.35, usedWords);
-
-      // Verify fix preserves meaning
-      const fixOverlap = contentWordOverlap(origSent, fixed);
-      if (fixOverlap >= minOverlap) {
-        fixedSentences.push(fixed);
-      } else {
-        // Minimal change fallback
-        fixedSentences.push(applyAIWordKill(origSent));
-      }
-      coveredOriginals.add(origIdx);
-      usedOriginals.add(origIdx);
+      resultParas.push(fixed);
       anyFixed = true;
+      continue;
     }
+    if (!humanPara) continue;
+
+    // Skip heading-like paragraphs — pass through as-is
+    if (isHeadingParagraph(origPara) || isHeadingParagraph(humanPara)) {
+      resultParas.push(humanPara);
+      continue;
+    }
+
+    const origSents = robustSentenceSplit(origPara);
+    const humanSents = robustSentenceSplit(humanPara);
+
+    if (humanSents.length < 1) {
+      resultParas.push(humanPara);
+      continue;
+    }
+
+    const fixedSents: string[] = [];
+    const usedOriginals = new Set<number>();
+
+    for (let i = 0; i < humanSents.length; i++) {
+      // Find best-matching original sentence
+      let bestOrigIdx = 0;
+      let bestOverlap = 0;
+      for (let j = 0; j < origSents.length; j++) {
+        const overlap = contentWordOverlap(origSents[j], humanSents[i]);
+        if (overlap > bestOverlap) {
+          bestOverlap = overlap;
+          bestOrigIdx = j;
+        }
+      }
+
+      if (bestOverlap >= minOverlap) {
+        // Sentence preserves meaning — keep it
+        fixedSents.push(humanSents[i]);
+        usedOriginals.add(bestOrigIdx);
+      } else {
+        // Meaning drifted — use lightly-transformed original
+        const positionalIdx = Math.min(i, origSents.length - 1);
+        const origSent = usedOriginals.has(bestOrigIdx) ? origSents[positionalIdx] : origSents[bestOrigIdx];
+        let fixed = applyAIWordKill(origSent);
+        const usedWords = new Set<string>();
+        fixed = synonymReplace(fixed, 0.35, usedWords);
+        fixedSents.push(fixed);
+        usedOriginals.add(bestOrigIdx);
+        anyFixed = true;
+      }
+    }
+
+    resultParas.push(fixedSents.join(' '));
   }
 
   if (!anyFixed) return humanizedText;
 
-  // Reconstruct preserving paragraph structure
-  const paragraphs = humanizedText.split(/\n\s*\n/);
-  let sentIdx = 0;
-  const rebuilt = paragraphs.map(para => {
-    const paraSents = robustSentenceSplit(para);
-    const replacedSents: string[] = [];
-    // Distribute fixed sentences proportionally to paragraph size
-    const count = Math.min(paraSents.length, fixedSentences.length - sentIdx);
-    for (let j = 0; j < count; j++) {
-      if (sentIdx < fixedSentences.length) {
-        replacedSents.push(fixedSentences[sentIdx]);
-        sentIdx++;
-      }
-    }
-    return replacedSents.join(' ');
-  });
-
-  // If there are remaining sentences, append to last paragraph
-  if (sentIdx < fixedSentences.length) {
-    const remaining = fixedSentences.slice(sentIdx).join(' ');
-    if (rebuilt.length > 0) {
-      rebuilt[rebuilt.length - 1] += ' ' + remaining;
-    } else {
-      rebuilt.push(remaining);
-    }
-  }
-
-  return rebuilt.filter(p => p.trim()).join('\n\n');
+  return resultParas.filter(p => p.trim()).join('\n\n');
 }
 
 function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: string): Promise<T> {
@@ -1098,16 +1076,19 @@ export async function POST(req: Request) {
       const nuruPostStart = Date.now();
       humanized = applySmartNuruPolish(humanized, 15);
 
-      const splitIntoIndexedSentences = (textStr: string): { sentences: string[]; paragraphBoundaries: number[] } => {
+      const splitIntoIndexedSentences = (textStr: string): { sentences: string[]; paragraphBoundaries: number[]; headingIndices: Set<number> } => {
         const paragraphs = textStr.split(/\n\s*\n/).filter(p => p.trim());
         const S: string[] = [];
         const B: number[] = [];
+        const H: Set<number> = new Set();
         for (const para of paragraphs) {
           B.push(S.length);
           const trimmed = para.trim();
           const isHeading = looksLikeHeadingLine(trimmed);
           if (isHeading) {
-            S.push(trimmed);
+            H.add(S.length);
+            // Humanize titles >6 words, pass short ones through
+            S.push(humanizeTitle(trimmed));
           } else {
             // Normalize hard wraps within the paragraph to spaces before splitting
             const normalizedPara = trimmed.replace(/\n/g, ' ').replace(/\s+/g, ' ').trim();
@@ -1115,7 +1096,7 @@ export async function POST(req: Request) {
             S.push(...sents);
           }
         }
-        return { sentences: S, paragraphBoundaries: B };
+        return { sentences: S, paragraphBoundaries: B, headingIndices: H };
       };
 
       const reassembleText = (S: string[], B: number[]): string => {
