@@ -73,7 +73,9 @@ const PHRASE_REPLACEMENTS: Array<{ pattern: RegExp; replacements: string[] }> = 
   { pattern: /\ba wide range of\b/gi, replacements: ['many', 'various'] },
   { pattern: /\btake into account\b/gi, replacements: ['consider', 'factor in'] },
   { pattern: /\bplay a (?:significant |important |key |crucial |vital |critical |pivotal )?role in\b/gi, replacements: ['shape', 'affect', 'influence'] },
+  { pattern: /\bplays a (?:significant |important |key |crucial |vital |critical |pivotal )?role in\b/gi, replacements: ['shapes', 'affects', 'influences'] },
   { pattern: /\bhave an impact on\b/gi, replacements: ['affect', 'influence'] },
+  { pattern: /\bhas an impact on\b/gi, replacements: ['affects', 'influences'] },
   { pattern: /\bin light of\b/gi, replacements: ['given', 'considering'] },
   { pattern: /\bthe fact that\b/gi, replacements: ['that', 'how'] },
   { pattern: /\bit is (?:clear|evident|obvious) that\b/gi, replacements: ['clearly,'] },
@@ -86,6 +88,66 @@ const PHRASE_REPLACEMENTS: Array<{ pattern: RegExp; replacements: string[] }> = 
   { pattern: /\bpave the way for\b/gi, replacements: ['enable', 'allow'] },
   { pattern: /\bover the course of\b/gi, replacements: ['during', 'throughout'] },
   { pattern: /\bat this point in time\b/gi, replacements: ['now', 'currently'] },
+  // ── Extended AI-tell patterns (borrowed from AntiPangram forensics) ──
+  { pattern: /\bwhich contributes? to (?:better |improved |enhanced |greater |stronger |more effective )?/gi, replacements: [', improving', '. This supports'] },
+  { pattern: /\bResearch has shown that\b/gi, replacements: ['Studies show', 'Evidence shows', 'Research shows'] },
+  { pattern: /\bstudies have shown that\b/gi, replacements: ['Research shows', 'Evidence suggests'] },
+  { pattern: /\bit is widely (?:recognized|acknowledged|accepted) that\b/gi, replacements: ['Most agree that', 'It is known that'] },
+  { pattern: /\bone of the (?:major|key|most important|primary|greatest|significant) (?:strengths|advantages|benefits|features) of\b/gi, replacements: ['a strength of', 'a benefit of', 'an advantage of'] },
+  { pattern: /\bprovides (?:a |an )?(?:comprehensive|holistic|thorough) (?:overview|understanding|analysis|examination) of\b/gi, replacements: ['covers', 'examines', 'looks closely at'] },
+  { pattern: /\bhas (?:gained|garnered|received|attracted) (?:significant|considerable|substantial|growing|increasing) (?:attention|interest|focus|traction)\b/gi, replacements: ['has drawn attention', 'has become a topic of interest', 'has become more studied'] },
+  { pattern: /\bthis (?:study|paper|research|analysis|article) (?:aims|seeks|attempts|endeavors) to\b/gi, replacements: ['this work looks to', 'the goal here is to', 'the focus is on'] },
+  { pattern: /\bserves as (?:a |an )?(?:critical|crucial|vital|important|key|essential) (?:tool|mechanism|framework|foundation)\b/gi, replacements: ['works as a tool', 'acts as a base', 'functions as a framework'] },
+  { pattern: /\bultimately (?:leads|leading) to\b/gi, replacements: ['eventually causing', 'resulting in'] },
+  { pattern: /\bultimately (?:drives|driving)\b/gi, replacements: ['eventually pushing', 'helping push'] },
+  { pattern: /\bthis is particularly (?:important|relevant|significant|notable|true) (?:because|since|as|given)\b/gi, replacements: ['this matters because', 'this stands out since'] },
+  { pattern: /\bthis (?:highlights|underscores|emphasizes) the (?:importance|need|significance|value) of\b/gi, replacements: ['this points to the value of', 'this shows why it matters to focus on'] },
+];
+
+/* ── Evaluative Phrase Surgery (sentence-level AI signal removal) ── */
+
+const EVALUATIVE_SURGERIES: Array<{ pattern: RegExp; replaceFn: (match: string, ...groups: string[]) => string }> = [
+  {
+    // "One of the major/key strengths/advantages of X is"
+    pattern: /\b[Oo]ne of the (?:major|key|most important|primary|greatest|significant) (?:strengths|advantages|benefits|features) of (.+?) is (?:its |that it |the fact that it )?/gi,
+    replaceFn: (_m, subject) => `${subject.trim()} `,
+  },
+  {
+    // "It is widely used in the treatment of" → "It treats"
+    pattern: /\b[Ii]t is widely used in the (?:treatment|management|handling) of\b/gi,
+    replaceFn: () => {
+      const alts = ['It treats', 'It is used to treat', 'It addresses'];
+      return alts[Math.floor(Math.random() * alts.length)];
+    },
+  },
+  {
+    // "By understanding X, individuals can learn how to Y"
+    pattern: /\b[Bb]y (?:understanding|recognizing|identifying|addressing|examining|exploring) (?:these |this |the )?([\w\s]+?),\s*(?:individuals|people|organizations|companies|teams) can (?:learn (?:how )?to |begin to |start to )?/gi,
+    replaceFn: (_m, topic) => {
+      const alts = [
+        `Understanding ${topic.trim()} helps `,
+        `Knowing about ${topic.trim()} means they can `,
+        `With a grasp of ${topic.trim()}, it becomes easier to `,
+      ];
+      return alts[Math.floor(Math.random() * alts.length)];
+    },
+  },
+  {
+    // "As a result, people become more confident in"
+    pattern: /\b[Aa]s a result,?\s*(?:people|individuals|organizations) become (?:more )?/gi,
+    replaceFn: () => {
+      const alts = ['People end up ', 'This makes them ', 'So they get '];
+      return alts[Math.floor(Math.random() * alts.length)];
+    },
+  },
+  {
+    // "It is based on the idea that"
+    pattern: /\b[Ii]t is based on the idea that\b/gi,
+    replaceFn: () => {
+      const alts = ['The idea is that', 'The premise is that', 'It works on the basis that'];
+      return alts[Math.floor(Math.random() * alts.length)];
+    },
+  },
 ];
 
 /* ── Sentence Starters (probabilistic injection) ──────────────────── */
@@ -892,6 +954,320 @@ function contentOverlap(original: string, modified: string): number {
   return Math.min(1, matches / getContent(original).length);
 }
 
+/* ── Readability Scorer ───────────────────────────────────────────
+ * Scores a sentence's readability on a 0–1 scale.
+ * High = readable/natural. Low = garbled/unnatural.
+ * Used to select the BEST iteration, not just the most changed one.
+ * ──────────────────────────────────────────────────────────────── */
+
+// Common AI-tell patterns that detectors flag
+const AI_TELL_PATTERNS = [
+  /\bplays? a (?:crucial|vital|key|significant|pivotal|critical|important|essential|fundamental|central|major) role\b/i,
+  /\bserves? as (?:a |an )?(?:crucial|vital|key|critical|important|essential) (?:tool|mechanism|framework|foundation|component)\b/i,
+  /\bit is (?:important|essential|crucial|vital|worth noting|noteworthy|significant) (?:to|that)\b/i,
+  /\bprovides? (?:a |an )?(?:comprehensive|holistic|thorough|detailed) (?:overview|understanding|analysis|framework|examination)\b/i,
+  /\bhas (?:gained|garnered|received|attracted) (?:significant|considerable|substantial|growing|increasing) (?:attention|interest|focus|traction)\b/i,
+  /\bthis (?:highlights|underscores|emphasizes|demonstrates) the (?:importance|need|significance|value|necessity) of\b/i,
+  /\bultimately (?:leads?|leading|drives?|driving|results?|resulting) (?:to|in)\b/i,
+  /\bin conclusion\b/i,
+  /\bfurthermore\b/i,
+  /\bmoreover\b/i,
+  /\badditionally\b/i,
+  /\bnevertheless\b/i,
+  /\bconsequently\b/i,
+  /\bdelves? into\b/i,
+  /\btapestry\b/i,
+  /\bseamlessly?\b/i,
+  /\binnovative approach\b/i,
+  /\boverall,?\s/i,
+  /\bin today's (?:world|society|era|age|landscape)\b/i,
+];
+
+function scoreReadability(sentence: string, original: string): number {
+  let score = 1.0;
+  const words = sentence.split(/\s+/).filter(Boolean);
+  const wordCount = words.length;
+
+  // 1. Penalize garbled morphology (e.g. "informationd", "analyzement")
+  const garbledMorphology = /\b[a-z]+(?:ment|tion|sion)(?:ed|ing|ly)\b/gi;
+  const garbleMatches = sentence.match(garbledMorphology);
+  if (garbleMatches) score -= garbleMatches.length * 0.08;
+
+  // 2. Penalize doubled words ("the the", "is is")
+  const doubled = sentence.match(/\b(\w+)\s+\1\b/gi);
+  if (doubled) score -= doubled.length * 0.15;
+
+  // 3. Penalize sentences that are too short (<4 words) or too long (>45 words)
+  if (wordCount < 4 && wordCount > 0) score -= 0.2;
+  if (wordCount > 45) score -= 0.15;
+
+  // 4. Penalize article mismatches ("a information", "an big")
+  const badArticleA = sentence.match(/\ba\s+[aeiou]\w/gi);
+  const badArticleAn = sentence.match(/\ban\s+[bcdfghjklmnpqrstvwxyz]\w/gi);
+  if (badArticleA) score -= badArticleA.length * 0.08;
+  if (badArticleAn) score -= badArticleAn.length * 0.08;
+
+  // 5. Penalize AI-tell patterns still present
+  let aiTells = 0;
+  for (const pattern of AI_TELL_PATTERNS) {
+    if (pattern.test(sentence)) aiTells++;
+  }
+  score -= aiTells * 0.10;
+
+  // 6. Penalize contractions (academic must not have them)
+  const contractions = sentence.match(/\b\w+[''\u2019](?:t|s|re|ve|ll|d|m)\b/gi);
+  if (contractions) score -= contractions.length * 0.12;
+
+  // 7. Reward meaning preservation — content overlap with original
+  const overlap = contentOverlap(original, sentence);
+  if (overlap < 0.20) score -= 0.25; // too far from original meaning
+  if (overlap > 0.85) score -= 0.05; // not enough change
+
+  // 8. Penalize consecutive rare/long words (3+ in a row with 8+ chars)
+  let consecutiveLong = 0;
+  let maxConsecutive = 0;
+  for (const w of words) {
+    if (w.replace(/[^a-zA-Z]/g, '').length >= 8) {
+      consecutiveLong++;
+      maxConsecutive = Math.max(maxConsecutive, consecutiveLong);
+    } else {
+      consecutiveLong = 0;
+    }
+  }
+  if (maxConsecutive >= 3) score -= 0.10;
+  if (maxConsecutive >= 5) score -= 0.15;
+
+  // 9. Penalize first person when not in original
+  if (/\b(?:I|we|my|our|me|us)\b/.test(sentence) && !/\b(?:I|we|my|our|me|us)\b/.test(original)) {
+    score -= 0.15;
+  }
+
+  // 10. Penalize rhetorical questions
+  if (/\?\s*$/.test(sentence) && !/\?\s*$/.test(original)) {
+    score -= 0.20;
+  }
+
+  return Math.max(0, Math.min(1, score));
+}
+
+/**
+ * Composite quality score for selecting the best iteration result.
+ * Balances word-level change, readability, and AI signal absence.
+ */
+function compositeQualityScore(
+  original: string,
+  candidate: string,
+): number {
+  const changeRatio = wordChangeRatio(original, candidate);
+  const readability = scoreReadability(candidate, original);
+
+  // Change score: reward change up to 0.65, then diminishing returns
+  // (over-changing hurts readability — thesaurus syndrome)
+  const changeScore = changeRatio <= 0.65
+    ? changeRatio / 0.65
+    : 1.0 - (changeRatio - 0.65) * 0.5;
+
+  // Weights: readability matters more than raw change
+  return (changeScore * 0.40) + (readability * 0.60);
+}
+
+/* ── Sentence-Level Restructuring ─────────────────────────────────
+ * Structural transforms that change sentence shape, not just words.
+ * Applied before word replacement for deeper variety.
+ * ──────────────────────────────────────────────────────────────── */
+
+function applySentenceRestructuring(sentence: string, strategy: number): string {
+  let text = sentence;
+
+  // Strategy 0: No restructuring (word swap only)
+  if (strategy === 0) return text;
+
+  // All strategies: Apply evaluative phrase surgery
+  for (const { pattern, replaceFn } of EVALUATIVE_SURGERIES) {
+    pattern.lastIndex = 0;
+    text = text.replace(pattern, replaceFn);
+  }
+
+  // Strategy 1: Clause reorder (move prepositional phrase to front)
+  if (strategy === 1 || strategy === 3) {
+    const ppMatch = text.match(/^(.{20,}?)\s+((?:in|on|at|for|through|during|within|across|by|under|over|between|among|after|before|since|until|without)\s+[^,]+)[.!?]?\s*$/i);
+    if (ppMatch && ppMatch[2].split(/\s+/).length >= 3 && ppMatch[2].split(/\s+/).length <= 10) {
+      const pp = ppMatch[2].trim();
+      const rest = ppMatch[1].trim().replace(/[,.]$/, '');
+      text = pp.charAt(0).toUpperCase() + pp.slice(1) + ', ' + rest.charAt(0).toLowerCase() + rest.slice(1) + '.';
+    }
+  }
+
+  // Strategy 2: Passive ↔ Active voice toggle
+  if (strategy === 2 || strategy === 4) {
+    const passiveRe = /\b(\w[\w\s]{2,30}?)\s+(is|are|was|were)\s+(\w+ed)\s+by\s+(\w[\w\s]{2,30}?)([.,;])/i;
+    const pm = text.match(passiveRe);
+    if (pm) {
+      const [full, subject, , verb, agent, punct] = pm;
+      const activeVerb = verb.replace(/ed$/, 's');
+      text = text.replace(full, agent.trim() + ' ' + activeVerb + ' ' + subject.trim() + punct);
+    }
+  }
+
+  // Strategy 3: Break parallel structures ("X, Y, and Z" → "X and Y. Z also...")
+  if (strategy === 3) {
+    const tripleList = text.match(/\b(\w[\w\s]+?),\s+(\w[\w\s]+?),?\s+and\s+(\w[\w\s]+?)([.!?])\s*$/i);
+    if (tripleList) {
+      const [fullMatch, item1, item2, item3, punct] = tripleList;
+      const prefix = text.slice(0, text.indexOf(fullMatch));
+      text = prefix + item1.trim() + ' and ' + item2.trim() + punct + ' ' + item3.trim().charAt(0).toUpperCase() + item3.trim().slice(1) + ' also applies' + punct;
+    }
+  }
+
+  // Strategy 4: Connector disruption (strip or downgrade formal connectors)
+  if (strategy >= 2) {
+    const connectorRemovals: Record<string, string[]> = {
+      'furthermore': [''], 'moreover': [''], 'additionally': [''],
+      'consequently': ['so'], 'nevertheless': ['still'], 'nonetheless': ['still'],
+      'subsequently': ['then'], 'accordingly': ['so'], 'therefore': ['so'],
+      'hence': ['so'], 'indeed': [''], 'in contrast': ['but'],
+      'as a result': ['so'], 'in addition': ['also'],
+      'in conclusion': [''], 'in summary': [''], 'in essence': [''],
+    };
+    for (const [conn, repls] of Object.entries(connectorRemovals)) {
+      const re = new RegExp(`^${conn}[,;]?\\s*`, 'i');
+      if (re.test(text)) {
+        const rep = repls[Math.floor(Math.random() * repls.length)];
+        text = text.replace(re, '');
+        if (rep) {
+          text = rep.charAt(0).toUpperCase() + rep.slice(1) + ' ' + text.charAt(0).toLowerCase() + text.slice(1);
+        } else {
+          text = text.charAt(0).toUpperCase() + text.slice(1);
+        }
+        break;
+      }
+    }
+  }
+
+  // Ensure proper ending
+  text = text.trim();
+  if (text.length > 0 && !/[.!?]$/.test(text)) text += '.';
+  if (text.length > 0 && text[0] !== text[0].toUpperCase()) {
+    text = text.charAt(0).toUpperCase() + text.slice(1);
+  }
+
+  return text;
+}
+
+/* ── Burstiness Manager ───────────────────────────────────────────
+ * Varies sentence lengths within a paragraph for natural rhythm.
+ * ONLY splits at verified independent-clause boundaries where both
+ * halves can stand alone as grammatical sentences.
+ * Returns an array of { text, needsReprocess } — any newly created
+ * sentence from a split/merge is flagged for re-processing through
+ * processSentence so it gets full cleanup.
+ * ──────────────────────────────────────────────────────────────── */
+
+interface BurstResult { text: string; needsReprocess: boolean; }
+
+/**
+ * Check if a string fragment looks like a complete independent clause.
+ * Must have: at least one subject-like word AND at least one verb.
+ */
+function isIndependentClause(fragment: string): boolean {
+  const trimmed = fragment.trim().replace(/[.!?,;:]+$/, '').trim();
+  const words = trimmed.split(/\s+/);
+  if (words.length < 5) return false; // too short to be a real sentence
+
+  // Must contain a finite verb (is/are/was/were/has/have/had/do/does/did/can/could/
+  // will/would/may/might/shall/should OR a word ending in -s/-ed/-es for 3rd person/past)
+  const hasVerb = /\b(is|are|was|were|has|have|had|does|did|do|can|could|will|would|may|might|shall|should|seems?|appears?|remains?|becomes?|provides?|includes?|requires?|involves?|suggests?|indicates?|shows?|demonstrates?|reveals?|represents?|offers?|creates?|makes?|takes?|gives?|leads?|allows?|enables?|helps?)\b/i.test(trimmed)
+    || /\b\w+(?:ed|ied|ated|ized|ised)\b/i.test(trimmed); // past tense
+  if (!hasVerb) return false;
+
+  // Must start with something subject-like (noun phrase, pronoun, determiner + noun)
+  const startsWithSubject = /^(?:the|a|an|this|that|these|those|it|they|he|she|we|its|their|his|her|most|many|some|all|each|both|such|every|several|various|certain|particular|specific|different|similar|other|further|additional|overall|general|key|new|recent|current|early|modern|traditional|digital|online|social|financial|commercial|economic|academic|professional|technical|statistical|analytical|empirical|practical|theoretical|significant|important|essential|critical|effective|efficient|successful|comprehensive|systematic|strategic|primary|secondary|initial|final|subsequent|previous|existing|available|relevant|potential|possible|necessary|sufficient|appropriate|suitable|common|frequent|typical|standard|normal|natural|basic|fundamental|central|main|major|minor|local|global|national|international|internal|external|direct|indirect|positive|negative|high|low|large|small|long|short)\b/i.test(trimmed);
+
+  return startsWithSubject;
+}
+
+function manageBurstiness(sentences: string[]): BurstResult[] {
+  const result: BurstResult[] = sentences.map(s => ({ text: s, needsReprocess: false }));
+
+  // Pass 1: Smart-split sentences >30 words ONLY at verified clause boundaries
+  for (let i = result.length - 1; i >= 0; i--) {
+    const words = result[i].text.split(/\s+/);
+    if (words.length <= 30) continue;
+
+    let didSplit = false;
+
+    // Strategy A: Split at ", which/where/who" (non-restrictive clause → "This ...")
+    const relMatch = result[i].text.match(/^(.{30,}?),\s+(which|where|who)\s+(.+)$/i);
+    if (relMatch) {
+      const main = relMatch[1].trim().replace(/,$/, '').trim();
+      const relWord = relMatch[2].toLowerCase();
+      const rest = relMatch[3].trim();
+
+      // Build the standalone second sentence
+      const bridge = relWord === 'which' ? 'This' : relWord === 'where' ? 'There,' : 'They';
+      let secondSent = bridge + ' ' + rest.charAt(0).toLowerCase() + rest.slice(1);
+      if (!/[.!?]$/.test(secondSent)) secondSent += '.';
+      const mainSent = /[.!?]$/.test(main) ? main : main + '.';
+
+      // Validate BOTH halves are real sentences
+      if (isIndependentClause(mainSent) && secondSent.split(/\s+/).length >= 5) {
+        result.splice(i, 1,
+          { text: mainSent, needsReprocess: false },
+          { text: secondSent, needsReprocess: true }, // new sentence needs full cleanup
+        );
+        didSplit = true;
+      }
+    }
+
+    if (didSplit) continue;
+
+    // Strategy B: Split at ", and/but/so/yet" ONLY if BOTH sides are independent clauses
+    const conjMatch = result[i].text.match(/^(.{25,}?),\s+(and|but|so|yet)\s+(.{15,})$/i);
+    if (conjMatch) {
+      const part1 = conjMatch[1].trim().replace(/,$/, '').trim();
+      const part2 = conjMatch[3].trim();
+
+      const sent1 = /[.!?]$/.test(part1) ? part1 : part1 + '.';
+      let sent2 = part2.charAt(0).toUpperCase() + part2.slice(1);
+      if (!/[.!?]$/.test(sent2)) sent2 += '.';
+
+      // BOTH must be real independent clauses
+      if (isIndependentClause(sent1) && isIndependentClause(sent2)) {
+        result.splice(i, 1,
+          { text: sent1, needsReprocess: false },
+          { text: sent2, needsReprocess: true },
+        );
+        didSplit = true;
+      }
+    }
+
+    // NO force-split fallback — if we can't find a clean clause boundary,
+    // leave the long sentence intact. A long readable sentence is better
+    // than two broken fragments.
+  }
+
+  // Pass 2: Merge adjacent very short sentences (<6 words each, combined ≤18)
+  // ONLY merge if they share a topic (second sentence refers back to first)
+  for (let i = 0; i < result.length - 1; i++) {
+    const w1 = result[i].text.split(/\s+/).length;
+    const w2 = result[i + 1].text.split(/\s+/).length;
+    if (w1 > 6 || w2 > 6 || w1 + w2 > 18) continue;
+
+    // Check if sentences are related (share at least one content word ≥4 chars)
+    const words1 = new Set(result[i].text.toLowerCase().replace(/[^a-z\s]/g, '').split(/\s+/).filter(w => w.length >= 4));
+    const words2 = result[i + 1].text.toLowerCase().replace(/[^a-z\s]/g, '').split(/\s+/).filter(w => w.length >= 4);
+    const shared = words2.some(w => words1.has(w));
+    if (!shared) continue; // unrelated short sentences — leave separate
+
+    const s1 = result[i].text.replace(/[.!?]$/, '').trim();
+    const s2Lower = result[i + 1].text.charAt(0).toLowerCase() + result[i + 1].text.slice(1);
+    const merged = s1 + ', and ' + s2Lower;
+    result.splice(i, 2, { text: merged, needsReprocess: true });
+  }
+
+  return result;
+}
+
 /* ── Core: process one sentence ──────────────────────────────────── */
 
 function processSentence(
@@ -915,6 +1291,13 @@ function processSentence(
     abbrevMap[placeholder] = m;
     return placeholder;
   });
+
+  // ─── Step 0.5: Sentence-level restructuring ─────────────────
+  // Pick a random restructuring strategy for variety across iterations.
+  // Strategies: 0=none, 1=clause reorder, 2=voice toggle, 3=clause+parallel,
+  //             4=voice toggle+connector disruption
+  const restructureStrategy = Math.floor(Math.random() * 5);
+  text = applySentenceRestructuring(text, restructureStrategy);
 
   // ─── Step 1: AI phrase replacement ───────────────────────────
   for (const { pattern, replacements } of PHRASE_REPLACEMENTS) {
@@ -1280,10 +1663,11 @@ export function stealthHumanize(
         sent, hasFirstPerson, globalSentenceIdx, totalSentences,
         usedStarters, strength,
       );
-      let bestChange = wordChangeRatio(originalSent, best);
+      let bestScore = compositeQualityScore(originalSent, best);
 
       // Iterative refinement: each pass starts from ORIGINAL to prevent
-      // compounding garble. We keep the best result (highest change ratio).
+      // compounding garble. We keep the best result (highest composite score
+      // balancing change ratio, readability, and AI signal absence).
       // Subsequent passes use sentenceIndex=0 to prevent duplicate starter injection.
       let iter = 1;
         while (iter <= enforcedMaxIterations) {
@@ -1292,12 +1676,12 @@ export function stealthHumanize(
             originalSent, hasFirstPerson, iter === 1 ? globalSentenceIdx : 0,
             totalSentences, usedStarters, iterStrength as any
           );
-          const nextChange = wordChangeRatio(originalSent, next);
-          if (nextChange > bestChange) {
+          const nextScore = compositeQualityScore(originalSent, next);
+          if (nextScore > bestScore) {
             best = next;
-            bestChange = nextChange;
+            bestScore = nextScore;
           }
-          if (iter >= 10 && bestChange >= 0.65) break;
+          if (iter >= 10 && wordChangeRatio(originalSent, best) >= 0.65) break;
           iter++;
         }
 
@@ -1305,7 +1689,37 @@ export function stealthHumanize(
       globalSentenceIdx++;
     }
 
-    outputParagraphs.push(outputSentences.join(' '));
+    // Apply burstiness management — splits/merges get flagged for reprocessing
+    const burstyResults = manageBurstiness(outputSentences);
+
+    // Re-process any newly created sentences (from splits/merges) through
+    // the full processSentence pipeline so they get proper cleanup, synonym
+    // replacement, grammar fixes etc. This keeps everything sentence-by-sentence.
+    const finalSentences: string[] = [];
+    for (const item of burstyResults) {
+      if (item.needsReprocess && item.text.trim().length >= 8) {
+        // Run 3 iterations on the new sentence and pick the best
+        let reprocessBest = processSentence(
+          item.text, hasFirstPerson, 0, totalSentences, usedStarters, strength,
+        );
+        let reprocessBestScore = compositeQualityScore(item.text, reprocessBest);
+        for (let ri = 0; ri < 3; ri++) {
+          const candidate = processSentence(
+            item.text, hasFirstPerson, 0, totalSentences, usedStarters, strength,
+          );
+          const score = compositeQualityScore(item.text, candidate);
+          if (score > reprocessBestScore) {
+            reprocessBest = candidate;
+            reprocessBestScore = score;
+          }
+        }
+        finalSentences.push(reprocessBest);
+      } else {
+        finalSentences.push(item.text);
+      }
+    }
+
+    outputParagraphs.push(finalSentences.join(' '));
   }
 
   // Final post-processing: fix AI/acronym capitalization across all output
