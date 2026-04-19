@@ -241,7 +241,7 @@ function EditorHighlight({ text, issues, activeIdx, onClickIssue }: {
   }, [text, issues]);
 
   return (
-    <div className="text-[15px] leading-[1.85] text-slate-800 dark:text-zinc-200 whitespace-pre-wrap min-h-[300px]">
+    <div className="word-editor-text whitespace-pre-wrap min-h-[420px]">
       {segments.map((s, i) =>
         s.isIssue ? (
           <span key={i} onClick={() => onClickIssue(s.idx)}
@@ -262,7 +262,7 @@ function CorrectionDiff({ input, issues }: { input: string; issues: Issue[] }) {
   const fixable = issues.filter(i => i.replacements.length > 0).sort((a, b) => a.start - b.start);
 
   if (fixable.length === 0) {
-    return <div className="text-[15px] leading-[1.85] text-slate-800 dark:text-zinc-200 whitespace-pre-wrap">{input}</div>;
+    return <div className="word-editor-text whitespace-pre-wrap">{input}</div>;
   }
 
   const parts: React.ReactNode[] = [];
@@ -284,7 +284,7 @@ function CorrectionDiff({ input, issues }: { input: string; issues: Issue[] }) {
 
   return (
     <div>
-      <div className="text-[15px] leading-[1.85] text-slate-800 dark:text-zinc-200 whitespace-pre-wrap">{parts}</div>
+      <div className="word-editor-text whitespace-pre-wrap">{parts}</div>
       <div className="mt-6 pt-4 border-t border-slate-100 dark:border-zinc-800/50 flex items-center gap-5 text-[11px] text-slate-400 dark:text-zinc-500">
         <span className="flex items-center gap-1.5">
           <span className="w-3 h-2 rounded-sm bg-red-100 dark:bg-red-950/40 border border-red-200 dark:border-red-800/40 inline-block" /> Removed
@@ -474,8 +474,35 @@ export default function GrammarPage() {
 
   const handleCopy = useCallback(() => {
     if (!result) return;
-    navigator.clipboard.writeText(showCorrected ? result.output : result.input);
-    setCopied(true); setTimeout(() => setCopied(false), 2000);
+    const textToCopy = showCorrected ? result.output : result.input;
+    const escaped = textToCopy
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/\"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+    const htmlParagraphs = escaped
+      .split(/\n{2,}/)
+      .map((paragraph) => paragraph.replace(/\n/g, '<br />'))
+      .map((paragraph) => `<p style=\"margin:0 0 12pt 0;\">${paragraph || '&nbsp;'}</p>`)
+      .join('');
+    const html = `<!doctype html><html><body><div style=\"font-family:Cambria,'Times New Roman',serif;font-size:12pt;line-height:1.6;color:#1f2328;\">${htmlParagraphs}</div></body></html>`;
+
+    const copyWithRichText = async () => {
+      if (navigator.clipboard && 'write' in navigator && typeof ClipboardItem !== 'undefined') {
+        const item = new ClipboardItem({
+          'text/plain': new Blob([textToCopy], { type: 'text/plain' }),
+          'text/html': new Blob([html], { type: 'text/html' }),
+        });
+        await navigator.clipboard.write([item]);
+      } else {
+        await navigator.clipboard.writeText(textToCopy);
+      }
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    };
+
+    void copyWithRichText();
   }, [result, showCorrected]);
 
   const handleAccept = useCallback(async (idx: number, rep: string) => {
@@ -568,11 +595,11 @@ export default function GrammarPage() {
      ════════════════════════════════════════════════════════════════════════ */
 
   return (
-    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-[#f8f9fa] dark:bg-[#0a0a0f]">
+    <div className="flex h-full min-h-0 flex-col overflow-hidden overscroll-none bg-[#f8f9fa] dark:bg-[#0a0a0f]">
 
       {/* ── Top bar ────────────────────────────────────────────────────── */}
       <div className="shrink-0 border-b border-slate-200 bg-white dark:border-zinc-800 dark:bg-zinc-900/70">
-        <div className="max-w-[1800px] mx-auto px-6">
+        <div className="max-w-[1800px] mx-auto px-3 sm:px-4 lg:px-6">
           <div className="flex flex-wrap items-center justify-between gap-3 py-3">
             <div className="flex items-center gap-3">
               <Link href="/app" className="text-slate-400 dark:text-zinc-600 hover:text-emerald-500 transition-colors">
@@ -636,10 +663,10 @@ export default function GrammarPage() {
       </div>
 
       {/* ── Two-column layout ──────────────────────────────────────────── */}
-      <div className="max-w-[1800px] mx-auto flex min-h-0 flex-1 w-full overflow-hidden">
+      <div className="mx-auto grid min-h-0 flex-1 w-full max-w-[1800px] grid-cols-1 grid-rows-[minmax(0,1.2fr)_minmax(0,1fr)] overflow-hidden lg:grid-cols-[minmax(0,1fr)_360px] lg:grid-rows-1 xl:grid-cols-[minmax(0,1fr)_400px]">
 
         {/* ═══ LEFT: Editor ════════════════════════════════════════════════ */}
-        <div className="flex min-h-0 flex-1 flex-col border-b border-slate-200 dark:border-zinc-800 lg:border-b-0 lg:border-r">
+        <div className="flex min-h-0 flex-col border-b border-slate-200 dark:border-zinc-800 lg:border-b-0 lg:border-r">
 
           {/* Toolbar */}
           <div className="shrink-0 flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 bg-white/50 px-4 py-2 dark:border-zinc-800/60 dark:bg-zinc-900/30 sm:px-6">
@@ -748,20 +775,24 @@ export default function GrammarPage() {
           </div>
 
           {/* Editor area */}
-          <div className="min-h-0 flex-1 overflow-y-auto bg-white dark:bg-zinc-900/20">
+          <div className="word-editor-shell min-h-0 flex-1 overflow-y-auto px-2 py-3 sm:px-4 sm:py-4">
             {!result ? (
-              <textarea value={inputText} onChange={(e) => setInputText(e.target.value)}
-                onKeyDown={(e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) handleCheck(); }}
-                placeholder="Start typing or paste your text here…"
-                className="w-full h-full min-h-full resize-none bg-transparent p-8 text-[15px] leading-[1.85] text-slate-800 outline-none placeholder:text-slate-300 dark:text-zinc-200 dark:placeholder:text-zinc-700" />
+              <div className="word-editor-page">
+                <textarea value={inputText} onChange={(e) => setInputText(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) handleCheck(); }}
+                  placeholder="Start typing or paste your text here…"
+                  className="word-editor-text h-full min-h-full w-full resize-none bg-transparent p-6 sm:p-10 outline-none placeholder:text-slate-400" />
+              </div>
             ) : (
-              <div className="p-8">
-                {showCorrected ? (
-                  <CorrectionDiff input={result.input} issues={visibleIssues} />
-                ) : (
-                  <EditorHighlight text={result.input} issues={result.issues} activeIdx={activeIssue}
-                    onClickIssue={(i) => setActiveIssue(activeIssue === i ? null : i)} />
-                )}
+              <div className="word-editor-page">
+                <div className="p-6 sm:p-10">
+                  {showCorrected ? (
+                    <CorrectionDiff input={result.input} issues={visibleIssues} />
+                  ) : (
+                    <EditorHighlight text={result.input} issues={result.issues} activeIdx={activeIssue}
+                      onClickIssue={(i) => setActiveIssue(activeIssue === i ? null : i)} />
+                  )}
+                </div>
               </div>
             )}
           </div>
@@ -774,7 +805,7 @@ export default function GrammarPage() {
         </div>
 
         {/* ═══ RIGHT: Sidebar ══════════════════════════════════════════════ */}
-        <div className="flex min-h-0 w-full flex-shrink-0 flex-col overflow-hidden bg-white dark:bg-zinc-900/40 lg:w-[360px] xl:w-[400px]">
+        <div className="flex min-h-0 flex-col overflow-hidden border-t border-slate-200 bg-white dark:border-zinc-800 dark:bg-zinc-900/40 lg:border-t-0">
 
           {result ? (
             <>

@@ -1,9 +1,12 @@
 import type { NextConfig } from "next";
 import path from "path";
 
+const workspaceRoot = path.resolve(/* turbopackIgnore: true */ process.cwd(), "..", "..");
+
 const nextConfig: NextConfig = {
+  outputFileTracingRoot: workspaceRoot,
   turbopack: {
-    root: path.resolve(/* turbopackIgnore: true */ process.cwd()),
+    root: workspaceRoot,
   },
   images: {
     formats: ['image/avif', 'image/webp'],

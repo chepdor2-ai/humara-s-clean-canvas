@@ -745,6 +745,52 @@
     background: rgba(66, 143, 86, 0.5);
   }
 
+  /* Grammar page: Word-style document viewport */
+  .word-editor-shell {
+    background:
+      radial-gradient(140% 60% at 50% 0%, rgba(148, 163, 184, 0.2), transparent 55%),
+      linear-gradient(180deg, #eef2f7 0%, #e7ebf1 100%);
+    overscroll-behavior: contain;
+  }
+  .dark .word-editor-shell {
+    background:
+      radial-gradient(140% 60% at 50% 0%, rgba(56, 189, 248, 0.08), transparent 55%),
+      linear-gradient(180deg, #0e1118 0%, #0a0d14 100%);
+  }
+
+  .word-editor-page {
+    width: min(100%, 8.9in);
+    min-height: 100%;
+    margin: 0 auto;
+    border-radius: 2px;
+    border: 1px solid #d4d8e0;
+    background: #ffffff;
+    box-shadow:
+      0 1px 2px rgba(15, 23, 42, 0.08),
+      0 18px 40px -26px rgba(15, 23, 42, 0.34);
+  }
+  .dark .word-editor-page {
+    border-color: #272d39;
+    box-shadow:
+      0 1px 2px rgba(2, 6, 23, 0.4),
+      0 20px 44px -24px rgba(2, 6, 23, 0.7);
+  }
+
+  .word-editor-text {
+    font-family: Cambria, 'Times New Roman', Georgia, serif;
+    font-size: 12pt;
+    line-height: 1.65;
+    color: #1f2328;
+    letter-spacing: 0;
+    tab-size: 4;
+    text-rendering: optimizeLegibility;
+    caret-color: #0f172a;
+  }
+  .word-editor-text::selection {
+    background: rgba(147, 197, 253, 0.34);
+    color: #111827;
+  }
+
   /* Range slider styling */
   input[type="range"]::-webkit-slider-thumb {
     -webkit-appearance: none;

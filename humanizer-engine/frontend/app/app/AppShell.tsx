@@ -22,7 +22,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <CommandPaletteProvider>
         <UsageProvider>
           <AmbientBackground />
-          <div className="flex min-h-screen">
+          <div className="flex min-h-[100dvh] w-full">
             <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
             <div className="flex min-h-0 flex-1 flex-col min-w-0">
               <TopBar onMenuToggle={() => setSidebarOpen(o => !o)} />
