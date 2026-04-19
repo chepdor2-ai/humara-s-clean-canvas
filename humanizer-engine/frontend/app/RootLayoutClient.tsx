@@ -18,7 +18,7 @@ const Logo = () => (
       <div className="absolute -inset-2.5 rounded-full bg-cyan-400/15 animate-[logoPulse_2.5s_ease-in-out_infinite_0.6s] blur-lg" />
       <div className="absolute -inset-4 rounded-full bg-cyan-600/8 animate-[logoPulse_2.5s_ease-in-out_infinite_1.2s] blur-xl" />
     </div>
-    <span className="brand-wordmark text-xl font-bold tracking-tight"><span className="brand-humara">Humara</span><span className="brand-gpt">GPT</span></span>
+    <span className="brand-wordmark text-xl font-bold tracking-tight"><span className="brand-humara">Humara</span><span className="brand-gpt uniform-brand-glow">GPT</span></span>
   </Link>
 );
 

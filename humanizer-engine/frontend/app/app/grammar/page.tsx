@@ -13,6 +13,7 @@ import {
   type Severity,
   type CorrectionResult,
 } from '@/lib/engine/grammar-corrector';
+import { RichTextEditor } from '../../../components/grammar/RichTextEditor';
 
 /* ── Severity config ──────────────────────────────────────────────────────── */
 
@@ -663,10 +664,10 @@ export default function GrammarPage() {
       </div>
 
       {/* ── Two-column layout ──────────────────────────────────────────── */}
-      <div className="mx-auto grid min-h-0 flex-1 w-full max-w-[1800px] grid-cols-1 grid-rows-[minmax(0,1.2fr)_minmax(0,1fr)] overflow-hidden lg:grid-cols-[minmax(0,1fr)_360px] lg:grid-rows-1 xl:grid-cols-[minmax(0,1fr)_400px]">
+      <div className="mx-auto grid min-h-[calc(100vh-140px)] flex-1 w-full max-w-[1800px] grid-cols-1 grid-rows-[minmax(0,1.2fr)_minmax(0,1fr)] overflow-hidden lg:grid-cols-[minmax(0,1fr)_360px] lg:grid-rows-1 xl:grid-cols-[minmax(0,1fr)_400px]">
 
         {/* ═══ LEFT: Editor ════════════════════════════════════════════════ */}
-        <div className="flex min-h-0 flex-col border-b border-slate-200 dark:border-zinc-800 lg:border-b-0 lg:border-r">
+        <div className="flex flex-col border-b border-slate-200 dark:border-zinc-800 lg:border-b-0 lg:border-r h-[calc(100vh-72px)]">
 
           {/* Toolbar */}
           <div className="shrink-0 flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 bg-white/50 px-4 py-2 dark:border-zinc-800/60 dark:bg-zinc-900/30 sm:px-6">
@@ -775,26 +776,64 @@ export default function GrammarPage() {
           </div>
 
           {/* Editor area */}
-          <div className="word-editor-shell min-h-0 flex-1 overflow-y-auto px-2 py-3 sm:px-4 sm:py-4">
-            {!result ? (
-              <div className="word-editor-page">
-                <textarea value={inputText} onChange={(e) => setInputText(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) handleCheck(); }}
-                  placeholder="Start typing or paste your text here…"
-                  className="word-editor-text h-full min-h-full w-full resize-none bg-transparent p-6 sm:p-10 outline-none placeholder:text-slate-400" />
-              </div>
-            ) : (
-              <div className="word-editor-page">
-                <div className="p-6 sm:p-10">
-                  {showCorrected ? (
-                    <CorrectionDiff input={result.input} issues={visibleIssues} />
-                  ) : (
-                    <EditorHighlight text={result.input} issues={result.issues} activeIdx={activeIssue}
-                      onClickIssue={(i) => setActiveIssue(activeIssue === i ? null : i)} />
-                  )}
+          <div className="min-h-0 flex-1 relative bg-[#eef2f7] dark:bg-[#0e1118]">
+            <div className="word-editor-page flex flex-col h-full bg-white dark:bg-zinc-950">
+              {showCorrected && result ? (
+                <div className="p-6 sm:p-10 overflow-y-auto w-full h-full">
+                  <CorrectionDiff input={result.input} issues={visibleIssues} />
                 </div>
-              </div>
-            )}
+              ) : (
+                <RichTextEditor
+                  value={inputText}
+                  onChange={setInputText}
+                  onCheck={handleCheck}
+                  isChecking={checking}
+                  issues={result ? result.issues : null}
+                  activeIssueIdx={activeIssue}
+                  onIssueClick={(i) => setActiveIssue(activeIssue === i ? null : i)}
+                  onAcceptIssue={handleAccept}
+                  onExportTarget={async (type) => {
+                    const content = showCorrected && result ? result.output : inputText;
+                    if (type === 'txt') {
+                      const blob = new Blob([content], { type: 'text/plain' });
+                      const url = URL.createObjectURL(blob);
+                      const a = document.createElement('a');
+                      a.href = url;
+                      a.download = 'Grammar_Export.txt';
+                      a.click();
+                      URL.revokeObjectURL(url);
+                    } else if (type === 'docx') {
+                      const { Document, Packer, Paragraph, TextRun } = await import('docx');
+                      const doc = new Document({
+                        sections: [{
+                          properties: {},
+                          children: content.split('\n').map(p => new Paragraph({ children: [new TextRun(p)] }))
+                        }]
+                      });
+                      Packer.toBlob(doc).then(blob => {
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = 'Grammar_Export.docx';
+                        a.click();
+                      });
+                    } else if (type === 'pdf') {
+                      const { jsPDF } = await import('jspdf');
+                      const doc = new jsPDF();
+                      const splitText = doc.splitTextToSize(content, 180);
+                      doc.text(splitText, 15, 15);
+                      doc.save('Grammar_Export.pdf');
+                    }
+                  }}
+                  onRewriteSelection={async (text, mode) => {
+                    // Hook into actual routing if desired
+                    return new Promise((resolve) => {
+                      setTimeout(() => resolve(text + ' (Rewritten)'), 1000);
+                    });
+                  }}
+                />
+              )}
+            </div>
           </div>
 
           {!result && inputText.trim() && (
@@ -805,7 +844,7 @@ export default function GrammarPage() {
         </div>
 
         {/* ═══ RIGHT: Sidebar ══════════════════════════════════════════════ */}
-        <div className="flex min-h-0 flex-col overflow-hidden border-t border-slate-200 bg-white dark:border-zinc-800 dark:bg-zinc-900/40 lg:border-t-0">
+        <div className="flex min-h-0 flex-col overflow-hidden border-t border-slate-200 bg-white dark:border-zinc-800 dark:bg-zinc-900/40 lg:border-t-0 h-[calc(100vh-72px)]">
 
           {result ? (
             <>

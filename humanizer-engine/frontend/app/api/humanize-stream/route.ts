@@ -834,8 +834,8 @@ export async function POST(req: Request) {
             } else if (eng === 'easy') {
               fullResult = (await runHumara22(normalizedText));
             } else {
-              // Default fallback: use Easy (Swift) engine
-              fullResult = (await runHumara22(normalizedText));
+              // Default fallback: use offline engine instead of LLM API
+              fullResult = runHumara20(normalizedText);
             }
             if (!fullResult || fullResult.trim().length === 0) fullResult = normalizedText;
 

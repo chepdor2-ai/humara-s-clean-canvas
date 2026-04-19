@@ -138,7 +138,7 @@ export function Sidebar({ open, onClose }: { open?: boolean; onClose?: () => voi
               <div className="absolute -inset-1 rounded-full bg-cyan-500/25 animate-[logoPulse_2.5s_ease-in-out_infinite] blur-md" />
             </div>
             <div className="flex flex-col">
-              <span className="brand-wordmark text-base font-semibold tracking-tight"><span className="brand-humara">Humara</span><span className="brand-gpt">GPT</span></span>
+              <span className="brand-wordmark text-base font-semibold tracking-tight"><span className="brand-humara">Humara</span><span className="brand-gpt uniform-brand-glow">GPT</span></span>
               <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Stealth Suite</span>
             </div>
           </Link>
@@ -178,7 +178,7 @@ export function Sidebar({ open, onClose }: { open?: boolean; onClose?: () => voi
           <Link
             href="/pricing"
             onClick={onClose}
-            className="uniform-auto-button uniform-auto-glow mt-3 block w-full rounded-lg border border-primary/30 bg-primary/10 px-3 py-1.5 text-center text-xs font-semibold text-primary transition-colors hover:bg-primary/15"
+            className="uniform-brand-glow mt-3 block w-full rounded-lg border border-primary/30 bg-primary/10 px-3 py-1.5 text-center text-xs font-semibold text-primary transition-colors hover:bg-primary/15"
           >
             Upgrade Plan
           </Link>

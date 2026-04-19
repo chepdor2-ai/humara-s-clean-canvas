@@ -968,6 +968,36 @@
     animation: brandGlow 3s ease-in-out infinite;
   }
 
+  /* ── 16-Color Uniform Glow ─────────────────────────────── */
+  @keyframes uniformGlowFast {
+    0% { filter: hue-rotate(0deg) drop-shadow(0 0 8px rgba(0,0,0,0.2)); }
+    10% { filter: hue-rotate(36deg); }
+    20% { filter: hue-rotate(72deg) drop-shadow(0 0 15px rgba(0,0,0,0.5)); }
+    30% { filter: hue-rotate(108deg); }
+    40% { filter: hue-rotate(144deg); }
+    50% { filter: hue-rotate(180deg) drop-shadow(0 0 20px rgba(0,0,0,0.6)); }
+    60% { filter: hue-rotate(216deg); }
+    70% { filter: hue-rotate(252deg); }
+    80% { filter: hue-rotate(288deg) drop-shadow(0 0 15px rgba(0,0,0,0.5)); }
+    90% { filter: hue-rotate(324deg); }
+    100% { filter: hue-rotate(360deg) drop-shadow(0 0 8px rgba(0,0,0,0.2)); }
+  }
+
+  @keyframes uniformGlowSlow {
+    0% { filter: hue-rotate(0deg) drop-shadow(0 0 4px rgba(0,0,0,0.1)); }
+    100% { filter: hue-rotate(360deg) drop-shadow(0 0 4px rgba(0,0,0,0.1)); }
+  }
+
+  .uniform-brand-glow {
+    /* Fast tracking for 10 seconds, then slow loop infinitely */
+    animation: uniformGlowFast 1s linear 10, uniformGlowSlow 10s linear 10s infinite;
+    display: inline-block; /* Ensure transforms and filters apply well to text */
+  }
+
+  .uniform-brand-glow-bg {
+    animation: uniformGlowFast 1s linear 10, uniformGlowSlow 10s linear 10s infinite;
+  }
+
   /* ── Ticker Animation ──────────────────────────────────── */
   @keyframes ticker {
     0% { transform: translateX(0); }
