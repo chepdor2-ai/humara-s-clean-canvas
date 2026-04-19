@@ -171,7 +171,6 @@ const ALL_ENGINES: EngineConfig[] = [
   { id: 'ninja_5', label: 'Omega' },
   { id: 'ghost_trial_2', label: 'Specter' },
   { id: 'phantom', label: 'Phantom' },
-  { id: 'ai_analysis', label: 'AI Analysis' },
 ];
 
 type ModeId = 'core_engines' | 'detection_control' | 'advanced_engines';
@@ -179,12 +178,10 @@ const MODE_ENGINES: Record<ModeId, Set<string>> = {
   core_engines: new Set(['easy', 'ninja_1', 'antipangram']),
   detection_control: new Set(['humara_v3_3', 'oxygen', 'king', 'nuru_v2', 'ghost_pro_wiki']),
   advanced_engines: new Set([
-    'ninja_3',
     'ninja_2',
     'ninja_5',
     'ghost_trial_2',
     'phantom',
-    'ai_analysis',
   ]),
 };
 const MODE_LABELS: Record<ModeId, string> = {
@@ -274,9 +271,9 @@ const getProcessingMessages = (label: string) => {
   return matched?.messages ?? DEFAULT_PROCESSING_MESSAGES;
 };
 
-const MAX_WORDS_PER_REQUEST = 2000;
+const MAX_WORDS_PER_REQUEST = 5000;
 const RECOMMENDED_MIN_WORDS = 500;
-const RECOMMENDED_MAX_WORDS = 1500;
+const RECOMMENDED_MAX_WORDS = 3000;
 const EDITOR_HEIGHT_CLASS = 'min-h-[240px] sm:min-h-[320px] md:min-h-[380px] lg:min-h-[420px] max-h-[320px] sm:max-h-[420px] md:max-h-[500px] lg:max-h-[560px]';
 
 interface EngineConfig {
@@ -310,14 +307,14 @@ function EditorPageInner() {
   const [error, setError] = useState('');
   const [rephrasing, setRephrasing] = useState(false);
 
-  const [engine, setEngine] = useState('humara_v3_3');
+  const [engine, setEngine] = useState('ninja_1');
   const [engineDropdownOpen, setEngineDropdownOpen] = useState(false);
   const [strength, setStrength] = useState('medium');
   const [tone, setTone] = useState('academic');
   const [strictMeaning, setStrictMeaning] = useState(true);
   const [humanizationRate, setHumanizationRate] = useState(8);
   const [grammarCorrection, setGrammarCorrection] = useState(false);
-  const [mode, setMode] = useState<ModeId>('detection_control');
+  const [mode, setMode] = useState<ModeId>('core_engines');
 
   // Admin-controlled engine visibility
   const [engineConfig, setEngineConfig] = useState<Record<string, { enabled: boolean; premium: boolean; sort_order: number }>>({});
@@ -367,9 +364,9 @@ function EditorPageInner() {
   // Auto-switch engine when mode changes
   useEffect(() => {
     const fallbackByMode: Record<ModeId, string> = {
-      core_engines: 'easy',
+      core_engines: 'ninja_1',
       detection_control: 'humara_v3_3',
-      advanced_engines: 'ninja_5',
+      advanced_engines: 'ninja_2',
     };
     if (!MODE_ENGINES[mode].has(engine)) setEngine(fallbackByMode[mode]);
   }, [mode]); // eslint-disable-line react-hooks/exhaustive-deps

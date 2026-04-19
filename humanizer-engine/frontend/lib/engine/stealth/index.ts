@@ -18,6 +18,7 @@
 import { AI_WORD_REPLACEMENTS } from '../shared-dictionaries';
 import { getBestReplacement } from './dictionary-service';
 import { runFullDetectorForensicsCleanup } from './forensics';
+import { detectDomain, getProtectedTermsForDomain } from '../domain-detector';
 
 /* ── Sentence Splitter ────────────────────────────────────────────── */
 
@@ -1226,6 +1227,12 @@ export function stealthHumanize(
   const enforcedMaxIterations = Math.max(10, maxIterations);
   console.log('[NURU_V2] === NEW ENGINE ACTIVE === Input length:', text.length);
   if (!text || text.trim().length === 0) return text;
+
+  // Detect domain and merge domain-specific protected terms into the static set
+  const domainResult = detectDomain(text);
+  const domainProtected = getProtectedTermsForDomain(domainResult);
+  for (const term of domainProtected) PROTECTED.add(term.toLowerCase());
+  console.log(`[NURU_V2] Domain: ${domainResult.primary} (${(domainResult.confidence * 100).toFixed(0)}%) — added ${domainProtected.size} protected terms`);
 
   const hasFirstPerson = /\b(I|we|my|our|me|us|myself|ourselves)\b/.test(text);
   const paragraphs = text.split(/\n\s*\n/).filter(p => p.trim());

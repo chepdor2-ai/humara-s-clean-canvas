@@ -33,7 +33,7 @@ import { fixMidSentenceCapitalization } from '@/lib/engine/validation-post-proce
 import { createServiceClient } from '@/lib/supabase';
 import { getUsageStatsCompat, incrementUsageCompat } from '@/lib/server/usage-tracking';
 
-export const maxDuration = 120;
+export const maxDuration = 300;
 
 /* ── SSE streaming humanization with per-sentence stage updates ─────── */
 
@@ -169,10 +169,10 @@ export async function POST(req: Request) {
       });
     }
 
-    // Max 2000 words per request
+    // Max 5000 words per request
     const inputWordCount = text.trim().split(/\s+/).length;
-    if (inputWordCount > 2000) {
-      return new Response('data: ' + JSON.stringify({ type: 'error', error: `Maximum 2,000 words per request. You submitted ${inputWordCount.toLocaleString()} words.` }) + '\n\n', {
+    if (inputWordCount > 5000) {
+      return new Response('data: ' + JSON.stringify({ type: 'error', error: `Maximum 5,000 words per request. You submitted ${inputWordCount.toLocaleString()} words.` }) + '\n\n', {
         status: 400,
         headers: { 'Content-Type': 'text/event-stream' },
       });
@@ -232,7 +232,7 @@ export async function POST(req: Request) {
     const stream = new ReadableStream({
       async start(controller) {
         // ── Deadline safety: send partial results before Vercel kills the function ──
-        const DEADLINE_MS = 115_000; // 115s — 5s before Vercel's 120s hard cutoff
+        const DEADLINE_MS = 295_000; // 295s — 5s before Vercel's 300s hard cutoff
         const startTime = Date.now();
         let deadlineReached = false;
         let latestHumanized = text; // always holds the best result so far
@@ -770,58 +770,142 @@ export async function POST(req: Request) {
               
               fullResult = tmp;
             } else if (eng === 'ai_analysis') {
-              const MAX_AUTO_ANALYSIS_ITERATIONS = 5;
-              let workingSentences = [...inputSentences];
+              // ═══════════════════════════════════════════════════════════
+              // TACTICAL AI ANALYSIS — 3+ agent pipeline with adaptive
+              // post-processing (Nuru 2.0 vs Pangram) and iterative
+              // flagged-sentence loop targeting <20% AI score.
+              // ═══════════════════════════════════════════════════════════
+              const MAX_ITER = 5;
+              const TARGET_SCORE = 20;
+              const timeOk = () => !(deadlineReached || Date.now() - startTime > DEADLINE_MS - 12000);
+
+              // ── Phase 0: Pre-Analysis ──
+              sendSSE(controller, { type: 'stage', stage: 'AI Analysis: Pre-Scan' });
+              await flushDelay(12);
+              const detector = getDetector();
+              const preAnalysis = detector.analyze(normalizedText);
+              const initialAiScore = getDetectorAverage(preAnalysis);
+              const isHighAI = initialAiScore >= 55;
+              const isMediumAI = initialAiScore >= 30 && initialAiScore < 55;
+              // Decide post-processing: Pangram for medium AI (cleaner text), Nuru for high AI (aggressive)
+              const useAntiPangram = isMediumAI || Math.random() < 0.35;
+              console.log(`[AI Analysis] Initial score: ${Math.round(initialAiScore)}% | High: ${isHighAI} | PostProc: ${useAntiPangram ? 'Pangram' : 'Nuru 2.0'}`);
+
+              // ── Phase 1: Agent 1 — Humarin (Humara 2.4) full-text pass ──
+              sendSSE(controller, { type: 'stage', stage: 'AI Analysis: Agent 1 — Humarin' });
+              await flushDelay(12);
+              let working = normalizedText;
+              if (timeOk()) {
+                try {
+                  working = await runHumara24(working);
+                } catch (err) {
+                  console.warn('[AI Analysis] Humarin agent failed, continuing:', err instanceof Error ? err.message : err);
+                }
+              }
+
+              // ── Phase 2: Agent 2 — Oxygen (Humara 2.0) structural rewrite ──
+              sendSSE(controller, { type: 'stage', stage: 'AI Analysis: Agent 2 — Oxygen Rewrite' });
+              await flushDelay(12);
+              if (timeOk()) {
+                working = runHumara20(working);
+              }
+
+              // ── Phase 3: Agent 3 — Deep Non-LLM Clean + Nuru polish (10×) ──
+              sendSSE(controller, { type: 'stage', stage: 'AI Analysis: Agent 3 — Deep Clean + Nuru' });
+              await flushDelay(12);
+              if (timeOk()) {
+                const { sentences: cleanSents, paragraphBoundaries: cleanBounds } = splitIntoIndexedSentences(working);
+                for (let i = 0; i < cleanSents.length; i++) {
+                  if (!isHeadingSentCheck(cleanSents[i])) {
+                    cleanSents[i] = deepNonLLMClean(cleanSents[i]);
+                    for (let p = 0; p < 10; p++) {
+                      cleanSents[i] = runNuruSinglePass(cleanSents[i]);
+                    }
+                    cleanSents[i] = finalSmoothGrammar(cleanSents[i]);
+                  }
+                  sendSSE(controller, { type: 'sentence', index: i, text: cleanSents[i], stage: 'Deep Clean + Nuru ×10' });
+                }
+                working = reassembleText(cleanSents, cleanBounds.length ? cleanBounds : [0]);
+              }
+
+              // ── Phase 4: Post-Processing — AntiPangram (forensic) or Nuru 2.0 Full ──
+              if (timeOk()) {
+                if (useAntiPangram) {
+                  sendSSE(controller, { type: 'stage', stage: 'AI Analysis: Pangram Forensic Clean' });
+                  await flushDelay(10);
+                  const { antiPangramSimple } = await import('@/lib/engine/antipangram');
+                  working = antiPangramSimple(
+                    working,
+                    (strength ?? 'strong') as 'light' | 'medium' | 'strong',
+                    (tone ?? 'academic') as 'academic' | 'professional' | 'casual' | 'neutral',
+                  );
+                } else {
+                  sendSSE(controller, { type: 'stage', stage: 'AI Analysis: Nuru 2.0 Full Post-Processing' });
+                  await flushDelay(10);
+                  const { sentences: nuruSents, paragraphBoundaries: nuruBounds } = splitIntoIndexedSentences(working);
+                  for (let i = 0; i < nuruSents.length; i++) {
+                    if (!isHeadingSentCheck(nuruSents[i])) {
+                      nuruSents[i] = await runNuru20Full(nuruSents[i]);
+                    }
+                    sendSSE(controller, { type: 'sentence', index: i, text: nuruSents[i], stage: 'Nuru 2.0 Full' });
+                  }
+                  working = reassembleText(nuruSents, nuruBounds.length ? nuruBounds : [0]);
+                }
+              }
+
+              // ── Phase 5: Iterative Flagged-Sentence Loop — Phantom + Nuru targeting ──
+              let workingSentences = splitIntoIndexedSentences(working).sentences;
+              const workingBounds = splitIntoIndexedSentences(working).paragraphBoundaries;
               let currentScan = getFlaggedSentenceDetails(workingSentences);
+              sendSSE(controller, { type: 'stage', stage: `AI Analysis: Post-Agent Score ${Math.round(currentScan.detectorAverage)}%` });
+              await flushDelay(12);
 
-              sendSSE(controller, { type: 'stage', stage: `AI Analysis: detector average ${Math.round(currentScan.detectorAverage)}%` });
-              await flushDelay(20);
-
-              for (let iteration = 0; iteration < MAX_AUTO_ANALYSIS_ITERATIONS; iteration++) {
-                if (currentScan.detectorAverage <= 20 || currentScan.flagged.length === 0) {
-                  sendSSE(controller, { type: 'stage', stage: `AI Analysis: score ${Math.round(currentScan.detectorAverage)}% — target met` });
-                  await flushDelay(12);
+              for (let iteration = 0; iteration < MAX_ITER; iteration++) {
+                if (currentScan.detectorAverage <= TARGET_SCORE || currentScan.flagged.length === 0) {
+                  sendSSE(controller, { type: 'stage', stage: `AI Analysis: ${Math.round(currentScan.detectorAverage)}% — target met` });
+                  await flushDelay(8);
                   break;
                 }
+                if (!timeOk()) break;
 
-                if (deadlineReached || Date.now() - startTime > DEADLINE_MS - 10000) break;
-
-                const useDualPass = currentScan.detectorAverage >= 40;
+                const usePhantom = currentScan.detectorAverage >= 35;
                 sendSSE(controller, {
                   type: 'stage',
-                  stage: `AI Analysis: flagged sentence loop ${iteration + 1} (${Math.round(currentScan.detectorAverage)}%)`,
+                  stage: `AI Analysis: Iteration ${iteration + 1} (${Math.round(currentScan.detectorAverage)}%)`,
                 });
-                await flushDelay(12);
+                await flushDelay(10);
 
                 for (const flagged of currentScan.flagged) {
                   if (isHeadingSentCheck(workingSentences[flagged.index])) continue;
-                  let updatedSentence = workingSentences[flagged.index];
+                  let sent = workingSentences[flagged.index];
 
-                  if (useDualPass) {
-                    updatedSentence = await runHumara24Full(updatedSentence);
+                  // Phantom (Humara 2.4) for high-AI sentences
+                  if (usePhantom) {
+                    sent = await runHumara24Full(sent);
                   }
+                  // Always run Nuru 2.0 Full
+                  sent = await runNuru20Full(sent);
+                  sent = finalSmoothGrammar(sent);
 
-                  updatedSentence = await runNuru20Full(updatedSentence);
-                  updatedSentence = finalSmoothGrammar(updatedSentence);
-
+                  // Targeted stealth on specifically flagged phrases
                   if (flagged.flaggedPhrases.length > 0) {
-                    updatedSentence = stealthHumanizeTargeted(updatedSentence, flagged.flaggedPhrases, strength ?? 'medium');
+                    sent = stealthHumanizeTargeted(sent, flagged.flaggedPhrases, strength ?? 'medium');
                   }
 
-                  workingSentences[flagged.index] = updatedSentence;
+                  workingSentences[flagged.index] = sent;
                   sendSSE(controller, {
                     type: 'sentence',
                     index: flagged.index,
-                    text: updatedSentence,
-                    stage: useDualPass ? 'Phantom → Nuru 2.0 Full' : 'Nuru 2.0 Full',
+                    text: sent,
+                    stage: usePhantom ? 'Phantom → Nuru 2.0' : 'Nuru 2.0 Targeted',
                   });
                 }
 
                 currentScan = getFlaggedSentenceDetails(workingSentences);
-                await flushDelay(12);
+                await flushDelay(8);
               }
 
-              fullResult = reassembleText(workingSentences, inputParaBounds.length ? inputParaBounds : [0]);
+              fullResult = reassembleText(workingSentences, workingBounds.length ? workingBounds : [0]);
             } else if (eng === 'humara_v3_3' || eng === 'phantom') {
               fullResult = await runHumara24(normalizedText);
             } else if (eng === 'easy') {

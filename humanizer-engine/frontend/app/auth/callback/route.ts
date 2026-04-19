@@ -36,8 +36,15 @@ export async function GET(request: NextRequest) {
     if (!error) {
       return response;
     }
+    // Log the real error for debugging
+    console.error('[Auth Callback] exchangeCodeForSession failed:', error.message, error);
+    const params = new URLSearchParams({
+      error: 'auth_callback_failed',
+      error_description: error.message || 'Unknown auth error',
+    });
+    return NextResponse.redirect(new URL(`/login?${params.toString()}`, siteUrl));
   }
 
-  // No code or exchange failed — redirect to login
-  return NextResponse.redirect(new URL('/login?error=auth_callback_failed', siteUrl));
+  // No code provided — redirect to login
+  return NextResponse.redirect(new URL('/login?error=auth_callback_failed&error_description=No+authorization+code+received', siteUrl));
 }

@@ -14,6 +14,11 @@
  *   Phase 6: Quality gate — enforce min change ratio with retry loop
  */
 
+import { detectDomain, getProtectedTermsForDomain } from './domain-detector';
+
+// Module-level set populated per-call by oxygenHumanize — checked in deepSynonymReplace
+let _oxygenDomainProtected: Set<string> = new Set();
+
 // ── Tense-aware replacement helpers ──
 
 /** Safe first-char accessor — prevents 'Cannot read properties of undefined' */
@@ -514,6 +519,8 @@ function deepSynonymReplace(text: string, intensity: number = 0.6): string {
       const matched = m[0];
       // Reset regex lastIndex since we use /g flags
       pattern.lastIndex = 0;
+      // Skip if the matched term is a domain-protected term
+      if (_oxygenDomainProtected.has(matched.toLowerCase())) continue;
       // Skip if inside parenthetical citation
       const before = text.slice(0, m.index);
       const depth = (before.match(/\(/g) || []).length - (before.match(/\)/g) || []).length;
@@ -807,6 +814,11 @@ export function oxygenHumanize(
   mode?: string,
   sentenceBySentence: boolean = true,
 ): string {
+  // Detect domain and build protected term set for this run
+  const domainResult = detectDomain(text);
+  _oxygenDomainProtected = getProtectedTermsForDomain(domainResult);
+  console.log(`[OXYGEN] Domain: ${domainResult.primary} (${(domainResult.confidence * 100).toFixed(0)}%) — protecting ${_oxygenDomainProtected.size} terms`);
+
   const resolvedMode = mode || (strength === 'light' ? 'fast' : strength === 'strong' ? 'aggressive' : 'quality');
   const preset = MODE_PRESETS[resolvedMode] || MODE_PRESETS.quality;
 

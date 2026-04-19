@@ -215,32 +215,32 @@
     50% { opacity: 1; transform: scale(1.4); }
   }
 
-  /* ── Auto Model: Red blink phase (first 10s) ────────── */
+  /* ── Auto Model: Red blink phase (first 10s) — vivid, saturated ────────── */
   @keyframes autoModelRedBlink {
-    0%, 100% { --auto-glow: #ff2f2f; --auto-hue: 0deg; --auto-glow-r: 255; --auto-glow-g: 47; --auto-glow-b: 47; }
-    50% { --auto-glow: #c81e1e; --auto-hue: -8deg; --auto-glow-r: 200; --auto-glow-g: 30; --auto-glow-b: 30; }
+    0%, 100% { --auto-glow: #ff1a1a; --auto-hue: 0deg; --auto-glow-r: 255; --auto-glow-g: 26; --auto-glow-b: 26; }
+    50% { --auto-glow: #e00000; --auto-hue: -4deg; --auto-glow-r: 224; --auto-glow-g: 0; --auto-glow-b: 0; }
   }
 
-  /* ── Auto Model: clean 17-color cycle over 30s; yellow gets the shortest hold ───────── */
+  /* ── Auto Model: 17-color vivid cycle over 30s — full saturation, no pastels ───────── */
   @keyframes autoModelColorCycle {
-    0%       { --auto-glow: #ff4d4d; --auto-hue: 0deg; --auto-glow-r: 255; --auto-glow-g: 77; --auto-glow-b: 77; }
-    6.25%    { --auto-glow: #ff8a5b; --auto-hue: 18deg; --auto-glow-r: 255; --auto-glow-g: 138; --auto-glow-b: 91; }
-    9.375%   { --auto-glow: #ffd84d; --auto-hue: 48deg; --auto-glow-r: 255; --auto-glow-g: 216; --auto-glow-b: 77; }
-    12.5%    { --auto-glow: #b7f05a; --auto-hue: 78deg; --auto-glow-r: 183; --auto-glow-g: 240; --auto-glow-b: 90; }
-    18.75%   { --auto-glow: #64e97c; --auto-hue: 118deg; --auto-glow-r: 100; --auto-glow-g: 233; --auto-glow-b: 124; }
-    25%      { --auto-glow: #34d399; --auto-hue: 152deg; --auto-glow-r: 52; --auto-glow-g: 211; --auto-glow-b: 153; }
-    31.25%   { --auto-glow: #2dd4bf; --auto-hue: 170deg; --auto-glow-r: 45; --auto-glow-g: 212; --auto-glow-b: 191; }
-    37.5%    { --auto-glow: #22d3ee; --auto-hue: 188deg; --auto-glow-r: 34; --auto-glow-g: 211; --auto-glow-b: 238; }
-    43.75%   { --auto-glow: #38bdf8; --auto-hue: 198deg; --auto-glow-r: 56; --auto-glow-g: 189; --auto-glow-b: 248; }
-    50%      { --auto-glow: #4f8cff; --auto-hue: 218deg; --auto-glow-r: 79; --auto-glow-g: 140; --auto-glow-b: 255; }
-    56.25%   { --auto-glow: #6d78ff; --auto-hue: 235deg; --auto-glow-r: 109; --auto-glow-g: 120; --auto-glow-b: 255; }
-    62.5%    { --auto-glow: #8b5cf6; --auto-hue: 258deg; --auto-glow-r: 139; --auto-glow-g: 92; --auto-glow-b: 246; }
-    68.75%   { --auto-glow: #a855f7; --auto-hue: 274deg; --auto-glow-r: 168; --auto-glow-g: 85; --auto-glow-b: 247; }
-    75%      { --auto-glow: #d946ef; --auto-hue: 302deg; --auto-glow-r: 217; --auto-glow-g: 70; --auto-glow-b: 239; }
-    81.25%   { --auto-glow: #f472b6; --auto-hue: 326deg; --auto-glow-r: 244; --auto-glow-g: 114; --auto-glow-b: 182; }
-    87.5%    { --auto-glow: #fb7185; --auto-hue: 344deg; --auto-glow-r: 251; --auto-glow-g: 113; --auto-glow-b: 133; }
-    93.75%   { --auto-glow: #ff5f6d; --auto-hue: 356deg; --auto-glow-r: 255; --auto-glow-g: 95; --auto-glow-b: 109; }
-    100%     { --auto-glow: #ff4d4d; --auto-hue: 0deg; --auto-glow-r: 255; --auto-glow-g: 77; --auto-glow-b: 77; }
+    0%       { --auto-glow: #ff0040; --auto-hue: 0deg; --auto-glow-r: 255; --auto-glow-g: 0; --auto-glow-b: 64; }
+    6.25%    { --auto-glow: #ff6600; --auto-hue: 18deg; --auto-glow-r: 255; --auto-glow-g: 102; --auto-glow-b: 0; }
+    9.375%   { --auto-glow: #ffc400; --auto-hue: 48deg; --auto-glow-r: 255; --auto-glow-g: 196; --auto-glow-b: 0; }
+    12.5%    { --auto-glow: #80e000; --auto-hue: 78deg; --auto-glow-r: 128; --auto-glow-g: 224; --auto-glow-b: 0; }
+    18.75%   { --auto-glow: #00e64d; --auto-hue: 118deg; --auto-glow-r: 0; --auto-glow-g: 230; --auto-glow-b: 77; }
+    25%      { --auto-glow: #00d98c; --auto-hue: 152deg; --auto-glow-r: 0; --auto-glow-g: 217; --auto-glow-b: 140; }
+    31.25%   { --auto-glow: #00d4c8; --auto-hue: 170deg; --auto-glow-r: 0; --auto-glow-g: 212; --auto-glow-b: 200; }
+    37.5%    { --auto-glow: #00c8ff; --auto-hue: 188deg; --auto-glow-r: 0; --auto-glow-g: 200; --auto-glow-b: 255; }
+    43.75%   { --auto-glow: #0099ff; --auto-hue: 198deg; --auto-glow-r: 0; --auto-glow-g: 153; --auto-glow-b: 255; }
+    50%      { --auto-glow: #0055ff; --auto-hue: 218deg; --auto-glow-r: 0; --auto-glow-g: 85; --auto-glow-b: 255; }
+    56.25%   { --auto-glow: #4400ff; --auto-hue: 235deg; --auto-glow-r: 68; --auto-glow-g: 0; --auto-glow-b: 255; }
+    62.5%    { --auto-glow: #7b00ff; --auto-hue: 258deg; --auto-glow-r: 123; --auto-glow-g: 0; --auto-glow-b: 255; }
+    68.75%   { --auto-glow: #aa00ff; --auto-hue: 274deg; --auto-glow-r: 170; --auto-glow-g: 0; --auto-glow-b: 255; }
+    75%      { --auto-glow: #e000e0; --auto-hue: 302deg; --auto-glow-r: 224; --auto-glow-g: 0; --auto-glow-b: 224; }
+    81.25%   { --auto-glow: #ff0080; --auto-hue: 326deg; --auto-glow-r: 255; --auto-glow-g: 0; --auto-glow-b: 128; }
+    87.5%    { --auto-glow: #ff0050; --auto-hue: 344deg; --auto-glow-r: 255; --auto-glow-g: 0; --auto-glow-b: 80; }
+    93.75%   { --auto-glow: #ff0030; --auto-hue: 356deg; --auto-glow-r: 255; --auto-glow-g: 0; --auto-glow-b: 48; }
+    100%     { --auto-glow: #ff0040; --auto-hue: 0deg; --auto-glow-r: 255; --auto-glow-g: 0; --auto-glow-b: 64; }
   }
 }
 

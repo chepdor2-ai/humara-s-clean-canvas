@@ -60,6 +60,7 @@ import {
   type InputFeatures as SurgeryInputFeatures,
 } from "./sentence-surgery";
 import { getGroqClient, resolveGroqChatModel } from "./groq-client";
+import { detectDomain, getToneGuidance, type DomainResult } from "./domain-detector";
 
 // ── Config ──
 
@@ -200,11 +201,12 @@ function buildPhase2System(profile: import("./style-memory").StyleProfile, gapIn
     ? "- You may use rhetorical questions sparingly"
     : "- Do NOT use rhetorical questions or sentences ending with question marks";
 
-  return `You are a Controlled Academic Humanization Engine. Your task: make the text sound like it was written by a real human academic in the mid-1990s — not a machine, not a post-2010 corporate writer.
+  return `You are a Controlled Humanization Engine. Your task: make the text sound like it was written by a real human writer in the mid-1990s — not a machine, not a post-2010 corporate writer.
+
+DOMAIN GUIDANCE:
+${gapInstr}
 
 ${profileSummaryText(profile)}
-
-${gapInstr}
 
 HUMANIZATION RULES (apply all of these):
 
@@ -262,7 +264,7 @@ function buildPhase2Prompt(text: string, strength: string, strictMeaning: boolea
   let meaningGuide = "";
   if (strictMeaning) meaningGuide = "\nStrict meaning mode: content deviation must be zero.";
 
-  return `Humanize this text to sound like authentic academic writing by a real person from the 1990s — before AI tools existed. Apply all humanization rules.
+  return `Humanize this text to sound like authentic writing by a real person from the 1990s — before AI tools existed. Apply all humanization rules.
 
 ${variationGuide}${meaningGuide}
 
@@ -288,10 +290,10 @@ function buildPhase3System(features: InputFeatures): string {
     ? "- You may use rhetorical questions sparingly"
     : "- Do NOT use rhetorical questions or sentences ending with question marks";
 
-  return `You are a final-pass academic quality reviewer. Your job is ONLY to:
+  return `You are a final-pass quality reviewer. Your job is ONLY to:
 1. Fix any remaining awkward phrasing
-2. Ensure academic consistency
-3. Remove any overly polished or mechanical-sounding passages — the result should read like 1990s academic writing
+2. Ensure consistency with the text's subject domain and register
+3. Remove any overly polished or mechanical-sounding passages — the result should read like authentic 1990s-era writing
 4. Verify logical connections between arguments
 5. Remove any modern corporate or tech buzzwords (post-2000 language)
 
@@ -406,13 +408,15 @@ const NINJA_STUDENT_PROMPTS: string[] = [
 // Counter for round-robin prompt selection
 let _ninjaPromptIndex = 0;
 
-function normalizeNinjaTone(tone: string): "wikipedia" | "academic" | "seo" | "professional" | "simple" | "neutral" {
+function normalizeNinjaTone(tone: string): "wikipedia" | "academic" | "seo" | "professional" | "simple" | "technical" | "creative" | "neutral" {
   const normalized = tone.trim().toLowerCase();
   if (normalized.includes("wiki")) return "wikipedia";
   if (normalized.includes("academic")) return "academic";
   if (normalized.includes("seo") || normalized.includes("blog")) return "seo";
   if (normalized.includes("professional")) return "professional";
   if (normalized.includes("simple")) return "simple";
+  if (normalized.includes("technical")) return "technical";
+  if (normalized.includes("creative")) return "creative";
   return "neutral";
 }
 
@@ -428,6 +432,10 @@ function getNinjaToneLabel(tone: string): string {
       return "a professional analysis or briefing";
     case "simple":
       return "a plain-language explainer";
+    case "technical":
+      return "a technical document or engineering report";
+    case "creative":
+      return "a creative or literary piece";
     default:
       return "a clear human-written article";
   }
@@ -445,6 +453,10 @@ function getNinjaToneDirective(tone: string): string {
       return "Write with direct professional clarity. Keep the sentence efficient, grounded, and free of padding.";
     case "simple":
       return "Use plain, highly readable wording. Prefer direct syntax and short concrete words where possible.";
+    case "technical":
+      return "Write with precise technical clarity. Preserve all technical terms, specifications, and code references exactly. Keep prose structured and methodical.";
+    case "creative":
+      return "Preserve the author's creative voice. Maintain literary devices, intentional style choices, and emotional texture. Focus on making the prose sound authentically human.";
     default:
       return "Write with natural article flow. Balance clarity, information density, and readable cadence without sounding scripted.";
   }
@@ -1983,6 +1995,11 @@ export async function llmHumanize(
   console.log(`  [Ninja] Starting Ninja v2 pipeline...`);
   console.log(`  [Ninja] Input: ${features.wordCount} words, ${features.sentenceCount} sents, ${features.paragraphCount} paras`);
   console.log(`  [Ninja] Tone profile: ${normalizeNinjaTone(tone)}`);
+
+  // Detect text domain for adaptive prompts
+  const domainResult = detectDomain(original);
+  const domainGuidance = getToneGuidance(domainResult, tone);
+  console.log(`  [Ninja] Domain: ${domainResult.primary} (confidence: ${(domainResult.confidence * 100).toFixed(0)}%)${domainResult.secondary ? ` + ${domainResult.secondary}` : ''}`);
 
   // Rephrase ~30% of end-of-sentence citations for natural variation
   const citationText = rephraseCitations(original);
