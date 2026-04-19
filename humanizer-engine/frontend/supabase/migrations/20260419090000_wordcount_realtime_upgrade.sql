@@ -72,23 +72,23 @@ END $patch_plans$;
 INSERT INTO public.plans (name, display_name, price_monthly, price_yearly, daily_words_fast, daily_words_stealth, duration_days, max_style_profiles, engines, features, is_active)
 VALUES
   ('free',         'Free',               0.00,   0.00,      1000, 0,  0,  1,
-   ARRAY['oxygen','easy','ninja_4','ninja_1'],
+   ARRAY['oxygen','easy','ninja_1'],
    '["1,000 words/day","Core engines","Basic AI detection"]'::jsonb, true),
 
   ('starter',      'Starter',            5.00,   4.25,     20000, 0, 30,  1,
-   ARRAY['oxygen','easy','ninja_4','ninja_1','humara_v3_3','nuru_v2','ghost_pro_wiki','king','antipangram'],
+   ARRAY['oxygen','easy','ninja_1','humara_v3_3','nuru_v2','ghost_pro_wiki','king','antipangram'],
    '["20,000 words/day","All engine modes","Full detector suite","Email support"]'::jsonb, true),
 
   ('creator',      'Creator',           10.00,   8.50,     50000, 0, 30,  3,
-   ARRAY['oxygen','easy','ninja_4','ninja_1','humara_v3_3','nuru_v2','ghost_pro_wiki','king','antipangram','ninja_3','ninja_2','ninja_5','ghost_trial_2','phantom'],
+   ARRAY['oxygen','easy','ninja_1','humara_v3_3','nuru_v2','ghost_pro_wiki','king','antipangram','ninja_3','ninja_2','ninja_5','ghost_trial_2','phantom'],
    '["50,000 words/day","All engine modes","Priority support","Style memory (3 slots)"]'::jsonb, true),
 
   ('professional', 'Professional',      20.00,  17.00,    100000, 0, 30,  5,
-   ARRAY['oxygen','easy','ninja_4','ninja_1','humara_v3_3','nuru_v2','ghost_pro_wiki','king','antipangram','ninja_3','ninja_2','ninja_5','ghost_trial_2','phantom'],
+   ARRAY['oxygen','easy','ninja_1','humara_v3_3','nuru_v2','ghost_pro_wiki','king','antipangram','ninja_3','ninja_2','ninja_5','ghost_trial_2','phantom'],
    '["100,000 words/day","All engine modes","API access","Priority support","Style memory (5 slots)"]'::jsonb, true),
 
   ('business',     'Business Unlimited',50.00,  42.50,        -1, 0, 30, -1,
-   ARRAY['oxygen','easy','ninja_4','ninja_1','humara_v3_3','nuru_v2','ghost_pro_wiki','king','antipangram','ninja_3','ninja_2','ninja_5','ghost_trial_2','phantom'],
+   ARRAY['oxygen','easy','ninja_1','humara_v3_3','nuru_v2','ghost_pro_wiki','king','antipangram','ninja_3','ninja_2','ninja_5','ghost_trial_2','phantom'],
    '["Unlimited daily words","All engine modes","Full API access","Dedicated support"]'::jsonb, true)
 ON CONFLICT (name) DO UPDATE SET
   display_name        = EXCLUDED.display_name,
@@ -459,7 +459,7 @@ CREATE TABLE IF NOT EXISTS public.engine_config (
 -- Seed engine config with new names
 INSERT INTO public.engine_config (engine_id, label, enabled, premium, sort_order)
 VALUES
-  ('ninja_4',      'Nova',     true, false, 1),
+  (      'Nova',     true, false, 1),
   ('easy',         'Swift',    true, false, 2),
   ('ninja_1',      'Ninja',    true, false, 3),
   ('antipangram',  'Pangram',  true, false, 4),
@@ -513,9 +513,9 @@ CREATE TABLE IF NOT EXISTS public.api_plans (
 
 INSERT INTO public.api_plans (id, display_name, monthly_words, daily_requests, engines, rate_limit_per_minute)
 VALUES
-  ('hobby',       'Hobby',        50000,  100, ARRAY['oxygen','easy','ninja_4','humara_v3_3','nuru_v2','ghost_pro_wiki'], 10),
-  ('pro',         'Pro',         200000,  500, ARRAY['oxygen','easy','ninja_4','humara_v3_3','nuru_v2','ghost_pro_wiki','ninja_3','ninja_2','phantom'], 30),
-  ('enterprise',  'Enterprise', 1000000, 2000, ARRAY['oxygen','easy','ninja_4','humara_v3_3','nuru_v2','ghost_pro_wiki','ninja_3','ninja_2','ninja_5','ghost_trial_2','phantom'], 60)
+  ('hobby',       'Hobby',        50000,  100, ARRAY['oxygen','easy','humara_v3_3','nuru_v2','ghost_pro_wiki'], 10),
+  ('pro',         'Pro',         200000,  500, ARRAY['oxygen','easy','humara_v3_3','nuru_v2','ghost_pro_wiki','ninja_3','ninja_2','phantom'], 30),
+  ('enterprise',  'Enterprise', 1000000, 2000, ARRAY['oxygen','easy','humara_v3_3','nuru_v2','ghost_pro_wiki','ninja_3','ninja_2','ninja_5','ghost_trial_2','phantom'], 60)
 ON CONFLICT (id) DO UPDATE SET
   display_name          = EXCLUDED.display_name,
   monthly_words         = EXCLUDED.monthly_words,
@@ -693,28 +693,27 @@ END $rls_api_plans$;
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS TRIGGER
 LANGUAGE plpgsql
-SECURITY DEFINER
-AS $handle_new_user$
-DECLARE v_free_id UUID;
+AS $$
 BEGIN
-  SELECT id INTO v_free_id FROM public.plans WHERE name = 'free' LIMIT 1;
-
   -- Create profile
   INSERT INTO public.profiles (id, full_name, avatar_url, plan_id)
   VALUES (
     NEW.id,
     COALESCE(NEW.raw_user_meta_data->>'full_name', NEW.raw_user_meta_data->>'name', ''),
     COALESCE(NEW.raw_user_meta_data->>'avatar_url', ''),
-    v_free_id
+    (SELECT id FROM public.plans WHERE name = 'free' LIMIT 1)
   )
   ON CONFLICT (id) DO NOTHING;
 
-  -- Create free subscription (30 days)
-  IF v_free_id IS NOT NULL THEN
-    INSERT INTO public.subscriptions (user_id, plan_id, status, current_period_end)
-    VALUES (NEW.id, v_free_id, 'active', NOW() + INTERVAL '365 days')
-    ON CONFLICT DO NOTHING;
-  END IF;
+  -- Create free subscription (365 days)
+  INSERT INTO public.subscriptions (user_id, plan_id, status, current_period_end)
+  VALUES (
+    NEW.id,
+    (SELECT id FROM public.plans WHERE name = 'free' LIMIT 1),
+    'active',
+    NOW() + INTERVAL '365 days'
+  )
+  ON CONFLICT DO NOTHING;
 
   -- Create initial daily usage record
   INSERT INTO public.usage (user_id, usage_date, words_limit_fast, words_limit_stealth, days_remaining)
@@ -723,7 +722,7 @@ BEGIN
 
   RETURN NEW;
 END;
-$handle_new_user$;
+$$;
 
 DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
 CREATE TRIGGER on_auth_user_created
@@ -790,12 +789,10 @@ BEGIN
     v_limit_fast, v_limit_stealth, 1
   )
   ON CONFLICT (user_id, usage_date) DO UPDATE SET
-    words_used_fast    = public.usage.words_used_fast
-                         + CASE WHEN p_engine_type IN ('fast','standard')        THEN p_words ELSE 0 END,
-    words_used_stealth = public.usage.words_used_stealth
-                         + CASE WHEN p_engine_type IN ('stealth','undetectable') THEN p_words ELSE 0 END,
-    words_limit_fast    = v_limit_fast,
-    words_limit_stealth = v_limit_stealth,
+    words_used_fast    = public.usage.words_used_fast + EXCLUDED.words_used_fast,
+    words_used_stealth = public.usage.words_used_stealth + EXCLUDED.words_used_stealth,
+    words_limit_fast    = EXCLUDED.words_limit_fast,
+    words_limit_stealth = EXCLUDED.words_limit_stealth,
     requests            = public.usage.requests + 1,
     updated_at          = NOW()
   RETURNING * INTO current_usage;

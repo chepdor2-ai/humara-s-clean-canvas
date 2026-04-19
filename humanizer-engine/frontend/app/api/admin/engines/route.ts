@@ -4,7 +4,6 @@ import { createServiceClient } from '../../../../lib/supabase';
 // Hardcoded engine defaults — must match ALL_ENGINES in page.tsx
 const DEFAULT_ENGINES = [
   // 🟢 Core Engines
-  { engine_id: 'ninja_4', label: 'Nova', enabled: true, premium: false, sort_order: 1 },
   { engine_id: 'easy', label: 'Swift', enabled: true, premium: false, sort_order: 2 },
   { engine_id: 'ninja_1', label: 'Ninja', enabled: true, premium: false, sort_order: 3 },
   { engine_id: 'antipangram', label: 'Pangram', enabled: true, premium: false, sort_order: 4 },

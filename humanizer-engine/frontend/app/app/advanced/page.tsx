@@ -18,7 +18,7 @@ export default function AdvancedPage() {
   const [batchResults, setBatchResults] = useState<string[]>([]);
   const [batchProcessing, setBatchProcessing] = useState(false);
   const [batchProgress, setBatchProgress] = useState(0);
-  const [batchEngine, setBatchEngine] = useState('ninja_4');
+  const [batchEngine, setBatchEngine] = useState('easy');
 
   const headers = useCallback((): HeadersInit => {
     if (!session?.access_token) return {};

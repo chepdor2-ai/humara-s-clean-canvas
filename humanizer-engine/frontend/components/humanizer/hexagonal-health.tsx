@@ -368,12 +368,6 @@ export interface EnginePipelineConfig {
 /** Pre-defined pipeline layouts for engines with multi-phase processing */
 export const ENGINE_PIPELINE_CONFIGS: Record<string, EnginePipelineConfig> = {
   // ── Core Engines ──
-  ninja_4: {  // Nova
-    layers: [
-      { label: 'Engine', count: 1, cellLabels: ['EZ'] },
-      { label: 'Clean', count: 2, cellLabels: ['CLN', 'GRM'] },
-    ],
-  },
   easy: {  // Swift
     layers: [
       { label: 'Engine', count: 1, cellLabels: ['EZ'] },

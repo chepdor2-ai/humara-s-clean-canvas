@@ -313,7 +313,7 @@ export async function POST(req: Request) {
             oxygen: 'Oxygen', nuru_v2: 'Nuru', humara_v3_3: 'Humarin',
             easy: 'Swift', ghost_pro: 'Ghost Pro',
             humara: 'Humara', nuru: 'Nuru', omega: 'Omega',
-            ninja_2: 'Beta', ninja_3: 'Alpha', ninja_4: 'Nova', ninja_5: 'Omega',
+            ninja_2: 'Beta', ninja_3: 'Alpha', ninja_5: 'Omega',
             ghost_trial_2: 'Specter',
             phantom: 'Phantom', king: 'King',
             dipper: 'Dipper', humarin: 'Humarin', oxygen3: 'Oxygen 3', oxygen_t5: 'Oxygen T5',
@@ -328,7 +328,7 @@ export async function POST(req: Request) {
           // Engines that use the phase pipeline (fast-loop + deep-kill)
           const PHASED_ENGINES = new Set([
             ...FAST_REHUMANIZE_ENGINES,
-            'ninja_2', 'ninja_3', 'ninja_4', 'ninja_5',
+            'ninja_2', 'ninja_3', 'ninja_5',
             'ghost_trial_2',
             'phantom',
           ]);
@@ -594,7 +594,7 @@ export async function POST(req: Request) {
 
           // Deep Kill engine set — used to skip destructive post-processors
           const DEEP_KILL_ENGINES = new Set([
-            'ninja_2', 'ninja_3', 'ninja_4', 'ninja_5',
+            'ninja_2', 'ninja_3', 'ninja_5',
             'ghost_trial_2',
           ]);
           const isDeepKill = DEEP_KILL_ENGINES.has(eng);
@@ -646,11 +646,6 @@ export async function POST(req: Request) {
             } else if (eng === 'ninja_2') {
               // Phase 1 only: Easy (Swift) — remaining phases handled in pipeline
               return await runGuarded('ninja_2_s1', () => runHumara22Clean(sentence), sentence, 35_000);
-            } else if (eng === 'ninja_4') {
-              // Phase 1 only: Ozone (Nova exclusive) — remaining phases handled in pipeline
-              return await runGuarded('ninja_4_s1', () => {
-                return ozoneHumanize(sentence, false).then(r => r.humanized);
-              }, sentence, 35_000);
             } else if (eng === 'ninja_5') {
               // Phase 1 only: Humara 2.2 — remaining phases handled in pipeline
               return await runGuarded('ninja_5_s1', () => runHumara22(sentence), sentence, 35_000);
@@ -756,7 +751,7 @@ export async function POST(req: Request) {
             // Determine if this engine uses async/LLM calls (can parallelize)
             const LLM_ENGINES = new Set([
               'oxygen3', 'oxygen_t5', 'dipper', 'humarin', 'humara_v3_3',
-              'ghost_pro_wiki', 'ninja_1', 'ninja_2', 'ninja_4', 'ninja_5',
+              'ghost_pro_wiki', 'ninja_1', 'ninja_2', 'ninja_5',
               'ghost_trial_2', 'ghost_trial_2_alt', 'conscusion_1', 'conscusion_12',
               'undetectable', 'ninja', 'fast_v11', 'ghost_pro',
               'humara_v1_3', 'omega',
@@ -930,14 +925,6 @@ export async function POST(req: Request) {
                   { name: 'Wikipedia', type: 'emit' },
                   { name: 'Humara 2.0 (Full)', type: 'async', fn: (s) => runHumara20Full(s) },
                   { name: 'Nuru 2.0', type: 'nuru', passes: CHAIN_TS },
-                  { name: 'Deep Non-LLM Clean', type: 'sync', fn: (s) => deepNonLLMClean(s) },
-                  { name: 'Final Smooth & Grammar', type: 'sync', fn: (s) => finalSmoothGrammar(s) },
-                ];
-                break;
-              case 'ninja_4':
-                // Nova: Ozone (Stealth Pro exclusive) → Keyword Recovery → Grammar Clean
-                phases = [
-                  { name: 'Ozone', type: 'emit' },
                   { name: 'Deep Non-LLM Clean', type: 'sync', fn: (s) => deepNonLLMClean(s) },
                   { name: 'Final Smooth & Grammar', type: 'sync', fn: (s) => finalSmoothGrammar(s) },
                 ];

@@ -147,7 +147,6 @@ const splitSentences = (text: string): { text: string; start: number; end: numbe
 // Full engine registry — admin controls which are visible/premium via Supabase engine_config
 const ALL_ENGINES: EngineConfig[] = [
   // 🟢 Core Engines
-  { id: 'ninja_4', label: 'Nova' },
   { id: 'easy', label: 'Swift' },
   { id: 'ninja_1', label: 'Ninja' },
   { id: 'antipangram', label: 'Pangram' },
@@ -167,7 +166,7 @@ const ALL_ENGINES: EngineConfig[] = [
 
 type ModeId = 'core_engines' | 'detection_control' | 'advanced_engines';
 const MODE_ENGINES: Record<ModeId, Set<string>> = {
-  core_engines: new Set(['ninja_4', 'easy', 'ninja_1', 'antipangram']),
+  core_engines: new Set(['easy', 'ninja_1', 'antipangram']),
   detection_control: new Set(['humara_v3_3', 'oxygen', 'king', 'nuru_v2', 'ghost_pro_wiki']),
   advanced_engines: new Set([
     'ninja_3',
@@ -185,7 +184,6 @@ const MODE_LABELS: Record<ModeId, string> = {
 
 const ENGINE_GUIDES: Record<string, string> = {
   // Core Engines
-  ninja_4: 'Nova — Fast stealth rewrite via Easy engine + keyword recovery + grammar cleaning.',
   easy: 'Swift — Quick balanced rewrites with natural-sounding output and 10× Nuru polish.',
   ninja_1: 'Ninja — LLM-powered stealth rewrite → Humara 2.0 → 10× Nuru for maximum evasion.',
   antipangram: 'Pangram — Forensic AI-signal destroyer. Pure TypeScript. No LLM, no API. Surgical precision.',
@@ -357,7 +355,7 @@ function EditorPageInner() {
   // Auto-switch engine when mode changes
   useEffect(() => {
     const fallbackByMode: Record<ModeId, string> = {
-      core_engines: 'ninja_4',
+      core_engines: 'easy',
       detection_control: 'humara_v3_3',
       advanced_engines: 'ninja_5',
     };

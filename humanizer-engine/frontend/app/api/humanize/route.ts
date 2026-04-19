@@ -21,7 +21,6 @@ import { stealthHumanize, stealthHumanizeTargeted } from '@/lib/engine/stealth';
 import { applySentenceStartersDistribution, applyNuruDocumentFlowCalibration } from '@/lib/engine/stealth/nuru-document-phases';
 import { omegaHumanize } from '@/lib/engine/omega-humanizer';
 import { easyHumanize } from '@/lib/engine/easy-humanizer';
-import { ozoneHumanize } from '@/lib/engine/ozone-humanizer';
 import { oxygenHumanize } from '@/lib/engine/oxygen-humanizer';
 import { humarinHumanize } from '@/lib/engine/humarin-humanizer';
 import { oxygen3Humanize } from '@/lib/engine/oxygen3-humanizer';
@@ -840,7 +839,7 @@ export async function POST(req: Request) {
 
     // Deep Kill engine set — used to skip destructive post-processors
     const DEEP_KILL_ENGINES = new Set([
-      'ninja_2', 'ninja_3', 'ninja_4', 'ninja_5',
+      'ninja_2', 'ninja_3', 'ninja_5',
       'ghost_trial_2',
     ]);
     const isDeepKill = DEEP_KILL_ENGINES.has(engine);
@@ -914,10 +913,6 @@ export async function POST(req: Request) {
       const stage1 = await runGuarded('ninja_2_stage_1', () => runHumara22Clean(normalizedText), normalizedText, 35_000);
       const stage2 = runHumara20(stage1);
       humanized = applySmartNuruPolish(stage2);
-    } else if (engine === 'ninja_4') {
-      // Nova: Ozone backend (Stealth Pro exclusive)
-      const ozResult = await ozoneHumanize(normalizedText, false);
-      humanized = ozResult.humanized;
     } else if (engine === 'ninja_5') {
       // Omega: Humara 2.4 → 15× Smart Nuru
       const stage1 = await runGuarded('ninja_5_stage_1', () => runHumara24(normalizedText), normalizedText);
