@@ -2,7 +2,7 @@
 
 import { Clock, Gauge, Languages, Waves } from "lucide-react"
 import { useMemo } from "react"
-import { detectLanguage, readingEase, readingTime, toneLabel } from "@/lib/sentence-utils"
+import { detectLanguage, readingEase, readingEaseSentenceAverage, readingTime, toneLabel } from "@/lib/sentence-utils"
 
 function easeBand(score: number) {
   if (score >= 70) return { label: "Easy", color: "text-emerald-500" }
@@ -11,16 +11,16 @@ function easeBand(score: number) {
   return { label: "Very hard", color: "text-rose-500" }
 }
 
-export function MetricsStrip({ text }: { text: string; label?: string }) {
+export function MetricsStrip({ text, sentenceAveragedReadability = false }: { text: string; label?: string; sentenceAveragedReadability?: boolean }) {
   const metrics = useMemo(() => {
     const words = text.trim() ? text.trim().split(/\s+/).length : 0
     const chars = text.length
     const rt = readingTime(text)
-    const ease = readingEase(text)
+    const ease = sentenceAveragedReadability ? readingEaseSentenceAverage(text) : readingEase(text)
     const tone = toneLabel(text)
     const lang = detectLanguage(text)
     return { words, chars, rt, ease, tone, lang }
-  }, [text])
+  }, [sentenceAveragedReadability, text])
 
   const band = easeBand(metrics.ease)
 

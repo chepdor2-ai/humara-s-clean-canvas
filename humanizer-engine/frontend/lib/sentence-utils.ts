@@ -4,6 +4,14 @@ export function splitSentences(text: string): string[] {
   return parts.map((p) => p).filter(Boolean)
 }
 
+function readingEaseForSentence(sentence: string) {
+  const words = sentence.trim().split(/\s+/).filter(Boolean)
+  if (!words.length) return 0
+  const syllables = words.reduce((acc, w) => acc + countSyllables(w), 0)
+  const ease = 206.835 - 1.015 * words.length - 84.6 * (syllables / words.length)
+  return Math.max(0, Math.min(100, ease))
+}
+
 export function readingEase(text: string) {
   const words = text.trim().split(/\s+/).filter(Boolean)
   const sentences = splitSentences(text).filter((s) => s.trim().length > 0)
@@ -11,6 +19,15 @@ export function readingEase(text: string) {
   const syllables = words.reduce((acc, w) => acc + countSyllables(w), 0)
   const ease = 206.835 - 1.015 * (words.length / sentences.length) - 84.6 * (syllables / words.length)
   return Math.round(Math.max(0, Math.min(100, ease)))
+}
+
+export function readingEaseSentenceAverage(text: string) {
+  const sentences = splitSentences(text).map((s) => s.trim()).filter(Boolean)
+  if (!sentences.length) return 0
+  const scores = sentences.map(readingEaseForSentence).filter((score) => Number.isFinite(score))
+  if (!scores.length) return 0
+  const avg = scores.reduce((sum, score) => sum + score, 0) / scores.length
+  return Math.round(Math.max(0, Math.min(100, avg)))
 }
 
 function countSyllables(word: string) {

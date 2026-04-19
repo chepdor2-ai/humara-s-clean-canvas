@@ -12,6 +12,7 @@ import { MetricsStrip } from '@/components/humanizer/metrics-strip';
 import { SentenceMeter } from '@/components/humanizer/sentence-meter';
 import { ExportMenu } from '@/components/humanizer/export-menu';
 import { CosmicLoader } from '@/components/humanizer/cosmic-loader';
+import { sentenceRisk } from '@/lib/sentence-utils';
 
 const ADMIN_EMAILS = ['maguna956@gmail.com', 'maxwellotieno11@gmail.com'];
 
@@ -376,7 +377,7 @@ function EditorPageInner() {
   const [inputDetection, setInputDetection] = useState<DetectionResult | null>(null);
   const [outputDetection, setOutputDetection] = useState<DetectionResult | null>(null);
   const [autoDetecting, setAutoDetecting] = useState(false);
-  const [_sentenceScores, setSentenceScores] = useState<ScoredSentence[]>([]);
+  const [sentenceScores, setSentenceScores] = useState<ScoredSentence[]>([]);
   const [_meaningScore, setMeaningScore] = useState<number | null>(null);
 
   const { usage, refresh: refreshUsage, addWords, setUsageTotals } = useUsage();
@@ -503,6 +504,23 @@ function EditorPageInner() {
     return outputDetection.overallAi;
   }, [outputDetection]);
 
+  const computeSentenceScores = useCallback((value: string, overallAi?: number | null): ScoredSentence[] => {
+    return splitSentences(value).map((sentence) => ({
+      ...sentence,
+      score: typeof overallAi === 'number'
+        ? scoreSentence(sentence.text, overallAi)
+        : Math.round(sentenceRisk(sentence.text) * 100),
+    }));
+  }, []);
+
+  useEffect(() => {
+    if (!result.trim()) {
+      setSentenceScores([]);
+      return;
+    }
+    setSentenceScores(computeSentenceScores(result, outputDetection?.overallAi));
+  }, [computeSentenceScores, outputDetection?.overallAi, result]);
+
   const activeEngineLabel = useMemo(
     () => ENGINES.find(entry => entry.id === engine)?.label ?? engine,
     [ENGINES, engine],
@@ -522,11 +540,11 @@ function EditorPageInner() {
 
   const processingStatusItems = useMemo(
     () => [
-      { label: 'Engine', value: activeEngineLabel },
+      { label: 'Profile', value: activeEngineLabel },
       streamCycleTotal > 0
-        ? { label: streamCycleLabel || 'Cycle', value: `${streamCycleCurrent}/${streamCycleTotal}` }
-        : { label: 'Mode', value: MODE_LABELS[mode] },
-      { label: 'Live Fill', value: `${Math.round(streamProgress)}%` },
+        ? { label: 'Focus', value: streamCycleLabel || 'Refining draft' }
+        : { label: 'Style', value: MODE_LABELS[mode] },
+      { label: 'Progress', value: `${Math.round(streamProgress)}%` },
     ],
     [activeEngineLabel, mode, streamCycleCurrent, streamCycleLabel, streamCycleTotal, streamProgress],
   );
@@ -1039,6 +1057,24 @@ function EditorPageInner() {
         setResult(currentResult);
         setRunSalt(prev => prev + 1);
         setMeaningScore(finalData.meaning_similarity as number);
+        setPreGeneratedAlts(
+          Object.fromEntries(
+            Object.entries(finalData.sentence_alternatives ?? {}).map(([key, values]) => [
+              key,
+              values.map((value) => ({ text: value.text, score: value.score })),
+            ]),
+          ),
+        );
+
+        if (finalData.output_detector_results && typeof finalData.output_detector_results.overall === 'number') {
+          setOutputDetection({
+            overallAi: finalData.output_detector_results.overall,
+            overallHuman: Math.max(0, 100 - finalData.output_detector_results.overall),
+            detectors: finalData.output_detector_results.detectors,
+          });
+        } else {
+          setOutputDetection(null);
+        }
 
         // Detection disabled — coming soon
         // Detection results from API are ignored
@@ -1115,7 +1151,23 @@ function EditorPageInner() {
         setResult(rephrased);
         setRunSalt(prev => prev + 1);
         setMeaningScore(finalData.meaning_similarity as number);
-        // Detection disabled — coming soon
+        setPreGeneratedAlts(
+          Object.fromEntries(
+            Object.entries(finalData.sentence_alternatives ?? {}).map(([key, values]) => [
+              key,
+              values.map((value) => ({ text: value.text, score: value.score })),
+            ]),
+          ),
+        );
+        if (finalData.output_detector_results && typeof finalData.output_detector_results.overall === 'number') {
+          setOutputDetection({
+            overallAi: finalData.output_detector_results.overall,
+            overallHuman: Math.max(0, 100 - finalData.output_detector_results.overall),
+            detectors: finalData.output_detector_results.detectors,
+          });
+        } else {
+          setOutputDetection(null);
+        }
 
         // Update usage: optimistic + server refresh (all non-admin users are metered)
         if (!isAdmin) {
@@ -1199,7 +1251,7 @@ function EditorPageInner() {
         return;
       }
     }
-    setRehumanizing(true); setError('');
+    setRehumanizing(true); setError(''); setOutputView('confidence');
     const MAX_ITERATIONS = 5;
     let currentText = result;
 
@@ -1216,6 +1268,7 @@ function EditorPageInner() {
         // Score each sentence
         const currentSentences = splitSentences(currentText);
         const scored = currentSentences.map(s => ({ ...s, score: scoreSentence(s.text, currentOverallAi) }));
+        setSentenceScores(scored);
 
         // Find flagged sentences (score > 35)
         const flagged = scored.filter(s => s.score > 35);
@@ -1267,6 +1320,7 @@ function EditorPageInner() {
       const finalData = await finalRes.json();
       if (finalRes.ok && !finalData.error) {
         setOutputDetection({ overallAi: finalData.summary.overall_ai_score, overallHuman: finalData.summary.overall_human_score, detectors: finalData.detectors });
+        setSentenceScores(computeSentenceScores(currentText, finalData.summary.overall_ai_score));
       }
 
       // Apply grammar correction to final output
@@ -1278,6 +1332,83 @@ function EditorPageInner() {
     } catch (err) { setError(err instanceof Error ? err.message : 'Rehumanize failed'); }
     finally { setRehumanizing(false); }
   };
+
+  const handleFixSentence = useCallback(async (index: number) => {
+    if (!result.trim()) return;
+    const scored = sentenceScores.length ? sentenceScores : computeSentenceScores(result, outputDetection?.overallAi);
+    const target = scored[index];
+    if (!target) return;
+    if (!isAdmin && usage) {
+      const targetWords = target.text.trim().split(/\s+/).filter(Boolean).length;
+      const remaining = usage.wordsLimit - usage.wordsUsed;
+      if (remaining < targetWords) {
+        setError(`Word limit reached. ${Math.max(0, remaining).toLocaleString()} words remaining of your daily ${usage.wordsLimit.toLocaleString()} words.`);
+        return;
+      }
+    }
+
+    setRehumanizing(true);
+    setError('');
+    setOutputView('confidence');
+
+    try {
+      const response = await fetch('/api/humanize', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          text: target.text.trim(),
+          engine: engine === 'ghost_mini' ? 'ghost_pro' : engine,
+          strength: 'strong',
+          tone,
+          strict_meaning: strictMeaning,
+          enable_post_processing: true,
+        }),
+      });
+      const data = await response.json() as HumanizeResponse;
+      if (!response.ok || data.error || !data.humanized) {
+        throw new Error(data.error || 'Sentence fix failed');
+      }
+
+      let replacement = normalizeOutputText(data.humanized.trim());
+      if (grammarCorrection) {
+        const checker = new GrammarChecker();
+        replacement = checker.correctAll(replacement);
+      }
+
+      const nextResult = result.slice(0, target.start) + replacement + result.slice(target.end);
+      setResult(nextResult);
+      setRunSalt(prev => prev + 1);
+
+      const detectRes = await fetch('/api/detect', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: nextResult }),
+      });
+      const detectData = await detectRes.json();
+      if (detectRes.ok && !detectData.error) {
+        setOutputDetection({
+          overallAi: detectData.summary.overall_ai_score,
+          overallHuman: detectData.summary.overall_human_score,
+          detectors: detectData.detectors,
+        });
+        setSentenceScores(computeSentenceScores(nextResult, detectData.summary.overall_ai_score));
+      } else {
+        setSentenceScores(computeSentenceScores(nextResult, null));
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Sentence fix failed');
+    } finally {
+      setRehumanizing(false);
+    }
+  }, [computeSentenceScores, engine, grammarCorrection, outputDetection?.overallAi, result, sentenceScores, strictMeaning, tone, usage, isAdmin]);
+
+  const selectedSentenceIndex = useMemo(() => {
+    if (!selectionInfo || selectionInfo.type !== 'sentence') return -1;
+    const scored = sentenceScores.length ? sentenceScores : computeSentenceScores(result, outputDetection?.overallAi);
+    return scored.findIndex((sentence) => selectionInfo.start >= sentence.start && selectionInfo.end <= sentence.end);
+  }, [computeSentenceScores, outputDetection?.overallAi, result, selectionInfo, sentenceScores]);
+
+  const selectedSentenceScore = selectedSentenceIndex >= 0 ? sentenceScores[selectedSentenceIndex]?.score ?? null : null;
 
   /* ── Popup helpers ──────────────────────────────────────────────────── */
   const closePopup = useCallback(() => {
@@ -1834,7 +1965,7 @@ function EditorPageInner() {
             <div className={`relative flex-1 ${EDITOR_HEIGHT_CLASS} overflow-hidden`}>
               {/* MetricsStrip for output */}
               <div className="relative z-10 border-b border-emerald-100 dark:border-emerald-900/30">
-                <MetricsStrip text={result} label="Output" />
+                <MetricsStrip text={result} label="Output" sentenceAveragedReadability />
               </div>
               {outputView === 'result' && (
                 <textarea ref={outputRef} value={result}
@@ -1850,7 +1981,7 @@ function EditorPageInner() {
               )}
               {outputView === 'confidence' && (
                 <div className="relative z-10 h-[calc(100%-2.5rem)] overflow-y-auto p-5">
-                  <SentenceMeter text={result} salt={runSalt} key={`sm-${runSalt}`} />
+                  <SentenceMeter text={result} salt={runSalt} key={`sm-${runSalt}`} onFixSentence={handleFixSentence} />
                 </div>
               )}
             </div>
@@ -1905,6 +2036,14 @@ function EditorPageInner() {
                   <p className="text-xs text-slate-500 dark:text-zinc-400 text-center leading-relaxed max-w-xs">
                     Select text and click below to generate alternative phrasings
                   </p>
+                  {selectedSentenceIndex >= 0 && selectedSentenceScore !== null && selectedSentenceScore > 35 && (
+                    <button
+                      onClick={() => void handleFixSentence(selectedSentenceIndex)}
+                      className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-lg transition-all shadow-sm hover:shadow-md active:scale-[0.98] flex items-center gap-1.5"
+                    >
+                      <Sparkles className="w-3 h-3" /> Fix AI in this sentence
+                    </button>
+                  )}
                   <button
                     onClick={handleRequestAlternatives}
                     className="px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white text-xs font-bold rounded-lg transition-all shadow-sm hover:shadow-md active:scale-[0.98] flex items-center gap-1.5"
@@ -1919,16 +2058,28 @@ function EditorPageInner() {
                     <RotateCcw className="w-4 h-4" /> Generating…
                   </div>
                 ) : sentenceAlternatives.length > 0 ? (
-                  sentenceAlternatives.map((alt, idx) => (
-                    <button key={idx} onClick={() => applyReplacement(alt.text)}
-                      className="w-full text-left px-3 py-2.5 text-sm border-b border-slate-100 dark:border-zinc-800/40 last:border-0 hover:bg-cyan-50 dark:hover:bg-cyan-900/20 transition-colors">
-                      <div className="flex items-start gap-2.5">
-                        <span className="text-xs font-semibold text-cyan-600 dark:text-cyan-400 bg-cyan-100 dark:bg-cyan-900/30 px-1.5 py-0.5 rounded mt-0.5 shrink-0">{idx + 1}</span>
-                        <span className="flex-1 text-slate-800 dark:text-zinc-200 leading-relaxed">{alt.text}</span>
-                        <span className="text-xs text-slate-500 dark:text-zinc-500 font-medium whitespace-nowrap mt-0.5">{Math.round(alt.score * 100)}%</span>
+                  <>
+                    {selectedSentenceIndex >= 0 && selectedSentenceScore !== null && selectedSentenceScore > 35 && (
+                      <div className="px-3 py-2 border-b border-slate-100 dark:border-zinc-800/40 bg-rose-50/70 dark:bg-rose-950/20">
+                        <button
+                          onClick={() => void handleFixSentence(selectedSentenceIndex)}
+                          className="w-full flex items-center justify-center gap-1.5 rounded-lg bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold px-3 py-2 transition-all"
+                        >
+                          <Sparkles className="w-3 h-3" /> Fix AI in this sentence first
+                        </button>
                       </div>
-                    </button>
-                  ))
+                    )}
+                    {sentenceAlternatives.map((alt, idx) => (
+                      <button key={idx} onClick={() => applyReplacement(alt.text)}
+                        className="w-full text-left px-3 py-2.5 text-sm border-b border-slate-100 dark:border-zinc-800/40 last:border-0 hover:bg-cyan-50 dark:hover:bg-cyan-900/20 transition-colors">
+                        <div className="flex items-start gap-2.5">
+                          <span className="text-xs font-semibold text-cyan-600 dark:text-cyan-400 bg-cyan-100 dark:bg-cyan-900/30 px-1.5 py-0.5 rounded mt-0.5 shrink-0">{idx + 1}</span>
+                          <span className="flex-1 text-slate-800 dark:text-zinc-200 leading-relaxed">{alt.text}</span>
+                          <span className="text-xs text-slate-500 dark:text-zinc-500 font-medium whitespace-nowrap mt-0.5">{Math.round(alt.score * 100)}%</span>
+                        </div>
+                      </button>
+                    ))}
+                  </>
                 ) : <div className="px-3 py-4 text-xs text-slate-500 dark:text-zinc-500 text-center">No alternatives available</div>}
               </div>
               )}

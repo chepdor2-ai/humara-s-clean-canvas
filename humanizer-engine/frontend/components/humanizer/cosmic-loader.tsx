@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { HexagonalHealth, buildPipelineLayers } from './hexagonal-health';
 
 /* ── Cosmic Processing Animation v2 ──────────────────────────────────────
    Premium orbital loader — brand-matched cyan/teal palette.
@@ -23,6 +22,11 @@ interface CosmicLoaderProps {
   /** Total phases in pipeline */
   totalPhases?: number;
 }
+
+type Milestone = {
+  label: string;
+  caption: string;
+};
 
 /* ── Brand palette ── */
 const C = {
@@ -99,11 +103,41 @@ export function CosmicLoader({ stage, message, progress, engineLabel, statusItem
   const canvasRef = useRef<HTMLCanvasElement>(null);
   useStarfield(canvasRef);
 
-  /* Build hex pipeline layers from engine config + current phase */
-  const hexLayers = useMemo(() => {
-    if (!engineId || totalPhases === undefined) return null;
-    return buildPipelineLayers(engineId, phaseIndex ?? 0, Math.max(1, totalPhases));
-  }, [engineId, phaseIndex, totalPhases]);
+  const milestones = useMemo<Milestone[]>(() => [
+    { label: 'Analyze', caption: 'Reading structure and tone' },
+    { label: 'Reshape', caption: 'Breaking AI-like patterns' },
+    { label: 'Humanize', caption: 'Adding natural cadence' },
+    { label: 'Polish', caption: 'Cleaning grammar and flow' },
+    { label: 'Deliver', caption: 'Preparing final output' },
+  ], []);
+
+  const currentMilestone = useMemo(() => {
+    const normalizedTotal = Math.max(1, totalPhases ?? milestones.length);
+    const normalizedIndex = Math.max(0, Math.min(normalizedTotal, phaseIndex ?? 0));
+    if (normalizedIndex <= 0) {
+      return progress >= 100 ? milestones.length - 1 : 0;
+    }
+    return Math.min(
+      milestones.length - 1,
+      Math.floor(((normalizedIndex - 1) / normalizedTotal) * milestones.length),
+    );
+  }, [milestones.length, phaseIndex, progress, totalPhases]);
+
+  const milestoneProgress = useMemo(() => {
+    return milestones.map((_, index) => {
+      if (index < currentMilestone) return 100;
+      if (index > currentMilestone) return 0;
+      const local = ((currentMilestone + Math.max(0, Math.min(100, progress)) / 100) / milestones.length) * 100;
+      return Math.max(14, Math.min(100, local * milestones.length - index * 100));
+    });
+  }, [currentMilestone, milestones, progress]);
+
+  const statusCards = useMemo(() => {
+    return statusItems.slice(0, 3).map((item, index) => ({
+      ...item,
+      tone: index === 0 ? 'from-cyan-500/18 to-sky-500/10' : index === 1 ? 'from-teal-500/16 to-cyan-500/8' : 'from-violet-500/14 to-cyan-500/10',
+    }));
+  }, [statusItems]);
 
   /* Pulse ring counter — emit a new ring every 2.5s */
   const [pulseKey, setPulseKey] = useState(0);
@@ -341,76 +375,71 @@ export function CosmicLoader({ stage, message, progress, engineLabel, statusItem
           </AnimatePresence>
         </div>
 
-        {/* ── Progress bar ── */}
-        <div className="space-y-2">
+        {/* ── Milestone progress tracker ── */}
+        <div className="space-y-3">
           <div className="flex items-center justify-between text-[11px] font-semibold">
-            <span className="text-slate-600 dark:text-zinc-300">{engineLabel}</span>
+            <div className="flex items-center gap-2">
+              <span className="text-slate-600 dark:text-zinc-300">{engineLabel}</span>
+              {engineId && (
+                <span className="rounded-full border border-cyan-500/15 bg-cyan-500/8 px-2 py-0.5 text-[9px] uppercase tracking-[0.18em] text-cyan-600 dark:text-cyan-300">
+                  Live
+                </span>
+              )}
+            </div>
             <span className="text-cyan-600 dark:text-cyan-400 tabular-nums font-mono">{Math.round(progress)}%</span>
           </div>
-          <div className="relative h-[6px] w-full overflow-hidden rounded-full bg-slate-100 dark:bg-zinc-800/60">
-            {/* Shimmer track */}
-            <motion.div
-              className="absolute inset-0 rounded-full opacity-30"
-              style={{
-                background: `linear-gradient(90deg, transparent 0%, ${rgba(C.cyan, 0.15)} 50%, transparent 100%)`,
-                backgroundSize: '200% 100%',
-              }}
-              animate={{ backgroundPosition: ['200% 0%', '-200% 0%'] }}
-              transition={{ duration: 2, repeat: Infinity, ease: 'linear' }}
-            />
-            {/* Fill */}
-            <motion.div
-              className="h-full rounded-full relative overflow-hidden"
-              style={{
-                background: `linear-gradient(90deg, ${rgba(C.cyan, 1)}, ${rgba(C.teal, 1)})`,
-              }}
-              initial={false}
-              animate={{ width: `${Math.max(2, Math.min(100, progress))}%` }}
-              transition={{ type: 'spring', stiffness: 60, damping: 20 }}
-            >
-              {/* Moving highlight on fill */}
-              <motion.div
-                className="absolute inset-0"
-                style={{
-                  background: `linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.3) 50%, transparent 100%)`,
-                  backgroundSize: '60% 100%',
-                }}
-                animate={{ backgroundPosition: ['-100% 0%', '200% 0%'] }}
-                transition={{ duration: 1.5, repeat: Infinity, ease: 'linear' }}
-              />
-            </motion.div>
+
+          <div className="grid grid-cols-5 gap-2">
+            {milestones.map((milestone, index) => {
+              const isDone = index < currentMilestone || progress >= 100;
+              const isCurrent = index === currentMilestone && progress < 100;
+              return (
+                <div
+                  key={milestone.label}
+                  className={`rounded-xl border px-2.5 py-2 text-left transition-colors ${
+                    isDone
+                      ? 'border-emerald-400/30 bg-emerald-500/10'
+                      : isCurrent
+                        ? 'border-cyan-400/35 bg-cyan-500/10'
+                        : 'border-slate-200/60 bg-slate-50/70 dark:border-zinc-700/40 dark:bg-zinc-800/30'
+                  }`}
+                >
+                  <div className="mb-2 flex items-center gap-2">
+                    <div className={`h-2.5 w-2.5 rounded-full ${isDone ? 'bg-emerald-500' : isCurrent ? 'bg-cyan-500 ring-4 ring-cyan-500/15' : 'bg-slate-300 dark:bg-zinc-600'}`} />
+                    <p className={`text-[10px] font-bold uppercase tracking-[0.16em] ${isDone ? 'text-emerald-600 dark:text-emerald-300' : isCurrent ? 'text-cyan-600 dark:text-cyan-300' : 'text-slate-500 dark:text-zinc-400'}`}>
+                      {milestone.label}
+                    </p>
+                  </div>
+                  <div className="h-1.5 overflow-hidden rounded-full bg-slate-200/80 dark:bg-zinc-800/70">
+                    <motion.div
+                      className={`h-full rounded-full ${isDone ? 'bg-emerald-500' : 'bg-cyan-500'}`}
+                      initial={false}
+                      animate={{ width: `${milestoneProgress[index]}%` }}
+                      transition={{ type: 'spring', stiffness: 80, damping: 20 }}
+                    />
+                  </div>
+                  <p className="mt-2 text-[10px] leading-relaxed text-slate-500 dark:text-zinc-400">
+                    {milestone.caption}
+                  </p>
+                </div>
+              );
+            })}
           </div>
         </div>
 
-        {/* ── Hexagonal Health Tracker / Status grid ── */}
-        {hexLayers && hexLayers.length > 0 ? (
-          <div className="space-y-2">
-            <HexagonalHealth layers={hexLayers} compact />
-            <div className="grid grid-cols-3 gap-1.5">
-              {statusItems.map((item) => (
-                <div
-                  key={item.label}
-                  className="rounded-md border border-slate-200/40 dark:border-zinc-700/30 bg-slate-50/60 dark:bg-zinc-800/30 px-2 py-1.5 text-center"
-                >
-                  <p className="text-[8px] uppercase tracking-wider text-slate-400 dark:text-zinc-500 font-semibold">{item.label}</p>
-                  <p className="mt-0.5 truncate text-[10px] font-bold text-slate-700 dark:text-zinc-200">{item.value}</p>
-                </div>
-              ))}
+        {/* ── Context cards ── */}
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+          {statusCards.map((item) => (
+            <div
+              key={item.label}
+              className="rounded-xl border border-slate-200/60 dark:border-zinc-700/40 bg-white/70 dark:bg-zinc-800/35 px-3 py-2.5 shadow-sm"
+            >
+              <div className={`mb-2 h-1 w-12 rounded-full bg-gradient-to-r ${item.tone}`} />
+              <p className="text-[9px] font-semibold uppercase tracking-[0.18em] text-slate-400 dark:text-zinc-500">{item.label}</p>
+              <p className="mt-1 truncate text-sm font-semibold text-slate-700 dark:text-zinc-100">{item.value}</p>
             </div>
-          </div>
-        ) : (
-          <div className="grid grid-cols-3 gap-2">
-            {statusItems.map((item) => (
-              <div
-                key={item.label}
-                className="rounded-lg border border-slate-200/60 dark:border-zinc-700/40 bg-slate-50/80 dark:bg-zinc-800/40 px-2.5 py-2 text-center transition-colors"
-              >
-                <p className="text-[9px] uppercase tracking-wider text-slate-400 dark:text-zinc-500 font-semibold">{item.label}</p>
-                <p className="mt-0.5 truncate text-xs font-bold text-slate-700 dark:text-zinc-200">{item.value}</p>
-              </div>
-            ))}
-          </div>
-        )}
+          ))}
+        </div>
       </div>
 
       {/* ── Keyframe injection ── */}
