@@ -1,6 +1,6 @@
 'use client';
 import { useState, useEffect } from 'react';
-import { Activity, FileText, BrainCircuit, TrendingUp, Zap, BarChart3, Crown, Sparkles, Clock, ChevronRight, Shield } from 'lucide-react';
+import { Activity, FileText, BrainCircuit, TrendingUp, Zap, BarChart3, Crown, Sparkles, Clock, ChevronRight, Shield, Search, GraduationCap } from 'lucide-react';
 import Link from 'next/link';
 import { useAuth } from '../../AuthProvider';
 import { useUsage } from '../UsageBar';
@@ -156,6 +156,7 @@ export default function DashboardHome() {
           { label: 'Human Score', value: avgScore > 0 ? `${avgScore}%` : '—', icon: TrendingUp, color: 'text-emerald-400', border: 'border-emerald-500/10' },
           { label: 'Style Profiles', value: String(profileCount), icon: BrainCircuit, color: 'text-violet-400', border: 'border-violet-500/10' },
           { label: 'Documents', value: String(docTotal), icon: BarChart3, color: 'text-cyan-400', border: 'border-cyan-500/10' },
+          { label: 'Scholar Tokens', value: '150K', icon: GraduationCap, color: 'text-amber-400', border: 'border-amber-500/10' },
         ].map((stat, i) => (
           <div key={i} className={`dashboard-card bg-white dark:bg-[#0c0c14] border ${stat.border.replace('border-', 'dark:border-').replace('/10', '/10').replace('500', '500').concat(' border-slate-200')} rounded-xl p-4 sm:p-5`}>
             <div className="flex items-center justify-between mb-3">
@@ -169,11 +170,26 @@ export default function DashboardHome() {
       </div>
 
       {/* Quick Actions */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 lg:grid-cols-6 gap-3">
         <Link href="/app" className="dashboard-card group bg-white dark:bg-[#0c0c14] border border-slate-200 dark:border-zinc-800/60 rounded-xl p-4 hover:border-cyan-500/50 dark:hover:border-cyan-500/20 transition-colors">
           <Zap className="w-5 h-5 text-cyan-500 dark:text-cyan-400 mb-2" />
           <h3 className="text-sm font-semibold text-zinc-900 dark:text-white">Humanize</h3>
           <p className="text-[11px] text-slate-500 dark:text-zinc-500">Transform AI text</p>
+        </Link>
+        <Link href="/workspace/chat" className="dashboard-card group bg-white dark:bg-[#0c0c14] border border-slate-200 dark:border-zinc-800/60 rounded-xl p-4 hover:border-cyan-500/50 dark:hover:border-cyan-500/20 transition-colors">
+          <GraduationCap className="w-5 h-5 text-amber-500 dark:text-amber-400 mb-2" />
+          <h3 className="text-sm font-semibold text-zinc-900 dark:text-white">Workbench</h3>
+          <p className="text-[11px] text-slate-500 dark:text-zinc-500">Claude-like academic chat</p>
+        </Link>
+        <Link href="/workspace/scholar" className="dashboard-card group bg-white dark:bg-[#0c0c14] border border-slate-200 dark:border-zinc-800/60 rounded-xl p-4 hover:border-amber-500/50 dark:hover:border-amber-500/20 transition-colors">
+          <Search className="w-5 h-5 text-amber-500 dark:text-amber-400 mb-2" />
+          <h3 className="text-sm font-semibold text-zinc-900 dark:text-white">Scholar Search</h3>
+          <p className="text-[11px] text-slate-500 dark:text-zinc-500">Find and add sources</p>
+        </Link>
+        <Link href="/workspace/document/project_seed_how_humara_works" className="dashboard-card group bg-white dark:bg-[#0c0c14] border border-slate-200 dark:border-zinc-800/60 rounded-xl p-4 hover:border-violet-500/50 dark:hover:border-violet-500/20 transition-colors">
+          <FileText className="w-5 h-5 text-violet-500 dark:text-violet-400 mb-2" />
+          <h3 className="text-sm font-semibold text-zinc-900 dark:text-white">Artifact Editor</h3>
+          <p className="text-[11px] text-slate-500 dark:text-zinc-500">Edit, grade, and export</p>
         </Link>
         <Link href="/app/detector" className="dashboard-card group bg-white dark:bg-[#0c0c14] border border-slate-200 dark:border-zinc-800/60 rounded-xl p-4 hover:border-emerald-500/50 dark:hover:border-emerald-500/20 transition-colors">
           <TrendingUp className="w-5 h-5 text-emerald-500 dark:text-emerald-400 mb-2" />

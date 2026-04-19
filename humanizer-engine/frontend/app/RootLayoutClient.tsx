@@ -22,7 +22,7 @@ const Logo = () => (
   </Link>
 );
 
-const APP_ROUTES = ['/app'];
+const APP_ROUTES = ['/app', '/workspace'];
 
 export default function RootLayoutClient({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();

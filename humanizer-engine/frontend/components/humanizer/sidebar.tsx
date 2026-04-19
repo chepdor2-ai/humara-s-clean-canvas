@@ -39,6 +39,9 @@ type NavItem = {
 
 const primary: NavItem[] = [
   { label: "Dashboard", icon: LayoutDashboard, href: "/app/dashboard" },
+  { label: "Workspace Chat", icon: Wand2, href: "/workspace/chat" },
+  { label: "Scholar Search", icon: BookOpen, href: "/workspace/scholar" },
+  { label: "Artifact Editor", icon: FileText, href: "/workspace/document/project_seed_how_humara_works" },
   { label: "Humanizer", icon: Wand2, href: "/app" },
   { label: "Documents", icon: FileText, href: "/app/documents" },
   { label: "AI Detector", icon: ShieldCheck, href: "/app/detector" },
@@ -111,6 +114,7 @@ export function Sidebar({ open, onClose }: { open?: boolean; onClose?: () => voi
     if (!href) return false
     if (href === "/app") return pathname === "/app"
     if (href === "/app/dashboard") return pathname === "/app/dashboard" || pathname === "/app/payment/verify"
+    if (href.startsWith('/workspace/document/')) return pathname.startsWith('/workspace/document/')
     return pathname.startsWith(href)
   }
 
