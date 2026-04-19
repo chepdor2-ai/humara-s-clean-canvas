@@ -35,6 +35,12 @@ interface SelectionInfo { text: string; start: number; end: number; rect: { x: n
 interface ScoredSentence { text: string; start: number; end: number; score: number; }
 type StreamedHumanizeResult = Partial<HumanizeResponse> & { type?: string; partial?: boolean; humanized?: string };
 
+const hasDetectorResults = (value: unknown): value is { overall: number; detectors: DetectorScore[] } => {
+  if (!value || typeof value !== 'object') return false;
+  const candidate = value as { overall?: unknown; detectors?: unknown };
+  return typeof candidate.overall === 'number' && Array.isArray(candidate.detectors);
+};
+
 /* ── Temporary History (auto-expires after 4 minutes) ──────────────────── */
 interface HistoryEntry {
   id: string;
@@ -161,7 +167,6 @@ const ALL_ENGINES: EngineConfig[] = [
   { id: 'nuru_v2', label: 'Nuru' },
   { id: 'ghost_pro_wiki', label: 'Ghost' },
   // 🔴 Advanced Engines
-  { id: 'ninja_3', label: 'Ninja 3' },
   { id: 'ninja_2', label: 'Beta' },
   { id: 'ninja_5', label: 'Omega' },
   { id: 'ghost_trial_2', label: 'Specter' },
@@ -779,7 +784,7 @@ function EditorPageInner() {
   };
 
   /** Shared SSE streaming handler used by humanize & rephrase */
-  const runStreamingHumanize = async (inputText: string, signal: AbortSignal) => {
+  const runStreamingHumanize = async (inputText: string, signal: AbortSignal): Promise<StreamedHumanizeResult> => {
     const requestBody: Record<string, unknown> = {
       text: cleanInputText(inputText),
       engine,
@@ -1067,11 +1072,15 @@ function EditorPageInner() {
           ),
         );
 
-        if (finalData.output_detector_results && typeof finalData.output_detector_results.overall === 'number') {
+        const outputDetectorResults = hasDetectorResults(finalData.output_detector_results)
+          ? finalData.output_detector_results
+          : null;
+
+        if (outputDetectorResults) {
           setOutputDetection({
-            overallAi: finalData.output_detector_results.overall,
-            overallHuman: Math.max(0, 100 - finalData.output_detector_results.overall),
-            detectors: finalData.output_detector_results.detectors,
+            overallAi: outputDetectorResults.overall,
+            overallHuman: Math.max(0, 100 - outputDetectorResults.overall),
+            detectors: outputDetectorResults.detectors,
           });
         } else {
           setOutputDetection(null);
@@ -1160,11 +1169,16 @@ function EditorPageInner() {
             ]),
           ),
         );
-        if (finalData.output_detector_results && typeof finalData.output_detector_results.overall === 'number') {
+
+        const outputDetectorResults = hasDetectorResults(finalData.output_detector_results)
+          ? finalData.output_detector_results
+          : null;
+
+        if (outputDetectorResults) {
           setOutputDetection({
-            overallAi: finalData.output_detector_results.overall,
-            overallHuman: Math.max(0, 100 - finalData.output_detector_results.overall),
-            detectors: finalData.output_detector_results.detectors,
+            overallAi: outputDetectorResults.overall,
+            overallHuman: Math.max(0, 100 - outputDetectorResults.overall),
+            detectors: outputDetectorResults.detectors,
           });
         } else {
           setOutputDetection(null);
