@@ -95,8 +95,8 @@ export function ScholarClient() {
         }
         const data: OpenAlexSearchResponse = await res.json()
         setResults(data)
-      } catch (err: any) {
-        setError(err?.message || 'Something went wrong')
+      } catch (err: unknown) {
+        setError(err instanceof Error ? err.message : 'Something went wrong')
         setResults(null)
       } finally {
         setLoading(false)

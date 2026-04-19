@@ -163,8 +163,8 @@ export async function POST(req: NextRequest) {
           const token = chunk.choices?.[0]?.delta?.content ?? ''
           if (token) controller.enqueue(encoder.encode(token))
         }
-      } catch (err: any) {
-        const msg = err?.message || 'The AI request failed.'
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : 'The AI request failed.'
         controller.enqueue(encoder.encode(`\n\n> Error: ${msg}`))
       } finally {
         controller.close()
