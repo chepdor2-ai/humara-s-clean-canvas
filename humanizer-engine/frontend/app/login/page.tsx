@@ -17,6 +17,15 @@ function LoginForm() {
   const [error, setError] = useState('');
   const [googleLoading, setGoogleLoading] = useState(false);
 
+  // Show error from auth callback redirect (e.g. Google sign-in failure)
+  useEffect(() => {
+    const callbackError = searchParams.get('error');
+    const errorDesc = searchParams.get('error_description');
+    if (callbackError) {
+      setError(errorDesc || 'Authentication failed. Please try again.');
+    }
+  }, [searchParams]);
+
   // Redirect already-authenticated users to /app
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {

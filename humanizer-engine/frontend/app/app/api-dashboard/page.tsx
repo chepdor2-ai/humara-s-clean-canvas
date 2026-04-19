@@ -51,23 +51,33 @@ interface UsageStats {
 type Tab = 'overview' | 'keys' | 'usage' | 'settings';
 
 const ENGINE_NAMES: Record<string, string> = {
-  oxygen: 'Humara 2.0',
-  ozone: 'Humara 2.1',
-  easy: 'Humara 2.2',
-  oxygen3: 'Humara 3.0',
-  humara_v3_3: 'Humara 2.4',
-  nuru_v2: 'Nuru 2.0',
-  ghost_pro_wiki: 'Wikipedia',
+  easy: 'Swift',
+  ninja_1: 'Ninja',
+  antipangram: 'Pangram',
+  humara_v3_3: 'Humarin',
+  oxygen: 'Oxygen',
+  king: 'King',
+  nuru_v2: 'Nuru',
+  ghost_pro_wiki: 'Ghost',
+  ninja_2: 'Beta',
+  ninja_5: 'Omega',
+  ghost_trial_2: 'Specter',
+  phantom: 'Phantom',
 };
 
 const ENGINE_COLORS: Record<string, string> = {
-  oxygen: '#8b5cf6',
-  ozone: '#6366f1',
   easy: '#10b981',
-  oxygen3: '#3b82f6',
-  humara_v3_3: '#f59e0b',
+  ninja_1: '#6366f1',
+  antipangram: '#f59e0b',
+  humara_v3_3: '#f97316',
+  oxygen: '#8b5cf6',
+  king: '#eab308',
   nuru_v2: '#ef4444',
   ghost_pro_wiki: '#06b6d4',
+  ninja_2: '#3b82f6',
+  ninja_5: '#ec4899',
+  ghost_trial_2: '#a855f7',
+  phantom: '#14b8a6',
 };
 
 export default function ApiDashboardPage() {
@@ -427,13 +437,13 @@ function ModelSettings() {
   const [copied, setCopied] = useState(false);
 
   const engines = [
-    { id: 'oxygen', name: 'Humara 2.0', desc: 'GPTZero killer — best for academic papers', tier: 'Hobby+', speed: 'Medium', quality: 'High' },
-    { id: 'ozone', name: 'Humara 2.1', desc: 'ZeroGPT/SEO cleaner — blog & marketing content', tier: 'Developer+', speed: 'Medium', quality: 'High' },
-    { id: 'easy', name: 'Humara 2.2', desc: 'General-purpose — works on everything', tier: 'Hobby+', speed: 'Fast', quality: 'Good' },
-    { id: 'oxygen3', name: 'Humara 3.0', desc: 'Fine-tuned model — sentence-independent processing', tier: 'Developer+', speed: 'Fast', quality: 'Very High' },
-    { id: 'humara_v3_3', name: 'Humara 2.4', desc: 'Strongest — triple fallback + detector feedback', tier: 'Business+', speed: 'Slow', quality: 'Highest' },
-    { id: 'nuru_v2', name: 'Nuru 2.0', desc: 'Deep restructuring — 40%+ structural change', tier: 'Developer+', speed: 'Medium', quality: 'High' },
-    { id: 'ghost_pro_wiki', name: 'Wikipedia', desc: 'Encyclopedic NPOV — citation-aware', tier: 'Developer+', speed: 'Slow', quality: 'High' },
+    { id: 'easy', name: 'Swift', desc: 'Fast general-purpose humanization', tier: 'Free+', speed: 'Fast', quality: 'Good' },
+    { id: 'ninja_1', name: 'Ninja', desc: 'Balanced quality and speed', tier: 'Free+', speed: 'Medium', quality: 'High' },
+    { id: 'oxygen', name: 'Oxygen', desc: 'Structural rewrite — academic papers', tier: 'Hobby+', speed: 'Medium', quality: 'High' },
+    { id: 'humara_v3_3', name: 'Humarin', desc: 'Strongest — triple fallback + detector feedback', tier: 'Developer+', speed: 'Slow', quality: 'Highest' },
+    { id: 'nuru_v2', name: 'Nuru', desc: 'Deep restructuring — 40%+ structural change', tier: 'Developer+', speed: 'Medium', quality: 'High' },
+    { id: 'ghost_pro_wiki', name: 'Ghost', desc: 'Encyclopedic NPOV — citation-aware', tier: 'Developer+', speed: 'Slow', quality: 'High' },
+    { id: 'king', name: 'King', desc: 'Detection-control optimized', tier: 'Developer+', speed: 'Medium', quality: 'Very High' },
   ];
 
   const generateCurlCommand = () => {

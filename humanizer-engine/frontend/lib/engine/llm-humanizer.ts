@@ -462,7 +462,7 @@ function getNinjaToneDirective(tone: string): string {
   }
 }
 
-function getNinjaSentenceSystemPrompt(features: InputFeatures, tone: string): string {
+function getNinjaSentenceSystemPrompt(features: InputFeatures, tone: string, domainGuidance?: string): string {
   const contractionConstraint = features.hasContractions
     ? "You MAY use contractions naturally."
     : "Do NOT use contractions. Write all words fully.";
@@ -483,6 +483,7 @@ You are rewriting a SINGLE sentence for ${getNinjaToneLabel(tone)}. Your goal is
 
 TONE TARGET:
 ${getNinjaToneDirective(tone)}
+${domainGuidance ? `\nDOMAIN GUIDANCE:\n${domainGuidance}` : ''}
 
 STRUCTURAL TECHNIQUES (use naturally when they improve flow — do NOT force every technique):
 - CLAUSE FRONTING: Occasionally move subordinate clauses to the beginning
@@ -2039,7 +2040,7 @@ export async function llmHumanize(
   const tempBase: Record<string, number> = { light: 0.70, medium: 0.82, strong: 0.92 };
 
   console.log("  [Ninja] Sentence-by-sentence LLM rewrite (combined 3-phase)...");
-  const sentenceSystem = getNinjaSentenceSystemPrompt(features, tone);
+  const sentenceSystem = getNinjaSentenceSystemPrompt(features, tone, domainGuidance);
   const paragraphs = surgeryText.split(/\n\s*\n/).filter(p => p.trim());
   let totalSentencesProcessed = 0;
 

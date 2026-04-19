@@ -19,6 +19,10 @@ import { AI_WORD_REPLACEMENTS } from '../shared-dictionaries';
 import { getBestReplacement } from './dictionary-service';
 import { runFullDetectorForensicsCleanup } from './forensics';
 import { detectDomain, getProtectedTermsForDomain } from '../domain-detector';
+import { resolveStrategy, type DomainStrategy } from '../domain-strategies';
+
+// Module-level strategy populated per-call by stealthHumanize
+let _stealthStrategy: DomainStrategy | null = null;
 
 /* ── Sentence Splitter ────────────────────────────────────────────── */
 
@@ -942,7 +946,9 @@ function processSentence(
   const resultTokens: string[] = [];
   let replaceCount = 0;
   const wordCount = text.split(/\s+/).length;
-  const maxReplacements = Math.ceil(wordCount * (strength === 'strong' ? 0.80 : 0.70));
+  const baseReplacementRate = strength === 'strong' ? 0.80 : 0.70;
+  const domainRate = _stealthStrategy ? _stealthStrategy.synonymIntensity + 0.15 : baseReplacementRate;
+  const maxReplacements = Math.ceil(wordCount * Math.min(baseReplacementRate, domainRate));
   const alreadyReplaced = new Set<string>(); // Track Step 2 output words
 
   for (let i = 0; i < tokens.length; i++) {
@@ -1102,7 +1108,8 @@ function processSentence(
   // ─── Step 3b: Clause reordering ──────────────────────────────
   // Swap independent clauses around ", and ", ", but ", ", which " etc.
   // This adds structural change without changing any words.
-  if (Math.random() < 0.25 && text.length > 40) {
+  const clauseReorderRate = _stealthStrategy ? _stealthStrategy.structuralRate : 0.25;
+  if (Math.random() < clauseReorderRate && text.length > 40) {
     // Try swapping clauses around ", and " or ", but "
     const clauseSwapRe = /^(.{15,}?),\s+(and|but|yet)\s+(.{15,})$/i;
     const clauseMatch = text.match(clauseSwapRe);
@@ -1122,7 +1129,8 @@ function processSentence(
 
   // ─── Step 3c: Passive ↔ Active voice toggle ─────────────────
   // ~20% chance: convert "X is/was Yed by Z" → "Z Yed X" or vice versa
-  if (Math.random() < 0.15 && text.length > 30) {
+  const voiceToggleRate = _stealthStrategy ? _stealthStrategy.structuralRate * 0.6 : 0.15;
+  if (Math.random() < voiceToggleRate && text.length > 30) {
     // Passive → Active: "X is/was <verb>ed by Y" → "Y <verb>s X"
     const passiveRe = /\b(\w[\w\s]{2,30}?)\s+(is|are|was|were)\s+(\w+ed)\s+by\s+(\w[\w\s]{2,30}?)([.,;])/i;
     const pm = text.match(passiveRe);
@@ -1137,8 +1145,12 @@ function processSentence(
   // ~5% chance, only if sentence doesn't already start with a varied opener
   const starterRoll = Math.random();
   const alreadyHasStarter = /^(However|Although|Though|Moreover|Furthermore|Thus|Therefore|Hence|Consequently|Because|Since|Yet|Meanwhile|Additionally|Instead|Despite|In spite|Driven by|As a|As the|Notably|Historically|Traditionally|In practice|In broad|From a|At its|On balance|By extension|In reality|Against|Under these|For instance|For example|To illustrate|In particular|More specifically)/i.test(text) || /^[A-Z][a-z]+,\s/.test(text);
-  if (starterRoll < 0.05 && !alreadyHasStarter && sentenceIndex > 0 && text.length > 30) {
-    const available = STARTERS_ACADEMIC.filter(s => !usedStarters.has(s));
+  const starterRate = _stealthStrategy ? _stealthStrategy.starterInjectionRate : 0.05;
+  if (starterRoll < starterRate && !alreadyHasStarter && sentenceIndex > 0 && text.length > 30) {
+    // Merge domain-specific starters with academic starters
+    const domainStarters = _stealthStrategy ? _stealthStrategy.domainStarters : [];
+    const allStarters = [...new Set([...STARTERS_ACADEMIC, ...domainStarters])];
+    const available = allStarters.filter(s => !usedStarters.has(s));
     if (available.length > 0) {
       const starter = available[Math.floor(Math.random() * available.length)];
       usedStarters.add(starter);
@@ -1232,7 +1244,8 @@ export function stealthHumanize(
   const domainResult = detectDomain(text);
   const domainProtected = getProtectedTermsForDomain(domainResult);
   for (const term of domainProtected) PROTECTED.add(term.toLowerCase());
-  console.log(`[NURU_V2] Domain: ${domainResult.primary} (${(domainResult.confidence * 100).toFixed(0)}%) — added ${domainProtected.size} protected terms`);
+  _stealthStrategy = resolveStrategy(domainResult);
+  console.log(`[NURU_V2] Domain: ${domainResult.primary} (${(domainResult.confidence * 100).toFixed(0)}%) — added ${domainProtected.size} protected terms, synInt=${_stealthStrategy.synonymIntensity.toFixed(2)}, structRate=${_stealthStrategy.structuralRate.toFixed(2)}`);
 
   const hasFirstPerson = /\b(I|we|my|our|me|us|myself|ourselves)\b/.test(text);
   const paragraphs = text.split(/\n\s*\n/).filter(p => p.trim());

@@ -7,9 +7,18 @@
 -- This version catches all errors and never blocks user creation.
 -- ══════════════════════════════════════════════════════════
 
--- 1) Ensure a 'free' plan always exists
-INSERT INTO public.plans (name, display_name, price, words_per_day, description)
-VALUES ('free', 'Free', 0, 1000, 'Free tier — 1,000 words/day')
+-- 1) Ensure a 'free' plan always exists (matching actual plans table schema)
+INSERT INTO public.plans (
+  name, display_name, price_monthly, price_yearly,
+  daily_words_fast, daily_words_stealth, duration_days,
+  max_style_profiles, engines, features, is_active
+)
+VALUES (
+  'free', 'Free', 0.00, 0.00,
+  1000, 0, 0,
+  1, ARRAY['oxygen','easy','ninja_1'],
+  '["1,000 words/day","Core engines","Basic AI detection"]'::jsonb, true
+)
 ON CONFLICT (name) DO NOTHING;
 
 -- 2) Replace the trigger function with a resilient version

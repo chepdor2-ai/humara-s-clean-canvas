@@ -88,7 +88,7 @@ async function runHumarinPass(
 ): Promise<HumarinResult> {
   const wordCount = text.split(/\s+/).filter(Boolean).length;
   const useSingleRequest = sentenceBySentence || mode === 'turbo' || mode === 'fast' || wordCount <= 1200;
-  const chunks = useSingleRequest ? [text] : splitIntoChunks(text, 2);
+  const chunks = useSingleRequest ? [text] : splitIntoChunks(text, Math.min(5, Math.ceil(wordCount / 1200)));
 
   if (chunks.length === 1) {
     const result = await humarinCall(text, mode, sentenceBySentence, apiKey, url);

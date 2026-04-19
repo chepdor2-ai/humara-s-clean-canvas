@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { createServiceClient } from '../../../../lib/supabase';
 import crypto from 'crypto';
 
-export const maxDuration = 120;
+export const maxDuration = 300;
 
 // ── API Key Authentication Helper ─────────────────────────────────
 async function authenticateApiKey(request: Request) {

@@ -87,8 +87,27 @@ export async function GET(request: Request) {
             // Update profile plan_id
             await supabase
               .from('profiles')
-              .update({ plan_id: planRow.id })
+              .update({ plan_id: planRow.id, updated_at: new Date().toISOString() })
               .eq('id', userId);
+
+            // Update today's usage record with new plan limits
+            const { data: planLimits } = await supabase
+              .from('plans')
+              .select('daily_words_fast, daily_words_stealth, duration_days')
+              .eq('id', planRow.id)
+              .single();
+
+            if (planLimits) {
+              await supabase
+                .from('usage')
+                .upsert({
+                  user_id: userId,
+                  usage_date: new Date().toISOString().split('T')[0],
+                  words_limit_fast: planLimits.daily_words_fast,
+                  words_limit_stealth: planLimits.daily_words_stealth,
+                  days_remaining: planLimits.duration_days || (billing === 'yearly' ? 365 : 30),
+                }, { onConflict: 'user_id,usage_date' });
+            }
           }
         } else {
           console.error('No user found for email:', email);

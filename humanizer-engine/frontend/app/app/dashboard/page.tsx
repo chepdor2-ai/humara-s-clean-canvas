@@ -55,7 +55,14 @@ export default function DashboardHome() {
     : 0;
 
   const engineLabel = (e: string) => {
-    const map: Record<string, string> = { oxygen: 'Humara 2.0', ozone: 'Humara 2.1', easy: 'Humara 2.2' };
+    const map: Record<string, string> = {
+      easy: 'Swift', ninja_1: 'Ninja', antipangram: 'Pangram',
+      humara_v3_3: 'Humarin', oxygen: 'Oxygen', king: 'King',
+      nuru_v2: 'Nuru', ghost_pro_wiki: 'Ghost',
+      ninja_2: 'Beta', ninja_3: 'Alpha', ninja_5: 'Omega',
+      ghost_trial_2: 'Specter', phantom: 'Phantom',
+      ai_analysis: 'AI Analysis',
+    };
     return map[e] || e || '—';
   };
 

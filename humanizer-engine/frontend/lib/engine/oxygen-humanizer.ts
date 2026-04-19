@@ -15,9 +15,12 @@
  */
 
 import { detectDomain, getProtectedTermsForDomain } from './domain-detector';
+import { resolveStrategy, type DomainStrategy } from './domain-strategies';
 
 // Module-level set populated per-call by oxygenHumanize — checked in deepSynonymReplace
 let _oxygenDomainProtected: Set<string> = new Set();
+// Module-level strategy populated per-call by oxygenHumanize
+let _oxygenStrategy: DomainStrategy | null = null;
 
 // ── Tense-aware replacement helpers ──
 
@@ -513,9 +516,13 @@ function diversifyStarters(text: string): string {
 }
 
 function deepSynonymReplace(text: string, intensity: number = 0.6): string {
+  // Domain strategy caps the effective intensity for precision-sensitive domains
+  const effectiveIntensity = _oxygenStrategy
+    ? Math.min(intensity, _oxygenStrategy.synonymIntensity + 0.15)
+    : intensity;
   for (const [pattern, replacements] of DEEP_SYNONYMS) {
     const m = pattern.exec(text);
-    if (m && Math.random() < intensity) {
+    if (m && Math.random() < effectiveIntensity) {
       const matched = m[0];
       // Reset regex lastIndex since we use /g flags
       pattern.lastIndex = 0;
@@ -544,8 +551,9 @@ function deepSynonymReplace(text: string, intensity: number = 0.6): string {
 }
 
 function clauseFront(sentence: string): string {
+  const clauseProb = _oxygenStrategy ? _oxygenStrategy.structuralRate * 2.8 : 0.7;
   const m = sentence.match(/^(.{20,}?)\s+(because|since|although|while|whereas|given that)\s+(.{10,})$/i);
-  if (m && Math.random() < 0.7) {
+  if (m && Math.random() < clauseProb) {
     const main = m[1].replace(/[.,;]+$/, '');
     const conj = m[2];
     const sub = m[3].replace(/\.$/, '');
@@ -585,7 +593,7 @@ function varySentenceLength(sentences: string[]): string[] {
       && s.split(/\s+/).length < 10
       && sentences[i + 1].split(/\s+/).length < 10
       && sentences[i + 1].length > 0
-      && Math.random() < 0.3) {
+      && Math.random() < (_oxygenStrategy ? _oxygenStrategy.sentenceMergeRate : 0.3)) {
       const connector = pick([', and ', ' — ', '; ']);
       const nextSent = sentences[i + 1];
       const merged = s.replace(/[.!?]+$/, '') + connector + (nextSent.length > 0 ? nextSent[0].toLowerCase() + nextSent.slice(1) : '');
@@ -817,10 +825,16 @@ export function oxygenHumanize(
   // Detect domain and build protected term set for this run
   const domainResult = detectDomain(text);
   _oxygenDomainProtected = getProtectedTermsForDomain(domainResult);
-  console.log(`[OXYGEN] Domain: ${domainResult.primary} (${(domainResult.confidence * 100).toFixed(0)}%) — protecting ${_oxygenDomainProtected.size} terms`);
+  _oxygenStrategy = resolveStrategy(domainResult);
+  console.log(`[OXYGEN] Domain: ${domainResult.primary} (${(domainResult.confidence * 100).toFixed(0)}%) — protecting ${_oxygenDomainProtected.size} terms, synonymInt=${_oxygenStrategy.synonymIntensity.toFixed(2)}, structRate=${_oxygenStrategy.structuralRate.toFixed(2)}`);
 
   const resolvedMode = mode || (strength === 'light' ? 'fast' : strength === 'strong' ? 'aggressive' : 'quality');
-  const preset = MODE_PRESETS[resolvedMode] || MODE_PRESETS.quality;
+  const basePreset = MODE_PRESETS[resolvedMode] || MODE_PRESETS.quality;
+
+  // Blend mode preset with domain strategy — domain can lower the change target for precision-sensitive domains
+  const preset = _oxygenStrategy
+    ? { minChange: Math.min(basePreset.minChange, Math.max(basePreset.minChange, _oxygenStrategy.minChangeTarget)), maxRetries: basePreset.maxRetries }
+    : basePreset;
 
   const paragraphs = splitParagraphs(text);
   const allResults: { text: string; isTitle: boolean }[] = [];

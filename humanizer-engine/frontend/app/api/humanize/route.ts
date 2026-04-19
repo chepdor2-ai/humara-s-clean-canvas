@@ -34,7 +34,7 @@ import { apexHumanize } from '@/lib/engine/apex-humanizer';
 import { kingHumanize } from '@/lib/engine/king-humanizer';
 import { analyzeDocumentCoherence, fixDocumentCoherence, type CoherenceReport } from '@/lib/engine/document-coherence';
 
-export const maxDuration = 120; // LLM engines need more time
+export const maxDuration = 300; // LLM engines need more time
 
 // ── Template-Breaking Pass for Wiki Mode ──────────────────────────
 // Detects repetitive sentence starters and evaluation phrases across

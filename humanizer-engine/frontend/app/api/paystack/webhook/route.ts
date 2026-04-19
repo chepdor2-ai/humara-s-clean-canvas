@@ -97,6 +97,31 @@ export async function POST(request: Request) {
 
       if (subError) console.error('Subscription insert failed:', subError.message, subError.details);
 
+      // Update profile plan_id to reflect the new plan
+      await supabase
+        .from('profiles')
+        .update({ plan_id: planRow.id, updated_at: new Date().toISOString() })
+        .eq('id', userId);
+
+      // Update today's usage record with new plan limits so quota is immediately available
+      const { data: planDetails } = await supabase
+        .from('plans')
+        .select('daily_words_fast, daily_words_stealth, duration_days')
+        .eq('id', planRow.id)
+        .single();
+
+      if (planDetails) {
+        await supabase
+          .from('usage')
+          .upsert({
+            user_id: userId,
+            usage_date: new Date().toISOString().split('T')[0],
+            words_limit_fast: planDetails.daily_words_fast,
+            words_limit_stealth: planDetails.daily_words_stealth,
+            days_remaining: planDetails.duration_days || (billing === 'yearly' ? 365 : 30),
+          }, { onConflict: 'user_id,usage_date' });
+      }
+
       // Record payment
       const { error: payError } = await supabase
         .from('payments')

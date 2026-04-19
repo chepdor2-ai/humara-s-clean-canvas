@@ -854,8 +854,7 @@ export async function POST(req: Request) {
               }
 
               // ── Phase 5: Iterative Flagged-Sentence Loop — Phantom + Nuru targeting ──
-              let workingSentences = splitIntoIndexedSentences(working).sentences;
-              const workingBounds = splitIntoIndexedSentences(working).paragraphBoundaries;
+              const { sentences: workingSentences, paragraphBoundaries: workingBounds } = splitIntoIndexedSentences(working);
               let currentScan = getFlaggedSentenceDetails(workingSentences);
               sendSSE(controller, { type: 'stage', stage: `AI Analysis: Post-Agent Score ${Math.round(currentScan.detectorAverage)}%` });
               await flushDelay(12);
