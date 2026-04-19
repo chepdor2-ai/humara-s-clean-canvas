@@ -386,6 +386,8 @@ export const ENGINE_PIPELINE_CONFIGS: Record<string, EnginePipelineConfig> = {
   antipangram: {  // Pangram
     layers: [
       { label: 'Forensic', count: 1, cellLabels: ['APG'] },
+      { label: 'Nuru 2.0', count: 10, cellLabels: ['1','2','3','4','5','6','7','8','9','10'] },
+      { label: 'Clean', count: 2, cellLabels: ['CLN', 'GRM'] },
     ],
   },
 
@@ -400,6 +402,9 @@ export const ENGINE_PIPELINE_CONFIGS: Record<string, EnginePipelineConfig> = {
   oxygen: {  // Oxygen
     layers: [
       { label: 'Engine', count: 1, cellLabels: ['OXY'] },
+      { label: 'Nuru 2.0', count: 10, cellLabels: ['1','2','3','4','5','6','7','8','9','10'] },
+      { label: 'Nuru Targeted', count: 5, cellLabels: ['T1','T2','T3','T4','T5'] },
+      { label: 'Clean', count: 2, cellLabels: ['CLN', 'GRM'] },
     ],
   },
   king: {  // King
@@ -427,7 +432,7 @@ export const ENGINE_PIPELINE_CONFIGS: Record<string, EnginePipelineConfig> = {
   // ── Advanced Engines ──
   ninja_3: {  // Alpha
     layers: [
-      { label: 'Engine', count: 2, cellLabels: ['WIK', 'H20'] },
+      { label: 'Engine', count: 1, cellLabels: ['H20'] },
       { label: 'Nuru 2.0', count: 10, cellLabels: ['1','2','3','4','5','6','7','8','9','10'] },
       { label: 'Clean', count: 2, cellLabels: ['CLN', 'GRM'] },
     ],
@@ -459,6 +464,17 @@ export const ENGINE_PIPELINE_CONFIGS: Record<string, EnginePipelineConfig> = {
       { label: 'Nuru 2.0', count: 10, cellLabels: ['1','2','3','4','5','6','7','8','9','10'] },
       { label: 'Clean', count: 2, cellLabels: ['CLN', 'GRM'] },
       { label: 'Forensic', count: 1, cellLabels: ['APG'] },
+    ],
+  },
+  ai_analysis: {  // AI Analysis
+    layers: [
+      { label: 'Analyze', count: 1, cellLabels: ['CTX'] },
+      { label: 'Engine', count: 2, cellLabels: ['E1', 'E2'] },
+      { label: 'Phantom', count: 1, cellLabels: ['PHT'] },
+      { label: 'Forensic', count: 1, cellLabels: ['APG'] },
+      { label: 'Nuru 2.0', count: 10, cellLabels: ['1','2','3','4','5','6','7','8','9','10'] },
+      { label: 'Clean', count: 2, cellLabels: ['CLN', 'GRM'] },
+      { label: 'Loop', count: 3, cellLabels: ['L1','L2','L3'] },
     ],
   },
 };

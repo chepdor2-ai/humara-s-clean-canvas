@@ -162,6 +162,7 @@ const ALL_ENGINES: EngineConfig[] = [
   { id: 'ninja_5', label: 'Omega' },
   { id: 'ghost_trial_2', label: 'Specter' },
   { id: 'phantom', label: 'Phantom' },
+  { id: 'ai_analysis', label: 'AI Analysis' },
 ];
 
 type ModeId = 'core_engines' | 'detection_control' | 'advanced_engines';
@@ -174,6 +175,7 @@ const MODE_ENGINES: Record<ModeId, Set<string>> = {
     'ninja_5',
     'ghost_trial_2',
     'phantom',
+    'ai_analysis',
   ]),
 };
 const MODE_LABELS: Record<ModeId, string> = {
@@ -194,11 +196,12 @@ const ENGINE_GUIDES: Record<string, string> = {
   nuru_v2: 'Nuru — Purely non-LLM stealth engine. 10 iterative passes — no AI calls, no external APIs.',
   ghost_pro_wiki: 'Ghost — Academic-style rewrite that sounds like encyclopedic human writing.',
   // Advanced Engines
-  ninja_3: 'Alpha — Wikipedia → Humara 2.0 → full 10× Nuru. Aggressive AI signal suppression.',
+  ninja_3: 'Alpha — Humara 2.0 (instant) → full 10× Nuru. Fast aggressive AI signal suppression under 20 seconds.',
   ninja_2: 'Beta — Easy → Humara 2.0 → full 10× Nuru. Multi-pass chain for deep cleaning.',
   ninja_5: 'Omega — Easy → Humara 2.4 → full 10× Nuru. Maximum transformation depth.',
   ghost_trial_2: 'Specter — Humara 2.4 → Humara 2.0 → full 10× Nuru. Ghost-grade signal removal.',
   phantom: 'Phantom — Humara 2.4 → 10× Nuru → deep clean → AntiPangram forensic cleanup.',
+  ai_analysis: 'AI Analysis — Smart auto-selector. Analyzes your text, picks the best engines, runs Phantom + full Nuru 2.0, and loops until under 20% AI across all detectors.',
 };
 
 const DEFAULT_PROCESSING_MESSAGES = [

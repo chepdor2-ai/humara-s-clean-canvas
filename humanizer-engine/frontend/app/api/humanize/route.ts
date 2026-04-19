@@ -904,10 +904,9 @@ export async function POST(req: Request) {
         (tone ?? 'academic') as 'academic' | 'professional' | 'casual' | 'neutral',
       );
     } else if (engine === 'ninja_3') {
-      // Ninja 3 (Deep Kill Alpha): Wikipedia → Humara 2.0 → Smart Nuru
-      const stage1 = await runGuarded('ninja_3_stage_1', () => runWikipediaClean(normalizedText), normalizedText);
-      const stage2 = runHumara20(stage1);
-      humanized = applySmartNuruPolish(stage2);
+      // Alpha (speed-optimized): Humara 2.0 (non-LLM, instant) → Smart Nuru
+      const stage1 = runHumara20(normalizedText);
+      humanized = applySmartNuruPolish(stage1);
     } else if (engine === 'ninja_2') {
       // Beta: Easy (Swift) → Humara 2.0 → Smart Nuru
       const stage1 = await runGuarded('ninja_2_stage_1', () => runHumara22Clean(normalizedText), normalizedText, 35_000);
@@ -1045,6 +1044,43 @@ export async function POST(req: Request) {
         (strength ?? 'strong') as 'light' | 'medium' | 'strong',
         (tone ?? 'academic') as 'academic' | 'professional' | 'casual' | 'neutral',
       );
+      // Add Nuru post-processing for Pangram
+      humanized = applySmartNuruPolish(humanized);
+    } else if (engine === 'ai_analysis') {
+      // AI Analysis: Analyze topic → pick engines → Phantom → AntiPangram → full Nuru
+      const { analyze } = await import('@/lib/engine/context-analyzer');
+      const ctx = analyze(normalizedText);
+      const topic = ctx.primaryTopic;
+
+      // Topic-based engine selection
+      let stage1: string;
+      if (['technology', 'science'].includes(topic)) {
+        stage1 = runHumara20(normalizedText);
+      } else if (['health', 'education'].includes(topic)) {
+        const { antiPangramSimple } = await import('@/lib/engine/antipangram');
+        stage1 = antiPangramSimple(
+          normalizedText,
+          (strength ?? 'strong') as 'light' | 'medium' | 'strong',
+          (tone ?? 'academic') as 'academic' | 'professional' | 'casual' | 'neutral',
+        );
+      } else {
+        stage1 = await runGuarded('ai_analysis_stage_1', () => runHumara24(normalizedText), normalizedText);
+      }
+
+      // Phantom pass
+      const { phantomHumanize } = await import('@/lib/engine/phantom');
+      const stage2 = phantomHumanize(stage1, (tone ?? 'academic') as any, (strength ?? 'strong') as any);
+
+      // AntiPangram forensic pass
+      const { antiPangramSimple: apg } = await import('@/lib/engine/antipangram');
+      const stage3 = apg(
+        stage2,
+        (strength ?? 'strong') as 'light' | 'medium' | 'strong',
+        (tone ?? 'academic') as 'academic' | 'professional' | 'casual' | 'neutral',
+      );
+
+      // Full Nuru 2.0 polish
+      humanized = applySmartNuruPolish(stage3);
     } else {
       // Ghost Mini: Statistical-only pipeline (no LLM)
       humanized = humanize(normalizedText, {

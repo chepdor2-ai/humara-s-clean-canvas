@@ -111,6 +111,12 @@ export const ENGINE_CATALOG: EngineCatalogEntry[] = [
     description: 'Humara 2.4 + AntiPangram forensic stealth — zero Nuru',
     tier: 'business',
   },
+  {
+    id: 'ai_analysis',
+    name: 'AI Analysis',
+    description: 'Smart auto-selector — topic analysis, multi-engine, Phantom + full Nuru 2.0 loop',
+    tier: 'business',
+  },
 ];
 
 function readConfiguredEnv(key: EnvKey): string | undefined {
