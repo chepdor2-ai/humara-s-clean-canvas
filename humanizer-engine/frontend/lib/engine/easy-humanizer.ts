@@ -5,7 +5,7 @@
  * Supports sentence-by-sentence concurrent processing.
  */
 
-import { protectSpecialContent, restoreSpecialContent, type ProtectionMap } from './content-protection';
+import { protectSpecialContent, restoreSpecialContent, humanizeTitle, type ProtectionMap } from './content-protection';
 
 const EASY_API_BASE = 'https://www.essaywritingsupport.com/api/v1';
 
@@ -78,10 +78,11 @@ function segmentText(text: string): TextSegment[] {
         /^\d+(?:[.):]|(?:\.\d+)+)\s+[A-Z]/.test(trimmed) ||
         /^[A-Za-z][.):]\s/.test(trimmed) ||
         /^(?:Part|Section|Chapter|Abstract|Introduction|Conclusion|References|Bibliography|Appendix)\b/i.test(trimmed) ||
-        (trimmed.length < 80 && !/[.!;]$/.test(trimmed) && /^[A-Z]/.test(trimmed) && trimmed.split(/\s+/).length <= 12 && !/[a-z]{3,}\s[a-z]{3,}\s[a-z]{3,}\s[a-z]{3,}\s[a-z]{3,}/.test(trimmed));
+        (!/[.!?;]$/.test(trimmed) && /^[A-Z]/.test(trimmed) && trimmed.split(/\s+/).length <= 3) ||
+        /^[A-Z][A-Z\s]+$/.test(trimmed);
 
       if (isTitle) {
-        segments.push({ type: 'title', text: trimmed, paragraphIndex: pIdx });
+        segments.push({ type: 'title', text: humanizeTitle(trimmed), paragraphIndex: pIdx });
       } else {
         const sentences = trimmed.match(/[^.!?]+[.!?]+(?:\s|$)|[^.!?]+$/g) || [trimmed];
         for (const sent of sentences) {

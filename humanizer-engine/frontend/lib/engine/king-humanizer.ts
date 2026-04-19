@@ -21,7 +21,7 @@
  *   - Title-case enforcement inside body text is corrected
  */
 
-import { robustSentenceSplit } from "./content-protection";
+import { robustSentenceSplit, humanizeTitle } from "./content-protection";
 import {
   applyAIWordKill,
   expandAllContractions,
@@ -91,9 +91,10 @@ function isHeading(text: string): boolean {
     )
   )
     return true;
-  if (/^[\d]+[.):]\s/.test(t)) return true;
+  if (/^[\d]+[.):]\s/.test(t) && t.split(/\s+/).length <= 10) return true;
   const words = t.split(/\s+/);
-  if (words.length <= 10 && !/[.!?]$/.test(t) && /^[A-Z]/.test(t)) return true;
+  if (words.length <= 3 && !/[.!?]$/.test(t) && /^[A-Z]/.test(t)) return true;
+  if (/^[A-Z][A-Z\s]+$/.test(t)) return true;
   return false;
 }
 
@@ -394,9 +395,9 @@ export async function kingHumanize(text: string): Promise<KingResult> {
       continue;
     }
 
-    // Titles / headings — preserve verbatim
+    // Titles / headings — light humanization for >6 words, preserve otherwise
     if (isHeading(para)) {
-      results.push(para);
+      results.push(humanizeTitle(para));
       continue;
     }
 
