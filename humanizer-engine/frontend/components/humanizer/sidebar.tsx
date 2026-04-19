@@ -68,7 +68,7 @@ function NavRow({ item, active, onNavigate }: { item: NavItem; active: boolean; 
       {active && (
         <motion.span
           layoutId="sidebar-active"
-          className="absolute inset-y-1 left-0 w-[3px] rounded-r-full bg-primary shadow-[0_0_12px] shadow-primary/40"
+          className="sidebar-active-indicator absolute inset-y-1 left-0 w-[3px] rounded-r-full bg-primary shadow-[0_0_12px] shadow-primary/40"
           transition={{ type: "spring", stiffness: 380, damping: 30 }}
         />
       )}
@@ -135,7 +135,7 @@ export function Sidebar({ open, onClose }: { open?: boolean; onClose?: () => voi
           <Link href="/" className="flex items-center gap-3 group">
             <div className="relative logo-shine">
               <Image src="/logo.png" alt="HumaraGPT" width={36} height={36} priority className="w-9 h-9 relative z-10 drop-shadow-[0_0_10px_rgba(6,182,212,0.6)]" />
-              <div className="absolute -inset-1 rounded-full bg-cyan-500/25 animate-[logoPulse_2.5s_ease-in-out_infinite] blur-md" />
+              <div className="sidebar-logo-pulse absolute -inset-1 rounded-full bg-cyan-500/25 animate-[logoPulse_2.5s_ease-in-out_infinite] blur-md" />
             </div>
             <div className="flex flex-col">
               <span className="brand-wordmark text-base font-semibold tracking-tight"><span className="brand-humara">Humara</span><span className="brand-gpt uniform-brand-glow">GPT</span></span>

@@ -459,7 +459,7 @@ CREATE TABLE IF NOT EXISTS public.engine_config (
 -- Seed engine config with new names
 INSERT INTO public.engine_config (engine_id, label, enabled, premium, sort_order)
 VALUES
-  (      'Nova',     true, false, 1),
+  ('nova',         'Nova',     true, false, 1),
   ('easy',         'Swift',    true, false, 2),
   ('ninja_1',      'Ninja',    true, false, 3),
   ('antipangram',  'Pangram',  true, false, 4),

@@ -26,9 +26,12 @@ END $repair_usage_columns$;
 
 ALTER TABLE public.usage DROP CONSTRAINT IF EXISTS usage_user_id_period_start_key;
 ALTER TABLE public.usage DROP CONSTRAINT IF EXISTS usage_user_period_start_key;
+ALTER TABLE public.usage DROP CONSTRAINT IF EXISTS usage_user_date_unique;
 DROP INDEX IF EXISTS public.usage_user_id_period_start_key;
 DROP INDEX IF EXISTS public.idx_usage_user_period_start;
 DROP INDEX IF EXISTS public.idx_usage_period_start;
+DROP INDEX IF EXISTS public.idx_usage_user_period;
+DROP INDEX IF EXISTS public.idx_usage_user_usage_date_unique;
 
 DO $repair_usage_not_null$
 BEGIN
@@ -37,8 +40,20 @@ EXCEPTION WHEN OTHERS THEN
   RAISE NOTICE 'Could not enforce NOT NULL on public.usage.usage_date: %', SQLERRM;
 END $repair_usage_not_null$;
 
-CREATE UNIQUE INDEX IF NOT EXISTS idx_usage_user_usage_date_unique
-  ON public.usage(user_id, usage_date);
+DO $repair_usage_unique$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_constraint
+    WHERE conrelid = 'public.usage'::regclass
+      AND conname = 'usage_user_id_usage_date_key'
+  ) THEN
+    ALTER TABLE public.usage
+      ADD CONSTRAINT usage_user_id_usage_date_key UNIQUE (user_id, usage_date);
+  END IF;
+EXCEPTION WHEN OTHERS THEN
+  RAISE NOTICE 'Could not create canonical usage unique constraint: %', SQLERRM;
+END $repair_usage_unique$;
 
 CREATE OR REPLACE FUNCTION public.increment_usage(
   p_user_id     UUID,

@@ -203,27 +203,25 @@
     50% { --auto-glow: #dc2626; --auto-hue: -10deg; }
   }
 
-  /* ── Auto Model: 16+ color smooth cycle (slower, yellow is shortest hold) ──────────────── */
+  /* ── Auto Model: color smooth cycle (no orange, yellow is shortest hold) ──────────────── */
   @keyframes autoModelColorCycle {
-    0%      { --auto-glow: #ef4444; --auto-hue: 0deg; }
-    5.88%   { --auto-glow: #f97316; --auto-hue: 22deg; }
-    11.76%  { --auto-glow: #eab308; --auto-hue: 45deg; }
-    13.2%   { --auto-glow: #facc15; --auto-hue: 52deg; }
-    17.64%  { --auto-glow: #84cc16; --auto-hue: 80deg; }
-    23.52%  { --auto-glow: #22c55e; --auto-hue: 112deg; }
-    29.4%   { --auto-glow: #10b981; --auto-hue: 145deg; }
-    35.28%  { --auto-glow: #14b8a6; --auto-hue: 170deg; }
-    41.16%  { --auto-glow: #06b6d4; --auto-hue: 188deg; }
-    47.04%  { --auto-glow: #0ea5e9; --auto-hue: 202deg; }
-    52.92%  { --auto-glow: #3b82f6; --auto-hue: 220deg; }
-    58.8%   { --auto-glow: #6366f1; --auto-hue: 238deg; }
-    64.68%  { --auto-glow: #8b5cf6; --auto-hue: 258deg; }
-    70.56%  { --auto-glow: #a855f7; --auto-hue: 274deg; }
-    76.44%  { --auto-glow: #d946ef; --auto-hue: 302deg; }
-    82.32%  { --auto-glow: #ec4899; --auto-hue: 330deg; }
-    88.2%   { --auto-glow: #f43f5e; --auto-hue: 350deg; }
-    94.1%   { --auto-glow: #fb923c; --auto-hue: 16deg; }
-    100%    { --auto-glow: #ef4444; --auto-hue: 0deg; }
+    0%       { --auto-glow: #ef4444; --auto-hue: 0deg; }
+    6.67%    { --auto-glow: #eab308; --auto-hue: 45deg; }
+    8.33%    { --auto-glow: #facc15; --auto-hue: 52deg; }
+    13.33%   { --auto-glow: #84cc16; --auto-hue: 80deg; }
+    20%      { --auto-glow: #22c55e; --auto-hue: 112deg; }
+    26.67%   { --auto-glow: #10b981; --auto-hue: 145deg; }
+    33.33%   { --auto-glow: #14b8a6; --auto-hue: 170deg; }
+    40%      { --auto-glow: #06b6d4; --auto-hue: 188deg; }
+    46.67%   { --auto-glow: #0ea5e9; --auto-hue: 202deg; }
+    53.33%   { --auto-glow: #3b82f6; --auto-hue: 220deg; }
+    60%      { --auto-glow: #6366f1; --auto-hue: 238deg; }
+    66.67%   { --auto-glow: #8b5cf6; --auto-hue: 258deg; }
+    73.33%   { --auto-glow: #a855f7; --auto-hue: 274deg; }
+    80%      { --auto-glow: #d946ef; --auto-hue: 302deg; }
+    86.67%   { --auto-glow: #ec4899; --auto-hue: 330deg; }
+    93.33%   { --auto-glow: #f43f5e; --auto-hue: 350deg; }
+    100%     { --auto-glow: #ef4444; --auto-hue: 0deg; }
   }
 }
 
@@ -385,10 +383,49 @@
     transition: background var(--auto-glow-transition, 220ms linear);
   }
 
-  /* Processing animation hue shift */
+  /* Processing animation hue shift (calibrated to cyan-188° base) */
   :root[data-auto-mode='on'] .auto-uniform-processing {
-    filter: hue-rotate(var(--auto-hue, 0deg)) saturate(1.15);
+    filter: hue-rotate(calc(var(--auto-hue, 188deg) - 188deg)) saturate(1.15);
     transition: filter var(--auto-glow-transition, 220ms linear);
+  }
+
+  /* Disable hue-rotate glow so --auto-glow gradient takes over for brand text */
+  :root[data-auto-mode='on'] .uniform-brand-glow {
+    animation: none !important;
+    filter: none !important;
+  }
+
+  /* Sidebar active indicator follows glow */
+  :root[data-auto-mode='on'] .sidebar-active-indicator {
+    background-color: var(--auto-glow) !important;
+    box-shadow: 0 0 12px color-mix(in srgb, var(--auto-glow) 40%, transparent) !important;
+    transition: background-color var(--auto-glow-transition, 220ms linear),
+                box-shadow var(--auto-glow-transition, 220ms linear);
+  }
+
+  /* Sidebar logo pulse follows glow */
+  :root[data-auto-mode='on'] .sidebar-logo-pulse {
+    background-color: color-mix(in srgb, var(--auto-glow) 25%, transparent) !important;
+  }
+
+  /* Cyan toggles follow glow when in auto mode */
+  :root[data-auto-mode='on'] .auto-glow-toggle {
+    background-color: var(--auto-glow) !important;
+    box-shadow: 0 0 8px color-mix(in srgb, var(--auto-glow) 35%, transparent);
+    transition: background-color var(--auto-glow-transition, 220ms linear),
+                box-shadow var(--auto-glow-transition, 220ms linear);
+  }
+
+  /* Range input accent follows glow */
+  :root[data-auto-mode='on'] .auto-glow-accent {
+    accent-color: var(--auto-glow) !important;
+  }
+
+  /* Active pill buttons follow glow (mode, depth, pipe, etc.) */
+  :root[data-auto-mode='on'] .auto-glow-active-pill {
+    background-color: var(--auto-glow) !important;
+    box-shadow: 0 0 8px color-mix(in srgb, var(--auto-glow) 30%, transparent);
+    transition: background-color var(--auto-glow-transition, 220ms linear);
   }
 
   .brand-wordmark {

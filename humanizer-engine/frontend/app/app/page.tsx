@@ -159,7 +159,7 @@ const ALL_ENGINES: EngineConfig[] = [
   { id: 'nuru_v2', label: 'Nuru' },
   { id: 'ghost_pro_wiki', label: 'Ghost' },
   // 🔴 Advanced Engines
-  { id: 'ninja_3', label: 'Alpha' },
+  { id: 'ninja_3', label: 'Ninja 3' },
   { id: 'ninja_2', label: 'Beta' },
   { id: 'ninja_5', label: 'Omega' },
   { id: 'ghost_trial_2', label: 'Specter' },
@@ -198,7 +198,7 @@ const ENGINE_GUIDES: Record<string, string> = {
   nuru_v2: 'Nuru — Purely non-LLM stealth engine. 10 iterative passes — no AI calls, no external APIs.',
   ghost_pro_wiki: 'Ghost — Academic-style rewrite that sounds like encyclopedic human writing.',
   // Advanced Engines
-  ninja_3: 'Alpha — Humara 2.0 (instant) → full 10× Nuru. Fast aggressive AI signal suppression under 20 seconds.',
+  ninja_3: 'Ninja 3 — Humara 2.0 (instant) → full 10× Nuru. Fast aggressive AI signal suppression under 20 seconds.',
   ninja_2: 'Beta — Easy → Humara 2.0 → full 10× Nuru. Multi-pass chain for deep cleaning.',
   ninja_5: 'Omega — Easy → Humara 2.4 → full 10× Nuru. Maximum transformation depth.',
   ghost_trial_2: 'Specter — Humara 2.4 → Humara 2.0 → full 10× Nuru. Ghost-grade signal removal.',
@@ -1502,7 +1502,9 @@ function EditorPageInner() {
                   onClick={() => { if (!autoModelEnabled) setMode(m.id); }}
                   disabled={autoModelEnabled}
                   className={`px-2 py-1 text-[10px] font-semibold rounded transition-all ${
-                    mode === m.id ? 'bg-cyan-500 dark:bg-cyan-700/70 text-white' : 'text-slate-500 dark:text-zinc-500 hover:text-slate-700 dark:hover:text-zinc-300'
+                    mode === m.id
+                      ? (autoModelEnabled ? 'auto-glow-active-pill text-white' : 'bg-cyan-500 dark:bg-cyan-700/70 text-white')
+                      : 'text-slate-500 dark:text-zinc-500 hover:text-slate-700 dark:hover:text-zinc-300'
                   } ${autoModelEnabled ? 'opacity-50 cursor-not-allowed' : ''} ${autoModelEnabled && mode === m.id ? autoGlowClass + ' auto-glow-btn' : ''}`}
                 >
                   {m.label}
@@ -1563,7 +1565,11 @@ function EditorPageInner() {
             <div className={`flex rounded-md p-0.5 border ${autoModelEnabled ? autoGlowClass + ' auto-glow-btn border-transparent' : 'bg-slate-100 dark:bg-zinc-950/60 border-slate-200 dark:border-cyan-900/40'}`}>
               {STRENGTHS.map(s => (
                 <button key={s.id} onClick={() => setStrength(s.id)}
-                  className={`px-2 py-1 text-[10px] font-semibold rounded transition-all ${strength === s.id ? 'bg-cyan-500 dark:bg-cyan-700/70 text-white' : 'text-slate-500 dark:text-zinc-500 hover:text-slate-700 dark:hover:text-zinc-300'}`}>
+                  className={`px-2 py-1 text-[10px] font-semibold rounded transition-all ${
+                    strength === s.id
+                      ? (autoModelEnabled ? 'auto-glow-active-pill text-white' : 'bg-cyan-500 dark:bg-cyan-700/70 text-white')
+                      : 'text-slate-500 dark:text-zinc-500 hover:text-slate-700 dark:hover:text-zinc-300'
+                  }`}>
                   {s.label}
                 </button>
               ))}
@@ -1581,7 +1587,11 @@ function EditorPageInner() {
           <label className="flex items-center gap-1.5 cursor-pointer select-none">
             <span className={`text-[10px] font-semibold uppercase ${autoModelEnabled ? autoGlowClass + ' auto-glow-text' : 'text-slate-500 dark:text-zinc-500'}`}>Meaning</span>
             <button onClick={() => setStrictMeaning(!strictMeaning)} title={strictMeaning ? 'On' : 'Off'}
-              className={`w-7 h-[16px] rounded-full transition-all relative ${strictMeaning ? 'bg-cyan-500 dark:bg-cyan-600' : 'bg-slate-300 dark:bg-zinc-700'}`}>
+              className={`w-7 h-[16px] rounded-full transition-all relative ${
+                strictMeaning
+                  ? (autoModelEnabled ? 'auto-glow-toggle' : 'bg-cyan-500 dark:bg-cyan-600')
+                  : 'bg-slate-300 dark:bg-zinc-700'
+              }`}>
               <div className={`w-2.5 h-2.5 bg-white rounded-full absolute top-[3px] transition-all shadow-sm ${strictMeaning ? 'left-[13px]' : 'left-[3px]'}`} />
             </button>
           </label>
@@ -1598,8 +1608,8 @@ function EditorPageInner() {
           <div className="flex items-center gap-1.5">
             <span className={`text-[10px] font-semibold uppercase ${autoModelEnabled ? autoGlowClass + ' auto-glow-text' : 'text-slate-500 dark:text-zinc-500'}`}>Rate</span>
             <input type="range" min={1} max={10} value={humanizationRate} onChange={(e) => setHumanizationRate(Number(e.target.value))}
-              className="w-16 h-1.5 accent-cyan-500 cursor-pointer" title={`Humanization rate: ${humanizationRate} (${humanizationRate * 10}% min change)`} />
-            <span className="text-[10px] font-bold text-cyan-600 dark:text-cyan-400 min-w-[14px] text-center">{humanizationRate}</span>
+              className={`w-16 h-1.5 cursor-pointer ${autoModelEnabled ? 'auto-glow-accent' : 'accent-cyan-500'}`} title={`Humanization rate: ${humanizationRate} (${humanizationRate * 10}% min change)`} />
+            <span className={`text-[10px] font-bold min-w-[14px] text-center ${autoModelEnabled ? autoGlowClass + ' auto-glow-text' : 'text-cyan-600 dark:text-cyan-400'}`}>{humanizationRate}</span>
           </div>
           <button onClick={handleHumanize} disabled={!text.trim() || loading || rephrasing || isDailyLimitReached}
             className={`w-full sm:w-auto sm:ml-auto text-white text-[11px] font-bold rounded-lg px-4 py-2 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-1.5 shadow-md ${
@@ -1637,7 +1647,11 @@ function EditorPageInner() {
               <label className="flex items-center gap-1.5 cursor-pointer">
                 <span className="text-[9px] font-semibold text-slate-500 dark:text-zinc-500">SBS</span>
                 <button onClick={() => setEasySentenceBySentence(!easySentenceBySentence)}
-                  className={`relative inline-flex h-3.5 w-6 items-center rounded-full transition-colors ${easySentenceBySentence ? 'bg-cyan-500 dark:bg-cyan-600' : 'bg-slate-300 dark:bg-zinc-700'}`}>
+                  className={`relative inline-flex h-3.5 w-6 items-center rounded-full transition-colors ${
+                    easySentenceBySentence
+                      ? (autoModelEnabled ? 'auto-glow-toggle' : 'bg-cyan-500 dark:bg-cyan-600')
+                      : 'bg-slate-300 dark:bg-zinc-700'
+                  }`}>
                   <span className={`inline-block h-2 w-2 transform rounded-full bg-white transition-transform ${easySentenceBySentence ? 'translate-x-3' : 'translate-x-0.5'}`} />
                 </button>
               </label>
@@ -1645,11 +1659,15 @@ function EditorPageInner() {
             {engine === 'oxygen' && (
               <>
                 <div className="flex items-center gap-1">
-                  <span className="text-[9px] font-bold text-cyan-600 dark:text-cyan-400 uppercase">Pipe</span>
+                  <span className={`text-[9px] font-bold uppercase ${autoModelEnabled ? autoGlowClass + ' auto-glow-text' : 'text-cyan-600 dark:text-cyan-400'}`}>Pipe</span>
                   <div className="flex gap-0.5">
                     {(['quality', 'fast', 'aggressive'] as const).map(m => (
                       <button key={m} onClick={() => setOxygenMode(m)}
-                        className={`px-1.5 py-0.5 rounded text-[8px] font-semibold transition-all ${oxygenMode === m ? 'bg-cyan-600 text-white' : 'bg-slate-100 dark:bg-zinc-800/60 text-slate-500 dark:text-zinc-500'}`}>{m[0].toUpperCase() + m.slice(1)}</button>
+                        className={`px-1.5 py-0.5 rounded text-[8px] font-semibold transition-all ${
+                          oxygenMode === m
+                            ? (autoModelEnabled ? 'auto-glow-active-pill text-white' : 'bg-cyan-600 text-white')
+                            : 'bg-slate-100 dark:bg-zinc-800/60 text-slate-500 dark:text-zinc-500'
+                        }`}>{m[0].toUpperCase() + m.slice(1)}</button>
                     ))}
                   </div>
                 </div>
