@@ -16,6 +16,7 @@
 
 import { detectDomain, getProtectedTermsForDomain } from './domain-detector';
 import { resolveStrategy, type DomainStrategy } from './domain-strategies';
+import { humanizeTitle } from './content-protection';
 
 // Module-level set populated per-call by oxygenHumanize — checked in deepSynonymReplace
 let _oxygenDomainProtected: Set<string> = new Set();
@@ -848,7 +849,8 @@ export function oxygenHumanize(
 
   for (const para of paragraphs) {
     if (para.isTitle) {
-      allResults.push({ text: para.text, isTitle: true });
+      // Humanize titles with >6 words; pass short titles through unchanged
+      allResults.push({ text: humanizeTitle(para.text), isTitle: true });
       continue;
     }
 
