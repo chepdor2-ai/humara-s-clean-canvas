@@ -162,7 +162,7 @@ export async function POST(req: Request) {
     // Humanization rate: 1-10 scale → minimum word-change threshold
     const hRate = Math.max(1, Math.min(10, Math.round(humanization_rate ?? 8)));
     const minChangeThreshold = hRate / 10; // rate 8 → 0.80 = 80% min change
-    const phaseMinChangeThreshold = Math.max(0.55, minChangeThreshold);
+    const phaseMinChangeThreshold = Math.max(0.40, minChangeThreshold);
     const postProcessingProfile = post_processing_profile === 'undetectability' || post_processing_profile === 'quality'
       ? post_processing_profile
       : 'balanced';
@@ -441,9 +441,9 @@ export async function POST(req: Request) {
           };
 
           // Nuru 2.0 post-processing depth applied at the tail of every pipeline.
-          const CHAIN_TS = 15;
-          const UNIVERSAL_POST_LOOPS = 10;      // 10 loops for maximum cleaning depth
-          const UNIVERSAL_POST_PASSES_PER_LOOP = 4;
+          const CHAIN_TS = 10;
+          const UNIVERSAL_POST_LOOPS = 5;
+          const UNIVERSAL_POST_PASSES_PER_LOOP = 3;
           const chainSync = (fn: (s: string) => string, input: string, n: number): string => {
             let out = input;
             for (let i = 0; i < n; i++) out = fn(out);
@@ -1220,7 +1220,7 @@ export async function POST(req: Request) {
                 phases = [
                   { name: 'Restructuring', type: 'async', fn: (s) => restructureSentence(s) },
                   { name: 'Deep Non-LLM Clean', type: 'sync', fn: (s) => deepNonLLMClean(s) },
-                  { name: 'Nuru 2.0', type: 'nuru', passes: CHAIN_TS },
+                  { name: 'Nuru 2.0', type: 'nuru', passes: 10 },
                   { name: 'Readability Polish', type: 'async', fn: (s) => nuruReadabilityPolish(s) },
                   { name: 'Final Smooth & Grammar', type: 'sync', fn: (s) => finalSmoothGrammar(s) },
                 ];
@@ -1232,7 +1232,7 @@ export async function POST(req: Request) {
                   { name: 'Deep Non-LLM Clean', type: 'sync', fn: (s) => deepNonLLMClean(s) },    // Phase 3: Rule-based AI vocabulary/phrase kill
                   { name: 'Humara 2.0 (Full)', type: 'async', fn: (s) => runHumara20Full(s) },    // Phase 4: Full Humara 2.0 pipeline
                   { name: 'Smoothing', type: 'sync', fn: (s) => smoothingPass(s) },               // Phase 5: Grammar + flow repair
-                  { name: 'Nuru 2.0', type: 'nuru', passes: CHAIN_TS },                           // Phase 6: 15-pass stealth humanization
+                  { name: 'Nuru 2.0', type: 'nuru', passes: CHAIN_TS },                           // Phase 6: 10-pass stealth humanization
                   { name: 'Readability Polish', type: 'async', fn: (s) => nuruReadabilityPolish(s) }, // Phase 7: LLM natural flow smoothing
                   { name: 'Final Smooth & Grammar', type: 'sync', fn: (s) => finalSmoothGrammar(s) }, // Phase 8: Final polish
                 ];
@@ -1240,9 +1240,9 @@ export async function POST(req: Request) {
               case 'oxygen':
                 phases = [
                   { name: 'Restructuring', type: 'async', fn: (s) => restructureSentence(s) },
-                  { name: 'Nuru 2.0', type: 'nuru', passes: CHAIN_TS },
+                  { name: 'Nuru 2.0', type: 'nuru', passes: 10 },
                   { name: 'Deep Non-LLM Clean', type: 'sync', fn: (s) => deepNonLLMClean(s) },
-                  { name: 'Nuru 2.0 (Targeted)', type: 'nuru', passes: 7 },
+                  { name: 'Nuru 2.0 (Targeted)', type: 'nuru', passes: 5 },
                   { name: 'Readability Polish', type: 'async', fn: (s) => nuruReadabilityPolish(s) },
                   { name: 'Final Smooth & Grammar', type: 'sync', fn: (s) => finalSmoothGrammar(s) },
                 ];
@@ -1250,7 +1250,7 @@ export async function POST(req: Request) {
               case 'nuru_v2':
                 phases = [
                   { name: 'Restructuring', type: 'async', fn: (s) => restructureSentence(s) },
-                  { name: 'Deep Clean', type: 'nuru', passes: CHAIN_TS },
+                  { name: 'Deep Clean', type: 'nuru', passes: 10 },
                   { name: 'Deep Non-LLM Clean', type: 'sync', fn: (s) => deepNonLLMClean(s) },
                   { name: 'Readability Polish', type: 'async', fn: (s) => nuruReadabilityPolish(s) },
                   { name: 'Final Smooth & Grammar', type: 'sync', fn: (s) => finalSmoothGrammar(s) },
@@ -1258,8 +1258,7 @@ export async function POST(req: Request) {
                 break;
               case 'king':
                 phases = [
-                  { name: 'Restructuring', type: 'async', fn: (s) => restructureSentence(s) },
-                  { name: 'Nuru 2.0', type: 'nuru', passes: CHAIN_TS },
+                  { name: 'Nuru 2.0', type: 'nuru', passes: 10 },
                   { name: 'Deep Non-LLM Clean', type: 'sync', fn: (s) => deepNonLLMClean(s) },
                   { name: 'Readability Polish', type: 'async', fn: (s) => nuruReadabilityPolish(s) },
                   { name: 'Final Smooth & Grammar', type: 'sync', fn: (s) => finalSmoothGrammar(s) },
@@ -1267,18 +1266,16 @@ export async function POST(req: Request) {
                 break;
               case 'humara_v3_3':
                 phases = [
-                  { name: 'Restructuring', type: 'async', fn: (s) => restructureSentence(s) },
-                  { name: 'Nuru 2.0', type: 'nuru', passes: CHAIN_TS },
+                  { name: 'Nuru 2.0', type: 'nuru', passes: 10 },
                   { name: 'Deep Non-LLM Clean', type: 'sync', fn: (s) => deepNonLLMClean(s) },
                   { name: 'Readability Polish', type: 'async', fn: (s) => nuruReadabilityPolish(s) },
                   { name: 'Final Smooth & Grammar', type: 'sync', fn: (s) => finalSmoothGrammar(s) },
                 ];
                 break;
               case 'phantom':
-                // Phantom = Humara 2.4 → Restructure → Nuru 2.0 × 15 → Deep Clean → Smooth → AntiPangram → Nuru Post-Processing
+                // Phantom = Humara 2.4 → Nuru 2.0 × 10 → Deep Clean → Smooth → AntiPangram → Nuru Post-Processing
                 phases = [
-                  { name: 'Restructuring', type: 'async', fn: (s) => restructureSentence(s) },
-                  { name: 'Nuru 2.0', type: 'nuru', passes: CHAIN_TS },
+                  { name: 'Nuru 2.0', type: 'nuru', passes: 10 },
                   { name: 'Deep Non-LLM Clean', type: 'sync', fn: (s) => deepNonLLMClean(s) },
                   { name: 'Readability Polish', type: 'async', fn: (s) => nuruReadabilityPolish(s) },
                   { name: 'Final Smooth & Grammar', type: 'sync', fn: (s) => finalSmoothGrammar(s) },
@@ -1286,8 +1283,7 @@ export async function POST(req: Request) {
                 break;
               case 'easy':
                 phases = [
-                  { name: 'Restructuring', type: 'async', fn: (s) => restructureSentence(s) },
-                  { name: 'Nuru 2.0', type: 'nuru', passes: CHAIN_TS },
+                  { name: 'Nuru 2.0', type: 'nuru', passes: 10 },
                   { name: 'Deep Non-LLM Clean', type: 'sync', fn: (s) => deepNonLLMClean(s) },
                   { name: 'Readability Polish', type: 'async', fn: (s) => nuruReadabilityPolish(s) },
                   { name: 'Final Smooth & Grammar', type: 'sync', fn: (s) => finalSmoothGrammar(s) },
@@ -1347,9 +1343,8 @@ export async function POST(req: Request) {
                 ];
                 break;
               case 'ai_analysis':
-                // AI Analysis: Restructure + Full Nuru 2.0 flow + Deep Clean + Readability Polish + Loop cleanup
+                // AI Analysis: Full Nuru 2.0 flow + Deep Clean + Readability Polish + Loop cleanup
                 phases = [
-                  { name: 'Restructuring', type: 'async', fn: (s) => restructureSentence(s) },
                   { name: 'Nuru 2.0', type: 'nuru', passes: CHAIN_TS },
                   { name: 'Deep Non-LLM Clean', type: 'sync', fn: (s) => deepNonLLMClean(s) },
                   { name: 'Readability Polish', type: 'async', fn: (s) => nuruReadabilityPolish(s) },
@@ -1375,7 +1370,7 @@ export async function POST(req: Request) {
               // For sync/async/nuru phases, each sentence must achieve ≥minChangeThreshold
               // word change from its state BEFORE this phase started.
               const MIN_CHANGE = phaseMinChangeThreshold;
-              const MAX_RETRIES = 3; // LLM async phases: 3 retries for meeting change threshold
+              const MAX_RETRIES = 1; // LLM async phases: 1 retry max (each call is expensive)
               const phaseInputSentences = [...currentSentences]; // snapshot before this phase
 
               if (phase.type === 'emit') {
@@ -1575,7 +1570,7 @@ export async function POST(req: Request) {
 
                 // ── Phase 4: 5 targeted passes on FLAGGED sentences only ──
                 if (flaggedSentences.length > 0 && !(deadlineReached || Date.now() - startTime > DEADLINE_MS - 8000)) {
-                  const TARGETED_PASSES = 7;
+                  const TARGETED_PASSES = 5;
                   const flaggedSet = new Map<number, string[]>();
                   for (const f of flaggedSentences) {
                     flaggedSet.set(f.index, f.flagged_phrases);
@@ -1675,12 +1670,12 @@ export async function POST(req: Request) {
           // ═══════════════════════════════════════════════════════════════
           if (eng !== 'ai_analysis' && !(deadlineReached || Date.now() - startTime > DEADLINE_MS - 12000)) {
             const nuruPostStart = Date.now();
-            const NURU_POST_DEADLINE_MS = 90_000; // 90s hard budget for deep cleaning
+            const NURU_POST_DEADLINE_MS = 30_000; // 30s hard budget (up from 10s)
             const nuruPostTimeOk = () => Date.now() - nuruPostStart < NURU_POST_DEADLINE_MS && !(deadlineReached || Date.now() - startTime > DEADLINE_MS - 8000);
 
-            // ── Quality Profile: AntiPangram 15 iterations → improve flow & quality ──
+            // ── Quality Profile: AntiPangram 10 iterations → improve flow & quality ──
             if (postProcessingProfile === 'quality' && nuruPostTimeOk()) {
-              sendSSE(controller, { type: 'stage', stage: 'AntiPangram Quality Post-Processing (15 iterations)' });
+              sendSSE(controller, { type: 'stage', stage: 'AntiPangram Quality Post-Processing (10 iterations)' });
               await flushDelay(10);
               const { antiPangramSimple } = await import('@/lib/engine/antipangram');
               const apgToneD: 'academic' | 'professional' | 'casual' | 'neutral' =
@@ -1695,7 +1690,7 @@ export async function POST(req: Request) {
                 apgToneD,
               );
               latestHumanized = humanized;
-              console.log(`[Quality PostProc] AntiPangram 15-iter complete: ${humanized.split(/\s+/).length} words`);
+              console.log(`[Quality PostProc] AntiPangram complete: ${humanized.split(/\s+/).length} words`);
             }
 
             // ── Undetectability Profile: 10 dedicated Nuru iterations before loops ──
@@ -1758,7 +1753,7 @@ export async function POST(req: Request) {
                         }
                       }
                     }
-                    sendSSE(controller, { type: 'sentence', index: i, text: postSents[i], stage: `Nuru Post Loop ${loop + 1}/10` });
+                    sendSSE(controller, { type: 'sentence', index: i, text: postSents[i], stage: `Nuru Post Loop ${loop + 1}/5` });
                   }
                   await flushDelay(5);
                   if (!nuruPostTimeOk()) break;
@@ -1798,7 +1793,7 @@ export async function POST(req: Request) {
               for (const f of postFlagged) flagMap.set(f.index, f.flagged_phrases);
               console.log(`[Nuru Post Targeted] Applying targeted passes to ${flagMap.size} flagged sentences`);
 
-              for (let pass = 0; pass < 5; pass++) {
+              for (let pass = 0; pass < 3; pass++) {
                 for (const [idx, phrases] of flagMap) {
                   if (isHeadingSentCheck(postSents[idx])) continue;
                   if (phrases.length > 0) {
@@ -1827,33 +1822,6 @@ export async function POST(req: Request) {
               humanized = reassembleText(nuruPostSents, sharedBounds.length ? sharedBounds : [0]);
               latestHumanized = humanized;
               console.log(`[Nuru Doc Phases] Starter distribution + flow calibration applied`);
-            }
-
-            // ── UNIVERSAL AntiPangram Final Sweep (ALL profiles) ──
-            // Ensures every output gets forensic AI signal removal regardless of profile.
-            // This is the last non-LLM cleanup pass — catches any residual AI patterns
-            // that survived the Nuru and structural phases.
-            if (nuruPostTimeOk()) {
-              sendSSE(controller, { type: 'stage', stage: 'AntiPangram Forensic Sweep' });
-              await flushDelay(10);
-              try {
-                const { antiPangramSimple } = await import('@/lib/engine/antipangram');
-                const apgToneFinal: 'academic' | 'professional' | 'casual' | 'neutral' =
-                  tone === 'academic' || tone === 'academic_blog'
-                    ? 'academic'
-                    : tone === 'professional' || tone === 'casual'
-                      ? tone
-                      : 'neutral';
-                humanized = antiPangramSimple(
-                  humanized,
-                  (strength ?? 'strong') as 'light' | 'medium' | 'strong',
-                  apgToneFinal,
-                );
-                latestHumanized = humanized;
-                console.log(`[Universal AntiPangram] Final forensic sweep complete: ${humanized.split(/\s+/).length} words`);
-              } catch (apgErr) {
-                console.warn('[Universal AntiPangram] sweep failed:', apgErr);
-              }
             }
           }
 
@@ -1897,7 +1865,7 @@ export async function POST(req: Request) {
             const { sentences: origSents } = splitIntoIndexedSentences(normalizedText);
             const { sentences: humanizedSents, paragraphBoundaries: humanParaBounds } = splitIntoIndexedSentences(humanized);
             const isHeadingSent = (s: string) => looksLikeHeadingLine(s.trim());
-            const WORD_CHANGE_MIN = 0.60; // Minimum 60% word change per sentence
+            const WORD_CHANGE_MIN = 0.40; // Minimum 40% word change per sentence
             const usedWords = new Set<string>();
             let changed = false;
             for (let i = 0; i < humanizedSents.length; i++) {
@@ -2110,7 +2078,7 @@ export async function POST(req: Request) {
                 }
                 // Only replace when the matched original sentence is similar in length
                 // (within 3x) to prevent replacing a short sentence with a much longer one
-                if (bestOrigIdx >= 0 && bestOverlap < 0.20) {
+                if (bestOrigIdx >= 0 && bestOverlap < 0.35) {
                   const origLen = origSentsM[bestOrigIdx].split(/\s+/).length;
                   const humanLen = humanSentsM[i].split(/\s+/).length;
                   if (origLen <= humanLen * 3) {
@@ -2155,8 +2123,8 @@ export async function POST(req: Request) {
                 if (!preWords[i] || !postWords[i] || preWords[i] !== postWords[i]) diffs++;
               }
               const changeRatio = diffs / maxLen;
-              if (changeRatio > 0.65) {
-                console.warn(`[PostProcess] Change cap exceeded: ${(changeRatio * 100).toFixed(1)}% > 65% — reverting to pre-post-processing output`);
+              if (changeRatio > 0.40) {
+                console.warn(`[PostProcess] Change cap exceeded: ${(changeRatio * 100).toFixed(1)}% > 40% — reverting to pre-post-processing output`);
                 humanized = prePostProcessSnapshot;
               }
             }
