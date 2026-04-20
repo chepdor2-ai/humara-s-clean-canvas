@@ -32,6 +32,7 @@ import { postCleanGrammar } from '@/lib/engine/grammar-cleaner';
 import { fixMidSentenceCapitalization } from '@/lib/engine/validation-post-process';
 import { createServiceClient } from '@/lib/supabase';
 import { getUsageStatsCompat, incrementUsageCompat } from '@/lib/server/usage-tracking';
+import { smartPreprocess, getMaxRestructureCount, selectForDownstreamRestructure, reassemblePreprocessed, measureWordChange, type SentenceAnalysis, type PreprocessResult, MAX_RESTRUCTURE_ITERATION } from '@/lib/engine/smart-preprocess';
 
 export const maxDuration = 300;
 
@@ -608,6 +609,48 @@ export async function POST(req: Request) {
           // For sentence-level engines, this stays as inputParaBounds.
           // For full-text engines, it gets overwritten with the engine output's bounds.
           let activeParaBounds = inputParaBounds;
+
+          // ═══════════════════════════════════════════════════════════════
+          // SMART PREPROCESSING — AI-aware sentence analysis & LLM restructuring
+          // Analyzes AI scores per-sentence, selects ≥40% for LLM structural
+          // rephrasing, computes aggression levels, and tracks which sentences
+          // were restructured to prevent re-restructuring in downstream engines.
+          // Non-LLM engines must NOT do structural restructuring.
+          // ═══════════════════════════════════════════════════════════════
+          let preprocessResult: PreprocessResult | null = null;
+          // Engines that skip smart preprocessing (they have their own LLM pipelines)
+          const SKIP_PREPROCESS_ENGINES = new Set(['ai_analysis', 'premium', 'undetectable', 'ninja']);
+          if (!SKIP_PREPROCESS_ENGINES.has(eng) && !(deadlineReached || Date.now() - startTime > DEADLINE_MS - 60000)) {
+            sendSSE(controller, { type: 'stage', stage: 'Smart Preprocessing: AI Analysis' });
+            await flushDelay(12);
+
+            try {
+              preprocessResult = await smartPreprocess(
+                inputSentences,
+                inputParaBounds,
+                (index, text, stage) => {
+                  sendSSE(controller, { type: 'sentence', index, text, stage: `Preprocessing: ${stage}` });
+                },
+              );
+
+              // Replace inputSentences with preprocessed versions
+              for (const analysis of preprocessResult.sentences) {
+                inputSentences[analysis.index] = analysis.preprocessed;
+              }
+
+              console.log(`[SmartPreprocess] Restructured ${preprocessResult.restructuredCount}/${preprocessResult.contentSentenceCount} sentences (${Math.round(preprocessResult.restructuredCount / Math.max(1, preprocessResult.contentSentenceCount) * 100)}%). AI score: ${Math.round(preprocessResult.initialAiScore)}% → ${Math.round(preprocessResult.postPreprocessAiScore)}%`);
+
+              // Emit preprocessed sentences
+              sendSSE(controller, { type: 'stage', stage: 'Smart Preprocessing: Complete' });
+              for (let i = 0; i < inputSentences.length; i++) {
+                sendSSE(controller, { type: 'sentence', index: i, text: inputSentences[i], stage: 'Preprocessed' });
+              }
+              await flushDelay(20);
+            } catch (preprocessErr) {
+              console.warn('[SmartPreprocess] Failed, continuing without preprocessing:', preprocessErr);
+              preprocessResult = null;
+            }
+          }
           const isHeadingSentCheck = (s: string) => {
             const t = s.trim();
             // Use robust heading detection from structure-preserver
@@ -865,9 +908,23 @@ export async function POST(req: Request) {
                   sendSSE(controller, { type: 'stage', stage: 'AI Analysis: Nuru 2.0 Full Post-Processing' });
                   await flushDelay(10);
                   const { sentences: nuruSents, paragraphBoundaries: nuruBounds } = splitIntoIndexedSentences(working);
+                  // Cap restructuring: max 30% of content sentences in Phase 4
+                  const contentIdxs: number[] = [];
                   for (let i = 0; i < nuruSents.length; i++) {
-                    if (!isHeadingSentCheck(nuruSents[i])) {
+                    if (!isHeadingSentCheck(nuruSents[i])) contentIdxs.push(i);
+                  }
+                  const maxRestructPhase4 = Math.max(1, Math.ceil(contentIdxs.length * MAX_RESTRUCTURE_ITERATION));
+                  let restructuredInPhase4 = 0;
+                  for (let i = 0; i < nuruSents.length; i++) {
+                    if (!isHeadingSentCheck(nuruSents[i]) && restructuredInPhase4 < maxRestructPhase4) {
+                      const before = nuruSents[i];
                       nuruSents[i] = await runNuru20Full(nuruSents[i]);
+                      // No-split/no-merge enforcement
+                      const splitCheck = robustSentenceSplit(nuruSents[i]);
+                      if (splitCheck.length > 1) {
+                        nuruSents[i] = splitCheck[0] && splitCheck[0].trim().length > 0 ? splitCheck[0] : before;
+                      }
+                      if (nuruSents[i] !== before) restructuredInPhase4++;
                     }
                     sendSSE(controller, { type: 'sentence', index: i, text: nuruSents[i], stage: 'Nuru 2.0 Full' });
                   }
@@ -876,7 +933,10 @@ export async function POST(req: Request) {
               }
 
               // ── Phase 5: Iterative Flagged-Sentence Loop — Phantom + Nuru targeting ──
+              // Restructuring capped at 10% of content sentences per iteration loop.
               const { sentences: workingSentences, paragraphBoundaries: workingBounds } = splitIntoIndexedSentences(working);
+              const totalContentSentsForCap = workingSentences.filter(s => !isHeadingSentCheck(s)).length;
+              const maxRestructPerIter = Math.max(1, Math.ceil(totalContentSentsForCap * MAX_RESTRUCTURE_ITERATION));
               let currentScan = getFlaggedSentenceDetails(workingSentences);
               sendSSE(controller, { type: 'stage', stage: `AI Analysis: Post-Agent Score ${Math.round(currentScan.detectorAverage)}%` });
               await flushDelay(12);
@@ -896,21 +956,42 @@ export async function POST(req: Request) {
                 });
                 await flushDelay(10);
 
+                let restructuredThisIter = 0;
                 for (const flagged of currentScan.flagged) {
                   if (isHeadingSentCheck(workingSentences[flagged.index])) continue;
-                  let sent = workingSentences[flagged.index];
+                  const before = workingSentences[flagged.index];
+                  let sent = before;
 
-                  // Phantom (Humara 2.4) for high-AI sentences
-                  if (usePhantom) {
-                    sent = await runHumara24Full(sent);
+                  // Only run LLM restructuring if under the iteration cap
+                  if (restructuredThisIter < maxRestructPerIter) {
+                    // Phantom (Humara 2.4) for high-AI sentences
+                    if (usePhantom) {
+                      sent = await runHumara24Full(sent);
+                    }
+                    // Nuru 2.0 Full (LLM restructure + nuru passes)
+                    sent = await runNuru20Full(sent);
+                    sent = finalSmoothGrammar(sent);
+
+                    // No-split/no-merge enforcement
+                    const splitCheck = robustSentenceSplit(sent);
+                    if (splitCheck.length > 1) {
+                      sent = splitCheck[0] && splitCheck[0].trim().length > 0 ? splitCheck[0] : before;
+                    }
+
+                    if (sent !== before) restructuredThisIter++;
+                  } else {
+                    // Over cap — only apply non-LLM targeted stealth (word-level, not structural)
+                    sent = finalSmoothGrammar(sent);
                   }
-                  // Always run Nuru 2.0 Full
-                  sent = await runNuru20Full(sent);
-                  sent = finalSmoothGrammar(sent);
 
-                  // Targeted stealth on specifically flagged phrases
+                  // Targeted stealth on specifically flagged phrases (word-level, always safe)
                   if (flagged.flaggedPhrases.length > 0) {
                     sent = stealthHumanizeTargeted(sent, flagged.flaggedPhrases, strength ?? 'medium');
+                    // No-split/no-merge check after stealth
+                    const stealthSplitCheck = robustSentenceSplit(sent);
+                    if (stealthSplitCheck.length > 1) {
+                      sent = stealthSplitCheck[0] && stealthSplitCheck[0].trim().length > 0 ? stealthSplitCheck[0] : before;
+                    }
                   }
 
                   workingSentences[flagged.index] = sent;
@@ -984,11 +1065,24 @@ export async function POST(req: Request) {
                   try {
                     const result = await runEngineOnSentence(sentence);
                     let final = result && result.trim().length > 0 ? result : sentence;
+                    // No-split/no-merge enforcement
+                    const splitCheck = robustSentenceSplit(final);
+                    if (splitCheck.length > 1) {
+                      final = splitCheck[0] && splitCheck[0].trim().length > 0 ? splitCheck[0] : sentence;
+                    }
                     // LLM engines: max 1 retry (each call is expensive)
                     const change = measureSentenceChange(sentence, final);
                     if (change < minChangeThreshold) {
                       const retried = await runEngineOnSentence(final);
-                      if (retried && retried.trim().length > 0) final = retried;
+                      if (retried && retried.trim().length > 0) {
+                        // No-split/no-merge enforcement on retry
+                        const retrySplitCheck = robustSentenceSplit(retried);
+                        if (retrySplitCheck.length > 1) {
+                          final = retrySplitCheck[0] && retrySplitCheck[0].trim().length > 0 ? retrySplitCheck[0] : final;
+                        } else {
+                          final = retried;
+                        }
+                      }
                     }
                     sendSSE(controller, { type: 'sentence', index: i, text: final, stage: 'Engine' });
                     return final;
@@ -1016,12 +1110,25 @@ export async function POST(req: Request) {
                 try {
                   const result = await runEngineOnSentence(sentence);
                   let final = result && result.trim().length > 0 ? result : sentence;
+                  // No-split/no-merge enforcement
+                  let splitCheck = robustSentenceSplit(final);
+                  if (splitCheck.length > 1) {
+                    final = splitCheck[0] && splitCheck[0].trim().length > 0 ? splitCheck[0] : sentence;
+                  }
                   let change = measureSentenceChange(sentence, final);
                   let retry = 0;
                   const maxRetries = Math.max(3, hRate - 3);
                   while (change < minChangeThreshold && retry < maxRetries) {
                     const retried = await runEngineOnSentence(final);
-                    if (retried && retried.trim().length > 0) final = retried;
+                    if (retried && retried.trim().length > 0) {
+                      // No-split/no-merge enforcement on retry
+                      splitCheck = robustSentenceSplit(retried);
+                      if (splitCheck.length > 1) {
+                        final = splitCheck[0] && splitCheck[0].trim().length > 0 ? splitCheck[0] : final;
+                      } else {
+                        final = retried;
+                      }
+                    }
                     change = measureSentenceChange(sentence, final);
                     retry++;
                   }
@@ -1212,18 +1319,35 @@ export async function POST(req: Request) {
                 // Protect special content (numbers, brackets, citations, etc.) around
                 // non-Nuru phases so deepNonLLMClean / smoothing / grammar repair
                 // cannot mangle figures like 52,446 or parenthetical content like (EDA).
+                // NON-LLM ENGINES: Only cleaning, deep cleaning — NO structural restructuring.
+                // Sentence count must remain exactly the same (no splits or merges).
                 for (let i = 0; i < currentSentences.length; i++) {
                   if (!isHeadingSentCheck(currentSentences[i])) {
                     const original = phaseInputSentences[i];
                     const { text: protectedSent, map: sentMap } = protectSpecialContent(currentSentences[i]);
                     let result = phase.fn(protectedSent);
                     result = restoreSpecialContent(result, sentMap);
+
+                    // ENFORCE: No sentence splitting or merging by non-LLM engines
+                    const resultSentCount = robustSentenceSplit(result).length;
+                    if (resultSentCount > 1) {
+                      // Non-LLM engine tried to split — take only first sentence
+                      const firstSent = robustSentenceSplit(result)[0];
+                      result = firstSent && firstSent.trim().length > 0 ? firstSent : currentSentences[i];
+                    }
+
                     let change = measureSentenceChange(original, result);
                     let retry = 0;
                     while (change < MIN_CHANGE && retry < MAX_RETRIES) {
                       const { text: rp, map: rm } = protectSpecialContent(result);
                       result = phase.fn(rp);
                       result = restoreSpecialContent(result, rm);
+                      // Re-enforce no split/merge after retry
+                      const retrySentCount = robustSentenceSplit(result).length;
+                      if (retrySentCount > 1) {
+                        const retryFirst = robustSentenceSplit(result)[0];
+                        result = retryFirst && retryFirst.trim().length > 0 ? retryFirst : currentSentences[i];
+                      }
                       change = measureSentenceChange(original, result);
                       retry++;
                     }
@@ -1236,23 +1360,66 @@ export async function POST(req: Request) {
                 // so a single LLM call failure cannot abort the whole pipeline.
                 // Content protection wraps each sentence so LLM restructuring
                 // cannot mangle numbers, brackets, citations, etc.
+                //
+                // SMART PREPROCESS INTEGRATION: If this is a 'Restructuring' phase and
+                // smart preprocessing already restructured this sentence, skip it to
+                // avoid double-restructuring. For multi-engine pipelines, enforce the
+                // restructuring cap (30% for 2 engines, 20% for >2 engines).
+                const isRestructuringPhase = phase.name.toLowerCase().includes('restructur');
+                const preprocessedIndices = preprocessResult?.restructuredIndices ?? new Set<number>();
+
+                // Count engines in this pipeline for restructuring caps
+                const pipelineEngineCount = phases.filter(p => p.type === 'async' || p.type === 'emit').length;
+                const contentSentCount = currentSentences.filter((_, i) => !isHeadingSentCheck(currentSentences[i])).length;
+                const maxRestructureThisPhase = isRestructuringPhase
+                  ? getMaxRestructureCount(pipelineEngineCount, false, contentSentCount)
+                  : contentSentCount; // non-restructuring phases have no cap
+                let restructuredThisPhase = 0;
+
                 const asyncResults = await Promise.all(
                   currentSentences.map(async (sent, i) => {
                     if (isHeadingSentCheck(sent)) return sent;
+
+                    // Skip restructuring for sentences already restructured in preprocessing
+                    if (isRestructuringPhase && preprocessedIndices.has(i)) {
+                      return sent; // Already restructured — pass through
+                    }
+
+                    // Enforce restructuring cap for multi-engine pipelines
+                    if (isRestructuringPhase && restructuredThisPhase >= maxRestructureThisPhase) {
+                      return sent; // Cap reached — pass through
+                    }
+
                     const original = phaseInputSentences[i];
                     try {
                       const { text: protectedSent, map: sentMap } = protectSpecialContent(sent);
                       let result = await phase.fn(protectedSent);
                       result = restoreSpecialContent(result, sentMap);
+
+                      // ENFORCE: No sentence splitting or merging
+                      const resultSentCount = robustSentenceSplit(result).length;
+                      if (resultSentCount > 1) {
+                        const firstSent = robustSentenceSplit(result)[0];
+                        result = firstSent && firstSent.trim().length > 0 ? firstSent : sent;
+                      }
+
                       let change = measureSentenceChange(original, result);
                       let retry = 0;
                       while (change < MIN_CHANGE && retry < MAX_RETRIES) {
                         const { text: rp, map: rm } = protectSpecialContent(result);
                         result = await phase.fn(rp);
                         result = restoreSpecialContent(result, rm);
+                        // Re-enforce no split/merge after retry
+                        const retrySentCount = robustSentenceSplit(result).length;
+                        if (retrySentCount > 1) {
+                          const firstRetry = robustSentenceSplit(result)[0];
+                          result = firstRetry && firstRetry.trim().length > 0 ? firstRetry : sent;
+                        }
                         change = measureSentenceChange(original, result);
                         retry++;
                       }
+
+                      if (isRestructuringPhase) restructuredThisPhase++;
                       return result;
                     } catch (sentErr) {
                       console.warn(`[Phase ${phase.name}] sentence ${i} failed, keeping previous:`, sentErr instanceof Error ? sentErr.message : sentErr);
@@ -1550,21 +1717,32 @@ export async function POST(req: Request) {
             }
           }
 
-          // 5. 40% Restructuring enforcement
+          // 5. Word-level change enforcement (25% minimum per sentence)
+          // NOTE: This is NOT structural restructuring — it only does synonym replacement
+          // and AI word elimination. Structural restructuring was already done by LLM
+          // in smart preprocessing. Non-LLM engines must NOT do structural restructuring.
           if (!isDeepKill) {
           if (!usePhasePipeline) {
-            sendSSE(controller, { type: 'stage', stage: 'Restructuring' });
+            sendSSE(controller, { type: 'stage', stage: 'Word-Level Change Enforcement' });
             await flushDelay(20);
           }
           {
             const { sentences: origSents } = splitIntoIndexedSentences(normalizedText);
             const { sentences: humanizedSents, paragraphBoundaries: humanParaBounds } = splitIntoIndexedSentences(humanized);
             const isHeadingSent = (s: string) => looksLikeHeadingLine(s.trim());
-            const RESTRUCTURE_MIN = 0.40;
+            const WORD_CHANGE_MIN = 0.25; // Minimum 25% word change per sentence
             const usedWords = new Set<string>();
             let changed = false;
             for (let i = 0; i < humanizedSents.length; i++) {
               if (isHeadingSent(humanizedSents[i])) continue; // Skip headings
+
+              // ENFORCE: No sentence splitting or merging
+              const sentCount = robustSentenceSplit(humanizedSents[i]).length;
+              if (sentCount > 1) {
+                const first = robustSentenceSplit(humanizedSents[i])[0];
+                if (first && first.trim().length > 0) humanizedSents[i] = first;
+              }
+
               // Only compare against non-heading original sentences
               let bestOrigIdx = -1;
               let bestScore = Infinity;
@@ -1573,13 +1751,14 @@ export async function POST(req: Request) {
                 const r = measureSentenceChange(origSents[j], humanizedSents[i]);
                 if (r < bestScore) { bestScore = r; bestOrigIdx = j; }
               }
-              if (bestOrigIdx >= 0 && bestScore < RESTRUCTURE_MIN) {
+              if (bestOrigIdx >= 0 && bestScore < WORD_CHANGE_MIN) {
                 let s = humanizedSents[i];
+                // Word-level only: AI word kill + synonym replacement (NOT restructuring)
                 s = applyAIWordKill(s);
                 s = synonymReplace(s, 0.85, usedWords);
                 // Re-check after synonym pass; apply more aggressive pass if still below
                 const recheck = measureSentenceChange(origSents[bestOrigIdx], s);
-                if (recheck < RESTRUCTURE_MIN) {
+                if (recheck < WORD_CHANGE_MIN) {
                   s = synonymReplace(s, 1.0, usedWords);
                 }
                 if (s !== humanizedSents[i]) { humanizedSents[i] = s; changed = true; }
@@ -1589,7 +1768,7 @@ export async function POST(req: Request) {
               humanized = reassembleText(humanizedSents, humanParaBounds.length ? humanParaBounds : [0]);
               if (!usePhasePipeline) {
                 const { sentences: restructuredSents } = splitIntoIndexedSentences(humanized);
-                await emitSentencesStaggered(controller, restructuredSents, 'Restructuring', 20);
+                await emitSentencesStaggered(controller, restructuredSents, 'Word-Level Change', 20);
               }
             }
           }
