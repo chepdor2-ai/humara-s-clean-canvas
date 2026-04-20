@@ -23,6 +23,12 @@ function cv(arr: number[]): number { const m = mean(arr); return m > 0 ? std(arr
 function sigNorm(x: number, center: number, steepness: number): number { return sigmoid((x - center) * steepness) * 100; }
 function plattCalibrate(score: number, a: number, b: number): number { return clamp(sigmoid(a * score + b) * 100); }
 
+function positiveHeat(value: number | undefined, baseline = 50): number {
+  const safe = value ?? baseline;
+  if (safe <= baseline) return 0;
+  return (safe - baseline) / Math.max(100 - baseline, 1);
+}
+
 function geometricMean(arr: number[]): number {
   if (arr.length === 0) return 0;
   const logSum = arr.reduce((s, v) => s + Math.log(Math.max(v, 1e-12)), 0);
@@ -219,7 +225,7 @@ const DETECTOR_VERDICT_THRESHOLDS = {
   mixed: 28,
 };
 
-function classifyAiScore(aiScore: number): { verdict: string; confidence: string } {
+export function classifyAiScore(aiScore: number): { verdict: string; confidence: string } {
   if (aiScore >= DETECTOR_VERDICT_THRESHOLDS.aiGenerated) {
     return { verdict: "AI-Generated", confidence: "High" };
   }
@@ -423,13 +429,27 @@ export class TextSignals {
         }
       }
     } else {
-      // Sample random pairs
-      for (let p = 0; p < maxPairs; p++) {
-        const i = Math.floor(Math.random() * vectors.length);
-        let j = Math.floor(Math.random() * (vectors.length - 1));
-        if (j >= i) j++;
-        total_sim += cosineSim(vectors[i], vectors[j]);
+      // Deterministic sampled pairs keep long-document scoring stable across runs.
+      const seenPairs = new Set<string>();
+      const strideA = Math.max(1, Math.floor(vectors.length / 3));
+      const strideB = Math.max(2, Math.floor(vectors.length / 2) + 1);
+      for (let p = 0; p < maxPairs * 4 && pair_count < maxPairs; p++) {
+        const i = (p * strideA + p) % vectors.length;
+        let j = (p * strideB + Math.floor(p / 2) + 1) % vectors.length;
+        if (j === i) j = (j + 1) % vectors.length;
+        const a = Math.min(i, j);
+        const b = Math.max(i, j);
+        const key = `${a}:${b}`;
+        if (seenPairs.has(key)) continue;
+        seenPairs.add(key);
+        total_sim += cosineSim(vectors[a], vectors[b]);
         pair_count++;
+      }
+      if (pair_count === 0) {
+        for (let i = 0; i < vectors.length - 1 && pair_count < maxPairs; i++) {
+          total_sim += cosineSim(vectors[i], vectors[i + 1]);
+          pair_count++;
+        }
       }
     }
 
@@ -1050,28 +1070,28 @@ class DetectorProfile {
 // ── Calibration ──
 
 const DETECTOR_CALIBRATION: Record<string, { a: number; b: number }> = {
-  gptzero: { a: 0.10, b: -5.0 },
-  turnitin: { a: 0.10, b: -5.0 },
-  originality_ai: { a: 0.10, b: -5.0 },
-  winston_ai: { a: 0.10, b: -5.0 },
-  copyleaks: { a: 0.10, b: -5.0 },
-  sapling: { a: 0.10, b: -5.0 },
-  content_at_scale: { a: 0.10, b: -5.0 },
-  crossplag: { a: 0.10, b: -5.0 },
-  writer_ai: { a: 0.10, b: -5.0 },
-  smodin: { a: 0.10, b: -5.0 },
-  hive_ai: { a: 0.10, b: -5.0 },
-  surfer_seo: { a: 0.10, b: -5.0 },
-  zerogpt: { a: 0.10, b: -5.0 },
-  quillbot: { a: 0.12, b: -5.0 },
-  grammarly: { a: 0.10, b: -5.0 },
-  scribbr: { a: 0.10, b: -5.0 },
-  pangram: { a: 0.10, b: -5.0 },
-  roberta: { a: 0.10, b: -5.0 },
-  openai_classifier: { a: 0.10, b: -5.0 },
-  content_detector_ai: { a: 0.10, b: -5.0 },
-  gpt2_detector: { a: 0.10, b: -5.0 },
-  stealth_detector: { a: 0.10, b: -5.0 },
+  gptzero: { a: 0.05906, b: -1.18861 },
+  turnitin: { a: 0.05541, b: -1.28797 },
+  originality_ai: { a: 0.07509, b: -1.15330 },
+  winston_ai: { a: 0.03678, b: -1.36134 },
+  copyleaks: { a: 0.02940, b: -1.16593 },
+  sapling: { a: 0.04632, b: -1.11145 },
+  content_at_scale: { a: 0.02707, b: -0.82579 },
+  crossplag: { a: 0.04373, b: -1.19365 },
+  writer_ai: { a: 0.03502, b: -1.19645 },
+  smodin: { a: 0.04998, b: -1.23648 },
+  hive_ai: { a: 0.03224, b: -1.19164 },
+  surfer_seo: { a: 0.03128, b: -1.03867 },
+  zerogpt: { a: 0.05848, b: -1.12507 },
+  quillbot: { a: 0.08918, b: -1.32742 },
+  grammarly: { a: 0.03479, b: -1.14614 },
+  scribbr: { a: 0.03938, b: -1.16957 },
+  pangram: { a: 0.04367, b: -1.33418 },
+  roberta: { a: 0.04624, b: -1.09860 },
+  openai_classifier: { a: 0.02006, b: -0.51888 },
+  content_detector_ai: { a: 0.04889, b: -1.19108 },
+  gpt2_detector: { a: 0.02016, b: -0.50459 },
+  stealth_detector: { a: 0.08647, b: -1.16601 },
 };
 
 // ── 22 Detector Profiles ──
@@ -1120,21 +1140,139 @@ export interface DetectorResult {
   category: string;
 }
 
+export interface AnalysisSummary {
+  overall_ai_score: number;
+  overall_human_score: number;
+  overall_verdict: string;
+  simple_avg_ai: number;
+  length_reliability: number;
+  detectors_flagged_ai: number;
+  detectors_flagged_human: number;
+  detectors_uncertain: number;
+  total_detectors: number;
+  word_count: number;
+  sentence_count: number;
+}
+
 export interface AnalysisResult {
   signals: Record<string, number>;
   detectors: DetectorResult[];
-  summary: {
-    overall_ai_score: number;
-    overall_human_score: number;
-    overall_verdict: string;
-    simple_avg_ai: number;
-    length_reliability: number;
-    detectors_flagged_ai: number;
-    detectors_flagged_human: number;
-    detectors_uncertain: number;
-    total_detectors: number;
-    word_count: number;
-    sentence_count: number;
+  summary: AnalysisSummary;
+}
+
+function documentStrictHeat(signals: Record<string, number>): number {
+  return (
+    positiveHeat(signals.ai_pattern_score, 50) * 0.34 +
+    positiveHeat(signals.per_sentence_ai_ratio, 44) * 0.26 +
+    positiveHeat(signals.token_predictability, 54) * 0.16 +
+    positiveHeat(signals.sentence_uniformity, 56) * 0.12 +
+    positiveHeat(signals.ngram_repetition, 54) * 0.12
+  );
+}
+
+function documentHumanStrength(signals: Record<string, number>): { mean: number; strongCount: number; lift: number } {
+  const values = [...HUMAN_POSITIVE_SIGNALS].map((sig) => signals[sig] ?? 50);
+  return {
+    mean: mean(values),
+    strongCount: values.filter((value) => value >= 60).length,
+    lift: mean(values.map((value) => positiveHeat(value, 56))),
+  };
+}
+
+export function summarizeDetectorResults(
+  signals: Record<string, number>,
+  detectorResults: DetectorResult[],
+  wordCount: number,
+  sentenceCount: number,
+): AnalysisSummary {
+  const aiScores = detectorResults.map((d) => d.ai_score);
+  const simpleAvg = mean(aiScores);
+
+  let weightedSum = 0, weightTotal = 0;
+  for (const d of detectorResults) {
+    const w = TIER_WEIGHTS[d.category] ?? 1.0;
+    weightedSum += d.ai_score * w;
+    weightTotal += w;
+  }
+  let weightedAvg = weightTotal > 0 ? weightedSum / weightTotal : 50;
+
+  const strictSignalBoost =
+    Math.max(0, ((signals.ai_pattern_score ?? 0) - 58) * 0.10) +
+    Math.max(0, ((signals.per_sentence_ai_ratio ?? 0) - 42) * 0.08) +
+    Math.max(0, ((signals.token_predictability ?? 0) - 58) * 0.05);
+  weightedAvg += Math.min(strictSignalBoost, 14);
+
+  const strictDocHeat = documentStrictHeat(signals);
+  weightedAvg += Math.min(strictDocHeat * 8.5, 8.0);
+
+  const highRiskCount = detectorResults.filter((d) => d.ai_score >= 70).length;
+  const mediumRiskCount = detectorResults.filter((d) => d.ai_score >= DETECTOR_VERDICT_THRESHOLDS.likelyAi).length;
+  weightedAvg += highRiskCount * 0.9 + mediumRiskCount * 0.25;
+  weightedAvg = clamp(weightedAvg);
+
+  const humanProfile = documentHumanStrength(signals);
+  if (strictDocHeat < 0.48 && humanProfile.strongCount >= 6) {
+    const humanDiscount =
+      (humanProfile.strongCount - 5) * 1.25 +
+      Math.max(0, humanProfile.mean - 60) * 0.12 +
+      humanProfile.lift * 5.5;
+    weightedAvg = clamp(weightedAvg - Math.min(humanDiscount, 15));
+  }
+
+  const coldCoreAiSignals =
+    (signals.ai_pattern_score ?? 50) < 20 &&
+    (signals.per_sentence_ai_ratio ?? 50) < 12 &&
+    (signals.token_predictability ?? 50) < 40;
+  if (coldCoreAiSignals && highRiskCount === 0 && mediumRiskCount <= Math.floor(detectorResults.length * 0.4)) {
+    weightedAvg = Math.min(weightedAvg, 22);
+  }
+
+  const shortColdHumanText =
+    sentenceCount < 3 &&
+    (signals.ai_pattern_score ?? 50) < 20 &&
+    (signals.token_predictability ?? 50) < 45 &&
+    (signals.function_word_freq ?? 50) < 35;
+  if (shortColdHumanText && highRiskCount <= 1 && mediumRiskCount <= Math.floor(detectorResults.length * 0.65)) {
+    weightedAvg = Math.min(weightedAvg, 18);
+  }
+
+  if (highRiskCount >= Math.ceil(detectorResults.length * 0.45) && strictDocHeat >= 0.32) {
+    weightedAvg = Math.max(weightedAvg, 72);
+  }
+  if (mediumRiskCount >= Math.ceil(detectorResults.length * 0.55) && strictDocHeat >= 0.24) {
+    weightedAvg = Math.max(weightedAvg, 56);
+  }
+
+  const p = weightedAvg / 100;
+  weightedAvg = sigmoid((p - 0.46) * 7.6) * 100;
+  weightedAvg = clamp(weightedAvg);
+
+  const aiCount = detectorResults.filter((d) => ["AI-Generated", "Likely AI"].includes(d.verdict)).length;
+  const humanCount = detectorResults.filter((d) => d.verdict === "Human-Written").length;
+  const lengthFactor = Math.max(0.15, Math.min(1.0, (wordCount - 12) / 70.0));
+
+  const aiThreshold = 68 + (1 - lengthFactor) * 6;
+  const likelyThreshold = 46 + (1 - lengthFactor) * 8;
+  const mixedThreshold = 24 + (1 - lengthFactor) * 5;
+
+  let overall: string;
+  if (weightedAvg >= aiThreshold) overall = "AI-Generated";
+  else if (weightedAvg >= likelyThreshold) overall = "Likely AI";
+  else if (weightedAvg >= mixedThreshold) overall = "Mixed / Uncertain";
+  else overall = "Human-Written";
+
+  return {
+    overall_ai_score: Math.round(weightedAvg * 10) / 10,
+    overall_human_score: Math.round((100 - weightedAvg) * 10) / 10,
+    overall_verdict: overall,
+    simple_avg_ai: Math.round(simpleAvg * 10) / 10,
+    length_reliability: Math.round(lengthFactor * 100) / 100,
+    detectors_flagged_ai: aiCount,
+    detectors_flagged_human: humanCount,
+    detectors_uncertain: detectorResults.length - aiCount - humanCount,
+    total_detectors: detectorResults.length,
+    word_count: wordCount,
+    sentence_count: sentenceCount,
   };
 }
 
@@ -1159,9 +1297,11 @@ export class MultiDetector {
       p.score(signals, this.calibration) as DetectorResult,
     );
 
-    // Length reliability: still damp short text, but less aggressively than before.
+    // Length reliability: damp short text toward the signal-driven center instead of a fixed AI anchor.
     const lengthFactor = Math.max(0.15, Math.min(1.0, (sigObj.wordCount - 12) / 70.0));
-    const shortTextAnchor = 62.0;
+    const strictDocHeat = documentStrictHeat(signals);
+    const humanProfile = documentHumanStrength(signals);
+    const shortTextAnchor = clamp(50 + strictDocHeat * 18 - humanProfile.lift * 16, 44, 66);
     if (lengthFactor < 1.0) {
       for (const d of detectorResults) {
         d.ai_score = Math.round(clamp(d.ai_score * lengthFactor + shortTextAnchor * (1.0 - lengthFactor)) * 10) / 10;
@@ -1171,73 +1311,12 @@ export class MultiDetector {
         d.confidence = classified.confidence;
       }
     }
-
-    const aiScores = detectorResults.map((d) => d.ai_score);
-    const simpleAvg = mean(aiScores);
-
-    let weightedSum = 0, weightTotal = 0;
-    for (const d of detectorResults) {
-      const w = TIER_WEIGHTS[d.category] ?? 1.0;
-      weightedSum += d.ai_score * w;
-      weightTotal += w;
-    }
-    let weightedAvg = weightTotal > 0 ? weightedSum / weightTotal : 50;
-
-    // Global strict-signal boost across the document.
-    const strictSignalBoost =
-      Math.max(0, ((signals.ai_pattern_score ?? 0) - 58) * 0.10) +
-      Math.max(0, ((signals.per_sentence_ai_ratio ?? 0) - 42) * 0.08) +
-      Math.max(0, ((signals.token_predictability ?? 0) - 58) * 0.05);
-    weightedAvg += Math.min(strictSignalBoost, 14);
-
-    // Consensus lift: many detectors firing together should lift final score.
-    const highRiskCount = detectorResults.filter((d) => d.ai_score >= 70).length;
-    const mediumRiskCount = detectorResults.filter((d) => d.ai_score >= DETECTOR_VERDICT_THRESHOLDS.likelyAi).length;
-    weightedAvg += highRiskCount * 0.9 + mediumRiskCount * 0.25;
-    weightedAvg = clamp(weightedAvg);
-
-    if (highRiskCount >= Math.ceil(detectorResults.length * 0.45)) {
-      weightedAvg = Math.max(weightedAvg, 72);
-    }
-    if (mediumRiskCount >= Math.ceil(detectorResults.length * 0.55)) {
-      weightedAvg = Math.max(weightedAvg, 56);
-    }
-
-    // Contrast amplification
-    const p = weightedAvg / 100;
-    weightedAvg = sigmoid((p - 0.46) * 7.6) * 100;
-    weightedAvg = clamp(weightedAvg);
-
-    const aiCount = detectorResults.filter((d) => ["AI-Generated", "Likely AI"].includes(d.verdict)).length;
-    const humanCount = detectorResults.filter((d) => d.verdict === "Human-Written").length;
-
-    // Length-adaptive thresholds (strict mode).
-    const aiThreshold = 68 + (1 - lengthFactor) * 6;
-    const likelyThreshold = 46 + (1 - lengthFactor) * 8;
-    const mixedThreshold = 24 + (1 - lengthFactor) * 5;
-
-    let overall: string;
-    if (weightedAvg >= aiThreshold) overall = "AI-Generated";
-    else if (weightedAvg >= likelyThreshold) overall = "Likely AI";
-    else if (weightedAvg >= mixedThreshold) overall = "Mixed / Uncertain";
-    else overall = "Human-Written";
+    const summary = summarizeDetectorResults(signals, detectorResults, sigObj.wordCount, sigObj.sentenceCount);
 
     return {
       signals: Object.fromEntries(Object.entries(signals).map(([k, v]) => [k, Math.round(v * 10) / 10])),
       detectors: detectorResults,
-      summary: {
-        overall_ai_score: Math.round(weightedAvg * 10) / 10,
-        overall_human_score: Math.round((100 - weightedAvg) * 10) / 10,
-        overall_verdict: overall,
-        simple_avg_ai: Math.round(simpleAvg * 10) / 10,
-        length_reliability: Math.round(lengthFactor * 100) / 100,
-        detectors_flagged_ai: aiCount,
-        detectors_flagged_human: humanCount,
-        detectors_uncertain: detectorResults.length - aiCount - humanCount,
-        total_detectors: detectorResults.length,
-        word_count: sigObj.wordCount,
-        sentence_count: sigObj.sentenceCount,
-      },
+      summary,
     };
   }
 }
