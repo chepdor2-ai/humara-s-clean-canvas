@@ -887,15 +887,24 @@ export function nuruHumanize(
 ): string {
   if (!text || !text.trim()) return text;
 
-  // ── CITATION PROTECTION ──
-  // Extract citations like (Author, Year) and protect them from modification
+  // ── CITATION + STAT PROTECTION ──
+  // Protect citations (Author, Year) and numeric statistics from modification
   const citationMap = new Map<string, string>();
   let citIdx = 0;
-  const textWithPlaceholders = text.replace(/\(([A-Z][a-zA-Z&.\s]+,?\s*\d{4}[a-z]?(?:;\s*[A-Z][a-zA-Z&.\s]+,?\s*\d{4}[a-z]?)*)\)/g, (match) => {
-    const placeholder = `__CITE_${citIdx++}__`;
-    citationMap.set(placeholder, match);
-    return placeholder;
-  });
+  let protected_text = text
+    // Protect citations: (Topol, 2019), (Esteva et al., 2017)
+    .replace(/\(([A-Z][a-zA-Z&.\s]+,?\s*\d{4}[a-z]?(?:;\s*[A-Z][a-zA-Z&.\s]+,?\s*\d{4}[a-z]?)*)\)/g, (match) => {
+      const placeholder = `__CITE_${citIdx++}__`;
+      citationMap.set(placeholder, match);
+      return placeholder;
+    })
+    // Protect numeric stats with decimals/ranges: 38.5%, $187.9 billion, 25-30%, 12.8 days
+    .replace(/\$[\d,.]+\s*(?:billion|million|trillion|thousand)?|\d+(?:[.,]\d+)+%?|\d+-\d+%/g, (match) => {
+      const placeholder = `__STAT_${citIdx++}__`;
+      citationMap.set(placeholder, match);
+      return placeholder;
+    });
+  const textWithPlaceholders = protected_text;
 
   // ── PHASE 1: PRE-ANALYSIS ──
   const inputHasFirstPerson = detectFirstPerson(textWithPlaceholders);

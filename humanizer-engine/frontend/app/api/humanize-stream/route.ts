@@ -1456,10 +1456,10 @@ export async function POST(req: Request) {
                 // Phase 3: Score-based extra bulk passes (0-5 more)
                 // Phase 4: 5 targeted passes on flagged sentences ONLY
                 // ═══════════════════════════════════════════════════════
-                const MIN_NURU_PASSES = 5;
+                const MIN_NURU_PASSES = Math.min(phase.passes, 5);
                 const maxNuruPasses = Math.max(phase.passes, MIN_NURU_PASSES);
 
-                // ── Phase 1: Baseline 5 passes on ALL sentences ──
+                // ── Phase 1: Baseline passes on ALL sentences ──
                 for (let pass = 0; pass < MIN_NURU_PASSES; pass++) {
                   for (let i = 0; i < currentSentences.length; i++) {
                     if (!isHeadingSentCheck(currentSentences[i])) {

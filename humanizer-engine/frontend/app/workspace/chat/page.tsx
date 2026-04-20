@@ -22,7 +22,16 @@ function loadConversations(): ChatConversation[] {
   if (typeof window === 'undefined') return []
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
-    return raw ? JSON.parse(raw) : []
+    if (!raw) return []
+    const parsed = JSON.parse(raw) as ChatConversation[]
+    const now = Date.now()
+    // Auto-expire after 20 days
+    const valid = parsed.filter((c) => {
+      const ageMs = now - new Date(c.createdAt).getTime()
+      const days = ageMs / (1000 * 60 * 60 * 24)
+      return days < 20
+    })
+    return valid
   } catch {
     return []
   }
@@ -45,17 +54,30 @@ function generateTitle(message: string): string {
 }
 
 /* ── Artifact parser ── */
-function parseArtifact(text: string): { title: string; content: string } | null {
-  const match = text.match(/<artifact[^>]*title="([^"]*)"[^>]*>([\s\S]*?)<\/artifact>/i)
-  if (match) {
-    return { title: match[1], content: match[2].trim() }
+export interface ArtifactData {
+  title: string;
+  content: string;
+  format?: 'APA' | 'MLA' | 'Harvard' | 'Chicago' | string;
+  coverpage?: boolean;
+}
+
+function parseArtifact(text: string): ArtifactData | null {
+  const match = text.match(/<artifact([^>]*)>([\s\S]*?)<\/artifact>/i)
+  if (!match) return null
+
+  const attrsStr = match[1]
+  const content = match[2].trim()
+
+  const titleMatch = attrsStr.match(/title="([^"]*)"/i) || attrsStr.match(/title=([^\s>]*)/i)
+  const formatMatch = attrsStr.match(/format="([^"]*)"/i) || attrsStr.match(/format=([^\s>]*)/i)
+  const coverMatch = attrsStr.match(/coverpage="([^"]*)"/i) || attrsStr.match(/coverpage=([^\s>]*)/i)
+
+  return {
+    title: titleMatch ? titleMatch[1] : 'Untitled Document',
+    content,
+    format: formatMatch ? formatMatch[1] : undefined,
+    coverpage: coverMatch ? coverMatch[1] === 'true' : undefined
   }
-  // Also try without quotes
-  const match2 = text.match(/<artifact[^>]*title=([^\s>]*)[^>]*>([\s\S]*?)<\/artifact>/i)
-  if (match2) {
-    return { title: match2[1], content: match2[2].trim() }
-  }
-  return null
 }
 
 /* ── Quick prompts ── */
@@ -75,8 +97,10 @@ export default function WorkspaceChatPage() {
   const [streamingContent, setStreamingContent] = useState('')
   const [historyOpen, setHistoryOpen] = useState(false)
 
+  const [isHumanizing, setIsHumanizing] = useState(false)
+
   // Document artifact
-  const [artifact, setArtifact] = useState<{ title: string; content: string } | null>(null)
+  const [artifact, setArtifact] = useState<ArtifactData | null>(null)
   const [docFullScreen, setDocFullScreen] = useState(false)
   const [showDocPane, setShowDocPane] = useState(true)
 
