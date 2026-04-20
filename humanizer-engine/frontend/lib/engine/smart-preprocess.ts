@@ -77,28 +77,28 @@ export interface PreprocessResult {
 // ═══════════════════════════════════════════════════════════════════════
 
 /** Minimum percentage of content sentences that must go through LLM rephrasing */
-const MIN_REPHRASING_RATIO = 0.85;
+const MIN_REPHRASING_RATIO = 0.95;
 
-/** Minimum word change per sentence (50% — aggressive for 0% AI detection) */
-const MIN_CHANGE = 0.50;
+/** Minimum word change per sentence (60% — aggressive for 0% AI detection) */
+const MIN_CHANGE = 0.60;
 
-/** Maximum word change per sentence (92% — allow near-total rewrites) */
-const MAX_CHANGE = 0.92;
+/** Maximum word change per sentence (95% — allow near-total rewrites) */
+const MAX_CHANGE = 0.95;
 
 /** AI score threshold below which sentences are considered low-risk */
-const LOW_RISK_THRESHOLD = 10;
+const LOW_RISK_THRESHOLD = 5;
 
 /** AI score threshold above which sentences are high-risk */
-const HIGH_RISK_THRESHOLD = 40;
+const HIGH_RISK_THRESHOLD = 25;
 
 /** Max restructured sentences per downstream engine phase */
-export const MAX_RESTRUCTURE_2_ENGINES = 0.85;
+export const MAX_RESTRUCTURE_2_ENGINES = 0.95;
 
 /** Max restructured sentences per downstream engine phase when chaining multiple engines */
-export const MAX_RESTRUCTURE_MULTI_ENGINES = 0.85;
+export const MAX_RESTRUCTURE_MULTI_ENGINES = 0.95;
 
 /** Max restructured sentences per iteration loop */
-export const MAX_RESTRUCTURE_ITERATION = 0.85;
+export const MAX_RESTRUCTURE_ITERATION = 0.95;
 
 // ═══════════════════════════════════════════════════════════════════════
 // Helpers
@@ -133,7 +133,8 @@ export function measureWordChange(original: string, modified: string): number {
  * Higher AI score → more aggressive handling.
  */
 function computeAggression(aiScore: number): number {
-  // Linear mapping: score 0 → 0.40, score 100 → 0.85
+  // Aggressive mapping: score 0 → 0.60, score 100 → 0.95
+  // Even low-AI sentences get heavy restructuring for consistent 0% detection
   const normalized = Math.max(0, Math.min(100, aiScore)) / 100;
   return MIN_CHANGE + normalized * (MAX_CHANGE - MIN_CHANGE);
 }
@@ -303,24 +304,28 @@ async function applyLLMRephrasing(
         }
 
         // Measure change
-        const change = measureWordChange(analysis.original, restructured);
+        let change = measureWordChange(analysis.original, restructured);
 
-        // Enforce min change (25%)
+        // Enforce min change — retry up to 3 times for deeper restructuring
         if (change < MIN_CHANGE) {
-          // Try once more with the restructured text as input
-          const { text: rp, map: rm } = protectSpecialContent(restructured);
-          let retry = await restructureSentence(rp);
-          retry = restoreSpecialContent(retry, rm);
-
-          // Verify no split/merge after retry
-          const retryCount = countSentencesInText(retry);
-          if (retryCount === 1) {
-            const retryChange = measureWordChange(analysis.original, retry);
-            if (retryChange >= MIN_CHANGE) {
-              restructured = retry;
+          for (let retryAttempt = 0; retryAttempt < 3; retryAttempt++) {
+            const retryInput = retryAttempt === 0 ? restructured : analysis.original;
+            const { text: rp, map: rm } = protectSpecialContent(retryInput);
+            let retry = await restructureSentence(rp);
+            retry = restoreSpecialContent(retry, rm);
+            const retryCount = countSentencesInText(retry);
+            if (retryCount === 1) {
+              const retryChange = measureWordChange(analysis.original, retry);
+              if (retryChange >= MIN_CHANGE) {
+                restructured = retry;
+                break;
+              }
+              if (retryChange > change) {
+                restructured = retry;
+                change = retryChange;
+              }
             }
           }
-          // If still below min, keep whatever we have — some change is better than none
         }
 
         // Enforce max change (85%) — if too much changed, blend with original
@@ -488,8 +493,8 @@ export function getMaxRestructureCount(
   if (totalEngines === 2) {
     return Math.max(1, Math.floor(totalContentSentences * MAX_RESTRUCTURE_2_ENGINES));
   }
-  // Single engine: preprocessing already handled the 40% minimum
-  return 0; // No additional restructuring needed
+  // Single engine: still allow some restructuring for deep cleaning
+  return Math.max(1, Math.floor(totalContentSentences * 0.50));
 }
 
 /**

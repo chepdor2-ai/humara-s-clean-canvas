@@ -733,7 +733,7 @@ export async function deepAICleanOneSentence(sentence: string): Promise<string> 
   if (isTitleOrHeading(trimmed)) return trimmed;
 
   const userPrompt = buildDeepAICleanUserPrompt(trimmed, null, null);
-  const temp = 0.65 + (Math.random() * 0.15);
+  const temp = 0.72 + (Math.random() * 0.16);
   const maxTokens = Math.max(200, Math.ceil(trimmed.split(/\s+/).length * 2.5));
 
   try {
@@ -753,29 +753,32 @@ export async function deepAICleanOneSentence(sentence: string): Promise<string> 
 // Every sentence gets its clause order, voice, and presentation rewritten.
 // ══════════════════════════════════════════════════════════════════════════
 
-const RESTRUCTURE_SYSTEM = `You are an expert academic editor specialising in sentence restructuring. Your SOLE job is to deeply restructure the presentation of a single sentence — change its clause order, voice, and syntactic frame — while keeping every fact, citation, and technical term intact.
+const RESTRUCTURE_SYSTEM = `You are an expert academic editor specialising in deep sentence restructuring. Your SOLE job is to completely transform the structure of a single sentence — change its clause order, voice, syntactic frame, and word choices — while keeping every fact, citation, and technical term intact. The result should read like it was written by a different person entirely.
 
-RESTRUCTURING TECHNIQUES (apply one or more):
+RESTRUCTURING TECHNIQUES (apply TWO or more):
 1. CLAUSE REORDERING — Move subordinate clauses to the front or end, swap subject-complement positions
-2. VOICE CHANGE — Switch active ↔ passive, or use impersonal constructions ("It is..." / "There is...")
-3. NOMINALISATION SWAP — Convert verb phrases to noun phrases or vice-versa (e.g. "measures X" → "measurement of X")
+2. VOICE CHANGE — Switch active ↔ passive, or use impersonal constructions
+3. NOMINALISATION SWAP — Convert verb phrases to noun phrases or vice-versa
 4. RELATIVE CLAUSE TRANSFORMATION — Convert participial phrases to which-/that- clauses or vice-versa
 5. ADVERBIAL FRONTING — Move time/place/manner adverbs to sentence start
 6. SENTENCE TYPE CHANGE — Convert simple → complex or complex → compound sentence structures
-7. NATURAL SYNONYM REPLACEMENT — Replace 30-60% of non-technical words with natural academic alternatives
+7. DEEP SYNONYM REPLACEMENT — Replace 50-75% of non-technical words with natural academic alternatives
+8. SENTENCE RHYTHM CHANGE — Vary the cadence: break long compound clauses into tighter phrasing
+9. PERSPECTIVE SHIFT — Change the framing angle (cause→effect to effect→cause, general→specific to specific→general)
 
 STRICT RULES:
 - Output EXACTLY one sentence (no splitting into multiple sentences)
+- The output MUST be substantially different from the input — at least 60% of words must change
 - Preserve ALL citations [1], [2], (Author, Year), etc. — copy verbatim
 - Preserve ALL technical terms, proper nouns, measurements, and formulas
 - Preserve ALL placeholder tokens like [[PROT_0]], [[TRM_0]], etc. — copy exactly
 - The restructured sentence MUST convey the same meaning
 - Do NOT add new information or opinions
-- Do NOT use AI-typical words: utilize, facilitate, leverage, comprehensive, multifaceted, paradigm, trajectory, discourse, robust, nuanced, pivotal, delve, foster, harness, underscore, bolster, streamline, furthermore, moreover, additionally, consequently, subsequently, nevertheless
+- Do NOT use AI-typical words: utilize, facilitate, leverage, comprehensive, multifaceted, paradigm, trajectory, discourse, robust, nuanced, pivotal, delve, foster, harness, underscore, bolster, streamline, furthermore, moreover, additionally, consequently, subsequently, nevertheless, embark, tapestry, cornerstone, navigate, landscape, realm, intricate, transformative, innovative
 - Return ONLY the restructured sentence, nothing else`;
 
 function buildRestructurePrompt(sentence: string): string {
-  return `Restructure the following sentence by changing its clause order, voice, and presentation. Keep all facts, citations, and technical terms. Output only the restructured sentence.
+  return `Deeply restructure this sentence by changing its clause order, voice, word choices, and presentation. Apply at least TWO restructuring techniques. Aim for 60%+ word change. Keep all facts, citations, and technical terms. Output only the restructured sentence.
 
 SENTENCE:
 ${sentence}`;
@@ -794,8 +797,8 @@ export async function restructureSentence(sentence: string): Promise<string> {
   // Convert ⟦PROTn⟧ placeholders → [[PROT_n]] so LLMs preserve them correctly
   const llmInput = placeholdersToLLMFormat(trimmed);
   const userPrompt = buildRestructurePrompt(llmInput);
-  const temp = 0.7 + (Math.random() * 0.15);
-  const maxTokens = Math.max(200, Math.ceil(trimmed.split(/\s+/).length * 3));
+  const temp = 0.82 + (Math.random() * 0.16);
+  const maxTokens = Math.max(250, Math.ceil(trimmed.split(/\s+/).length * 3.5));
 
   try {
     let result = await llmCallWithFallback(RESTRUCTURE_SYSTEM, userPrompt, temp, maxTokens);
@@ -818,24 +821,26 @@ export async function restructureSentence(sentence: string): Promise<string> {
 // dictionary-based transforms, without restructuring or adding content.
 // ══════════════════════════════════════════════════════════════════════════
 
-const NURU_READABILITY_SYSTEM = `You are a copy-editor reviewing a sentence that went through automated word-substitution. Your ONLY job is to make it read naturally — like something a real person wrote — by fixing awkward word pairings or mechanical-sounding constructions.
+const NURU_READABILITY_SYSTEM = `You are a skilled human blog writer editing a sentence for natural flow. Your job is to make it sound like genuine human writing — the kind of engaging, flowing prose you'd find in a well-written blog post or personal essay. Fix any robotic, stiff, or mechanical-sounding parts.
 
 STRICT RULES:
-- Fix ONLY unnatural collocations, mechanical phrasing, or stilted constructions.
-- Do NOT restructure, rewrite, or change the meaning.
-- Do NOT add any new ideas, facts, or context.
+- Make the sentence flow naturally, as if written by a thoughtful human blogger.
+- Vary sentence rhythm — mix short punchy phrases with longer flowing ones.
+- Use natural transitions people actually use in conversation and blogs.
+- Fix awkward collocations, overly formal constructions, and mechanical phrasing.
+- Do NOT add new ideas, facts, or context.
 - Do NOT remove existing facts, citations, or technical terms.
-- Do NOT use AI buzzwords: utilize, facilitate, leverage, comprehensive, multifaceted, furthermore, moreover, additionally, consequently, nevertheless, robust, nuanced, pivotal, intricate, transformative, innovative, paradigm, trajectory, holistic, streamline, optimize, mitigate, bolster, catalyze, foster, harness, underscore, exemplify.
-- Do NOT use banned starters: "Furthermore," "Moreover," "Additionally," "However," "Consequently," "It is important to note"
-- Keep sentence length within ±10% of the input.
+- ABSOLUTELY NEVER use these AI buzzwords: utilize, facilitate, leverage, comprehensive, multifaceted, furthermore, moreover, additionally, consequently, nevertheless, robust, nuanced, pivotal, intricate, transformative, innovative, paradigm, trajectory, holistic, streamline, optimize, mitigate, bolster, catalyze, foster, harness, underscore, exemplify, delve, embark, tapestry, cornerstone, navigate, landscape, realm.
+- NEVER start with: "Furthermore," "Moreover," "Additionally," "However," "Consequently," "It is important to note," "It is worth noting," "In today's"
+- Keep sentence length within ±15% of the input.
 - Preserve ALL placeholder tokens like [[PROT_0]], [[TRM_0]] exactly as-is.
 - Output EXACTLY ONE sentence. No labels, no commentary, no quotation marks.
 - If the sentence already reads naturally, return it unchanged.`;
 
 function buildNuruReadabilityPrompt(sentence: string): string {
   const wordCount = sentence.split(/\s+/).length;
-  return `Smooth this sentence so it reads naturally as written by a real person. Fix only awkward word pairings. Keep ALL content and meaning intact.
-WORD COUNT: ~${wordCount} words (stay within ±10%).
+  return `Make this sentence flow naturally, as if written by a real person in an engaging blog or essay. Fix robotic phrasing, stiff constructions, and unnatural word pairings. Keep ALL content and meaning intact.
+WORD COUNT: ~${wordCount} words (stay within ±15%).
 
 SENTENCE: ${sentence}`;
 }
@@ -854,7 +859,7 @@ export async function nuruReadabilityPolish(sentence: string): Promise<string> {
   // Convert ⟦PROTn⟧ placeholders → [[PROT_n]] so LLMs preserve them correctly
   const llmInput = placeholdersToLLMFormat(trimmed);
   const userPrompt = buildNuruReadabilityPrompt(llmInput);
-  const temp = 0.35 + (Math.random() * 0.10); // Low temp for conservative smoothing
+  const temp = 0.50 + (Math.random() * 0.15); // Moderate temp for natural flow smoothing
   const maxTokens = Math.max(150, Math.ceil(trimmed.split(/\s+/).length * 2));
 
   try {

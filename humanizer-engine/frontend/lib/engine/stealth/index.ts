@@ -1192,14 +1192,14 @@ function compositeQualityScore(
   const changeRatio = wordChangeRatio(original, candidate);
   const readability = scoreReadability(candidate, original);
 
-  // Change score: reward change up to 0.65, then diminishing returns
+  // Change score: reward change up to 0.80, then diminishing returns
   // (over-changing hurts readability — thesaurus syndrome)
-  const changeScore = changeRatio <= 0.65
-    ? changeRatio / 0.65
-    : 1.0 - (changeRatio - 0.65) * 0.5;
+  const changeScore = changeRatio <= 0.80
+    ? changeRatio / 0.80
+    : 1.0 - (changeRatio - 0.80) * 0.3;
 
-  // Weights: readability matters more than raw change
-  return (changeScore * 0.40) + (readability * 0.60);
+  // Weights: balance change and readability equally for deep humanization
+  return (changeScore * 0.50) + (readability * 0.50);
 }
 
 /* ── Sentence-Level Restructuring ─────────────────────────────────
@@ -1871,7 +1871,7 @@ export function stealthHumanize(
             best = next;
             bestScore = nextScore;
           }
-          if (iter >= 10 && wordChangeRatio(originalSent, best) >= 0.65) break;
+          if (iter >= 10 && wordChangeRatio(originalSent, best) >= 0.80) break;
           iter++;
         }
 
