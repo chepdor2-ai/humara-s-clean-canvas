@@ -42,6 +42,7 @@ export function DocumentArtifact({
   title,
   content,
   onContentChange,
+  onClose,
   isFullScreen,
   onToggleFullScreen,
   format,

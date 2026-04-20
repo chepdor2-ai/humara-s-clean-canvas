@@ -442,7 +442,7 @@ export async function POST(req: Request) {
 
           // Nuru 2.0 post-processing depth applied at the tail of every pipeline.
           const CHAIN_TS = 10;
-          const UNIVERSAL_POST_LOOPS = 5;
+          const UNIVERSAL_POST_LOOPS = 7;      // 7 loops for deeper cleaning (was 5)
           const UNIVERSAL_POST_PASSES_PER_LOOP = 3;
           const chainSync = (fn: (s: string) => string, input: string, n: number): string => {
             let out = input;
@@ -1670,12 +1670,12 @@ export async function POST(req: Request) {
           // ═══════════════════════════════════════════════════════════════
           if (eng !== 'ai_analysis' && !(deadlineReached || Date.now() - startTime > DEADLINE_MS - 12000)) {
             const nuruPostStart = Date.now();
-            const NURU_POST_DEADLINE_MS = 30_000; // 30s hard budget (up from 10s)
+            const NURU_POST_DEADLINE_MS = 60_000; // 60s hard budget (increased for deeper cleaning)
             const nuruPostTimeOk = () => Date.now() - nuruPostStart < NURU_POST_DEADLINE_MS && !(deadlineReached || Date.now() - startTime > DEADLINE_MS - 8000);
 
-            // ── Quality Profile: AntiPangram 10 iterations → improve flow & quality ──
+            // ── Quality Profile: AntiPangram 15 iterations → improve flow & quality ──
             if (postProcessingProfile === 'quality' && nuruPostTimeOk()) {
-              sendSSE(controller, { type: 'stage', stage: 'AntiPangram Quality Post-Processing (10 iterations)' });
+              sendSSE(controller, { type: 'stage', stage: 'AntiPangram Quality Post-Processing (15 iterations)' });
               await flushDelay(10);
               const { antiPangramSimple } = await import('@/lib/engine/antipangram');
               const apgToneD: 'academic' | 'professional' | 'casual' | 'neutral' =
@@ -1690,7 +1690,7 @@ export async function POST(req: Request) {
                 apgToneD,
               );
               latestHumanized = humanized;
-              console.log(`[Quality PostProc] AntiPangram complete: ${humanized.split(/\s+/).length} words`);
+              console.log(`[Quality PostProc] AntiPangram 15-iter complete: ${humanized.split(/\s+/).length} words`);
             }
 
             // ── Undetectability Profile: 10 dedicated Nuru iterations before loops ──
@@ -1727,13 +1727,31 @@ export async function POST(req: Request) {
             sendSSE(controller, { type: 'stage', stage: 'Nuru 2.0 Post-Processing' });
             await flushDelay(10);
 
+            // Helper: extract critical numeric data from a sentence (decimal %, dollar amounts, citation years)
+            const extractCriticalData = (s: string): string[] => {
+              const stats = s.match(/\d+\.\d+%/g) ?? [];
+              const dollars = s.match(/\$[\d,.]+\s*(?:billion|million|trillion|thousand)/gi) ?? [];
+              const citations = s.match(/\([A-Za-z]+(?:\s+et\s+al\.?)?,\s*\d{4}\)/g) ?? [];
+              return [...stats, ...dollars, ...citations];
+            };
+
             if (nuruPostTimeOk()) {
               for (let loop = 0; loop < UNIVERSAL_POST_LOOPS; loop++) {
                 for (let pass = 0; pass < UNIVERSAL_POST_PASSES_PER_LOOP; pass++) {
                   for (let i = 0; i < postSents.length; i++) {
                     if (!isHeadingSentCheck(postSents[i])) {
+                      const prevSent = postSents[i];
+                      const prevCritical = extractCriticalData(prevSent);
                       postSents[i] = runNuruSinglePass(postSents[i]);
                       postSents[i] = deepNonLLMClean(postSents[i]);
+                      // Guard: revert if critical data (stats, citations) was lost
+                      if (prevCritical.length > 0) {
+                        const newCritical = extractCriticalData(postSents[i]);
+                        const lost = prevCritical.filter(c => !newCritical.some(nc => nc.includes(c) || c.includes(nc)));
+                        if (lost.length > 0) {
+                          postSents[i] = prevSent; // Revert — critical data would be destroyed
+                        }
+                      }
                     }
                     sendSSE(controller, { type: 'sentence', index: i, text: postSents[i], stage: `Nuru Post Loop ${loop + 1}/5` });
                   }
@@ -1804,6 +1822,33 @@ export async function POST(req: Request) {
               humanized = reassembleText(nuruPostSents, sharedBounds.length ? sharedBounds : [0]);
               latestHumanized = humanized;
               console.log(`[Nuru Doc Phases] Starter distribution + flow calibration applied`);
+            }
+
+            // ── UNIVERSAL AntiPangram Final Sweep (ALL profiles) ──
+            // Ensures every output gets forensic AI signal removal regardless of profile.
+            // This is the last non-LLM cleanup pass — catches any residual AI patterns
+            // that survived the Nuru and structural phases.
+            if (nuruPostTimeOk()) {
+              sendSSE(controller, { type: 'stage', stage: 'AntiPangram Forensic Sweep' });
+              await flushDelay(10);
+              try {
+                const { antiPangramSimple } = await import('@/lib/engine/antipangram');
+                const apgToneFinal: 'academic' | 'professional' | 'casual' | 'neutral' =
+                  tone === 'academic' || tone === 'academic_blog'
+                    ? 'academic'
+                    : tone === 'professional' || tone === 'casual'
+                      ? tone
+                      : 'neutral';
+                humanized = antiPangramSimple(
+                  humanized,
+                  (strength ?? 'strong') as 'light' | 'medium' | 'strong',
+                  apgToneFinal,
+                );
+                latestHumanized = humanized;
+                console.log(`[Universal AntiPangram] Final forensic sweep complete: ${humanized.split(/\s+/).length} words`);
+              } catch (apgErr) {
+                console.warn('[Universal AntiPangram] sweep failed:', apgErr);
+              }
             }
           }
 
@@ -2247,7 +2292,7 @@ export async function POST(req: Request) {
           }
 
           humanized = humanized
-            .replace(/(^|[.!?]\s+)(?:Additionally|Furthermore|Moreover|In addition),?\s+/g, '$1')
+            .replace(/(^|\n|[.!?]\s+)(?:Additionally|Furthermore|Moreover|In addition),?\s+/gm, '$1')
             .replace(/\b(?:additionally|furthermore|moreover)\b/gi, 'also')
             .replace(/\s{2,}/g, ' ')
             .trim();
@@ -2351,7 +2396,7 @@ export async function POST(req: Request) {
           }
 
           humanized = humanized
-            .replace(/(^|[.!?]\s+)(?:Additionally|Furthermore|Moreover|In addition),?\s+/g, '$1')
+            .replace(/(^|\n|[.!?]\s+)(?:Additionally|Furthermore|Moreover|In addition),?\s+/gm, '$1')
             .replace(/\b(?:additionally|furthermore|moreover)\b/gi, 'also')
             .replace(/\s{2,}/g, ' ')
             .trim();

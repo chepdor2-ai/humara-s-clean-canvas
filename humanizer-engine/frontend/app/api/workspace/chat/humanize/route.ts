@@ -12,7 +12,7 @@ export async function POST(request: Request) {
     }
 
     // Call the internal humanizer API to process the document text
-    // using the 'ai_analysis' engine (Auto mode)
+    // using the 'ai_analysis' engine (Auto mode — API-free, no EssayWritingSupport dependency)
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
     
     const response = await fetch(`${baseUrl}/api/humanize`, {
@@ -23,10 +23,11 @@ export async function POST(request: Request) {
       body: JSON.stringify({
         text,
         engine: 'ai_analysis',
-        strength: 'medium',
+        strength: 'strong',
         tone: 'academic',
         strict_meaning: false,
         enable_post_processing: true,
+        post_processing_profile: 'undetectability',
       }),
     });
 

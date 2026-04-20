@@ -77,28 +77,28 @@ export interface PreprocessResult {
 // ═══════════════════════════════════════════════════════════════════════
 
 /** Minimum percentage of content sentences that must go through LLM rephrasing */
-const MIN_REPHRASING_RATIO = 0.70;
+const MIN_REPHRASING_RATIO = 0.85;
 
-/** Minimum word change per sentence (40%) */
-const MIN_CHANGE = 0.40;
+/** Minimum word change per sentence (50% — aggressive for 0% AI detection) */
+const MIN_CHANGE = 0.50;
 
-/** Maximum word change per sentence (85%) */
-const MAX_CHANGE = 0.85;
+/** Maximum word change per sentence (92% — allow near-total rewrites) */
+const MAX_CHANGE = 0.92;
 
 /** AI score threshold below which sentences are considered low-risk */
-const LOW_RISK_THRESHOLD = 20;
+const LOW_RISK_THRESHOLD = 10;
 
 /** AI score threshold above which sentences are high-risk */
-const HIGH_RISK_THRESHOLD = 60;
+const HIGH_RISK_THRESHOLD = 40;
 
 /** Max restructured sentences per downstream engine phase */
-export const MAX_RESTRUCTURE_2_ENGINES = 0.70;
+export const MAX_RESTRUCTURE_2_ENGINES = 0.85;
 
 /** Max restructured sentences per downstream engine phase when chaining multiple engines */
-export const MAX_RESTRUCTURE_MULTI_ENGINES = 0.70;
+export const MAX_RESTRUCTURE_MULTI_ENGINES = 0.85;
 
 /** Max restructured sentences per iteration loop */
-export const MAX_RESTRUCTURE_ITERATION = 0.70;
+export const MAX_RESTRUCTURE_ITERATION = 0.85;
 
 // ═══════════════════════════════════════════════════════════════════════
 // Helpers

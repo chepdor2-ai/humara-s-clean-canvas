@@ -46,7 +46,7 @@ const DEFAULT_CONFIG: AntiPangramConfig = {
   strength: 'strong',
   tone: 'academic',
   preserveMeaning: true,
-  maxIterations: 10,
+  maxIterations: 15,
 };
 
 // ═══════════════════════════════════════════════════════════════════
@@ -54,12 +54,12 @@ const DEFAULT_CONFIG: AntiPangramConfig = {
 // ═══════════════════════════════════════════════════════════════════
 
 const QUALITY_TARGETS = {
-  maxAiScore: 12,           // Overall forensic AI score must be below this
-  minBurstinessCV: 0.38,   // Sentence length CV must exceed this
-  maxConnectorDensity: 0.12, // Connector density must be below this
-  maxParallelScore: 0.10,   // Parallel structure score must be below this
-  maxStarterRepetition: 0.25,// Starter repetition must be below this
-  minChangeRatio: 0.28,     // Minimum word-level change from original
+  maxAiScore: 5,            // Overall forensic AI score must be below this (tuned for 0%)
+  minBurstinessCV: 0.45,   // Sentence length CV must exceed this (higher = more human-like variance)
+  maxConnectorDensity: 0.08, // Connector density must be below this (humans use fewer transitions)
+  maxParallelScore: 0.06,   // Parallel structure score must be below this (humans vary structure more)
+  maxStarterRepetition: 0.15,// Starter repetition must be below this (humans rarely repeat starters)
+  minChangeRatio: 0.40,     // Minimum word-level change from original (40% floor)
 };
 
 function protectCriticalSpans(text: string): { text: string; map: Map<string, string> } {
@@ -332,7 +332,7 @@ function targetedRefinement(text: string, forensic: ForensicProfile): string {
   for (const para of paragraphs) {
     let sentences = splitToSentences(para.trim());
 
-    // If connector density is still high, aggressively strip connectors
+    // If connector density is still high, aggressively strip ALL connectors
     if (forensic.connectorDensity > QUALITY_TARGETS.maxConnectorDensity) {
       sentences = sentences.map((sent, idx) => {
         const profile = profileSentence(sent, idx);
@@ -343,12 +343,19 @@ function targetedRefinement(text: string, forensic: ForensicProfile): string {
       });
     }
 
-    // If burstiness is still low, force-split the longest sentence
+    // If burstiness is still low, force-split MULTIPLE long sentences
     if (forensic.sentenceLengthVariance < QUALITY_TARGETS.minBurstinessCV) {
       const lengths = sentences.map(s => s.split(/\s+/).length);
-      const maxIdx = lengths.indexOf(Math.max(...lengths));
-      if (maxIdx >= 0 && lengths[maxIdx] > 18) {
-        // Force split at comma nearest to middle
+      // Split up to 3 longest sentences for maximum burstiness
+      const longIndices = lengths
+        .map((len, idx) => ({ len, idx }))
+        .filter(item => item.len > 15)
+        .sort((a, b) => b.len - a.len)
+        .slice(0, 3)
+        .map(item => item.idx)
+        .sort((a, b) => b - a); // reverse so splice indices stay valid
+
+      for (const maxIdx of longIndices) {
         const sent = sentences[maxIdx];
         const mid = Math.floor(sent.length / 2);
         const commaPositions: number[] = [];
@@ -361,14 +368,23 @@ function targetedRefinement(text: string, forensic: ForensicProfile): string {
           );
           const part1 = sent.slice(0, splitPos).trim() + '.';
           const part2 = sent.slice(splitPos + 1).trim();
-          const part2Cap = part2.charAt(0).toUpperCase() + part2.slice(1);
-          sentences.splice(maxIdx, 1, part1, part2Cap);
+          if (part2.length > 10) {
+            const part2Cap = part2.charAt(0).toUpperCase() + part2.slice(1);
+            sentences.splice(maxIdx, 1, part1, part2Cap);
+          }
         }
       }
     }
 
-    // If starter repetition is high, apply more aggressive diversification
+    // If starter repetition is high, apply aggressive diversification
     if (forensic.starterRepetition > QUALITY_TARGETS.maxStarterRepetition) {
+      const DIVERSE_STARTERS = [
+        'Granted,', 'That said,', 'In practice,', 'Put differently,',
+        'On a related note,', 'Looking at this another way,',
+        'From this angle,', 'With this in mind,', 'To put it plainly,',
+        'At the same time,', 'Along these lines,', 'Seen this way,',
+      ];
+      let starterIdx = Math.floor(Math.random() * DIVERSE_STARTERS.length);
       const starterCounts = new Map<string, number>();
       sentences = sentences.map((sent) => {
         const firstWord = sent.split(/\s+/)[0]?.replace(/[^a-zA-Z]/g, '').toLowerCase() ?? '';
@@ -376,7 +392,6 @@ function targetedRefinement(text: string, forensic: ForensicProfile): string {
         starterCounts.set(firstWord, count);
 
         if (count > 1) {
-          // Aggressive: restructure sentence to start differently
           // Try moving a prepositional phrase from end to front
           const ppMatch = sent.match(/^(.+?)\s+((?:in|on|at|for|through|during|within|across)\s+[^,]+)[.!?]?\s*$/i);
           if (ppMatch && ppMatch[2].split(/\s+/).length >= 3) {
@@ -384,10 +399,31 @@ function targetedRefinement(text: string, forensic: ForensicProfile): string {
             const rest = ppMatch[1].trim().replace(/[,.]$/, '');
             return pp.charAt(0).toUpperCase() + pp.slice(1) + ', ' + rest.charAt(0).toLowerCase() + rest.slice(1) + '.';
           }
+          // Fallback: prepend a diverse starter
+          const starter = DIVERSE_STARTERS[starterIdx % DIVERSE_STARTERS.length];
+          starterIdx++;
+          return starter + ' ' + sent.charAt(0).toLowerCase() + sent.slice(1);
         }
         return sent;
       });
     }
+
+    // Additional pass: remove any remaining evaluative hedging
+    sentences = sentences.map(sent => {
+      return sent
+        .replace(/\b(?:it is|this is) (?:important|crucial|essential|vital|imperative) to (?:note|recognize|acknowledge|understand|emphasize) that\s*/gi, '')
+        .replace(/\b(?:it is|this is) (?:widely|generally|commonly|broadly) (?:recognized|acknowledged|accepted|known) that\s*/gi, '')
+        .replace(/\s{2,}/g, ' ')
+        .trim();
+    }).filter(s => s.length > 0);
+
+    // Fix capitalization after removals
+    sentences = sentences.map(sent => {
+      if (sent.length > 0 && /^[a-z]/.test(sent)) {
+        return sent.charAt(0).toUpperCase() + sent.slice(1);
+      }
+      return sent;
+    });
 
     refinedParagraphs.push(sentences.join(' '));
   }
@@ -413,6 +449,15 @@ const FINAL_AI_KILL_PATTERNS: Array<[RegExp, string]> = [
   [/^Crucially,?\s*/im, ''],
   [/^Undeniably,?\s*/im, ''],
   [/^Undoubtedly,?\s*/im, ''],
+  [/^Importantly,?\s*/im, ''],
+  [/^Essentially,?\s*/im, ''],
+  [/^Fundamentally,?\s*/im, ''],
+  [/^Significantly,?\s*/im, ''],
+  [/^Interestingly,?\s*/im, ''],
+  [/^Remarkably,?\s*/im, ''],
+  [/^Evidently,?\s*/im, ''],
+  [/^Accordingly,?\s*/im, ''],
+  [/^Ultimately,?\s*/im, ''],
   // Mid-sentence AI tell phrases
   [/\bfurthermore\b/gi, 'also'],
   [/\bmoreover\b/gi, 'also'],
@@ -423,6 +468,10 @@ const FINAL_AI_KILL_PATTERNS: Array<[RegExp, string]> = [
   [/\bnevertheless\b/gi, 'still'],
   [/\bnonetheless\b/gi, 'still'],
   [/\bhenceforth\b/gi, 'from now on'],
+  [/\bthus\b/gi, 'so'],
+  [/\bherein\b/gi, 'here'],
+  [/\bthereby\b/gi, 'this way'],
+  [/\bwherein\b/gi, 'where'],
   // High-frequency AI adjectives/adverbs
   [/\butilize\b/gi, 'use'],
   [/\butilizes\b/gi, 'uses'],
@@ -446,11 +495,38 @@ const FINAL_AI_KILL_PATTERNS: Array<[RegExp, string]> = [
   [/\bexacerbat(?:e|es|ed|ing)\b/gi, 'worsen'],
   [/\bmitigat(?:e|es|ed|ing)\b/gi, 'reduce'],
   [/\bstreamlin(?:e|es|ed|ing)\b/gi, 'simplify'],
+  [/\bmultifaceted\b/gi, 'complex'],
+  [/\bpervasive\b/gi, 'widespread'],
+  [/\bprofound\b/gi, 'deep'],
+  [/\bprofoundly\b/gi, 'deeply'],
+  [/\bnuanced\b/gi, 'subtle'],
+  [/\bsalient\b/gi, 'notable'],
+  [/\bubiquitous\b/gi, 'common'],
+  [/\bdelve\b/gi, 'look into'],
+  [/\bdelves\b/gi, 'looks into'],
+  [/\bdelving\b/gi, 'looking into'],
+  [/\bembark\b/gi, 'start'],
+  [/\bembarks\b/gi, 'starts'],
+  [/\bembarking\b/gi, 'starting'],
+  [/\bunravel\b/gi, 'explain'],
+  [/\bunveil\b/gi, 'reveal'],
+  [/\btapestry\b/gi, 'mix'],
+  [/\bnexus\b/gi, 'link'],
+  [/\bcornerstone\b/gi, 'foundation'],
+  [/\blandscape\b(?!\s+(?:painting|architect|garden))/gi, 'field'],
+  [/\bparadigm\b/gi, 'model'],
+  [/\bdiscourse\b/gi, 'discussion'],
+  [/\btrajectory\b/gi, 'path'],
+  [/\bcatalyz(?:e|es|ed|ing)\b/gi, 'drive'],
+  [/\bspearhead(?:s|ed|ing)?\b/gi, 'lead'],
+  [/\bharness(?:es|ed|ing)?\b/gi, 'use'],
   // AI evaluative phrases
   [/\bcannot be overstated\b/gi, 'is real'],
-  [/\bit is worth noting that\b/gi, 'notably'],
-  [/\bit should be noted that\b/gi, 'notably'],
+  [/\bit is worth noting that\b/gi, ''],
+  [/\bit should be noted that\b/gi, ''],
   [/\bit must be noted that\b/gi, ''],
+  [/\bit is important to note that\b/gi, ''],
+  [/\bit is worth mentioning that\b/gi, ''],
   [/\bin order to\b/gi, 'to'],
   [/\bthe fact that\b/gi, 'that'],
   [/\bdue to the fact that\b/gi, 'because'],
@@ -458,13 +534,33 @@ const FINAL_AI_KILL_PATTERNS: Array<[RegExp, string]> = [
   [/\beach and every\b/gi, 'every'],
   [/\bat the end of the day\b/gi, 'in the end'],
   [/\bin light of\b/gi, 'given'],
-  [/\bplays? a (?:crucial|vital|key|significant|important|pivotal|critical|central) role\b/gi, 'is central'],
-  [/\ba wide (?:range|array|variety|spectrum) of\b/gi, 'many types of'],
+  [/\bplays? a (?:crucial|vital|key|significant|important|pivotal|critical|central) role\b/gi, 'matters'],
+  [/\ba wide (?:range|array|variety|spectrum) of\b/gi, 'many'],
   [/\ba (?:plethora|myriad|multitude) of\b/gi, 'many'],
   [/\bin the realm of\b/gi, 'in'],
-  [/\bin today'?s (?:world|society|era|landscape|age)\b/gi, 'at present'],
+  [/\bin today'?s (?:world|society|era|landscape|age)\b/gi, 'now'],
   [/\bserves? as a (?:testament|reminder|beacon|catalyst|cornerstone|foundation) (?:to|of)\b/gi, 'shows'],
   [/\bnot only\b(.{5,40})\bbut also\b/gi, '$1 and'],
+  // Extended AI-tell phrases (hedging, evaluation, formulaic)
+  [/\bthis essay (?:explores|examines|investigates|analyzes)\b/gi, 'this piece looks at'],
+  [/\bthis (?:paper|article|study) (?:explores|examines|investigates|analyzes)\b/gi, 'this work looks at'],
+  [/\bas (?:individuals|people|societies) navigate\b/gi, 'as people deal with'],
+  [/\bin an increasingly\b/gi, 'in a more and more'],
+  [/\bincreasingly\b/gi, 'more and more'],
+  [/\bin contemporary (?:society|times|life)\b/gi, 'these days'],
+  [/\brecognize its value\b/gi, 'see what it offers'],
+  [/\bin our (?:daily|everyday) lives\b/gi, 'day to day'],
+  [/\bthe importance of\b/gi, 'how much it matters to have'],
+  [/\benhance.{0,5} well-being\b/gi, 'help people feel better'],
+  [/\bfoster(?:s|ed|ing)? (?:deeper |greater |stronger )?connections?\b/gi, 'build bonds'],
+  [/\bin an otherwise\b/gi, 'in a'],
+  [/\blet us remember to\b/gi, 'we should'],
+  [/\bits essential place\b/gi, 'its place'],
+  [/\bholds the potential for\b/gi, 'can bring'],
+  [/\bas we move forward\b/gi, 'going forward'],
+  [/\bworld dominated by\b/gi, 'world full of'],
+  [/\bpersonal growth\b/gi, 'self-improvement'],
+  [/\bhistorical significance\b/gi, 'past importance'],
 ];
 
 function finalAIPhraseSweep(text: string): string {
