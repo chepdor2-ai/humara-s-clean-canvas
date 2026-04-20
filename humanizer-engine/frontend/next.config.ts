@@ -1,13 +1,12 @@
 import type { NextConfig } from "next";
 import path from "path";
 
+const isVercel = process.env.VERCEL === '1';
 const engineRoot = path.resolve(/* turbopackIgnore: true */ process.cwd(), "..");
 
 const nextConfig: NextConfig = {
-  outputFileTracingRoot: engineRoot,
-  turbopack: {
-    root: engineRoot,
-  },
+  ...(isVercel ? {} : { outputFileTracingRoot: engineRoot }),
+  turbopack: isVercel ? {} : { root: engineRoot },
   images: {
     formats: ['image/avif', 'image/webp'],
   },

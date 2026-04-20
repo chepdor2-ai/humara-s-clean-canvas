@@ -1,13 +1,40 @@
-*
-!package.json
-!package-lock.json
-!vercel.json
-!humanizer-engine/
-humanizer-engine/*
-!humanizer-engine/frontend/
-!humanizer-engine/frontend/**
+# VCS / editor / local env
+.git/
+.github/
+.orchids/
+.vscode/
+.vs/
+.venv/
+.vercel/
+__pycache__/
 
-# Exclude local frontend artifacts even inside the allowlisted subtree.
+# Large model/training and backend folders not needed for frontend deploy
+71d865f/
+_dipper_cpu/
+_dipper_zerogpu/
+_humarin_ct2/
+_humarin_space/
+cloud-run/
+dictionaries/
+dipper-space/
+grammar_backend/
+hf-space/
+king-server/
+oxygen-model/
+oxygen3-model/
+oxygen3-space/
+render-oxygen3/
+
+# Large binary and notebook artifacts
+*.ipynb
+*.png
+*.jpg
+*.jpeg
+*.webp
+*.mp4
+*.xlsx
+
+# Frontend local build artifacts
 humanizer-engine/frontend/.next/
 humanizer-engine/frontend/node_modules/
 humanizer-engine/frontend/.vercel/

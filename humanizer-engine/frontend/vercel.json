@@ -1,6 +1,6 @@
 {
   "framework": "nextjs",
-  "buildCommand": "npm run build",
+  "buildCommand": "npm run build && node scripts/ensure-routes-manifest.mjs",
   "installCommand": "npm install",
   "outputDirectory": ".next",
   "devCommand": "npm run dev",
@@ -9,12 +9,6 @@
       "maxDuration": 120
     }
   },
-  "crons": [
-    {
-      "path": "/api/keepalive",
-      "schedule": "*/10 * * * *"
-    }
-  ],
   "headers": [
     {
       "source": "/(.*)",

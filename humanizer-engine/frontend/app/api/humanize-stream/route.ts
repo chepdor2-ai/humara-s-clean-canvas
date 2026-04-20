@@ -2267,7 +2267,7 @@ export async function POST(req: Request) {
           humanized = humanized
             .replace(/(^|\n|[.!?]\s+)(?:Additionally|Furthermore|Moreover|In addition),?\s+/gm, '$1')
             .replace(/\b(?:additionally|furthermore|moreover)\b/gi, 'also')
-            .replace(/\s{2,}/g, ' ')
+            .replace(/[ \t]{2,}/g, ' ')
             .trim();
           humanized = restoreCitationAuthorCasing(text, humanized);
 
@@ -2371,7 +2371,7 @@ export async function POST(req: Request) {
           humanized = humanized
             .replace(/(^|\n|[.!?]\s+)(?:Additionally|Furthermore|Moreover|In addition),?\s+/gm, '$1')
             .replace(/\b(?:additionally|furthermore|moreover)\b/gi, 'also')
-            .replace(/\s{2,}/g, ' ')
+            .replace(/[ \t]{2,}/g, ' ')
             .trim();
           humanized = restoreCitationAuthorCasing(text, humanized);
           latestHumanized = humanized;
