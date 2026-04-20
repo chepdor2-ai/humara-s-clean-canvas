@@ -80,6 +80,26 @@ function parseArtifact(text: string): ArtifactData | null {
   }
 }
 
+/* ── Clean artifact content — strip asterisks from headings, fix formatting ── */
+function cleanArtifactContent(text: string): string {
+  return text
+    .split('\n')
+    .map((line) => {
+      const trimmed = line.trim()
+      // Convert standalone bold lines (e.g. **Introduction**) to ## headings
+      const boldHeading = trimmed.match(/^\*\*(.+?)\*\*\s*$/)
+      if (boldHeading && trimmed.split(/\s+/).length <= 10) {
+        return `## ${boldHeading[1].replace(/\*+/g, '').trim()}`
+      }
+      // Strip asterisks from markdown heading lines (e.g. ## **Title** → ## Title)
+      if (/^#{1,3}\s/.test(trimmed)) {
+        return trimmed.replace(/\*+/g, '')
+      }
+      return line
+    })
+    .join('\n')
+}
+
 /* ── Quick prompts ── */
 const QUICK_PROMPTS = [
   { icon: '📝', label: 'Write an essay', prompt: 'Write me a 1000-word essay on a topic of your choice. Use Harvard referencing style and include in-text citations.' },
@@ -321,40 +341,32 @@ export default function WorkspaceChatPage() {
         // Check for artifact in final response
         const parsedArtifact = parseArtifact(fullResponse)
         if (parsedArtifact) {
-          setArtifact(parsedArtifact)
+          // Strip asterisks from the content before setting artifact
+          const cleanedContent = cleanArtifactContent(parsedArtifact.content)
+          setArtifact({ ...parsedArtifact, content: cleanedContent })
           
           setIsHumanizing(true)
           try {
-             // Auto Humanize Pipeline
-             const hRes = await fetch('/api/workspace/chat/stream', {
+             // Auto Humanize Pipeline — uses real humanizer engine (API-free, no EssayWritingSupport)
+             // Pick a random engine from the safe pool
+             const SAFE_ENGINES = ['ai_analysis', 'antipangram', 'nuru_v2', 'oxygen'] as const
+             const randomEngine = SAFE_ENGINES[Math.floor(Math.random() * SAFE_ENGINES.length)]
+             
+             const hRes = await fetch('/api/workspace/chat/humanize', {
                method: 'POST',
                headers: { 'Content-Type': 'application/json' },
                body: JSON.stringify({
-                 message: `Humanize the following text to bypass AI detectors and make it read like a completely human-written academic paper. Keep the exact formatting (headers, citations) and length completely intact. Return ONLY the new text:\n\n${parsedArtifact.content}`,
-                 messages: []
+                 text: cleanedContent,
+                 engine: randomEngine,
                })
              });
              
-             if (hRes.ok && hRes.body) {
-                const hReader = hRes.body.getReader();
-                const hDecoder = new TextDecoder();
-                let hFull = '';
-                while (true) {
-                  const { done, value } = await hReader.read();
-                  if (done) break;
-                  const chunk = hDecoder.decode(value, { stream: true });
-                  const lines = chunk.split('\n');
-                  for (const line of lines) {
-                    if (line.trim().startsWith('data: ') && line.trim() !== 'data: [DONE]') {
-                       try {
-                         const parsed = JSON.parse(line.trim().slice(6));
-                         if (parsed.content) {
-                           hFull += parsed.content;
-                           setArtifact(prev => prev ? { ...prev, content: hFull } : null);
-                         }
-                       } catch {}
-                    }
-                  }
+             if (hRes.ok) {
+                const hData = await hRes.json();
+                if (hData.success && hData.humanized) {
+                  // Clean the humanized output of any residual asterisks in headings
+                  const finalContent = cleanArtifactContent(hData.humanized);
+                  setArtifact(prev => prev ? { ...prev, content: finalContent } : null);
                 }
              }
           } catch (e) {

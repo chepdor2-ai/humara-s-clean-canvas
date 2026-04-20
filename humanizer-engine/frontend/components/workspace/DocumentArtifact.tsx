@@ -117,20 +117,30 @@ export function DocumentArtifact({
       .map((paragraph) => {
         const trimmed = paragraph.trim()
         if (!trimmed) return ''
-        // Headings
+        // Headings (markdown # style)
         if (trimmed.startsWith('# ')) {
-          return `<h1 style="font-size:24px;font-weight:bold;margin:20px 0 10px;font-family:'${selectedFont}';color:#1e293b">${trimmed.slice(2)}</h1>`
+          const headingText = trimmed.slice(2).replace(/\*+/g, '').trim()
+          return `<h1 style="font-size:24px;font-weight:bold;margin:20px 0 10px;font-family:'${selectedFont}';color:#1e293b">${headingText}</h1>`
         }
         if (trimmed.startsWith('## ')) {
-          return `<h2 style="font-size:18px;font-weight:bold;margin:18px 0 8px;font-family:'${selectedFont}';color:#334155">${trimmed.slice(3)}</h2>`
+          const headingText = trimmed.slice(3).replace(/\*+/g, '').trim()
+          return `<h2 style="font-size:18px;font-weight:bold;margin:18px 0 8px;font-family:'${selectedFont}';color:#334155">${headingText}</h2>`
         }
         if (trimmed.startsWith('### ')) {
-          return `<h3 style="font-size:15px;font-weight:bold;margin:14px 0 6px;font-family:'${selectedFont}';color:#475569">${trimmed.slice(4)}</h3>`
+          const headingText = trimmed.slice(4).replace(/\*+/g, '').trim()
+          return `<h3 style="font-size:15px;font-weight:bold;margin:14px 0 6px;font-family:'${selectedFont}';color:#475569">${headingText}</h3>`
         }
-        // Bold and italic
+        // Detect standalone bold lines as headings (e.g. **Introduction** or **References**)
+        const standaloneBoldMatch = trimmed.match(/^\*\*(.+?)\*\*\s*$/)
+        if (standaloneBoldMatch && trimmed.split(/\s+/).length <= 10) {
+          const headingText = standaloneBoldMatch[1].replace(/\*+/g, '').trim()
+          return `<h2 style="font-size:18px;font-weight:bold;margin:18px 0 8px;font-family:'${selectedFont}';color:#334155">${headingText}</h2>`
+        }
+        // Bold and italic — strip residual asterisks from any remaining text
         const formatted = trimmed
           .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
           .replace(/\*(.+?)\*/g, '<em>$1</em>')
+          .replace(/(?<!\w)\*+|\*+(?!\w)/g, '')
 
         return `<p style="margin:0 0 12px;line-height:2;text-indent:0;text-align:justify;font-family:'${selectedFont}';font-size:${selectedSize}">${formatted}</p>`
       })
