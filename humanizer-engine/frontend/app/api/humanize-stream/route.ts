@@ -11,7 +11,7 @@ import { removeEmDashes, fixOutOfContextSynonyms, validateCollocations, replaceC
 import { humanize } from '@/lib/engine/humanizer';
 import { ghostProHumanize } from '@/lib/engine/ghost-pro';
 import { kingHumanize } from '@/lib/engine/king-humanizer';
-import { llmHumanize, deepAICleanOneSentence, restructureSentence } from '@/lib/engine/llm-humanizer';
+import { llmHumanize, deepAICleanOneSentence, restructureSentence, nuruReadabilityPolish } from '@/lib/engine/llm-humanizer';
 import { premiumHumanize } from '@/lib/engine/premium-humanizer';
 import { humanizeV11 } from '@/lib/engine/v11';
 import { humaraHumanize } from '@/lib/humara';
@@ -428,8 +428,11 @@ export async function POST(req: Request) {
           // Single-pass Nuru for the outer iteration loop (1 internal iteration).
           // The 10-cycle outer loop provides the 10 total Nuru iterations.
           const runNuruSinglePass = (input: string): string => {
-            const output = stealthHumanize(input, strength ?? 'medium', tone ?? 'academic', 1);
-            return output && output.trim().length > 0 ? output : input;
+            // Protect special content (numbers, stats, citations) from Nuru transforms
+            const { text: protectedInput, map: protMap } = protectSpecialContent(input);
+            const raw = stealthHumanize(protectedInput, strength ?? 'medium', tone ?? 'academic', 1);
+            const output = raw && raw.trim().length > 0 ? raw : protectedInput;
+            return restoreSpecialContent(output, protMap);
           };
 
           // Nuru 2.0 post-processing depth applied at the tail of every pipeline.
@@ -1173,6 +1176,7 @@ export async function POST(req: Request) {
                   { name: 'Restructuring', type: 'async', fn: (s) => restructureSentence(s) },
                   { name: 'Deep Non-LLM Clean', type: 'sync', fn: (s) => deepNonLLMClean(s) },
                   { name: 'Nuru 2.0', type: 'nuru', passes: 10 },
+                  { name: 'Readability Polish', type: 'async', fn: (s) => nuruReadabilityPolish(s) },
                   { name: 'Final Smooth & Grammar', type: 'sync', fn: (s) => finalSmoothGrammar(s) },
                 ];
                 break;
@@ -1184,7 +1188,8 @@ export async function POST(req: Request) {
                   { name: 'Humara 2.0 (Full)', type: 'async', fn: (s) => runHumara20Full(s) },    // Phase 4: Full Humara 2.0 pipeline
                   { name: 'Smoothing', type: 'sync', fn: (s) => smoothingPass(s) },               // Phase 5: Grammar + flow repair
                   { name: 'Nuru 2.0', type: 'nuru', passes: CHAIN_TS },                           // Phase 6: 10-pass stealth humanization
-                  { name: 'Final Smooth & Grammar', type: 'sync', fn: (s) => finalSmoothGrammar(s) }, // Phase 7: Final polish
+                  { name: 'Readability Polish', type: 'async', fn: (s) => nuruReadabilityPolish(s) }, // Phase 7: LLM natural flow smoothing
+                  { name: 'Final Smooth & Grammar', type: 'sync', fn: (s) => finalSmoothGrammar(s) }, // Phase 8: Final polish
                 ];
                 break;
               case 'oxygen':
@@ -1193,6 +1198,7 @@ export async function POST(req: Request) {
                   { name: 'Nuru 2.0', type: 'nuru', passes: 10 },
                   { name: 'Deep Non-LLM Clean', type: 'sync', fn: (s) => deepNonLLMClean(s) },
                   { name: 'Nuru 2.0 (Targeted)', type: 'nuru', passes: 5 },
+                  { name: 'Readability Polish', type: 'async', fn: (s) => nuruReadabilityPolish(s) },
                   { name: 'Final Smooth & Grammar', type: 'sync', fn: (s) => finalSmoothGrammar(s) },
                 ];
                 break;
@@ -1201,6 +1207,7 @@ export async function POST(req: Request) {
                   { name: 'Restructuring', type: 'async', fn: (s) => restructureSentence(s) },
                   { name: 'Deep Clean', type: 'nuru', passes: 10 },
                   { name: 'Deep Non-LLM Clean', type: 'sync', fn: (s) => deepNonLLMClean(s) },
+                  { name: 'Readability Polish', type: 'async', fn: (s) => nuruReadabilityPolish(s) },
                   { name: 'Final Smooth & Grammar', type: 'sync', fn: (s) => finalSmoothGrammar(s) },
                 ];
                 break;
@@ -1208,6 +1215,7 @@ export async function POST(req: Request) {
                 phases = [
                   { name: 'Nuru 2.0', type: 'nuru', passes: 10 },
                   { name: 'Deep Non-LLM Clean', type: 'sync', fn: (s) => deepNonLLMClean(s) },
+                  { name: 'Readability Polish', type: 'async', fn: (s) => nuruReadabilityPolish(s) },
                   { name: 'Final Smooth & Grammar', type: 'sync', fn: (s) => finalSmoothGrammar(s) },
                 ];
                 break;
@@ -1215,6 +1223,7 @@ export async function POST(req: Request) {
                 phases = [
                   { name: 'Nuru 2.0', type: 'nuru', passes: 10 },
                   { name: 'Deep Non-LLM Clean', type: 'sync', fn: (s) => deepNonLLMClean(s) },
+                  { name: 'Readability Polish', type: 'async', fn: (s) => nuruReadabilityPolish(s) },
                   { name: 'Final Smooth & Grammar', type: 'sync', fn: (s) => finalSmoothGrammar(s) },
                 ];
                 break;
@@ -1223,6 +1232,7 @@ export async function POST(req: Request) {
                 phases = [
                   { name: 'Nuru 2.0', type: 'nuru', passes: 10 },
                   { name: 'Deep Non-LLM Clean', type: 'sync', fn: (s) => deepNonLLMClean(s) },
+                  { name: 'Readability Polish', type: 'async', fn: (s) => nuruReadabilityPolish(s) },
                   { name: 'Final Smooth & Grammar', type: 'sync', fn: (s) => finalSmoothGrammar(s) },
                 ];
                 break;
@@ -1230,62 +1240,69 @@ export async function POST(req: Request) {
                 phases = [
                   { name: 'Nuru 2.0', type: 'nuru', passes: 10 },
                   { name: 'Deep Non-LLM Clean', type: 'sync', fn: (s) => deepNonLLMClean(s) },
+                  { name: 'Readability Polish', type: 'async', fn: (s) => nuruReadabilityPolish(s) },
                   { name: 'Final Smooth & Grammar', type: 'sync', fn: (s) => finalSmoothGrammar(s) },
                 ];
                 break;
               case 'antipangram':
-                // Pangram: AntiPangram forensic → Nuru 2.0 × 10 → Deep Non-LLM Clean → Final Smooth
+                // Pangram: AntiPangram forensic → Nuru 2.0 × 3 → Deep Non-LLM Clean → Final Smooth
+                // No LLM readability polish — antipangram already produces clean vocabulary
                 phases = [
-                  { name: 'Nuru 2.0', type: 'nuru', passes: 10 },
+                  { name: 'Nuru 2.0', type: 'nuru', passes: 3 },
                   { name: 'Deep Non-LLM Clean', type: 'sync', fn: (s) => deepNonLLMClean(s) },
                   { name: 'Final Smooth & Grammar', type: 'sync', fn: (s) => finalSmoothGrammar(s) },
                 ];
                 break;
               // Deep Kill engines — multi-step pipelines with visible phases
               case 'ninja_2':
-                // Beta: Easy (Swift) → Humara 2.0 → Nuru 2.0 → Deep Non-LLM Clean → Final Smooth
+                // Beta: Easy (Swift) → Humara 2.0 → Nuru 2.0 → Deep Non-LLM Clean → Readability Polish → Final Smooth
                 phases = [
                   { name: 'Swift', type: 'emit' },
                   { name: 'Humara 2.0 (Full)', type: 'async', fn: (s) => runHumara20Full(s) },
                   { name: 'Nuru 2.0', type: 'nuru', passes: CHAIN_TS },
                   { name: 'Deep Non-LLM Clean', type: 'sync', fn: (s) => deepNonLLMClean(s) },
+                  { name: 'Readability Polish', type: 'async', fn: (s) => nuruReadabilityPolish(s) },
                   { name: 'Final Smooth & Grammar', type: 'sync', fn: (s) => finalSmoothGrammar(s) },
                 ];
                 break;
               case 'ninja_3':
-                // Alpha (speed-optimized): Humara 2.0 (full text) → Nuru 2.0 → Deep Non-LLM Clean → Final Smooth
+                // Alpha (speed-optimized): Humara 2.0 → Nuru 2.0 → Deep Non-LLM Clean → Readability Polish → Final Smooth
                 phases = [
                   { name: 'Humara 2.0', type: 'emit' },
                   { name: 'Nuru 2.0', type: 'nuru', passes: CHAIN_TS },
                   { name: 'Deep Non-LLM Clean', type: 'sync', fn: (s) => deepNonLLMClean(s) },
+                  { name: 'Readability Polish', type: 'async', fn: (s) => nuruReadabilityPolish(s) },
                   { name: 'Final Smooth & Grammar', type: 'sync', fn: (s) => finalSmoothGrammar(s) },
                 ];
                 break;
               case 'ninja_5':
-                // Humara 2.2 → Humara 2.4 (Full) → Nuru 2.0 → Deep Non-LLM Clean → Final Smooth
+                // Humara 2.2 → Humara 2.4 (Full) → Nuru 2.0 → Deep Non-LLM Clean → Readability Polish → Final Smooth
                 phases = [
                   { name: 'Humara 2.2', type: 'emit' },
                   { name: 'Humara 2.4 (Full)', type: 'async', fn: (s) => runHumara24Full(s) },
                   { name: 'Nuru 2.0', type: 'nuru', passes: CHAIN_TS },
                   { name: 'Deep Non-LLM Clean', type: 'sync', fn: (s) => deepNonLLMClean(s) },
+                  { name: 'Readability Polish', type: 'async', fn: (s) => nuruReadabilityPolish(s) },
                   { name: 'Final Smooth & Grammar', type: 'sync', fn: (s) => finalSmoothGrammar(s) },
                 ];
                 break;
               case 'ghost_trial_2':
-                // Humara 2.4 → Humara 2.0 → Nuru 2.0 → Deep Non-LLM Clean → Final Smooth
+                // Humara 2.4 → Humara 2.0 → Nuru 2.0 → Deep Non-LLM Clean → Readability Polish → Final Smooth
                 phases = [
                   { name: 'Humara 2.4', type: 'emit' },
                   { name: 'Humara 2.0 (Full)', type: 'async', fn: (s) => runHumara20Full(s) },
                   { name: 'Nuru 2.0', type: 'nuru', passes: CHAIN_TS },
                   { name: 'Deep Non-LLM Clean', type: 'sync', fn: (s) => deepNonLLMClean(s) },
+                  { name: 'Readability Polish', type: 'async', fn: (s) => nuruReadabilityPolish(s) },
                   { name: 'Final Smooth & Grammar', type: 'sync', fn: (s) => finalSmoothGrammar(s) },
                 ];
                 break;
               case 'ai_analysis':
-                // AI Analysis: Full Nuru 2.0 flow + Deep Clean + Loop cleanup
+                // AI Analysis: Full Nuru 2.0 flow + Deep Clean + Readability Polish + Loop cleanup
                 phases = [
                   { name: 'Nuru 2.0', type: 'nuru', passes: CHAIN_TS },
                   { name: 'Deep Non-LLM Clean', type: 'sync', fn: (s) => deepNonLLMClean(s) },
+                  { name: 'Readability Polish', type: 'async', fn: (s) => nuruReadabilityPolish(s) },
                   { name: 'Final Smooth & Grammar', type: 'sync', fn: (s) => finalSmoothGrammar(s) },
                 ];
                 break;

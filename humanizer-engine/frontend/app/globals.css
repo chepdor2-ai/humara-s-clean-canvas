@@ -3415,3 +3415,278 @@
     }
   }
 }
+
+/* ══════════════════════════════════════════════════════════════
+   HUMARA WORKSPACE — Mini ChatGPT + Document Artifact Pane
+   ══════════════════════════════════════════════════════════════ */
+
+/* ── Chat Workspace Root ── */
+.chat-workspace-root {
+  background: linear-gradient(180deg, #fafbfc 0%, #f1f5f9 100%);
+}
+.dark .chat-workspace-root {
+  background: radial-gradient(ellipse 80% 50% at 50% 0%, rgba(6, 182, 212, 0.04), transparent 50%),
+              #05060a;
+}
+
+/* ── Chat Topbar ── */
+.chat-topbar {
+  position: relative;
+  z-index: 10;
+}
+
+/* ── Document Artifact A4 Page ── */
+.doc-a4-page {
+  background: #ffffff;
+  width: 100%;
+  max-width: 816px; /* ~8.5in at 96dpi */
+  min-height: 1056px; /* ~11in at 96dpi */
+  padding: 72px 72px 96px;
+  border-radius: 6px;
+  box-shadow:
+    0 1px 3px rgba(0, 0, 0, 0.08),
+    0 8px 24px rgba(0, 0, 0, 0.04),
+    0 24px 48px rgba(0, 0, 0, 0.02);
+  transition: box-shadow 0.3s ease;
+}
+.doc-a4-page:hover {
+  box-shadow:
+    0 1px 3px rgba(0, 0, 0, 0.1),
+    0 12px 32px rgba(0, 0, 0, 0.06),
+    0 32px 64px rgba(0, 0, 0, 0.03);
+}
+.dark .doc-a4-page {
+  background: #12141d;
+  box-shadow:
+    0 1px 3px rgba(0, 0, 0, 0.3),
+    0 8px 24px rgba(0, 0, 0, 0.2),
+    0 24px 48px rgba(0, 0, 0, 0.15);
+}
+
+.doc-page-container {
+  background:
+    repeating-linear-gradient(0deg, transparent, transparent 31px, rgba(0,0,0,0.015) 31px, rgba(0,0,0,0.015) 32px);
+}
+.dark .doc-page-container {
+  background:
+    repeating-linear-gradient(0deg, transparent, transparent 31px, rgba(255,255,255,0.02) 31px, rgba(255,255,255,0.02) 32px);
+}
+
+/* ── Document Toolbar Buttons ── */
+.doc-toolbar-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  color: #64748b;
+  transition: all 0.15s ease;
+}
+.doc-toolbar-btn:hover {
+  background: #e2e8f0;
+  color: #0f172a;
+}
+.doc-toolbar-btn:active {
+  background: #cbd5e1;
+  transform: scale(0.95);
+}
+.dark .doc-toolbar-btn {
+  color: #a1a1aa;
+}
+.dark .doc-toolbar-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #e4e4e7;
+}
+
+.doc-toolbar-btn-accent {
+  color: #0891b2;
+  font-weight: 600;
+  transition: all 0.15s ease;
+}
+.doc-toolbar-btn-accent:hover {
+  background: rgba(6, 182, 212, 0.08);
+}
+.dark .doc-toolbar-btn-accent {
+  color: #67e8f9;
+}
+.dark .doc-toolbar-btn-accent:hover {
+  background: rgba(6, 182, 212, 0.12);
+}
+
+.doc-toolbar-select {
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.doc-toolbar-select:hover {
+  background: #f1f5f9;
+}
+.dark .doc-toolbar-select:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+/* ── Chat Bubble Styles ── */
+.chat-user-bubble {
+  border-bottom-right-radius: 6px;
+  position: relative;
+}
+.chat-assistant-bubble {
+  border-bottom-left-radius: 6px;
+  position: relative;
+}
+
+/* ── Chat Message Content ── */
+.chat-msg-content p {
+  margin-bottom: 4px;
+}
+.chat-msg-content p:last-child {
+  margin-bottom: 0;
+}
+
+/* ── Chat Input Container ── */
+.chat-input-container {
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.chat-input-container:focus-within {
+  border-color: #06b6d4;
+  box-shadow: 0 0 0 3px rgba(6, 182, 212, 0.08), 0 8px 24px rgba(6, 182, 212, 0.06);
+}
+.dark .chat-input-container:focus-within {
+  border-color: rgba(6, 182, 212, 0.4);
+  box-shadow: 0 0 0 3px rgba(6, 182, 212, 0.12), 0 8px 24px rgba(6, 182, 212, 0.08);
+}
+
+/* ── Chat Input Area ── */
+.chat-input-area {
+  position: relative;
+  z-index: 10;
+}
+
+/* ── Quick Prompt Cards ── */
+.quick-prompt-card {
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.quick-prompt-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.06);
+}
+.dark .quick-prompt-card:hover {
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+}
+
+/* ── Chat History Sidebar ── */
+.chat-history-sidebar {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(148, 163, 184, 0.2) transparent;
+}
+
+/* ── Premium Scrollbar ── */
+.premium-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(148, 163, 184, 0.15) transparent;
+}
+.premium-scroll::-webkit-scrollbar {
+  width: 6px;
+}
+.premium-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+.premium-scroll::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.2);
+  border-radius: 3px;
+}
+.premium-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(148, 163, 184, 0.35);
+}
+.dark .premium-scroll {
+  scrollbar-color: rgba(82, 82, 91, 0.3) transparent;
+}
+.dark .premium-scroll::-webkit-scrollbar-thumb {
+  background: rgba(82, 82, 91, 0.3);
+}
+.dark .premium-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(82, 82, 91, 0.5);
+}
+
+/* ── Document Artifact Pane ── */
+.document-artifact-pane {
+  transition: width 0.3s ease;
+}
+
+/* ── Grammar Wavy Underlines ── */
+.grammar-error {
+  text-decoration: underline wavy;
+  text-decoration-color: rgba(239, 68, 68, 0.7);
+  text-underline-offset: 4px;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+.grammar-error:hover {
+  background: rgba(239, 68, 68, 0.08);
+  border-radius: 2px;
+}
+.grammar-warning {
+  text-decoration: underline wavy;
+  text-decoration-color: rgba(245, 158, 11, 0.7);
+  text-underline-offset: 4px;
+  cursor: pointer;
+}
+.grammar-warning:hover {
+  background: rgba(245, 158, 11, 0.08);
+  border-radius: 2px;
+}
+.grammar-info {
+  text-decoration: underline wavy;
+  text-decoration-color: rgba(59, 130, 246, 0.7);
+  text-underline-offset: 4px;
+  cursor: pointer;
+}
+
+/* ── Typing Cursor Animation ── */
+@keyframes typing-cursor {
+  0%, 50% { opacity: 1; }
+  51%, 100% { opacity: 0; }
+}
+.typing-cursor {
+  animation: typing-cursor 0.8s step-end infinite;
+}
+
+/* ── Document Editor Text Reset ── */
+.doc-editor-body p {
+  margin-bottom: 12px;
+  text-align: justify;
+}
+.doc-editor-body h1 {
+  font-size: 24px;
+  font-weight: bold;
+  margin: 20px 0 10px;
+  color: #1e293b;
+}
+.doc-editor-body h2 {
+  font-size: 18px;
+  font-weight: bold;
+  margin: 18px 0 8px;
+  color: #334155;
+}
+.doc-editor-body h3 {
+  font-size: 15px;
+  font-weight: bold;
+  margin: 14px 0 6px;
+  color: #475569;
+}
+.dark .doc-editor-body h1 { color: #f1f5f9; }
+.dark .doc-editor-body h2 { color: #e2e8f0; }
+.dark .doc-editor-body h3 { color: #cbd5e1; }
+
+/* ── Responsive: Hide document pane on small screens ── */
+@media (max-width: 768px) {
+  .document-artifact-pane {
+    position: fixed;
+    inset: 0;
+    z-index: 50;
+    width: 100% !important;
+  }
+  .chat-history-sidebar {
+    width: 280px !important;
+  }
+}

@@ -60,14 +60,28 @@ import {
   type InputFeatures as SurgeryInputFeatures,
 } from "./sentence-surgery";
 import { getGroqClient, resolveGroqChatModel } from "./groq-client";
+import OpenAI from "openai";
 import { detectDomain, getToneGuidance, type DomainResult } from "./domain-detector";
 
 // ── Config ──
 
 const LLM_MODEL = resolveGroqChatModel(process.env.LLM_MODEL, "llama-3.3-70b-versatile");
+const GPT4O_MINI_MODEL = "gpt-4o-mini";
 const MAX_FEEDBACK_ITERATIONS_MAP: Record<string, number> = { light: 1, medium: 1, strong: 2 };
 const TARGET_AI_SCORE = 5.0;
 
+// ── OpenAI direct client (for GPT-4o mini) ──
+let _openaiClient: OpenAI | null = null;
+function getOpenAIDirectClient(): OpenAI | null {
+  const key = process.env.OPENAI_API_KEY?.trim();
+  if (!key) return null;
+  if (!_openaiClient) {
+    _openaiClient = new OpenAI({ apiKey: key });
+  }
+  return _openaiClient;
+}
+
+// ── Primary LLM call: Groq (base model) ──
 function llmCall(system: string, user: string, temperature: number, maxTokens = 4096): Promise<string> {
   const client = getGroqClient();
   return client.chat.completions.create({
@@ -79,6 +93,34 @@ function llmCall(system: string, user: string, temperature: number, maxTokens = 
     temperature,
     max_tokens: maxTokens,
   }).then((r: any) => r.choices[0]?.message?.content?.trim() ?? "");
+}
+
+// ── GPT-4o mini first, Groq fallback ──
+async function llmCallWithFallback(
+  system: string,
+  user: string,
+  temperature: number,
+  maxTokens = 1024,
+): Promise<string> {
+  const openai = getOpenAIDirectClient();
+  if (openai) {
+    try {
+      const res = await openai.chat.completions.create({
+        model: GPT4O_MINI_MODEL,
+        messages: [
+          { role: "system", content: system },
+          { role: "user", content: user },
+        ],
+        temperature,
+        max_tokens: maxTokens,
+      });
+      const content = res.choices[0]?.message?.content?.trim();
+      if (content) return content;
+    } catch (err) {
+      console.warn("[LLM] GPT-4o mini failed, falling back to Groq:", err instanceof Error ? err.message : err);
+    }
+  }
+  return llmCall(system, user, temperature, maxTokens);
 }
 
 // ── Input Feature Detection ──
@@ -681,7 +723,8 @@ export async function deepAICleanSentences(
 }
 
 /**
- * Per-sentence deep AI cleaning — for use in route.ts pipeline phases.
+ * Per-sentence deep AI cleaning — uses GPT-4o mini (fallback Groq).
+ * For use in route.ts pipeline phases.
  * Takes a single sentence and returns a cleaned version.
  */
 export async function deepAICleanOneSentence(sentence: string): Promise<string> {
@@ -694,7 +737,7 @@ export async function deepAICleanOneSentence(sentence: string): Promise<string> 
   const maxTokens = Math.max(200, Math.ceil(trimmed.split(/\s+/).length * 2.5));
 
   try {
-    let cleaned = await llmCall(DEEP_AI_CLEAN_SYSTEM, userPrompt, temp, maxTokens);
+    let cleaned = await llmCallWithFallback(DEEP_AI_CLEAN_SYSTEM, userPrompt, temp, maxTokens);
     if (!cleaned || cleaned.trim().length < trimmed.length * 0.3) return trimmed;
     cleaned = cleaned.replace(/^\[CLEAN THIS\]:\s*/i, "").trim();
     cleaned = enforceSingleSentence(cleaned);
@@ -739,22 +782,88 @@ ${sentence}`;
 }
 
 /**
- * Restructure a single sentence via LLM — changes clause order, voice, and
- * syntactic frame while preserving meaning, citations, and technical terms.
+ * Restructure a single sentence via LLM — tries GPT-4o mini first,
+ * falls back to Groq. Changes clause order, voice, and syntactic frame
+ * while preserving meaning, citations, and technical terms.
  */
 export async function restructureSentence(sentence: string): Promise<string> {
   const trimmed = sentence.trim();
   if (!trimmed || trimmed.split(/\s+/).length < 5) return trimmed;
   if (isTitleOrHeading(trimmed)) return trimmed;
 
-  const userPrompt = buildRestructurePrompt(trimmed);
+  // Convert ⟦PROTn⟧ placeholders → [[PROT_n]] so LLMs preserve them correctly
+  const llmInput = placeholdersToLLMFormat(trimmed);
+  const userPrompt = buildRestructurePrompt(llmInput);
   const temp = 0.7 + (Math.random() * 0.15);
   const maxTokens = Math.max(200, Math.ceil(trimmed.split(/\s+/).length * 3));
 
   try {
-    let result = await llmCall(RESTRUCTURE_SYSTEM, userPrompt, temp, maxTokens);
-    if (!result || result.trim().length < trimmed.length * 0.3) return trimmed;
+    let result = await llmCallWithFallback(RESTRUCTURE_SYSTEM, userPrompt, temp, maxTokens);
+    if (!result || result.trim().length < llmInput.length * 0.3) return trimmed;
     result = result.replace(/^["']|["']$/g, '').trim();
+    // Convert [[PROT_n]] back to ⟦PROTn⟧ so the outer restoreSpecialContent can resolve them
+    result = llmFormatToPlaceholders(result);
+    result = enforceSingleSentence(result);
+    result = enforceCapitalization(trimmed, result);
+    return result;
+  } catch {
+    return trimmed;
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// NURU READABILITY POLISH — Post-Nuru smoothing for natural human flow
+// Uses GPT-4o mini (fallback Groq) with a light touch to fix awkward
+// collocations and mechanical-sounding phrases produced by Nuru's
+// dictionary-based transforms, without restructuring or adding content.
+// ══════════════════════════════════════════════════════════════════════════
+
+const NURU_READABILITY_SYSTEM = `You are a copy-editor reviewing a sentence that went through automated word-substitution. Your ONLY job is to make it read naturally — like something a real person wrote — by fixing awkward word pairings or mechanical-sounding constructions.
+
+STRICT RULES:
+- Fix ONLY unnatural collocations, mechanical phrasing, or stilted constructions.
+- Do NOT restructure, rewrite, or change the meaning.
+- Do NOT add any new ideas, facts, or context.
+- Do NOT remove existing facts, citations, or technical terms.
+- Do NOT use AI buzzwords: utilize, facilitate, leverage, comprehensive, multifaceted, furthermore, moreover, additionally, consequently, nevertheless, robust, nuanced, pivotal, intricate, transformative, innovative, paradigm, trajectory, holistic, streamline, optimize, mitigate, bolster, catalyze, foster, harness, underscore, exemplify.
+- Do NOT use banned starters: "Furthermore," "Moreover," "Additionally," "However," "Consequently," "It is important to note"
+- Keep sentence length within ±10% of the input.
+- Preserve ALL placeholder tokens like [[PROT_0]], [[TRM_0]] exactly as-is.
+- Output EXACTLY ONE sentence. No labels, no commentary, no quotation marks.
+- If the sentence already reads naturally, return it unchanged.`;
+
+function buildNuruReadabilityPrompt(sentence: string): string {
+  const wordCount = sentence.split(/\s+/).length;
+  return `Smooth this sentence so it reads naturally as written by a real person. Fix only awkward word pairings. Keep ALL content and meaning intact.
+WORD COUNT: ~${wordCount} words (stay within ±10%).
+
+SENTENCE: ${sentence}`;
+}
+
+/**
+ * Nuru Readability Polish — per-sentence LLM smoothing pass.
+ * Runs after Nuru stealth transforms to fix mechanical-sounding output.
+ * Uses GPT-4o mini first, falls back to Groq.
+ * Exported for use in route.ts phase pipelines.
+ */
+export async function nuruReadabilityPolish(sentence: string): Promise<string> {
+  const trimmed = sentence.trim();
+  if (!trimmed || trimmed.split(/\s+/).length < 5) return trimmed;
+  if (isTitleOrHeading(trimmed)) return trimmed;
+
+  // Convert ⟦PROTn⟧ placeholders → [[PROT_n]] so LLMs preserve them correctly
+  const llmInput = placeholdersToLLMFormat(trimmed);
+  const userPrompt = buildNuruReadabilityPrompt(llmInput);
+  const temp = 0.35 + (Math.random() * 0.10); // Low temp for conservative smoothing
+  const maxTokens = Math.max(150, Math.ceil(trimmed.split(/\s+/).length * 2));
+
+  try {
+    let result = await llmCallWithFallback(NURU_READABILITY_SYSTEM, userPrompt, temp, maxTokens);
+    if (!result || result.trim().length < llmInput.length * 0.5) return trimmed;
+    result = result.replace(/^["']|["']$/g, '').trim();
+    result = result.replace(/^SENTENCE:\s*/i, '').trim();
+    // Convert [[PROT_n]] back to ⟦PROTn⟧ so the outer restoreSpecialContent can resolve them
+    result = llmFormatToPlaceholders(result);
     result = enforceSingleSentence(result);
     result = enforceCapitalization(trimmed, result);
     return result;

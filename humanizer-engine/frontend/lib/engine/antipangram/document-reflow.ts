@@ -44,7 +44,7 @@ function computeLengthCV(sentences: string[]): number {
 function injectBurstiness(sentences: string[], targetCV: number = 0.45): string[] {
   const result = [...sentences];
   let iterations = 0;
-  const maxIterations = sentences.length * 3;
+  const maxIterations = Math.min(sentences.length * 2, 30); // Cap at 30 to prevent slow processing on large texts
   const triedIndices = new Set<number>();
 
   while (computeLengthCV(result) < targetCV && iterations < maxIterations) {
@@ -133,10 +133,43 @@ function injectBurstiness(sentences: string[], targetCV: number = 0.45): string[
 // Pangram heavily penalizes repeated "This", "The", "It" starters.
 // ═══════════════════════════════════════════════════════════════════
 
-const NEUTRAL_STARTERS: string[] = [
-  'In practice', 'At its core', 'Broadly', 'Often', 'Generally',
-  'Typically', 'Put simply', 'In short', 'Essentially', 'Realistically',
-];
+// ═══════════════════════════════════════════════════════════════
+// STARTER DIVERSIFICATION
+// Ensures no single starter word appears more than twice in a paragraph.
+// Pangram heavily penalizes repeated "This", "The", "It" starters.
+// Strategy: restructure the sentence so a different part comes first.
+// ═══════════════════════════════════════════════════════════════
+
+function restructureToNewStarter(sent: string): string {
+  // Try to move an adverbial/prepositional phrase from the end to the front
+  const ppEndMatch = sent.match(/^(.{15,}?)\s+((?:by|through|via|across|within|among|between|under|over|during|since|before|after|at|on|for)\s+[^,]{5,30})\.?\s*$/i);
+  if (ppEndMatch) {
+    const [, main, pp] = ppEndMatch;
+    const mainClean = main.trim().replace(/[,.]$/, '');
+    const ppCap = pp.charAt(0).toUpperCase() + pp.slice(1);
+    return `${ppCap}, ${mainClean.charAt(0).toLowerCase() + mainClean.slice(1)}.`;
+  }
+
+  // Try to flip a sentence starting with "The X is" or "The X are"
+  const theXIsMatch = sent.match(/^The\s+(\w+(?:\s+\w+)?)\s+(is|are|was|were|has been)\s+(.+)\.?$/i);
+  if (theXIsMatch) {
+    const [, subject, verb, predicate] = theXIsMatch;
+    // Turn "The X is Y" into "Y is what the X achieves" or "As for the X, it is Y"
+    const pred = predicate.replace(/[.]$/, '').trim();
+    return `As for the ${subject.trim()}, it ${verb.trim()} ${pred}.`;
+  }
+
+  // Try extracting a trailing "which/that" clause
+  const whichMatch = sent.match(/^(.{20,}?),\s*(which|who)\s+(.+)\.?$/);
+  if (whichMatch) {
+    const [, main, rel, clause] = whichMatch;
+    const clauseCap = clause.charAt(0).toUpperCase() + clause.replace(/[.]$/, '').slice(1);
+    return `${clauseCap}. ${main.trim()}.`;
+  }
+
+  // Fallback: return unchanged
+  return sent;
+}
 
 function diversifyStarters(sentences: string[]): string[] {
   const result = [...sentences];
@@ -148,12 +181,16 @@ function diversifyStarters(sentences: string[]): string[] {
     const count = (starterCounts.get(starter) ?? 0) + 1;
     starterCounts.set(starter, count);
 
-    // If this starter appears more than twice, diversify
-    if (count > 2 && words.length >= 5) {
-      // Strategy 1: Prepend a neutral starter
-      const neutralStarter = NEUTRAL_STARTERS[Math.floor(Math.random() * NEUTRAL_STARTERS.length)];
-      const rest = words.slice(0).join(' ');
-      result[i] = `${neutralStarter}, ${rest.charAt(0).toLowerCase() + rest.slice(1)}`;
+    // If this starter appears more than twice, restructure
+    if (count > 2 && words.length >= 7) {
+      const restructured = restructureToNewStarter(result[i]);
+      if (restructured !== result[i]) {
+        // Update starter count for new first word
+        const newStarter = restructured.split(/\s+/)[0]?.replace(/[^a-zA-Z]/g, '').toLowerCase() ?? '';
+        result[i] = restructured;
+        starterCounts.set(newStarter, (starterCounts.get(newStarter) ?? 0) + 1);
+        continue;
+      }
     }
   }
 
@@ -215,41 +252,42 @@ export function reflowDocument(
       const profile = profileSentence(sent, pIdx * 100 + sIdx);
       let transformed = sent;
 
-      // 1a. Connector disruption (highest priority signal)
-      if (profile.hasConnector && Math.random() < intensity) {
+      // 1a. Connector disruption (highest priority signal) — always apply, not random
+      if (profile.hasConnector) {
         transformed = disruptConnector(transformed, profile);
       }
 
-      // 1b. Evaluative phrase surgery
-      if (profile.aiSignals.includes('evaluative-phrase')) {
+      // 1b. Evaluative phrase surgery — always apply when signals detected
+      if (profile.aiSignals.includes('evaluative-phrase') || profile.aiSignals.includes('hedging')) {
         transformed = surgicalEvaluativeRewrite(transformed);
       }
 
-      // 1c. Parallel structure breaking
-      if (profile.isParallel && Math.random() < intensity) {
+      // 1c. Parallel structure breaking — apply at medium+ intensity
+      if (profile.isParallel && intensity >= 0.5) {
         transformed = breakParallelStructure(transformed);
       }
 
-      // 1d. Nominalization unpacking
-      if (profile.hasNominalization && Math.random() < intensity) {
+      // 1d. Nominalization unpacking — apply at medium+ intensity
+      if (profile.hasNominalization && intensity >= 0.5) {
         transformed = unpackNominalizations(transformed);
       }
 
       // 1e. Compound sentence simplification
-      if (profile.wordCount > 25 && profile.complexity === 'complex') {
+      if (profile.wordCount > 22 && profile.complexity === 'complex') {
         transformed = simplifyCompoundSentence(transformed);
       }
 
-      // 1f. Vocabulary naturalization
+      // 1f. Vocabulary naturalization — always apply
       transformed = naturalizeVocabulary(transformed, context.protectedTerms, intensity);
 
-      // 1g. Register micro-shifts (alternate casual/formal across sentences)
-      if (Math.random() < 0.3) {
-        const shift = sIdx % 3 === 0 ? 'casual' : 'formal';
-        transformed = applyRegisterShift(transformed, shift);
+      // 1g. Register micro-shifts (deterministic, alternating by index)
+      if (sIdx % 4 === 0) {
+        transformed = applyRegisterShift(transformed, 'casual');
+      } else if (sIdx % 4 === 2) {
+        transformed = applyRegisterShift(transformed, 'formal');
       }
 
-      // Ensure sentence starts with uppercase (transforms may have broken this)
+      // Ensure sentence starts with uppercase
       if (transformed.length > 0 && /^[a-z]/.test(transformed)) {
         transformed = transformed.charAt(0).toUpperCase() + transformed.slice(1);
       }
@@ -259,16 +297,16 @@ export function reflowDocument(
 
     // ── Phase 2: Paragraph-level transforms ──
 
-    // 2a. Burstiness injection
-    if (forensic.sentenceLengthVariance < 0.4) {
-      sentences = injectBurstiness(sentences, 0.4 + intensity * 0.15);
+    // 2a. Burstiness injection — target higher CV for more human-like variation
+    if (forensic.sentenceLengthVariance < 0.45) {
+      sentences = injectBurstiness(sentences, 0.45 + intensity * 0.10);
     }
 
     // 2b. Starter diversification
     sentences = diversifyStarters(sentences);
 
-    // 2c. Paragraph structure disruption (occasional)
-    if (Math.random() < intensity * 0.3) {
+    // 2c. Paragraph structure disruption (deterministic by paragraph index)
+    if (intensity >= 0.65 && pIdx % 3 === 1) {
       sentences = disruptParagraphStructure(sentences);
     }
 

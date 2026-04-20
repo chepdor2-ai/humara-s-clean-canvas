@@ -972,6 +972,210 @@ interface DetectorConfig {
   interactions?: [string, string, number][];
   category?: string;
   description?: string;
+  strategy?: DetectorStrategy;
+}
+
+type MetricOrientation = "ai" | "human";
+
+interface StrategicMetric {
+  signal: string;
+  baseline?: number;
+  weight?: number;
+  orientation?: MetricOrientation;
+}
+
+interface StrategicComponent {
+  name: string;
+  weight: number;
+  metrics: StrategicMetric[];
+  minActive?: number;
+  power?: number;
+}
+
+interface StrategicCondition {
+  signal: string;
+  min: number;
+  orientation?: MetricOrientation;
+}
+
+interface StrategicRule {
+  name: string;
+  weight: number;
+  all?: StrategicCondition[];
+  any?: StrategicCondition[];
+}
+
+interface StrategicFloor {
+  score: number;
+  all?: StrategicCondition[];
+  any?: StrategicCondition[];
+}
+
+interface DetectorStrategy {
+  blend?: number;
+  families: StrategicComponent[];
+  bonuses?: StrategicRule[];
+  dampeners?: StrategicRule[];
+  floors?: StrategicFloor[];
+}
+
+const aiMetric = (signal: string, baseline = 50, weight = 1): StrategicMetric => ({
+  signal,
+  baseline,
+  weight,
+  orientation: "ai",
+});
+
+const humanMetric = (signal: string, baseline = 50, weight = 1): StrategicMetric => ({
+  signal,
+  baseline,
+  weight,
+  orientation: "human",
+});
+
+const family = (
+  name: string,
+  weight: number,
+  metrics: StrategicMetric[],
+  minActive = 1,
+  power = 1,
+): StrategicComponent => ({ name, weight, metrics, minActive, power });
+
+const aiCondition = (signal: string, min: number): StrategicCondition => ({
+  signal,
+  min,
+  orientation: "ai",
+});
+
+const humanCondition = (signal: string, min: number): StrategicCondition => ({
+  signal,
+  min,
+  orientation: "human",
+});
+
+const bonus = (name: string, weight: number, all: StrategicCondition[]): StrategicRule => ({
+  name,
+  weight,
+  all,
+});
+
+const dampener = (name: string, weight: number, all: StrategicCondition[]): StrategicRule => ({
+  name,
+  weight,
+  all,
+});
+
+const floorAt = (score: number, all: StrategicCondition[]): StrategicFloor => ({
+  score,
+  all,
+});
+
+function orientedSignalValue(
+  signals: Record<string, number>,
+  signal: string,
+  orientation: MetricOrientation = "ai",
+): number {
+  const raw = signals[signal] ?? 50;
+  const isHumanPositive = HUMAN_POSITIVE_SIGNALS.has(signal);
+  if (orientation === "ai") {
+    return isHumanPositive ? 100 - raw : raw;
+  }
+  return isHumanPositive ? raw : 100 - raw;
+}
+
+function strategicMetricHeat(signals: Record<string, number>, metric: StrategicMetric): number {
+  return positiveHeat(
+    orientedSignalValue(signals, metric.signal, metric.orientation ?? "ai"),
+    metric.baseline ?? 50,
+  );
+}
+
+function strategicComponentHeat(signals: Record<string, number>, component: StrategicComponent): number {
+  let weightedSum = 0;
+  let weightTotal = 0;
+  const heats: number[] = [];
+
+  for (const metric of component.metrics) {
+    const heat = strategicMetricHeat(signals, metric);
+    const weight = metric.weight ?? 1;
+    heats.push(heat);
+    weightedSum += heat * weight;
+    weightTotal += weight;
+  }
+
+  if (weightTotal <= 0) return 0;
+
+  let score = weightedSum / weightTotal;
+  const activeCount = heats.filter((heat) => heat >= 0.08).length;
+  const minActive = Math.max(component.minActive ?? 1, 1);
+  if (activeCount < minActive) {
+    score *= activeCount / minActive;
+  }
+  return Math.pow(score, component.power ?? 1);
+}
+
+function strategicConditionStrength(
+  signals: Record<string, number>,
+  condition: StrategicCondition,
+): number {
+  const value = orientedSignalValue(signals, condition.signal, condition.orientation ?? "ai");
+  if (value < condition.min) return 0;
+  return (value - condition.min) / Math.max(100 - condition.min, 1);
+}
+
+function strategicRuleStrength(signals: Record<string, number>, rule: StrategicRule): number {
+  const allStrengths = (rule.all ?? []).map((condition) => strategicConditionStrength(signals, condition));
+  if (allStrengths.some((strength) => strength <= 0)) return 0;
+
+  const anyStrengths = (rule.any ?? []).map((condition) => strategicConditionStrength(signals, condition));
+  if ((rule.any?.length ?? 0) > 0 && anyStrengths.every((strength) => strength <= 0)) return 0;
+
+  const allScore = allStrengths.length > 0 ? mean(allStrengths) : 1;
+  const anyScore = anyStrengths.length > 0 ? Math.max(...anyStrengths) : 1;
+  return Math.min(allScore, anyScore);
+}
+
+function strategicRuleTriggered(
+  signals: Record<string, number>,
+  rule: Pick<StrategicRule, "all" | "any">,
+): boolean {
+  const allOk = (rule.all ?? []).every((condition) =>
+    orientedSignalValue(signals, condition.signal, condition.orientation ?? "ai") >= condition.min,
+  );
+  const any = rule.any ?? [];
+  const anyOk = any.length === 0 || any.some((condition) =>
+    orientedSignalValue(signals, condition.signal, condition.orientation ?? "ai") >= condition.min,
+  );
+  return allOk && anyOk;
+}
+
+function strategicScore(signals: Record<string, number>, strategy: DetectorStrategy): number {
+  let weightedSum = 0;
+  let weightTotal = 0;
+
+  for (const component of strategy.families) {
+    const score = strategicComponentHeat(signals, component);
+    weightedSum += score * component.weight;
+    weightTotal += component.weight;
+  }
+
+  let score = weightTotal > 0 ? (weightedSum / weightTotal) * 100 : 50;
+
+  for (const rule of strategy.bonuses ?? []) {
+    score += rule.weight * strategicRuleStrength(signals, rule);
+  }
+
+  for (const rule of strategy.dampeners ?? []) {
+    score -= rule.weight * strategicRuleStrength(signals, rule);
+  }
+
+  for (const floor of strategy.floors ?? []) {
+    if (strategicRuleTriggered(signals, floor)) {
+      score = Math.max(score, floor.score);
+    }
+  }
+
+  return clamp(score);
 }
 
 type DetectorScoreOutput = {
@@ -992,6 +1196,7 @@ class DetectorProfile {
   interactions: [string, string, number][];
   category: string;
   description: string;
+  strategy?: DetectorStrategy;
 
   constructor(config: DetectorConfig) {
     this.name = config.name;
@@ -1002,9 +1207,13 @@ class DetectorProfile {
     this.interactions = config.interactions ?? [];
     this.category = config.category ?? "general";
     this.description = config.description ?? "";
+    this.strategy = config.strategy;
   }
 
-  score(signals: Record<string, number>, calibration?: Record<string, { a: number; b: number }>): DetectorScoreOutput {
+  private legacyAiProbability(
+    signals: Record<string, number>,
+    calibration?: Record<string, { a: number; b: number }>,
+  ): number {
     const GLOBAL_BIAS = 0.09;
     const GLOBAL_TEMP_MULT = 2.35;
 
@@ -1047,11 +1256,26 @@ class DetectorProfile {
       aiProb = plattCalibrate(aiProb, c.a, c.b);
     }
 
+    return clamp(aiProb);
+  }
+
+  score(signals: Record<string, number>, calibration?: Record<string, { a: number; b: number }>): DetectorScoreOutput {
+    const legacyProb = this.legacyAiProbability(signals, calibration);
+    const strategicProb = this.strategy ? strategicScore(signals, this.strategy) : legacyProb;
+    const blend = this.strategy?.blend ?? 0;
+    let aiProb = this.strategy
+      ? legacyProb + (strategicProb - 50) * blend
+      : legacyProb;
+
     // Hard floors when strongest AI signatures co-occur.
     if ((signals.ai_pattern_score ?? 0) >= 82 && (signals.per_sentence_ai_ratio ?? 0) >= 58) {
       aiProb = Math.max(aiProb, 78);
     } else if ((signals.ai_pattern_score ?? 0) >= 70 && (signals.per_sentence_ai_ratio ?? 0) >= 42 && (signals.token_predictability ?? 0) >= 64) {
       aiProb = Math.max(aiProb, 66);
+    }
+
+    if (strategicProb >= 84 && (signals.per_sentence_ai_ratio ?? 0) >= 52) {
+      aiProb = Math.max(aiProb, 80);
     }
 
     // Confidence threshold: scores below 3% are within noise margin
@@ -1094,35 +1318,834 @@ const DETECTOR_CALIBRATION: Record<string, { a: number; b: number }> = {
   stealth_detector: { a: 0.08647, b: -1.16601 },
 };
 
+const DETECTOR_STRATEGIES: Record<string, DetectorStrategy> = {
+  gptzero: {
+    blend: 0.7,
+    families: [
+      family("predictability", 0.34, [
+        aiMetric("perplexity", 55, 1.5),
+        aiMetric("token_predictability", 56, 1.3),
+        aiMetric("sentence_uniformity", 56, 1.0),
+      ], 2),
+      family("burstiness lock", 0.26, [
+        aiMetric("burstiness", 55, 1.4),
+        aiMetric("spectral_flatness", 54, 0.8),
+        aiMetric("readability_consistency", 53, 0.7),
+      ], 2),
+      family("sentence templates", 0.24, [
+        aiMetric("per_sentence_ai_ratio", 46, 1.4),
+        aiMetric("ai_pattern_score", 58, 1.2),
+        aiMetric("ngram_repetition", 54, 0.7),
+      ], 2),
+      family("starter monotony", 0.16, [
+        aiMetric("starter_diversity", 54, 1.0),
+        aiMetric("avg_word_commonality", 56, 0.8),
+      ]),
+    ],
+    bonuses: [
+      bonus("predictable and low-burst", 11, [
+        aiCondition("perplexity", 58),
+        aiCondition("burstiness", 58),
+        aiCondition("token_predictability", 60),
+      ]),
+      bonus("template stack", 9, [
+        aiCondition("per_sentence_ai_ratio", 52),
+        aiCondition("ai_pattern_score", 68),
+      ]),
+    ],
+    dampeners: [
+      dampener("human stylometry", 6, [humanCondition("stylometric_score", 58)]),
+      dampener("human opener diversity", 5, [humanCondition("starter_diversity", 60)]),
+    ],
+    floors: [
+      floorAt(82, [
+        aiCondition("per_sentence_ai_ratio", 58),
+        aiCondition("ai_pattern_score", 72),
+        aiCondition("token_predictability", 62),
+      ]),
+    ],
+  },
+  turnitin: {
+    blend: 0.68,
+    families: [
+      family("document structure", 0.32, [
+        aiMetric("sentence_uniformity", 58, 1.2),
+        aiMetric("paragraph_uniformity", 57, 1.1),
+        aiMetric("readability_consistency", 54, 1.0),
+      ], 2),
+      family("academic templates", 0.26, [
+        aiMetric("ai_pattern_score", 60, 1.2),
+        aiMetric("per_sentence_ai_ratio", 48, 1.1),
+        aiMetric("avg_word_commonality", 56, 0.8),
+      ], 2),
+      family("stylometric evenness", 0.22, [
+        aiMetric("stylometric_score", 54, 1.0),
+        aiMetric("word_length_variance", 54, 0.8),
+        aiMetric("function_word_freq", 56, 0.9),
+      ], 2),
+      family("repetition pressure", 0.2, [
+        aiMetric("ngram_repetition", 55, 1.0),
+        aiMetric("token_predictability", 56, 0.9),
+        aiMetric("burstiness", 54, 0.8),
+      ], 2),
+    ],
+    bonuses: [
+      bonus("highly regular structure", 12, [
+        aiCondition("sentence_uniformity", 64),
+        aiCondition("paragraph_uniformity", 60),
+        aiCondition("readability_consistency", 56),
+      ]),
+      bonus("repetition plus templates", 9, [
+        aiCondition("ngram_repetition", 60),
+        aiCondition("token_predictability", 60),
+        aiCondition("ai_pattern_score", 66),
+      ]),
+    ],
+    dampeners: [
+      dampener("human syntax depth", 6, [humanCondition("dependency_depth", 58)]),
+      dampener("human style variety", 5, [humanCondition("stylometric_score", 60)]),
+    ],
+    floors: [
+      floorAt(84, [
+        aiCondition("sentence_uniformity", 64),
+        aiCondition("paragraph_uniformity", 60),
+        aiCondition("ai_pattern_score", 70),
+      ]),
+    ],
+  },
+  originality_ai: {
+    blend: 0.7,
+    families: [
+      family("phrase traces", 0.3, [
+        aiMetric("ai_pattern_score", 60, 1.3),
+        aiMetric("per_sentence_ai_ratio", 50, 1.2),
+        aiMetric("ngram_repetition", 56, 0.9),
+      ], 2),
+      family("predictability", 0.26, [
+        aiMetric("perplexity", 56, 1.2),
+        aiMetric("token_predictability", 58, 1.2),
+        aiMetric("sentence_uniformity", 57, 0.9),
+      ], 2),
+      family("distribution fingerprint", 0.24, [
+        aiMetric("zipf_deviation", 56, 1.1),
+        aiMetric("function_word_freq", 58, 1.0),
+        aiMetric("avg_word_commonality", 57, 0.8),
+      ], 2),
+      family("surface polish", 0.2, [
+        aiMetric("word_length_variance", 54, 1.0),
+        aiMetric("burstiness", 54, 0.8),
+        aiMetric("vocabulary_richness", 54, 0.8),
+      ], 2),
+    ],
+    bonuses: [
+      bonus("templates with predictability", 12, [
+        aiCondition("ai_pattern_score", 70),
+        aiCondition("per_sentence_ai_ratio", 54),
+        aiCondition("token_predictability", 60),
+      ]),
+      bonus("distribution match", 10, [
+        aiCondition("zipf_deviation", 60),
+        aiCondition("function_word_freq", 62),
+      ]),
+    ],
+    dampeners: [
+      dampener("human vocabulary spread", 6, [humanCondition("vocabulary_richness", 60)]),
+      dampener("human stylometry", 5, [humanCondition("stylometric_score", 58)]),
+    ],
+    floors: [
+      floorAt(86, [
+        aiCondition("ai_pattern_score", 74),
+        aiCondition("per_sentence_ai_ratio", 56),
+        aiCondition("function_word_freq", 62),
+      ]),
+    ],
+  },
+  winston_ai: {
+    blend: 0.64,
+    families: [
+      family("structure", 0.38, [
+        aiMetric("sentence_uniformity", 58, 1.1),
+        aiMetric("paragraph_uniformity", 58, 1.1),
+        aiMetric("readability_consistency", 54, 0.9),
+      ], 2),
+      family("layout cadence", 0.24, [
+        aiMetric("lexical_density_var", 54, 1.0),
+        aiMetric("spectral_flatness", 54, 0.9),
+        aiMetric("burstiness", 54, 0.8),
+      ], 2),
+      family("template surface", 0.22, [
+        aiMetric("ai_pattern_score", 58, 1.1),
+        aiMetric("per_sentence_ai_ratio", 46, 1.0),
+        aiMetric("avg_word_commonality", 55, 0.7),
+      ], 2),
+      family("stylometric restraint", 0.16, [
+        aiMetric("stylometric_score", 54, 1.0),
+        aiMetric("function_word_freq", 56, 0.8),
+      ]),
+    ],
+    bonuses: [
+      bonus("paragraph and sentence lockstep", 11, [
+        aiCondition("paragraph_uniformity", 62),
+        aiCondition("sentence_uniformity", 64),
+        aiCondition("readability_consistency", 56),
+      ]),
+      bonus("template structure overlap", 8, [
+        aiCondition("ai_pattern_score", 66),
+        aiCondition("paragraph_uniformity", 60),
+      ]),
+    ],
+    dampeners: [
+      dampener("human syntax depth", 5, [humanCondition("dependency_depth", 58)]),
+      dampener("human style variation", 5, [humanCondition("stylometric_score", 60)]),
+    ],
+    floors: [
+      floorAt(80, [
+        aiCondition("paragraph_uniformity", 62),
+        aiCondition("sentence_uniformity", 64),
+        aiCondition("ai_pattern_score", 66),
+      ]),
+    ],
+  },
+  copyleaks: {
+    blend: 0.66,
+    families: [
+      family("model entropy", 0.32, [
+        aiMetric("perplexity", 56, 1.2),
+        aiMetric("shannon_entropy", 54, 1.1),
+        aiMetric("token_predictability", 56, 1.0),
+      ], 2),
+      family("pattern reuse", 0.28, [
+        aiMetric("ngram_repetition", 55, 1.1),
+        aiMetric("ai_pattern_score", 58, 1.0),
+        aiMetric("per_sentence_ai_ratio", 46, 0.8),
+      ], 2),
+      family("distribution", 0.22, [
+        aiMetric("function_word_freq", 58, 1.0),
+        aiMetric("zipf_deviation", 55, 0.9),
+        aiMetric("avg_word_commonality", 56, 0.8),
+      ], 2),
+      family("sentence regularity", 0.18, [
+        aiMetric("sentence_uniformity", 56, 1.0),
+        aiMetric("burstiness", 54, 0.8),
+      ]),
+    ],
+    bonuses: [
+      bonus("entropy plus predictability", 10, [
+        aiCondition("perplexity", 58),
+        aiCondition("shannon_entropy", 56),
+        aiCondition("token_predictability", 60),
+      ]),
+      bonus("repeated function-word signature", 9, [
+        aiCondition("ngram_repetition", 60),
+        aiCondition("function_word_freq", 62),
+        aiCondition("ai_pattern_score", 66),
+      ]),
+    ],
+    dampeners: [
+      dampener("human vocabulary spread", 5, [humanCondition("vocabulary_richness", 60)]),
+      dampener("human stylometry", 4, [humanCondition("stylometric_score", 58)]),
+    ],
+    floors: [
+      floorAt(80, [
+        aiCondition("ngram_repetition", 60),
+        aiCondition("token_predictability", 62),
+        aiCondition("function_word_freq", 62),
+      ]),
+    ],
+  },
+  sapling: {
+    blend: 0.58,
+    families: [
+      family("predictability", 0.46, [
+        aiMetric("perplexity", 56, 1.3),
+        aiMetric("token_predictability", 56, 1.1),
+        aiMetric("shannon_entropy", 54, 0.9),
+      ], 2),
+      family("surface templates", 0.32, [
+        aiMetric("ai_pattern_score", 56, 1.1),
+        aiMetric("avg_word_commonality", 55, 0.9),
+        aiMetric("sentence_uniformity", 55, 0.8),
+      ], 2),
+      family("polish", 0.22, [
+        aiMetric("burstiness", 54, 1.0),
+        aiMetric("vocabulary_richness", 54, 0.8),
+      ]),
+    ],
+    bonuses: [
+      bonus("predictable polished text", 8, [
+        aiCondition("perplexity", 58),
+        aiCondition("token_predictability", 60),
+        aiCondition("ai_pattern_score", 62),
+      ]),
+    ],
+    dampeners: [
+      dampener("human burstiness", 5, [humanCondition("burstiness", 58)]),
+      dampener("human stylometry", 4, [humanCondition("stylometric_score", 58)]),
+    ],
+  },
+  content_at_scale: {
+    blend: 0.6,
+    families: [
+      family("seo readability", 0.34, [
+        aiMetric("readability_consistency", 54, 1.1),
+        aiMetric("sentence_uniformity", 57, 1.0),
+        aiMetric("avg_word_commonality", 56, 0.9),
+      ], 2),
+      family("template surface", 0.28, [
+        aiMetric("ai_pattern_score", 58, 1.1),
+        aiMetric("per_sentence_ai_ratio", 46, 1.0),
+        aiMetric("ngram_repetition", 54, 0.8),
+      ], 2),
+      family("density smoothness", 0.22, [
+        aiMetric("lexical_density_var", 54, 1.0),
+        aiMetric("word_length_variance", 54, 0.9),
+        aiMetric("paragraph_uniformity", 55, 0.8),
+      ], 2),
+      family("predictability", 0.16, [
+        aiMetric("perplexity", 55, 1.0),
+        aiMetric("token_predictability", 55, 0.8),
+      ]),
+    ],
+    bonuses: [
+      bonus("smooth seo prose", 10, [
+        aiCondition("sentence_uniformity", 62),
+        aiCondition("readability_consistency", 56),
+        aiCondition("ai_pattern_score", 64),
+      ]),
+      bonus("uniform paragraphs", 8, [
+        aiCondition("paragraph_uniformity", 60),
+        aiCondition("avg_word_commonality", 60),
+      ]),
+    ],
+    dampeners: [
+      dampener("human burstiness", 5, [humanCondition("burstiness", 58)]),
+      dampener("human stylometry", 4, [humanCondition("stylometric_score", 58)]),
+    ],
+  },
+  crossplag: {
+    blend: 0.58,
+    families: [
+      family("academic structure", 0.36, [
+        aiMetric("sentence_uniformity", 57, 1.1),
+        aiMetric("paragraph_uniformity", 56, 1.0),
+        aiMetric("readability_consistency", 54, 0.9),
+      ], 2),
+      family("template surface", 0.34, [
+        aiMetric("ai_pattern_score", 58, 1.1),
+        aiMetric("per_sentence_ai_ratio", 46, 1.0),
+        aiMetric("avg_word_commonality", 56, 0.8),
+      ], 2),
+      family("predictability", 0.3, [
+        aiMetric("perplexity", 55, 1.1),
+        aiMetric("ngram_repetition", 54, 0.9),
+        aiMetric("token_predictability", 55, 0.8),
+      ], 2),
+    ],
+    bonuses: [
+      bonus("structured template overlap", 8, [
+        aiCondition("sentence_uniformity", 62),
+        aiCondition("paragraph_uniformity", 60),
+        aiCondition("ai_pattern_score", 64),
+      ]),
+    ],
+    dampeners: [
+      dampener("human vocabulary", 4, [humanCondition("vocabulary_richness", 60)]),
+      dampener("human stylometry", 4, [humanCondition("stylometric_score", 58)]),
+    ],
+  },
+  writer_ai: {
+    blend: 0.54,
+    families: [
+      family("polished corporate tone", 0.38, [
+        aiMetric("stylometric_score", 54, 1.0),
+        aiMetric("readability_consistency", 54, 1.0),
+        aiMetric("function_word_freq", 56, 0.8),
+      ], 2),
+      family("predictability", 0.32, [
+        aiMetric("perplexity", 55, 1.1),
+        aiMetric("shannon_entropy", 54, 0.9),
+        aiMetric("sentence_uniformity", 55, 0.8),
+      ], 2),
+      family("surface templates", 0.3, [
+        aiMetric("ai_pattern_score", 56, 1.0),
+        aiMetric("avg_word_commonality", 55, 0.8),
+        aiMetric("per_sentence_ai_ratio", 44, 0.7),
+      ], 2),
+    ],
+    bonuses: [
+      bonus("polished predictable prose", 7, [
+        aiCondition("readability_consistency", 56),
+        aiCondition("perplexity", 58),
+        aiCondition("ai_pattern_score", 62),
+      ]),
+    ],
+    dampeners: [
+      dampener("human burstiness", 4, [humanCondition("burstiness", 58)]),
+      dampener("human stylometry", 4, [humanCondition("stylometric_score", 60)]),
+    ],
+  },
+  smodin: {
+    blend: 0.57,
+    families: [
+      family("template density", 0.38, [
+        aiMetric("ai_pattern_score", 58, 1.2),
+        aiMetric("per_sentence_ai_ratio", 46, 1.1),
+        aiMetric("ngram_repetition", 54, 0.8),
+      ], 2),
+      family("predictability", 0.32, [
+        aiMetric("perplexity", 55, 1.0),
+        aiMetric("burstiness", 54, 0.9),
+        aiMetric("token_predictability", 55, 0.8),
+      ], 2),
+      family("sentence smoothness", 0.3, [
+        aiMetric("sentence_uniformity", 56, 1.0),
+        aiMetric("avg_word_commonality", 55, 0.8),
+        aiMetric("readability_consistency", 54, 0.8),
+      ], 2),
+    ],
+    bonuses: [
+      bonus("templated predictable phrasing", 8, [
+        aiCondition("ai_pattern_score", 64),
+        aiCondition("perplexity", 58),
+        aiCondition("sentence_uniformity", 60),
+      ]),
+    ],
+    dampeners: [
+      dampener("human vocabulary", 4, [humanCondition("vocabulary_richness", 60)]),
+      dampener("human stylometry", 4, [humanCondition("stylometric_score", 58)]),
+    ],
+    floors: [
+      floorAt(74, [
+        aiCondition("ai_pattern_score", 70),
+        aiCondition("per_sentence_ai_ratio", 52),
+      ]),
+    ],
+  },
+  hive_ai: {
+    blend: 0.59,
+    families: [
+      family("surface", 0.34, [
+        aiMetric("ai_pattern_score", 57, 1.1),
+        aiMetric("per_sentence_ai_ratio", 46, 1.0),
+        aiMetric("sentence_uniformity", 56, 0.9),
+      ], 2),
+      family("predictability", 0.34, [
+        aiMetric("perplexity", 55, 1.1),
+        aiMetric("burstiness", 54, 0.9),
+        aiMetric("token_predictability", 55, 0.8),
+      ], 2),
+      family("style consistency", 0.32, [
+        aiMetric("readability_consistency", 54, 1.0),
+        aiMetric("word_length_variance", 54, 0.9),
+        aiMetric("function_word_freq", 56, 0.8),
+      ], 2),
+    ],
+    bonuses: [
+      bonus("surface and predictability", 8, [
+        aiCondition("ai_pattern_score", 64),
+        aiCondition("perplexity", 58),
+        aiCondition("sentence_uniformity", 60),
+      ]),
+    ],
+    dampeners: [
+      dampener("human stylometry", 5, [humanCondition("stylometric_score", 58)]),
+      dampener("human burstiness", 4, [humanCondition("burstiness", 58)]),
+    ],
+  },
+  surfer_seo: {
+    blend: 0.67,
+    families: [
+      family("seo smoothness", 0.34, [
+        aiMetric("sentence_uniformity", 58, 1.1),
+        aiMetric("paragraph_uniformity", 57, 1.0),
+        aiMetric("readability_consistency", 54, 1.0),
+      ], 2),
+      family("keyword commonality", 0.24, [
+        aiMetric("avg_word_commonality", 57, 1.0),
+        aiMetric("function_word_freq", 58, 0.9),
+        aiMetric("word_length_variance", 54, 0.8),
+      ], 2),
+      family("template surface", 0.24, [
+        aiMetric("ai_pattern_score", 60, 1.2),
+        aiMetric("per_sentence_ai_ratio", 48, 1.0),
+        aiMetric("ngram_repetition", 55, 0.8),
+      ], 2),
+      family("predictability", 0.18, [
+        aiMetric("perplexity", 56, 1.0),
+        aiMetric("token_predictability", 56, 0.9),
+      ]),
+    ],
+    bonuses: [
+      bonus("smooth seo page", 12, [
+        aiCondition("sentence_uniformity", 64),
+        aiCondition("readability_consistency", 56),
+        aiCondition("ai_pattern_score", 68),
+      ]),
+      bonus("paragraph plus keyword commonality", 9, [
+        aiCondition("paragraph_uniformity", 62),
+        aiCondition("avg_word_commonality", 60),
+      ]),
+    ],
+    dampeners: [
+      dampener("human burstiness", 5, [humanCondition("burstiness", 60)]),
+      dampener("human syntax depth", 5, [humanCondition("dependency_depth", 58)]),
+      dampener("human stylometry", 4, [humanCondition("stylometric_score", 58)]),
+    ],
+    floors: [
+      floorAt(82, [
+        aiCondition("sentence_uniformity", 64),
+        aiCondition("paragraph_uniformity", 62),
+        aiCondition("ai_pattern_score", 70),
+      ]),
+    ],
+  },
+  zerogpt: {
+    blend: 0.56,
+    families: [
+      family("predictability", 0.42, [
+        aiMetric("perplexity", 56, 1.3),
+        aiMetric("token_predictability", 56, 1.0),
+        aiMetric("shannon_entropy", 54, 0.9),
+      ], 2),
+      family("template surface", 0.34, [
+        aiMetric("ai_pattern_score", 56, 1.1),
+        aiMetric("per_sentence_ai_ratio", 46, 1.0),
+        aiMetric("ngram_repetition", 54, 0.8),
+      ], 2),
+      family("uniform sentence band", 0.24, [
+        aiMetric("sentence_uniformity", 56, 1.0),
+        aiMetric("avg_word_commonality", 55, 0.8),
+      ]),
+    ],
+    bonuses: [
+      bonus("predictable templated text", 9, [
+        aiCondition("perplexity", 58),
+        aiCondition("ai_pattern_score", 64),
+        aiCondition("token_predictability", 60),
+      ]),
+    ],
+    dampeners: [
+      dampener("human burstiness", 5, [humanCondition("burstiness", 58)]),
+      dampener("human stylometry", 4, [humanCondition("stylometric_score", 58)]),
+    ],
+  },
+  quillbot: {
+    blend: 0.53,
+    families: [
+      family("paraphrase surface", 0.36, [
+        aiMetric("vocabulary_richness", 54, 1.0),
+        aiMetric("avg_word_commonality", 55, 0.9),
+        aiMetric("ai_pattern_score", 56, 0.8),
+      ], 2),
+      family("style flatness", 0.34, [
+        aiMetric("stylometric_score", 54, 1.0),
+        aiMetric("starter_diversity", 54, 0.9),
+        aiMetric("sentence_uniformity", 55, 0.8),
+      ], 2),
+      family("predictability", 0.3, [
+        aiMetric("perplexity", 55, 1.0),
+        aiMetric("token_predictability", 55, 0.8),
+      ]),
+    ],
+    dampeners: [
+      dampener("human burstiness", 4, [humanCondition("burstiness", 58)]),
+      dampener("human syntax depth", 4, [humanCondition("dependency_depth", 58)]),
+    ],
+  },
+  grammarly: {
+    blend: 0.5,
+    families: [
+      family("polished style", 0.4, [
+        aiMetric("readability_consistency", 54, 1.0),
+        aiMetric("stylometric_score", 54, 1.0),
+        aiMetric("sentence_uniformity", 55, 0.8),
+      ], 2),
+      family("surface", 0.32, [
+        aiMetric("avg_word_commonality", 55, 0.9),
+        aiMetric("ai_pattern_score", 54, 0.8),
+        aiMetric("function_word_freq", 56, 0.7),
+      ], 2),
+      family("predictability", 0.28, [
+        aiMetric("perplexity", 54, 1.0),
+        aiMetric("token_predictability", 54, 0.8),
+      ]),
+    ],
+    dampeners: [
+      dampener("human burstiness", 4, [humanCondition("burstiness", 58)]),
+      dampener("human syntax depth", 4, [humanCondition("dependency_depth", 58)]),
+    ],
+  },
+  scribbr: {
+    blend: 0.54,
+    families: [
+      family("academic surface", 0.4, [
+        aiMetric("ai_pattern_score", 58, 1.1),
+        aiMetric("per_sentence_ai_ratio", 46, 1.0),
+        aiMetric("sentence_uniformity", 56, 0.9),
+      ], 2),
+      family("polish", 0.34, [
+        aiMetric("readability_consistency", 54, 1.0),
+        aiMetric("avg_word_commonality", 55, 0.8),
+        aiMetric("function_word_freq", 56, 0.8),
+      ], 2),
+      family("predictability", 0.26, [
+        aiMetric("perplexity", 55, 1.0),
+        aiMetric("token_predictability", 55, 0.8),
+      ]),
+    ],
+    dampeners: [
+      dampener("human vocabulary", 4, [humanCondition("vocabulary_richness", 60)]),
+      dampener("human stylometry", 4, [humanCondition("stylometric_score", 58)]),
+    ],
+  },
+  pangram: {
+    blend: 0.72,
+    families: [
+      family("model signature", 0.24, [
+        aiMetric("perplexity", 56, 1.2),
+        aiMetric("token_predictability", 56, 1.1),
+        aiMetric("shannon_entropy", 54, 1.0),
+      ], 2),
+      family("distribution", 0.22, [
+        aiMetric("zipf_deviation", 56, 1.0),
+        aiMetric("function_word_freq", 58, 1.0),
+        aiMetric("avg_word_commonality", 56, 0.8),
+      ], 2),
+      family("structure", 0.2, [
+        aiMetric("sentence_uniformity", 57, 1.0),
+        aiMetric("paragraph_uniformity", 56, 1.0),
+        aiMetric("readability_consistency", 54, 0.9),
+      ], 2),
+      family("surface templates", 0.2, [
+        aiMetric("ai_pattern_score", 58, 1.1),
+        aiMetric("per_sentence_ai_ratio", 48, 1.0),
+        aiMetric("ngram_repetition", 55, 0.8),
+      ], 2),
+      family("stylometric flatness", 0.14, [
+        aiMetric("spectral_flatness", 54, 1.0),
+        aiMetric("lexical_density_var", 54, 0.9),
+        aiMetric("dependency_depth", 54, 0.8),
+      ], 2),
+    ],
+    bonuses: [
+      bonus("model plus distribution", 12, [
+        aiCondition("perplexity", 58),
+        aiCondition("token_predictability", 60),
+        aiCondition("function_word_freq", 62),
+      ]),
+      bonus("structure plus templates", 10, [
+        aiCondition("sentence_uniformity", 62),
+        aiCondition("paragraph_uniformity", 60),
+        aiCondition("ai_pattern_score", 66),
+      ]),
+    ],
+    dampeners: [
+      dampener("human burstiness", 5, [humanCondition("burstiness", 60)]),
+      dampener("human vocabulary", 4, [humanCondition("vocabulary_richness", 60)]),
+      dampener("human stylometry", 4, [humanCondition("stylometric_score", 58)]),
+    ],
+    floors: [
+      floorAt(86, [
+        aiCondition("token_predictability", 62),
+        aiCondition("function_word_freq", 62),
+        aiCondition("ai_pattern_score", 70),
+        aiCondition("sentence_uniformity", 64),
+      ]),
+    ],
+  },
+  roberta: {
+    blend: 0.6,
+    families: [
+      family("model likelihood", 0.52, [
+        aiMetric("perplexity", 56, 1.3),
+        aiMetric("shannon_entropy", 54, 1.0),
+        aiMetric("token_predictability", 55, 0.9),
+      ], 2),
+      family("surface", 0.28, [
+        aiMetric("ai_pattern_score", 55, 1.0),
+        aiMetric("avg_word_commonality", 55, 0.8),
+        aiMetric("sentence_uniformity", 55, 0.8),
+      ], 2),
+      family("support", 0.2, [
+        aiMetric("vocabulary_richness", 54, 1.0),
+        aiMetric("ngram_repetition", 54, 0.8),
+      ]),
+    ],
+    dampeners: [
+      dampener("human burstiness", 5, [humanCondition("burstiness", 58)]),
+      dampener("human stylometry", 4, [humanCondition("stylometric_score", 58)]),
+    ],
+  },
+  openai_classifier: {
+    blend: 0.48,
+    families: [
+      family("model likelihood", 0.58, [
+        aiMetric("perplexity", 56, 1.3),
+        aiMetric("burstiness", 54, 1.0),
+        aiMetric("shannon_entropy", 54, 0.9),
+      ], 2),
+      family("surface", 0.22, [
+        aiMetric("sentence_uniformity", 55, 0.9),
+        aiMetric("avg_word_commonality", 55, 0.8),
+      ]),
+      family("support", 0.2, [
+        aiMetric("ai_pattern_score", 54, 0.8),
+        aiMetric("token_predictability", 54, 0.8),
+      ]),
+    ],
+    dampeners: [
+      dampener("human vocabulary", 5, [humanCondition("vocabulary_richness", 60)]),
+      dampener("human stylometry", 4, [humanCondition("stylometric_score", 58)]),
+    ],
+  },
+  content_detector_ai: {
+    blend: 0.56,
+    families: [
+      family("template surface", 0.42, [
+        aiMetric("ai_pattern_score", 56, 1.1),
+        aiMetric("per_sentence_ai_ratio", 46, 1.0),
+        aiMetric("ngram_repetition", 54, 0.8),
+      ], 2),
+      family("structure", 0.32, [
+        aiMetric("sentence_uniformity", 56, 1.0),
+        aiMetric("avg_word_commonality", 55, 0.8),
+        aiMetric("function_word_freq", 56, 0.8),
+      ], 2),
+      family("predictability", 0.26, [
+        aiMetric("perplexity", 55, 1.0),
+        aiMetric("token_predictability", 55, 0.8),
+      ]),
+    ],
+    dampeners: [
+      dampener("human stylometry", 5, [humanCondition("stylometric_score", 58)]),
+      dampener("human burstiness", 4, [humanCondition("burstiness", 58)]),
+    ],
+  },
+  gpt2_detector: {
+    blend: 0.49,
+    families: [
+      family("model likelihood", 0.6, [
+        aiMetric("perplexity", 56, 1.3),
+        aiMetric("shannon_entropy", 54, 1.0),
+        aiMetric("token_predictability", 55, 0.9),
+      ], 2),
+      family("surface", 0.22, [
+        aiMetric("sentence_uniformity", 55, 0.9),
+        aiMetric("avg_word_commonality", 55, 0.8),
+      ]),
+      family("support", 0.18, [
+        aiMetric("ai_pattern_score", 54, 0.8),
+        aiMetric("ngram_repetition", 53, 0.8),
+      ]),
+    ],
+    bonuses: [
+      bonus("lm plus surface", 7, [
+        aiCondition("perplexity", 58),
+        aiCondition("token_predictability", 58),
+        aiCondition("sentence_uniformity", 60),
+      ]),
+    ],
+    dampeners: [
+      dampener("human vocabulary", 5, [humanCondition("vocabulary_richness", 60)]),
+      dampener("human burstiness", 5, [humanCondition("burstiness", 58)]),
+    ],
+  },
+  stealth_detector: {
+    blend: 0.76,
+    families: [
+      family("predictability", 0.22, [
+        aiMetric("perplexity", 56, 1.2),
+        aiMetric("token_predictability", 57, 1.1),
+        aiMetric("shannon_entropy", 54, 1.0),
+      ], 2),
+      family("templates", 0.22, [
+        aiMetric("ai_pattern_score", 60, 1.2),
+        aiMetric("per_sentence_ai_ratio", 50, 1.1),
+        aiMetric("ngram_repetition", 55, 0.8),
+      ], 2),
+      family("structure", 0.2, [
+        aiMetric("sentence_uniformity", 58, 1.0),
+        aiMetric("paragraph_uniformity", 57, 1.0),
+        aiMetric("readability_consistency", 54, 0.9),
+      ], 2),
+      family("distribution", 0.18, [
+        aiMetric("function_word_freq", 58, 1.0),
+        aiMetric("zipf_deviation", 56, 0.9),
+        aiMetric("avg_word_commonality", 56, 0.8),
+      ], 2),
+      family("stylometric flatness", 0.18, [
+        aiMetric("burstiness", 54, 1.0),
+        aiMetric("spectral_flatness", 54, 0.9),
+        aiMetric("lexical_density_var", 54, 0.9),
+        aiMetric("word_length_variance", 54, 0.8),
+      ], 2),
+    ],
+    bonuses: [
+      bonus("predictable templated structure", 14, [
+        aiCondition("perplexity", 58),
+        aiCondition("ai_pattern_score", 68),
+        aiCondition("sentence_uniformity", 62),
+      ]),
+      bonus("distribution with templates", 10, [
+        aiCondition("function_word_freq", 62),
+        aiCondition("zipf_deviation", 60),
+        aiCondition("ai_pattern_score", 66),
+      ]),
+      bonus("dense ai sentence stack", 8, [
+        aiCondition("per_sentence_ai_ratio", 54),
+        aiCondition("token_predictability", 60),
+      ]),
+    ],
+    dampeners: [
+      dampener("human vocabulary", 5, [humanCondition("vocabulary_richness", 60)]),
+      dampener("human stylometry", 5, [humanCondition("stylometric_score", 60)]),
+      dampener("human syntax depth", 4, [humanCondition("dependency_depth", 58)]),
+    ],
+    floors: [
+      floorAt(78, [
+        aiCondition("ai_pattern_score", 66),
+        aiCondition("per_sentence_ai_ratio", 48),
+        aiCondition("function_word_freq", 60),
+      ]),
+      floorAt(90, [
+        aiCondition("ai_pattern_score", 76),
+        aiCondition("per_sentence_ai_ratio", 58),
+        aiCondition("token_predictability", 62),
+        aiCondition("sentence_uniformity", 64),
+      ]),
+    ],
+  },
+};
+
 // ── 22 Detector Profiles ──
 
 const DETECTOR_PROFILES: DetectorProfile[] = [
   // TIER 1: ACADEMIC
-  new DetectorProfile({ name: "gptzero", displayName: "GPTZero", category: "academic", bias: 0.22, temperature: 1.35, weights: { perplexity: 1.2, burstiness: 1.0, per_sentence_ai_ratio: 0.9, sentence_uniformity: 0.7, ai_pattern_score: 0.6, starter_diversity: 0.4, vocabulary_richness: 0.4, token_predictability: 0.5, ngram_repetition: 0.3, spectral_flatness: 0.3 }, interactions: [["perplexity", "burstiness", 0.35], ["per_sentence_ai_ratio", "ai_pattern_score", 0.3], ["token_predictability", "sentence_uniformity", 0.2]] }),
-  new DetectorProfile({ name: "turnitin", displayName: "Turnitin", category: "academic", bias: 0.25, temperature: 1.40, weights: { perplexity: 1.0, sentence_uniformity: 1.0, ai_pattern_score: 0.8, vocabulary_richness: 0.8, readability_consistency: 0.7, ngram_repetition: 0.6, stylometric_score: 0.6, per_sentence_ai_ratio: 0.7, paragraph_uniformity: 0.5, burstiness: 0.5, token_predictability: 0.4, spectral_flatness: 0.3 }, interactions: [["sentence_uniformity", "readability_consistency", 0.35], ["ngram_repetition", "token_predictability", 0.25], ["per_sentence_ai_ratio", "ai_pattern_score", 0.20], ["perplexity", "burstiness", 0.15]] }),
-  new DetectorProfile({ name: "originality_ai", displayName: "Originality.ai", category: "academic", bias: 0.35, temperature: 1.50, weights: { perplexity: 1.0, burstiness: 0.8, ai_pattern_score: 0.9, sentence_uniformity: 0.7, per_sentence_ai_ratio: 0.8, token_predictability: 0.6, vocabulary_richness: 0.5, ngram_repetition: 0.4, zipf_deviation: 0.4, function_word_freq: 0.3, spectral_flatness: 0.3, word_length_variance: 0.2 }, interactions: [["perplexity", "ai_pattern_score", 0.45], ["sentence_uniformity", "burstiness", 0.35], ["token_predictability", "zipf_deviation", 0.25], ["per_sentence_ai_ratio", "ngram_repetition", 0.2]] }),
-  new DetectorProfile({ name: "winston_ai", displayName: "Winston AI", category: "academic", bias: 0.15, temperature: 1.25, weights: { sentence_uniformity: 1.0, paragraph_uniformity: 0.9, readability_consistency: 0.7, ai_pattern_score: 0.6, perplexity: 0.6, stylometric_score: 0.5, lexical_density_var: 0.4, spectral_flatness: 0.3 }, interactions: [["paragraph_uniformity", "sentence_uniformity", 0.35], ["readability_consistency", "ai_pattern_score", 0.2]] }),
-  new DetectorProfile({ name: "copyleaks", displayName: "Copyleaks", category: "academic", bias: 0.18, temperature: 1.30, weights: { perplexity: 0.9, ai_pattern_score: 0.8, vocabulary_richness: 0.7, shannon_entropy: 0.6, sentence_uniformity: 0.6, burstiness: 0.6, function_word_freq: 0.4, token_predictability: 0.4, per_sentence_ai_ratio: 0.3, ngram_repetition: 0.3 }, interactions: [["perplexity", "shannon_entropy", 0.3], ["ai_pattern_score", "vocabulary_richness", 0.2]] }),
+  new DetectorProfile({ name: "gptzero", displayName: "GPTZero", category: "academic", bias: 0.22, temperature: 1.35, weights: { perplexity: 1.2, burstiness: 1.0, per_sentence_ai_ratio: 0.9, sentence_uniformity: 0.7, ai_pattern_score: 0.6, starter_diversity: 0.4, vocabulary_richness: 0.4, token_predictability: 0.5, ngram_repetition: 0.3, spectral_flatness: 0.3 }, interactions: [["perplexity", "burstiness", 0.35], ["per_sentence_ai_ratio", "ai_pattern_score", 0.3], ["token_predictability", "sentence_uniformity", 0.2]], strategy: DETECTOR_STRATEGIES.gptzero }),
+  new DetectorProfile({ name: "turnitin", displayName: "Turnitin", category: "academic", bias: 0.25, temperature: 1.40, weights: { perplexity: 1.0, sentence_uniformity: 1.0, ai_pattern_score: 0.8, vocabulary_richness: 0.8, readability_consistency: 0.7, ngram_repetition: 0.6, stylometric_score: 0.6, per_sentence_ai_ratio: 0.7, paragraph_uniformity: 0.5, burstiness: 0.5, token_predictability: 0.4, spectral_flatness: 0.3 }, interactions: [["sentence_uniformity", "readability_consistency", 0.35], ["ngram_repetition", "token_predictability", 0.25], ["per_sentence_ai_ratio", "ai_pattern_score", 0.20], ["perplexity", "burstiness", 0.15]], strategy: DETECTOR_STRATEGIES.turnitin }),
+  new DetectorProfile({ name: "originality_ai", displayName: "Originality.ai", category: "academic", bias: 0.35, temperature: 1.50, weights: { perplexity: 1.0, burstiness: 0.8, ai_pattern_score: 0.9, sentence_uniformity: 0.7, per_sentence_ai_ratio: 0.8, token_predictability: 0.6, vocabulary_richness: 0.5, ngram_repetition: 0.4, zipf_deviation: 0.4, function_word_freq: 0.3, spectral_flatness: 0.3, word_length_variance: 0.2 }, interactions: [["perplexity", "ai_pattern_score", 0.45], ["sentence_uniformity", "burstiness", 0.35], ["token_predictability", "zipf_deviation", 0.25], ["per_sentence_ai_ratio", "ngram_repetition", 0.2]], strategy: DETECTOR_STRATEGIES.originality_ai }),
+  new DetectorProfile({ name: "winston_ai", displayName: "Winston AI", category: "academic", bias: 0.15, temperature: 1.25, weights: { sentence_uniformity: 1.0, paragraph_uniformity: 0.9, readability_consistency: 0.7, ai_pattern_score: 0.6, perplexity: 0.6, stylometric_score: 0.5, lexical_density_var: 0.4, spectral_flatness: 0.3 }, interactions: [["paragraph_uniformity", "sentence_uniformity", 0.35], ["readability_consistency", "ai_pattern_score", 0.2]], strategy: DETECTOR_STRATEGIES.winston_ai }),
+  new DetectorProfile({ name: "copyleaks", displayName: "Copyleaks", category: "academic", bias: 0.18, temperature: 1.30, weights: { perplexity: 0.9, ai_pattern_score: 0.8, vocabulary_richness: 0.7, shannon_entropy: 0.6, sentence_uniformity: 0.6, burstiness: 0.6, function_word_freq: 0.4, token_predictability: 0.4, per_sentence_ai_ratio: 0.3, ngram_repetition: 0.3 }, interactions: [["perplexity", "shannon_entropy", 0.3], ["ai_pattern_score", "vocabulary_richness", 0.2]], strategy: DETECTOR_STRATEGIES.copyleaks }),
   // TIER 2: MID-TIER
-  new DetectorProfile({ name: "sapling", displayName: "Sapling AI", category: "mid-tier", bias: 0.08, temperature: 1.15, weights: { perplexity: 1.2, token_predictability: 0.7, vocabulary_richness: 0.5, burstiness: 0.4, ai_pattern_score: 0.4, shannon_entropy: 0.3 }, interactions: [["perplexity", "token_predictability", 0.3]] }),
-  new DetectorProfile({ name: "content_at_scale", displayName: "Content at Scale", category: "mid-tier", bias: 0.0, temperature: 1.10, weights: { readability_consistency: 0.8, perplexity: 0.6, ai_pattern_score: 0.5, sentence_uniformity: 0.5, avg_word_commonality: 0.4, ngram_repetition: 0.3, lexical_density_var: 0.3 } }),
-  new DetectorProfile({ name: "crossplag", displayName: "Crossplag", category: "mid-tier", bias: 0.05, temperature: 1.08, weights: { perplexity: 0.8, ai_pattern_score: 0.7, sentence_uniformity: 0.6, vocabulary_richness: 0.5, ngram_repetition: 0.4, paragraph_uniformity: 0.3 } }),
-  new DetectorProfile({ name: "writer_ai", displayName: "Writer.com", category: "mid-tier", bias: -0.15, temperature: 1.10, weights: { perplexity: 0.9, burstiness: 0.6, vocabulary_richness: 0.5, stylometric_score: 0.5, shannon_entropy: 0.3, function_word_freq: 0.2 } }),
-  new DetectorProfile({ name: "smodin", displayName: "Smodin AI", category: "mid-tier", bias: 0.10, temperature: 1.15, weights: { perplexity: 0.8, ai_pattern_score: 0.7, burstiness: 0.6, sentence_uniformity: 0.5, vocabulary_richness: 0.4, ngram_repetition: 0.3, per_sentence_ai_ratio: 0.3 } }),
-  new DetectorProfile({ name: "hive_ai", displayName: "Hive AI", category: "mid-tier", bias: 0.08, temperature: 1.20, weights: { perplexity: 0.7, burstiness: 0.5, sentence_uniformity: 0.6, ai_pattern_score: 0.5, vocabulary_richness: 0.4, readability_consistency: 0.4, word_length_variance: 0.3, spectral_flatness: 0.2 }, interactions: [["perplexity", "sentence_uniformity", 0.2]] }),
-  new DetectorProfile({ name: "surfer_seo", displayName: "Surfer SEO", category: "mid-tier", bias: 0.22, temperature: 1.35, weights: { perplexity: 1.0, readability_consistency: 0.9, sentence_uniformity: 0.8, ai_pattern_score: 0.8, vocabulary_richness: 0.7, paragraph_uniformity: 0.6, avg_word_commonality: 0.5, word_length_variance: 0.5, function_word_freq: 0.4, per_sentence_ai_ratio: 0.5, ngram_repetition: 0.4, token_predictability: 0.4, burstiness: 0.4, spectral_flatness: 0.3 }, interactions: [["readability_consistency", "sentence_uniformity", 0.35], ["perplexity", "ai_pattern_score", 0.30], ["per_sentence_ai_ratio", "ngram_repetition", 0.20], ["paragraph_uniformity", "readability_consistency", 0.15]] }),
+  new DetectorProfile({ name: "sapling", displayName: "Sapling AI", category: "mid-tier", bias: 0.08, temperature: 1.15, weights: { perplexity: 1.2, token_predictability: 0.7, vocabulary_richness: 0.5, burstiness: 0.4, ai_pattern_score: 0.4, shannon_entropy: 0.3 }, interactions: [["perplexity", "token_predictability", 0.3]], strategy: DETECTOR_STRATEGIES.sapling }),
+  new DetectorProfile({ name: "content_at_scale", displayName: "Content at Scale", category: "mid-tier", bias: 0.0, temperature: 1.10, weights: { readability_consistency: 0.8, perplexity: 0.6, ai_pattern_score: 0.5, sentence_uniformity: 0.5, avg_word_commonality: 0.4, ngram_repetition: 0.3, lexical_density_var: 0.3 }, strategy: DETECTOR_STRATEGIES.content_at_scale }),
+  new DetectorProfile({ name: "crossplag", displayName: "Crossplag", category: "mid-tier", bias: 0.05, temperature: 1.08, weights: { perplexity: 0.8, ai_pattern_score: 0.7, sentence_uniformity: 0.6, vocabulary_richness: 0.5, ngram_repetition: 0.4, paragraph_uniformity: 0.3 }, strategy: DETECTOR_STRATEGIES.crossplag }),
+  new DetectorProfile({ name: "writer_ai", displayName: "Writer.com", category: "mid-tier", bias: -0.15, temperature: 1.10, weights: { perplexity: 0.9, burstiness: 0.6, vocabulary_richness: 0.5, stylometric_score: 0.5, shannon_entropy: 0.3, function_word_freq: 0.2 }, strategy: DETECTOR_STRATEGIES.writer_ai }),
+  new DetectorProfile({ name: "smodin", displayName: "Smodin AI", category: "mid-tier", bias: 0.10, temperature: 1.15, weights: { perplexity: 0.8, ai_pattern_score: 0.7, burstiness: 0.6, sentence_uniformity: 0.5, vocabulary_richness: 0.4, ngram_repetition: 0.3, per_sentence_ai_ratio: 0.3 }, strategy: DETECTOR_STRATEGIES.smodin }),
+  new DetectorProfile({ name: "hive_ai", displayName: "Hive AI", category: "mid-tier", bias: 0.08, temperature: 1.20, weights: { perplexity: 0.7, burstiness: 0.5, sentence_uniformity: 0.6, ai_pattern_score: 0.5, vocabulary_richness: 0.4, readability_consistency: 0.4, word_length_variance: 0.3, spectral_flatness: 0.2 }, interactions: [["perplexity", "sentence_uniformity", 0.2]], strategy: DETECTOR_STRATEGIES.hive_ai }),
+  new DetectorProfile({ name: "surfer_seo", displayName: "Surfer SEO", category: "mid-tier", bias: 0.22, temperature: 1.35, weights: { perplexity: 1.0, readability_consistency: 0.9, sentence_uniformity: 0.8, ai_pattern_score: 0.8, vocabulary_richness: 0.7, paragraph_uniformity: 0.6, avg_word_commonality: 0.5, word_length_variance: 0.5, function_word_freq: 0.4, per_sentence_ai_ratio: 0.5, ngram_repetition: 0.4, token_predictability: 0.4, burstiness: 0.4, spectral_flatness: 0.3 }, interactions: [["readability_consistency", "sentence_uniformity", 0.35], ["perplexity", "ai_pattern_score", 0.30], ["per_sentence_ai_ratio", "ngram_repetition", 0.20], ["paragraph_uniformity", "readability_consistency", 0.15]], strategy: DETECTOR_STRATEGIES.surfer_seo }),
   // TIER 3: LOWER
-  new DetectorProfile({ name: "zerogpt", displayName: "ZeroGPT", category: "lower-tier", bias: -0.10, temperature: 0.95, weights: { perplexity: 1.3, ai_pattern_score: 0.6, burstiness: 0.4, ngram_repetition: 0.4 } }),
-  new DetectorProfile({ name: "quillbot", displayName: "QuillBot AI", category: "lower-tier", bias: -0.15, temperature: 0.92, weights: { vocabulary_richness: 0.8, perplexity: 0.7, stylometric_score: 0.5, ai_pattern_score: 0.4, starter_diversity: 0.3 } }),
-  new DetectorProfile({ name: "grammarly", displayName: "Grammarly AI", category: "lower-tier", bias: -0.25, temperature: 0.85, weights: { readability_consistency: 0.8, stylometric_score: 0.7, sentence_uniformity: 0.5, vocabulary_richness: 0.4, perplexity: 0.3 } }),
-  new DetectorProfile({ name: "scribbr", displayName: "Scribbr AI", category: "lower-tier", bias: -0.12, temperature: 0.90, weights: { ai_pattern_score: 0.8, sentence_uniformity: 0.6, readability_consistency: 0.5, vocabulary_richness: 0.4, perplexity: 0.4, per_sentence_ai_ratio: 0.3 } }),
+  new DetectorProfile({ name: "zerogpt", displayName: "ZeroGPT", category: "lower-tier", bias: -0.10, temperature: 0.95, weights: { perplexity: 1.3, ai_pattern_score: 0.6, burstiness: 0.4, ngram_repetition: 0.4 }, strategy: DETECTOR_STRATEGIES.zerogpt }),
+  new DetectorProfile({ name: "quillbot", displayName: "QuillBot AI", category: "lower-tier", bias: -0.15, temperature: 0.92, weights: { vocabulary_richness: 0.8, perplexity: 0.7, stylometric_score: 0.5, ai_pattern_score: 0.4, starter_diversity: 0.3 }, strategy: DETECTOR_STRATEGIES.quillbot }),
+  new DetectorProfile({ name: "grammarly", displayName: "Grammarly AI", category: "lower-tier", bias: -0.25, temperature: 0.85, weights: { readability_consistency: 0.8, stylometric_score: 0.7, sentence_uniformity: 0.5, vocabulary_richness: 0.4, perplexity: 0.3 }, strategy: DETECTOR_STRATEGIES.grammarly }),
+  new DetectorProfile({ name: "scribbr", displayName: "Scribbr AI", category: "lower-tier", bias: -0.12, temperature: 0.90, weights: { ai_pattern_score: 0.8, sentence_uniformity: 0.6, readability_consistency: 0.5, vocabulary_richness: 0.4, perplexity: 0.4, per_sentence_ai_ratio: 0.3 }, strategy: DETECTOR_STRATEGIES.scribbr }),
   // TIER 4: RESEARCH
-  new DetectorProfile({ name: "pangram", displayName: "Pangram", category: "research", bias: 0.28, temperature: 1.42, weights: { perplexity: 0.8, burstiness: 0.7, vocabulary_richness: 0.6, sentence_uniformity: 0.6, ai_pattern_score: 0.6, shannon_entropy: 0.5, readability_consistency: 0.5, ngram_repetition: 0.5, zipf_deviation: 0.4, token_predictability: 0.5, spectral_flatness: 0.4, function_word_freq: 0.3, dependency_depth: 0.3, lexical_density_var: 0.3, per_sentence_ai_ratio: 0.4, avg_word_commonality: 0.2, word_length_variance: 0.2 }, interactions: [["perplexity", "zipf_deviation", 0.35], ["burstiness", "spectral_flatness", 0.25], ["sentence_uniformity", "paragraph_uniformity", 0.25], ["ngram_repetition", "token_predictability", 0.2], ["per_sentence_ai_ratio", "ai_pattern_score", 0.2]] }),
-  new DetectorProfile({ name: "roberta", displayName: "RoBERTa Detector", category: "research", bias: 0.0, temperature: 1.05, weights: { perplexity: 1.0, vocabulary_richness: 0.7, burstiness: 0.5, ai_pattern_score: 0.4, shannon_entropy: 0.3, token_predictability: 0.3 } }),
-  new DetectorProfile({ name: "openai_classifier", displayName: "OpenAI Classifier", category: "research", bias: -0.40, temperature: 0.80, weights: { perplexity: 1.2, burstiness: 0.6, vocabulary_richness: 0.4, shannon_entropy: 0.3 } }),
-  new DetectorProfile({ name: "content_detector_ai", displayName: "Content Detector AI", category: "research", bias: -0.05, temperature: 1.00, weights: { perplexity: 0.8, ai_pattern_score: 0.7, sentence_uniformity: 0.5, vocabulary_richness: 0.4, ngram_repetition: 0.3, per_sentence_ai_ratio: 0.3 } }),
-  new DetectorProfile({ name: "gpt2_detector", displayName: "GPT-2 Output Detector", category: "research", bias: -0.45, temperature: 0.75, weights: { perplexity: 1.3, burstiness: 0.6, vocabulary_richness: 0.4, shannon_entropy: 0.3 } }),
-  new DetectorProfile({ name: "stealth_detector", displayName: "StealthDetector (Ours)", category: "custom", description: "Ultra-aggressive: all 20 signals + interactions, max temperature", bias: 0.35, temperature: 1.50, weights: { perplexity: 0.7, burstiness: 0.6, vocabulary_richness: 0.5, sentence_uniformity: 0.5, ai_pattern_score: 0.6, shannon_entropy: 0.4, readability_consistency: 0.4, stylometric_score: 0.3, ngram_repetition: 0.3, starter_diversity: 0.3, word_length_variance: 0.2, paragraph_uniformity: 0.3, avg_word_commonality: 0.2, zipf_deviation: 0.3, token_predictability: 0.4, per_sentence_ai_ratio: 0.5, spectral_flatness: 0.3, lexical_density_var: 0.2, function_word_freq: 0.2, dependency_depth: 0.2 }, interactions: [["perplexity", "burstiness", 0.35], ["perplexity", "ai_pattern_score", 0.30], ["sentence_uniformity", "paragraph_uniformity", 0.25], ["token_predictability", "zipf_deviation", 0.25], ["per_sentence_ai_ratio", "ai_pattern_score", 0.20], ["burstiness", "spectral_flatness", 0.15]] }),
+  new DetectorProfile({ name: "pangram", displayName: "Pangram", category: "research", bias: 0.28, temperature: 1.42, weights: { perplexity: 0.8, burstiness: 0.7, vocabulary_richness: 0.6, sentence_uniformity: 0.6, ai_pattern_score: 0.6, shannon_entropy: 0.5, readability_consistency: 0.5, ngram_repetition: 0.5, zipf_deviation: 0.4, token_predictability: 0.5, spectral_flatness: 0.4, function_word_freq: 0.3, dependency_depth: 0.3, lexical_density_var: 0.3, per_sentence_ai_ratio: 0.4, avg_word_commonality: 0.2, word_length_variance: 0.2 }, interactions: [["perplexity", "zipf_deviation", 0.35], ["burstiness", "spectral_flatness", 0.25], ["sentence_uniformity", "paragraph_uniformity", 0.25], ["ngram_repetition", "token_predictability", 0.2], ["per_sentence_ai_ratio", "ai_pattern_score", 0.2]], strategy: DETECTOR_STRATEGIES.pangram }),
+  new DetectorProfile({ name: "roberta", displayName: "RoBERTa Detector", category: "research", bias: 0.0, temperature: 1.05, weights: { perplexity: 1.0, vocabulary_richness: 0.7, burstiness: 0.5, ai_pattern_score: 0.4, shannon_entropy: 0.3, token_predictability: 0.3 }, strategy: DETECTOR_STRATEGIES.roberta }),
+  new DetectorProfile({ name: "openai_classifier", displayName: "OpenAI Classifier", category: "research", bias: -0.40, temperature: 0.80, weights: { perplexity: 1.2, burstiness: 0.6, vocabulary_richness: 0.4, shannon_entropy: 0.3 }, strategy: DETECTOR_STRATEGIES.openai_classifier }),
+  new DetectorProfile({ name: "content_detector_ai", displayName: "Content Detector AI", category: "research", bias: -0.05, temperature: 1.00, weights: { perplexity: 0.8, ai_pattern_score: 0.7, sentence_uniformity: 0.5, vocabulary_richness: 0.4, ngram_repetition: 0.3, per_sentence_ai_ratio: 0.3 }, strategy: DETECTOR_STRATEGIES.content_detector_ai }),
+  new DetectorProfile({ name: "gpt2_detector", displayName: "GPT-2 Output Detector", category: "research", bias: -0.45, temperature: 0.75, weights: { perplexity: 1.3, burstiness: 0.6, vocabulary_richness: 0.4, shannon_entropy: 0.3 }, strategy: DETECTOR_STRATEGIES.gpt2_detector }),
+  new DetectorProfile({ name: "stealth_detector", displayName: "StealthDetector (Ours)", category: "custom", description: "Ultra-aggressive: all 20 signals + interactions, max temperature", bias: 0.35, temperature: 1.50, weights: { perplexity: 0.7, burstiness: 0.6, vocabulary_richness: 0.5, sentence_uniformity: 0.5, ai_pattern_score: 0.6, shannon_entropy: 0.4, readability_consistency: 0.4, stylometric_score: 0.3, ngram_repetition: 0.3, starter_diversity: 0.3, word_length_variance: 0.2, paragraph_uniformity: 0.3, avg_word_commonality: 0.2, zipf_deviation: 0.3, token_predictability: 0.4, per_sentence_ai_ratio: 0.5, spectral_flatness: 0.3, lexical_density_var: 0.2, function_word_freq: 0.2, dependency_depth: 0.2 }, interactions: [["perplexity", "burstiness", 0.35], ["perplexity", "ai_pattern_score", 0.30], ["sentence_uniformity", "paragraph_uniformity", 0.25], ["token_predictability", "zipf_deviation", 0.25], ["per_sentence_ai_ratio", "ai_pattern_score", 0.20], ["burstiness", "spectral_flatness", 0.15]], strategy: DETECTOR_STRATEGIES.stealth_detector }),
 ];
 
 // ── Multi-Detector Orchestrator ──

@@ -54,12 +54,12 @@ const DEFAULT_CONFIG: AntiPangramConfig = {
 // ═══════════════════════════════════════════════════════════════════
 
 const QUALITY_TARGETS = {
-  maxAiScore: 15,           // Overall forensic AI score must be below this
-  minBurstinessCV: 0.35,    // Sentence length CV must exceed this
-  maxConnectorDensity: 0.15, // Connector density must be below this
-  maxParallelScore: 0.12,   // Parallel structure score must be below this
-  maxStarterRepetition: 0.30,// Starter repetition must be below this
-  minChangeRatio: 0.25,     // Minimum word-level change from original
+  maxAiScore: 12,           // Overall forensic AI score must be below this
+  minBurstinessCV: 0.38,   // Sentence length CV must exceed this
+  maxConnectorDensity: 0.12, // Connector density must be below this
+  maxParallelScore: 0.10,   // Parallel structure score must be below this
+  maxStarterRepetition: 0.25,// Starter repetition must be below this
+  minChangeRatio: 0.28,     // Minimum word-level change from original
 };
 
 // ═══════════════════════════════════════════════════════════════════
@@ -365,6 +365,121 @@ function targetedRefinement(text: string, forensic: ForensicProfile): string {
 }
 
 // ═══════════════════════════════════════════════════════════════════
+// FINAL AI-PHRASE KILL SWEEP
+// Hard-coded removal of the most persistent AI signal phrases that
+// survive all other passes. Applied once after all transforms.
+// ═══════════════════════════════════════════════════════════════════
+
+const FINAL_AI_KILL_PATTERNS: Array<[RegExp, string]> = [
+  // Sentence-start connectors still remaining
+  [/^Furthermore,?\s*/im, ''],
+  [/^Moreover,?\s*/im, ''],
+  [/^Additionally,?\s*/im, ''],
+  [/^Consequently,?\s*/im, ''],
+  [/^Subsequently,?\s*/im, ''],
+  [/^Notwithstanding,?\s*/im, ''],
+  [/^Notably,?\s*/im, ''],
+  [/^Crucially,?\s*/im, ''],
+  [/^Undeniably,?\s*/im, ''],
+  [/^Undoubtedly,?\s*/im, ''],
+  // Mid-sentence AI tell phrases
+  [/\bfurthermore\b/gi, 'also'],
+  [/\bmoreover\b/gi, 'also'],
+  [/\badditionally\b/gi, 'also'],
+  [/\bconsequently\b/gi, 'so'],
+  [/\bsubsequently\b/gi, 'then'],
+  [/\bnotwithstanding\b/gi, 'despite this'],
+  [/\bnevertheless\b/gi, 'still'],
+  [/\bnonetheless\b/gi, 'still'],
+  [/\bhenceforth\b/gi, 'from now on'],
+  // High-frequency AI adjectives/adverbs
+  [/\butilize\b/gi, 'use'],
+  [/\butilizes\b/gi, 'uses'],
+  [/\butilized\b/gi, 'used'],
+  [/\butilizing\b/gi, 'using'],
+  [/\bleverage\b(?!\s+(?:ratio|buyout|point))/gi, 'use'],
+  [/\bleverages\b/gi, 'uses'],
+  [/\bleveraged\b/gi, 'used'],
+  [/\bleveraging\b/gi, 'using'],
+  [/\bcomprehensive\b/gi, 'thorough'],
+  [/\btransformative\b/gi, 'major'],
+  [/\bpivotal\b/gi, 'key'],
+  [/\bparamount\b/gi, 'critical'],
+  [/\bintricate\b/gi, 'complex'],
+  [/\bmeticulous\b/gi, 'careful'],
+  [/\brobust\b(?!\s+(?:wine|beer|coffee))/gi, 'strong'],
+  [/\bholistic\b/gi, 'broad'],
+  [/\bunderscor(?:e|es|ed|ing)\b/gi, 'highlight'],
+  [/\bbolster(?:s|ed|ing)?\b/gi, 'support'],
+  [/\bfoster(?:s|ed|ing)?\b/gi, 'build'],
+  [/\bexacerbat(?:e|es|ed|ing)\b/gi, 'worsen'],
+  [/\bmitigat(?:e|es|ed|ing)\b/gi, 'reduce'],
+  [/\bstreamlin(?:e|es|ed|ing)\b/gi, 'simplify'],
+  // AI evaluative phrases
+  [/\bcannot be overstated\b/gi, 'is real'],
+  [/\bit is worth noting that\b/gi, 'notably'],
+  [/\bit should be noted that\b/gi, 'notably'],
+  [/\bit must be noted that\b/gi, ''],
+  [/\bin order to\b/gi, 'to'],
+  [/\bthe fact that\b/gi, 'that'],
+  [/\bdue to the fact that\b/gi, 'because'],
+  [/\bfirst and foremost\b/gi, 'first'],
+  [/\beach and every\b/gi, 'every'],
+  [/\bat the end of the day\b/gi, 'in the end'],
+  [/\bin light of\b/gi, 'given'],
+  [/\bplays? a (?:crucial|vital|key|significant|important|pivotal|critical|central) role\b/gi, 'is central'],
+  [/\ba wide (?:range|array|variety|spectrum) of\b/gi, 'many types of'],
+  [/\ba (?:plethora|myriad|multitude) of\b/gi, 'many'],
+  [/\bin the realm of\b/gi, 'in'],
+  [/\bin today'?s (?:world|society|era|landscape|age)\b/gi, 'at present'],
+  [/\bserves? as a (?:testament|reminder|beacon|catalyst|cornerstone|foundation) (?:to|of)\b/gi, 'shows'],
+  [/\bnot only\b(.{5,40})\bbut also\b/gi, '$1 and'],
+];
+
+function finalAIPhraseSweep(text: string): string {
+  // Split into sentences, apply transforms per-sentence to avoid cross-sentence matches
+  const paragraphs = text.split(/\n\s*\n/).filter(p => p.trim());
+  const result = paragraphs.map(para => {
+    const sentences = splitToSentencesForSweep(para);
+    return sentences.map(sent => {
+      let s = sent;
+      for (const [pattern, replacement] of FINAL_AI_KILL_PATTERNS) {
+        // Reset lastIndex for global regexes
+        if (pattern.global) pattern.lastIndex = 0;
+        s = s.replace(pattern, replacement as string);
+      }
+      // Fix double spaces and capitalization
+      s = s.replace(/  +/g, ' ').trim();
+      if (s.length > 0 && /^[a-z]/.test(s)) {
+        s = s.charAt(0).toUpperCase() + s.slice(1);
+      }
+      return s;
+    }).filter(s => s.trim().length > 0).join(' ');
+  });
+  return result.join('\n\n');
+}
+
+function splitToSentencesForSweep(text: string): string[] {
+  // Simple sentence splitter — split on . ! ? followed by space + uppercase
+  const parts: string[] = [];
+  let current = '';
+  for (let i = 0; i < text.length; i++) {
+    current += text[i];
+    if (/[.!?]/.test(text[i]) && i + 1 < text.length && /\s/.test(text[i + 1])) {
+      const next = text.slice(i + 1).trimStart();
+      if (/^[A-Z"']/.test(next)) {
+        parts.push(current.trim());
+        current = '';
+        // Skip whitespace
+        while (i + 1 < text.length && /\s/.test(text[i + 1])) i++;
+      }
+    }
+  }
+  if (current.trim()) parts.push(current.trim());
+  return parts.length > 0 ? parts : [text];
+}
+
+// ═══════════════════════════════════════════════════════════════════
 // MAIN ENGINE ENTRY POINT
 // ═══════════════════════════════════════════════════════════════════
 
@@ -378,6 +493,7 @@ export function antiPangramHumanize(
   // ── Pass 1: Forensic Analysis ──
   const forensicBefore = buildForensicProfile(text);
   const context = buildDocumentContext(text);
+
   const transformsApplied: string[] = [];
 
   console.log(`[AntiPangram] Initial forensic score: ${forensicBefore.overallAiScore}`);
@@ -437,6 +553,10 @@ export function antiPangramHumanize(
 
   // ── Pass 6: Grammar cleanup ──
   humanized = cleanGrammar(humanized);
+
+  // ── Pass 6b: Final AI-phrase kill sweep ──
+  // Hard-coded removal of remaining AI phrases the vocabulary pass may have missed.
+  humanized = finalAIPhraseSweep(humanized);
 
   // ── Pass 7: Contraction handling (ALWAYS expand — no contractions rule) ──
   humanized = expandContractions(humanized);

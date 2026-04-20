@@ -76,17 +76,40 @@ const AI_VOCABULARY_SET = new Set([
 // SENTENCE SPLITTING
 // ═══════════════════════════════════════════════════════════════════
 
+// Common abbreviations whose trailing period should NOT trigger a sentence split
+const ABBREV_RE = /\b(?:al|et|Dr|Mr|Mrs|Ms|Prof|Sr|Jr|vs|i\.e|e\.g|etc|Fig|approx|dept|est|govt|Corp|Inc|Ltd|Co|no|pp|vol|ed|eds|rev|trans|univ|avg|max|min|sec|dept|div|est|dist|approx|tel|ext|fax|blvd|ave|rd|st|sq|ft|lb|oz|km|cm|mm|mg|kg|ml)\.$/;
+
 export function splitToSentences(text: string): string[] {
-  return text
-    .replace(/([.!?])\s+(?=[A-Z])/g, (match, punct, offset) => {
-      if (punct === '.' && offset >= 2 && /[A-Za-z]/.test(text[offset - 1]) && text[offset - 2] === '.') {
+  // Temporarily protect known abbreviations like "et al.", "Dr.", "e.g."
+  let protected_text = text
+    .replace(/\bet al\./g, 'et al·')   // middle dot as placeholder
+    .replace(/\be\.g\./g, 'e.g·')
+    .replace(/\bi\.e\./g, 'i.e·')
+    .replace(/\betc\./g, 'etc·')
+    .replace(/\bDr\./g, 'Dr·')
+    .replace(/\bMr\./g, 'Mr·')
+    .replace(/\bMrs\./g, 'Mrs·')
+    .replace(/\bMs\./g, 'Ms·')
+    .replace(/\bProf\./g, 'Prof·')
+    .replace(/\bSt\./g, 'St·')
+    .replace(/\bFig\./g, 'Fig·')
+    .replace(/\bvs\./g, 'vs·');
+
+  const sentences = protected_text
+    .replace(/([.!?])\s+(?=[A-Z"])/g, (match, punct, offset) => {
+      // Also skip if preceded by a single uppercase letter (initials like "J. Smith")
+      if (punct === '.' && offset >= 2 && /[A-Z]/.test(protected_text[offset - 1]) && /\s/.test(protected_text[offset - 2])) {
         return match;
       }
       return punct + '\n§SPLIT§';
     })
     .split('§SPLIT§')
     .map(s => s.trim())
-    .filter(s => s.length > 0);
+    .filter(s => s.length > 0)
+    // Restore abbreviation placeholders
+    .map(s => s.replace(/·/g, '.'));
+
+  return sentences;
 }
 
 // ═══════════════════════════════════════════════════════════════════

@@ -437,7 +437,7 @@ function isGarbledSentence(sentence: string): boolean {
   // "is alsoed by" or any nonsense "-ed" passive form
   if (/\bis\s+alsoed\b/i.test(s)) return true;
   // Broken irregular past participles created by naive voice shift
-  if (/\b(?:chosed|choosed|runned|comed|goed|taked|takened|gived|writed|speaked|leaved|finded|knowed|thinked|sayed|tolded|keeped|bringed|buyed|felted|cutted|putted|setted|digged|stronglyed|becomed|choosened)\b/i.test(s)) return true;
+  if (/\b(?:chosed|choosed|runned|comed|goed|taked|takened|gived|writed|speaked|leaved|finded|knowed|thinked|sayed|tolded|keeped|bringed|buyed|felted|cutted|putted|setted|digged|stronglyed|becomed|choosened|arised|losed|wined|thinked|growed|drived|hited|falled|holded|rised|speaked|maked|standed|telled|spended|builded|dealed|feeled|payed)\b/i.test(s)) return true;
   // Broken passive with dangling agent: "is X by Y, subject"
   if (/\b(?:is|was|are|were)\s+\w+(?:ed|en)\s+by\s+\w+(?:\s+\w+)?\s*,\s*(?:I|he|she|it|we|they|you)\b/i.test(s)) return true;
   // Repeated adjacent words (excluding intentional)
@@ -645,9 +645,9 @@ const EXTRA_AI_PHRASES: [RegExp, string][] = [
   [/\bfirst and foremost\b/gi, 'first'],
   [/\beach and every\b/gi, 'every'],
   [/\bwhen it comes to\b/gi, 'regarding'],
-  [/\bat the end of the day\b/gi, 'ultimately'],
+  [/\bat the end of the day\b/gi, 'in practice'],
   [/\bin the context of\b/gi, 'within'],
-  [/\ba wide (?:range|array|spectrum) of\b/gi, 'many'],
+  [/\ba wide (?:range|array|spectrum) of\b/gi, 'many types of'],
   [/\bdue to the fact that\b/gi, 'because'],
   [/\bin the realm of\b/gi, 'in'],
   [/\bin order to\b/gi, 'to'],
@@ -716,17 +716,17 @@ function ppAIWordKill(text: string): string {
 
 const PP_AI_PHRASE_PATTERNS: [RegExp, string][] = [
   [/\bit is (?:important|crucial|essential|vital|imperative|worth noting) (?:to note |to mention |to recognize )?that\b/gi, ''],
-  [/\bplays? a (?:crucial|vital|key|significant|important|pivotal|critical) role(?: in)?\b/gi, 'matters for'],
+  [/\bplays? a (?:crucial|vital|key|significant|important|pivotal|critical) role(?: in)?\b/gi, 'is central to'],
   [/\bin today'?s (?:world|society|landscape|era|age)\b/gi, 'at present'],
-  [/\bserves? as a (?:testament|reminder|catalyst|cornerstone|foundation)\b/gi, 'demonstrates'],
-  [/\bcannot be overstated\b/gi, 'is significant'],
+  [/\bserves? as a (?:testament|reminder|catalyst|cornerstone|foundation)\b/gi, 'shows'],
+  [/\bcannot be overstated\b/gi, 'is real'],
   [/\bneedless to say\b/gi, ''],
   [/\bfirst and foremost\b/gi, 'first'],
   [/\beach and every\b/gi, 'every'],
   [/\bwhen it comes to\b/gi, 'regarding'],
-  [/\bat the end of the day\b/gi, 'ultimately'],
+  [/\bat the end of the day\b/gi, 'in practice'],
   [/\bin the context of\b/gi, 'within'],
-  [/\ba (?:wide|broad|vast) (?:range|array|spectrum) of\b/gi, 'many'],
+  [/\ba (?:wide|broad|vast) (?:range|array|spectrum) of\b/gi, 'many types of'],
   [/\bdue to the fact that\b/gi, 'because'],
   [/\bin the realm of\b/gi, 'in'],
   [/\bin order to\b/gi, 'to'],
@@ -742,6 +742,10 @@ const PP_AI_PHRASE_PATTERNS: [RegExp, string][] = [
   [/\bundeniably,?\s*/gi, ''], [/\bundoubtedly,?\s*/gi, ''],
   [/\bcrucially,?\s*/gi, ''],
   [/\barguably,?\s*/gi, ''],
+  [/\badditionally,?\s*/gi, ''],
+  [/\bmoreover,?\s*/gi, ''],
+  [/\bfurthermore,?\s*/gi, ''],
+  [/\bconsequently,?\s*/gi, ''],
 ];
 
 function ppAIPhrasesKill(text: string): string {
@@ -764,6 +768,7 @@ const PP_AI_STARTERS = new Set([
   'notwithstanding', 'crucially',
   'importantly', 'arguably',
   'undeniably', 'undoubtedly', 'remarkably', 'evidently',
+  'additionally', 'moreover', 'furthermore', 'consequently',
 ]);
 
 function ppStarterKill(text: string): string {
@@ -853,12 +858,12 @@ function ppFinalCleanup(text: string): string {
 /** Kill first person if not in input. */
 function ppKillFirstPerson(text: string): string {
   let r = text;
-  r = r.replace(/\bI believe that\b/gi, 'It can be argued that');
-  r = r.replace(/\bI think that\b/gi, 'It appears that');
+  r = r.replace(/\bI believe that\b/gi, 'The evidence suggests that');
+  r = r.replace(/\bI think that\b/gi, 'The data indicates that');
   r = r.replace(/\bI argue that\b/gi, 'The argument is that');
-  r = r.replace(/\bI suggest that\b/gi, 'It is suggested that');
-  r = r.replace(/\bwe can see that\b/gi, 'it can be observed that');
-  r = r.replace(/\bwe observe that\b/gi, 'it is observed that');
+  r = r.replace(/\bI suggest that\b/gi, 'The analysis suggests that');
+  r = r.replace(/\bwe can see that\b/gi, 'the data shows that');
+  r = r.replace(/\bwe observe that\b/gi, 'the observation is that');
   r = r.replace(/\bwe find that\b/gi, 'the findings indicate that');
   r = r.replace(/\bwe argue\b/gi, 'the argument holds');
   r = r.replace(/\bIn my view\b/gi, 'From this perspective');

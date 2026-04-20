@@ -41,7 +41,8 @@ export async function POST(req: Request) {
     if (Object.keys(vendorScores).length > 0) {
       detectorResults = analysis.detectors.map((detectorResult) => {
         const vendorKey = VENDOR_DETECTOR_BY_DISPLAY[detectorResult.detector];
-        const vendorScore = vendorKey ? vendorScores[vendorKey] : undefined;
+        if (!vendorKey) return detectorResult;
+        const vendorScore = vendorScores[vendorKey];
         if (typeof vendorScore !== 'number') return detectorResult;
         vendorDetectorsUsed.add(vendorKey);
         const aiScore = Math.round(Math.max(0, Math.min(100, vendorScore)) * 10) / 10;

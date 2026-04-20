@@ -145,7 +145,7 @@ const EVALUATIVE_SURGERIES: Array<{ pattern: RegExp; replaceFn: (match: string, 
     // "Research has shown that X significantly improves"
     pattern: /\b[Rr]esearch has shown that\b/gi,
     replaceFn: () => {
-      const alts = ['Studies show', 'Evidence shows', 'Research shows', 'The data suggests'];
+      const alts = ['Studies show', 'Evidence shows', 'Research shows', 'The data suggests', 'The literature shows'];
       return alts[Math.floor(Math.random() * alts.length)];
     },
   },
@@ -165,13 +165,88 @@ const EVALUATIVE_SURGERIES: Array<{ pattern: RegExp; replaceFn: (match: string, 
       return alts[Math.floor(Math.random() * alts.length)];
     },
   },
+  // ── GENERAL ACADEMIC EVALUATIVE PATTERNS ──────────────────────────
+  {
+    // "This highlights/underscores/demonstrates the importance of X"
+    pattern: /\b[Tt]his (?:highlights|underscores|underlines|emphasizes|demonstrates|illustrates|reinforces) the (?:importance|significance|need|value|critical nature|necessity|role) of\b/gi,
+    replaceFn: (_m) => {
+      const alts = ['This shows why', 'This points to the value of', 'This makes clear the need for', 'This speaks to the role of'];
+      return alts[_m.length % alts.length];
+    },
+  },
+  {
+    // "It is important to note that" / "It is worth noting that"
+    pattern: /\b[Ii]t is (?:important|crucial|essential|worth noting|worth emphasizing|vital|imperative) (?:to note |to recognize |to understand |to mention |to emphasize )?that\b/gi,
+    replaceFn: (_m) => {
+      const alts = ['Notably,', 'The key point is that', 'What matters here is that', 'One thing to keep in mind is that'];
+      return alts[_m.length % alts.length];
+    },
+  },
+  {
+    // "In conclusion, X"
+    pattern: /^[Ii]n conclusion,?\s*/g,
+    replaceFn: (_m) => {
+      const alts = ['All told, ', 'Taken together, ', 'On balance, ', 'When all is considered, '];
+      return alts[_m.length % alts.length];
+    },
+  },
+  {
+    // "In summary, X"
+    pattern: /^[Ii]n summary,?\s*/g,
+    replaceFn: (_m) => {
+      const alts = ['Put simply, ', 'In short, ', 'Broadly speaking, ', 'Looking at the overall picture, '];
+      return alts[_m.length % alts.length];
+    },
+  },
+  {
+    // "These findings/results highlight/suggest/indicate that"
+    pattern: /\b[Tt]hese (?:findings|results|data|studies|analyses) (?:highlight|suggest|indicate|demonstrate|confirm|show|reveal|underscore) that\b/gi,
+    replaceFn: (_m) => {
+      const alts = ['The data shows that', 'These results point to', 'The evidence here shows that', 'What the findings show is that'];
+      return alts[_m.length % alts.length];
+    },
+  },
+  {
+    // "This paper examines/evaluates/explores/investigates X"
+    pattern: /\b[Tt]his (?:paper|study|research|article|analysis|review) (?:examines|evaluates|explores|investigates|assesses|considers|addresses) (?:the )?/gi,
+    replaceFn: (_m) => {
+      const alts = ['Here we look at ', 'The focus here is on ', 'This analysis looks at the ', 'The work here examines the '];
+      return alts[_m.length % alts.length];
+    },
+  },
+  {
+    // "X has significantly transformed/revolutionized Y"
+    pattern: /\bhas (?:significantly |fundamentally |substantially |profoundly |dramatically )?(?:transformed|revolutionized|reshaped|reimagined) (?:the )?/gi,
+    replaceFn: (_m) => {
+      const alts = ['has changed ', 'has had a major effect on ', 'has redrawn the picture of ', 'has shifted how people approach '];
+      return alts[_m.length % alts.length];
+    },
+  },
+  {
+    // "Both X and Y" at sentence start → "X and Y both" or rephrase
+    pattern: /^Both (\w[\w\s]+?) and (\w[\w\s]+?) /g,
+    replaceFn: (_m: string, a: string, b: string) => `${a.trim()} and ${b.trim()} both `,
+  },
+  {
+    // "X presents both extraordinary opportunities and significant challenges"
+    pattern: /\bpresents? both (extraordinary|significant|major|key) (opportunities|benefits|advantages) and (significant|major|serious|substantial) (challenges|concerns|limitations|risks)\b/gi,
+    replaceFn: (_m, adj1, noun1, adj2, noun2) => {
+      return `brings real ${noun1} but also ${adj2} ${noun2}`;
+    },
+  },
 ];
 
 export function surgicalEvaluativeRewrite(sentence: string): string {
   let result = sentence;
   for (const { pattern, replaceFn } of EVALUATIVE_SURGERIES) {
     pattern.lastIndex = 0;
-    result = result.replace(pattern, replaceFn);
+    result = result.replace(pattern, replaceFn as (...args: string[]) => string);
+  }
+  // Clean up any double spaces from surgery
+  result = result.replace(/  +/g, ' ').trim();
+  // Fix capitalization at start
+  if (result.length > 0 && /^[a-z]/.test(result)) {
+    result = result.charAt(0).toUpperCase() + result.slice(1);
   }
   return result;
 }

@@ -737,7 +737,7 @@ const EXTRA_REPLACEMENTS: Record<string, string[]> = {
   limit: ['cap', 'ceiling', 'constraint', 'threshold'],
   exceed: ['surpass', 'outstrip', 'outpace', 'eclipse'],
   match: ['rival', 'equal', 'parallel', 'mirror'],
-  emerge: ['arise', 'come about', 'appear', 'develop'],
+  emerge: ['appear', 'surface', 'develop', 'come about'],
   adopt: ['embrace', 'implement', 'accept', 'employ'],
   train: ['educate', 'prepare', 'instruct', 'develop'],
   perpetuate: ['sustain', 'prolong', 'continue', 'maintain'],
@@ -952,6 +952,29 @@ function transferMorphology(original: string, replacement: string): string {
 
   // Past tense: -ed
   if (orig.endsWith('ed') && !rep.endsWith('ed') && orig.length > 4) {
+    // Irregular verbs that must not be regularized
+    const IRREGULAR_PAST: Record<string, string> = {
+      arise: 'arose', become: 'became', begin: 'began', break: 'broke',
+      bring: 'brought', build: 'built', buy: 'bought', catch: 'caught',
+      choose: 'chose', come: 'came', do: 'did', draw: 'drew',
+      drink: 'drank', drive: 'drove', eat: 'ate', fall: 'fell',
+      feel: 'felt', find: 'found', fly: 'flew', forget: 'forgot',
+      freeze: 'froze', get: 'got', give: 'gave', go: 'went',
+      grow: 'grew', have: 'had', hear: 'heard', hide: 'hid',
+      hit: 'hit', hold: 'held', keep: 'kept', know: 'knew',
+      lead: 'led', leave: 'left', lose: 'lost', make: 'made',
+      mean: 'meant', meet: 'met', pay: 'paid', put: 'put',
+      read: 'read', ride: 'rode', ring: 'rang', rise: 'rose',
+      run: 'ran', say: 'said', see: 'saw', sell: 'sold',
+      send: 'sent', set: 'set', show: 'showed', sit: 'sat',
+      speak: 'spoke', spend: 'spent', stand: 'stood', steal: 'stole',
+      swim: 'swam', swing: 'swung', take: 'took', teach: 'taught',
+      tear: 'tore', tell: 'told', think: 'thought', throw: 'threw',
+      understand: 'understood', wake: 'woke', wear: 'wore', win: 'won',
+      write: 'wrote', spread: 'spread', shed: 'shed', cut: 'cut',
+    };
+    const irregPast = IRREGULAR_PAST[rep];
+    if (irregPast) return replacement[0] === replacement[0].toUpperCase() ? irregPast.charAt(0).toUpperCase() + irregPast.slice(1) : irregPast;
     if (rep.endsWith('e')) return replacement + 'd';
     // consonant+y → -ied (apply→applied), vowel+y → -ed (employ→employed)
     if (rep.endsWith('y') && !'aeiou'.includes(rep[rep.length - 2] || '')) return replacement.slice(0, -1) + 'ied';
