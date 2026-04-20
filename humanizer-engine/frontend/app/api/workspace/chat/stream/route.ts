@@ -61,8 +61,9 @@ export async function POST(request: Request) {
 
     const groqKey = process.env.GROQ_API_KEY;
     const openaiKey = process.env.OPENAI_API_KEY;
+    const deepseekKey = process.env.DEEPSEEK_API_KEY;
 
-    if (!groqKey && !openaiKey) {
+    if (!groqKey && !openaiKey && !deepseekKey) {
       return new Response(JSON.stringify({ error: 'No AI API key configured.' }), {
         status: 500,
         headers: { 'Content-Type': 'application/json' },
@@ -79,17 +80,31 @@ export async function POST(request: Request) {
       conversationMessages.push({ role: 'user', content: userMessage });
     }
 
-    // Try Groq first, then OpenAI fallback
+    // Check if user is asking for more than 2000 words
+    const wordCountMatch = userMessage.match(/(\d+[,.]?\d*)\s*(?:-|to)?\s*(\d+[,.]?\d*)?\s*words?/i);
+    let wantsLongDocument = false;
+    if (wordCountMatch) {
+      const wCount = parseInt(wordCountMatch[1].replace(/[,.]/g, ''), 10);
+      if (wCount >= 2000) wantsLongDocument = true;
+    }
+
+    // Try DeepSeek for long documents, otherwise fallback. Try Groq first, then OpenAI fallback
     let stream: ReadableStream;
     try {
-      stream = groqKey
-        ? await streamFromGroq(groqKey, conversationMessages)
-        : await streamFromOpenAI(openaiKey!, conversationMessages);
+      if (wantsLongDocument && deepseekKey) {
+        stream = await streamFromDeepSeek(deepseekKey, conversationMessages);
+      } else {
+        stream = groqKey
+          ? await streamFromGroq(groqKey, conversationMessages)
+          : await streamFromOpenAI(openaiKey!, conversationMessages);
+      }
     } catch (primaryErr) {
       console.error('Primary stream provider failed:', primaryErr);
       // If primary fails, try fallback
       if (groqKey && openaiKey) {
         stream = await streamFromOpenAI(openaiKey, conversationMessages);
+      } else if (deepseekKey) {
+        stream = await streamFromDeepSeek(deepseekKey, conversationMessages);
       } else {
         throw new Error('All AI providers failed');
       }
@@ -139,6 +154,39 @@ async function streamFromGroq(apiKey: string, messages: ChatMessage[]): Promise<
       return streamFromOpenAI(openaiKey, messages);
     }
     throw new Error(`Groq API error: ${response.status}`);
+  }
+
+  return transformSSEStream(response.body);
+}
+
+async function streamFromDeepSeek(apiKey: string, messages: ChatMessage[]): Promise<ReadableStream> {
+  const model = 'deepseek-chat';
+
+  const response = await fetch('https://api.deepseek.com/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model,
+      messages,
+      temperature: 0.7,
+      max_tokens: 8000,
+      stream: true,
+    }),
+  });
+
+  if (!response.ok || !response.body) {
+    const errorText = await response.text().catch(() => 'unknown');
+    console.error(`DeepSeek API error ${response.status}:`, errorText);
+    
+    // Fallback to OpenAI or Groq
+    const openaiKey = process.env.OPENAI_API_KEY;
+    const groqKey = process.env.GROQ_API_KEY;
+    if (openaiKey) return streamFromOpenAI(openaiKey, messages);
+    if (groqKey) return streamFromGroq(groqKey, messages);
+    throw new Error(`DeepSeek API error: ${response.status}`);
   }
 
   return transformSSEStream(response.body);

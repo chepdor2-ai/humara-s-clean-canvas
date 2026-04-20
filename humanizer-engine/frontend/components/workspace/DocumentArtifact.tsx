@@ -34,15 +34,18 @@ interface DocumentArtifactProps {
   onClose: () => void
   isFullScreen?: boolean
   onToggleFullScreen?: () => void
+  format?: 'APA' | 'MLA' | 'Harvard' | 'Chicago' | string
+  coverpage?: boolean
 }
 
 export function DocumentArtifact({
   title,
   content,
   onContentChange,
-  onClose,
   isFullScreen,
   onToggleFullScreen,
+  format,
+  coverpage,
 }: DocumentArtifactProps) {
   const editorRef = useRef<HTMLDivElement>(null)
   const [wordCount, setWordCount] = useState(0)
@@ -98,7 +101,17 @@ export function DocumentArtifact({
   // Format content to HTML paragraphs
   function formatContentToHtml(text: string): string {
     if (!text) return ''
-    return text
+    let html = ''
+
+    // Add Cover Page if required
+    if (coverpage) {
+      html += `<div style="text-align: center; margin-bottom: 40px; page-break-after: always; display: flex; flex-direction: column; justify-content: center; min-height: 800px;">
+        <h1 style="font-size:32px;font-weight:bold;margin-bottom:20px;font-family:'${selectedFont}';color:#1e293b">${title}</h1>
+        <p style="font-size:16px;font-family:'${selectedFont}';color:#475569">Format: ${format || 'Standard'}</p>
+      </div>`
+    }
+
+    const paragraphsHtml = text
       .split('\n\n')
       .map((paragraph) => {
         const trimmed = paragraph.trim()
@@ -122,6 +135,8 @@ export function DocumentArtifact({
       })
       .filter(Boolean)
       .join('')
+
+    return html + paragraphsHtml
   }
 
   // Handle editor input
@@ -321,7 +336,7 @@ export function DocumentArtifact({
 
   // Export functions
   const handleExport = useCallback(
-    async (type: 'docx' | 'pdf' | 'txt') => {
+    async (type: 'docx' | 'pdf' | 'txt' | 'pptx') => {
       setShowExportMenu(false)
       const text = editorRef.current?.innerText || content
 
@@ -397,9 +412,51 @@ export function DocumentArtifact({
         } catch {
           toast.error('DOCX export failed')
         }
+        return
+      }
+
+      if (type === 'pptx') {
+        try {
+          const pptxgen = (await import('pptxgenjs')).default
+          const pptx = new pptxgen()
+          
+          let slide = pptx.addSlide()
+          slide.addText(title, { x: 1, y: 3, w: '80%', h: 1, align: 'center', fontSize: 32, bold: true })
+          if (format) {
+             slide.addText(`Format: ${format}`, { x: 1, y: 4, w: '80%', h: 1, align: 'center', fontSize: 16 })
+          }
+
+          const paragraphs = text.split('\n').filter(Boolean)
+          let currentSlide = pptx.addSlide()
+          let yPos = 0.5
+          
+          for (const p of paragraphs) {
+            if (yPos > 4.5) {
+               currentSlide = pptx.addSlide()
+               yPos = 0.5
+            }
+            if (p.startsWith('## ') || p.startsWith('# ')) {
+               const cleanTitle = p.replace(/#/g, '').trim()
+               currentSlide = pptx.addSlide()
+               currentSlide.addText(cleanTitle, { x: 0.5, y: 0.5, w: '90%', fontSize: 24, bold: true })
+               yPos = 1.5
+            } else {
+               const cleanP = p.replace(/\*\*/g, '').trim()
+               if (!cleanP) continue
+               currentSlide.addText(cleanP, { x: 0.5, y: yPos, w: '90%', fontSize: 14 })
+               yPos += 1.2
+            }
+          }
+          
+          pptx.writeFile({ fileName: `${title.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.pptx` })
+          toast.success('Downloaded as PPTX')
+        } catch (e) {
+          console.error(e)
+          toast.error('PPTX export failed')
+        }
       }
     },
-    [title, content, selectedFont],
+    [title, content, selectedFont, format],
   )
 
   // Change font
@@ -583,6 +640,12 @@ export function DocumentArtifact({
                 className="flex w-full items-center gap-2.5 px-3.5 py-2.5 text-xs font-medium text-slate-700 hover:bg-cyan-50 dark:text-zinc-300 dark:hover:bg-cyan-500/10"
               >
                 <FileText className="h-4 w-4 text-cyan-500" /> PDF Document (.pdf)
+              </button>
+              <button
+                onClick={() => handleExport('pptx')}
+                className="flex w-full items-center gap-2.5 px-3.5 py-2.5 text-xs font-medium text-slate-700 hover:bg-orange-50 dark:text-zinc-300 dark:hover:bg-orange-500/10"
+              >
+                <FileText className="h-4 w-4 text-orange-500" /> PowerPoint (.pptx)
               </button>
               <button
                 onClick={() => handleExport('txt')}

@@ -322,6 +322,46 @@ export default function WorkspaceChatPage() {
         const parsedArtifact = parseArtifact(fullResponse)
         if (parsedArtifact) {
           setArtifact(parsedArtifact)
+          
+          setIsHumanizing(true)
+          try {
+             // Auto Humanize Pipeline
+             const hRes = await fetch('/api/workspace/chat/stream', {
+               method: 'POST',
+               headers: { 'Content-Type': 'application/json' },
+               body: JSON.stringify({
+                 message: `Humanize the following text to bypass AI detectors and make it read like a completely human-written academic paper. Keep the exact formatting (headers, citations) and length completely intact. Return ONLY the new text:\n\n${parsedArtifact.content}`,
+                 messages: []
+               })
+             });
+             
+             if (hRes.ok && hRes.body) {
+                const hReader = hRes.body.getReader();
+                const hDecoder = new TextDecoder();
+                let hFull = '';
+                while (true) {
+                  const { done, value } = await hReader.read();
+                  if (done) break;
+                  const chunk = hDecoder.decode(value, { stream: true });
+                  const lines = chunk.split('\n');
+                  for (const line of lines) {
+                    if (line.trim().startsWith('data: ') && line.trim() !== 'data: [DONE]') {
+                       try {
+                         const parsed = JSON.parse(line.trim().slice(6));
+                         if (parsed.content) {
+                           hFull += parsed.content;
+                           setArtifact(prev => prev ? { ...prev, content: hFull } : null);
+                         }
+                       } catch {}
+                    }
+                  }
+                }
+             }
+          } catch (e) {
+             console.error('Auto Humanization failed', e);
+          } finally {
+             setIsHumanizing(false);
+          }
         }
       } catch (err: unknown) {
         if (err instanceof Error && err.name === 'AbortError') {
@@ -420,7 +460,12 @@ export default function WorkspaceChatPage() {
                 Humara<span className="text-cyan-500">GPT</span>
               </h1>
               <p className="text-[10px] text-slate-400 dark:text-zinc-600">
-                {isStreaming ? (
+                {isHumanizing ? (
+                  <span className="flex items-center gap-1 text-emerald-500">
+                    <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500" />
+                    Auto-Humanizing Document...
+                  </span>
+                ) : isStreaming ? (
                   <span className="flex items-center gap-1">
                     <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-cyan-500" />
                     Generating...
@@ -618,6 +663,8 @@ export default function WorkspaceChatPage() {
             <DocumentArtifact
               title={artifact.title}
               content={artifact.content}
+              format={artifact.format}
+              coverpage={artifact.coverpage}
               onContentChange={(newContent) =>
                 setArtifact((prev) => (prev ? { ...prev, content: newContent } : null))
               }
@@ -642,6 +689,8 @@ export default function WorkspaceChatPage() {
             <DocumentArtifact
               title={artifact.title}
               content={artifact.content}
+              format={artifact.format}
+              coverpage={artifact.coverpage}
               onContentChange={(newContent) =>
                 setArtifact((prev) => (prev ? { ...prev, content: newContent } : null))
               }
