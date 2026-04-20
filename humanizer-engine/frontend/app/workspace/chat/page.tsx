@@ -1,24 +1,13 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
-import { ArrowRight, Loader2, Plus, RefreshCcw, Send, WandSparkles } from 'lucide-react'
+import { Bot, FileDown, FileText, Loader2, MessageSquare, Plus, RefreshCcw, Send, Trash2, WandSparkles } from 'lucide-react'
 import { useAuth } from '@/app/AuthProvider'
-import {
-  ArtifactPreview,
-  ExportToolbar,
-  MessageThread,
-  ProgressRail,
-  ProjectMiniSidebar,
-  ScorePanel,
-  WorkspaceControlTabs,
-  WorkspacePageHeader,
-  WorkspaceStatGrid,
-} from '@/components/workspace/workspace-ui'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Textarea } from '@/components/ui/textarea'
-import { workspaceFetch, getActiveDraft, getLatestScore, downloadBlob } from '@/lib/workspace/client'
+import { ScrollArea } from '@/components/ui/scroll-area'
+import { cn } from '@/lib/utils'
+import { downloadBlob, getLatestScore, workspaceFetch } from '@/lib/workspace/client'
 import type { WorkspaceProject } from '@/lib/workspace/types'
 
 export default function WorkspaceChatPage() {
@@ -26,230 +15,340 @@ export default function WorkspaceChatPage() {
   const [projects, setProjects] = useState<WorkspaceProject[]>([])
   const [activeProjectId, setActiveProjectId] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
-  const [message, setMessage] = useState('Make it more critical and add 2 more scholarly sources.')
+  const [message, setMessage] = useState('')
   const [creating, setCreating] = useState(false)
   const [sending, setSending] = useState(false)
   const [busyAction, setBusyAction] = useState<'regrade' | 'revise' | 'export' | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const bottomRef = useRef<HTMLDivElement>(null)
+  const inputRef = useRef<HTMLTextAreaElement>(null)
 
+  const token = session?.access_token
+
+  /* ── load projects ── */
   useEffect(() => {
-    const load = async () => {
-      if (!session?.access_token) return
-      setLoading(true)
-      setError(null)
-      try {
-        const data = await workspaceFetch<{ projects: WorkspaceProject[] }>(session.access_token, '/api/workspace/projects')
-        setProjects(data.projects)
-        setActiveProjectId((current) => current ?? data.projects[0]?.id ?? null)
-      } catch (loadError) {
-        setError(loadError instanceof Error ? loadError.message : 'Failed to load workspace projects.')
-      } finally {
-        setLoading(false)
-      }
-    }
-    void load()
-  }, [session?.access_token])
+    if (!token) return
+    setLoading(true)
+    workspaceFetch<{ projects: WorkspaceProject[] }>(token, '/api/workspace/projects')
+      .then((d) => {
+        setProjects(d.projects)
+        setActiveProjectId((c) => c ?? d.projects[0]?.id ?? null)
+      })
+      .catch((e) => setError(e instanceof Error ? e.message : 'Failed to load projects.'))
+      .finally(() => setLoading(false))
+  }, [token])
 
   const activeProject = useMemo(
-    () => projects.find((project) => project.id === activeProjectId) ?? projects[0] ?? null,
+    () => projects.find((p) => p.id === activeProjectId) ?? projects[0] ?? null,
     [activeProjectId, projects],
   )
-  const activeDraft = getActiveDraft(activeProject)
-  const latestScore = getLatestScore(activeProject)
 
-  const updateProject = (project: WorkspaceProject) => {
-    setProjects((current) => current.map((item) => (item.id === project.id ? project : item)))
-  }
+  const score = getLatestScore(activeProject)
 
+  const updateProject = useCallback((p: WorkspaceProject) => {
+    setProjects((cur) => cur.map((x) => (x.id === p.id ? p : x)))
+  }, [])
+
+  /* ── scroll to bottom on new messages ── */
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [activeProject?.messages.length])
+
+  /* ── actions ── */
   const createProject = async () => {
-    if (!session?.access_token) return
+    if (!token) return
     setCreating(true)
     setError(null)
     try {
-      const data = await workspaceFetch<{ project: WorkspaceProject }>(session.access_token, '/api/workspace/projects', {
+      const d = await workspaceFetch<{ project: WorkspaceProject }>(token, '/api/workspace/projects', {
         method: 'POST',
         body: JSON.stringify({
-          title: 'New Academic Workbench Project',
+          title: 'New Project',
           instructions: 'Create a structured academic draft with clear sections, scholarly evidence, and a grading target of 90 or above.',
           rubric: 'Reward analytical depth, structure, evidence quality, and clean academic formatting.',
-          uploads: ['lecture-notes.pdf'],
           citationStyle: 'APA 7',
           targetWordCount: 1500,
         }),
       })
-      setProjects((current) => [data.project, ...current])
-      setActiveProjectId(data.project.id)
-    } catch (createError) {
-      setError(createError instanceof Error ? createError.message : 'Failed to create project.')
+      setProjects((cur) => [d.project, ...cur])
+      setActiveProjectId(d.project.id)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to create project.')
     } finally {
       setCreating(false)
     }
   }
 
   const sendMessage = async () => {
-    if (!session?.access_token || !activeProject || !message.trim()) return
+    if (!token || !activeProject || !message.trim()) return
     setSending(true)
     setError(null)
     try {
-      const data = await workspaceFetch<{ project: WorkspaceProject }>(session.access_token, '/api/workspace/chat/send', {
+      const d = await workspaceFetch<{ project: WorkspaceProject }>(token, '/api/workspace/chat/send', {
         method: 'POST',
         body: JSON.stringify({ projectId: activeProject.id, prompt: message }),
       })
-      updateProject(data.project)
+      updateProject(d.project)
       setMessage('')
-    } catch (sendError) {
-      setError(sendError instanceof Error ? sendError.message : 'Failed to send message.')
+      inputRef.current?.focus()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to send message.')
     } finally {
       setSending(false)
     }
   }
 
-  const regradeProject = async () => {
-    if (!session?.access_token || !activeProject) return
+  const regrade = async () => {
+    if (!token || !activeProject) return
     setBusyAction('regrade')
-    setError(null)
     try {
-      const data = await workspaceFetch<{ project: WorkspaceProject }>(session.access_token, '/api/workspace/chat/regrade', {
+      const d = await workspaceFetch<{ project: WorkspaceProject }>(token, '/api/workspace/chat/regrade', {
         method: 'POST',
         body: JSON.stringify({ projectId: activeProject.id }),
       })
-      updateProject(data.project)
-    } catch (regradeError) {
-      setError(regradeError instanceof Error ? regradeError.message : 'Failed to regrade project.')
+      updateProject(d.project)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Regrade failed.')
     } finally {
       setBusyAction(null)
     }
   }
 
-  const reviseProject = async () => {
-    if (!session?.access_token || !activeProject) return
+  const revise = async () => {
+    if (!token || !activeProject) return
     setBusyAction('revise')
-    setError(null)
     try {
-      const data = await workspaceFetch<{ project: WorkspaceProject }>(session.access_token, '/api/workspace/chat/revise', {
+      const d = await workspaceFetch<{ project: WorkspaceProject }>(token, '/api/workspace/chat/revise', {
         method: 'POST',
         body: JSON.stringify({ projectId: activeProject.id }),
       })
-      updateProject(data.project)
-    } catch (reviseError) {
-      setError(reviseError instanceof Error ? reviseError.message : 'Failed to revise project.')
+      updateProject(d.project)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Revision failed.')
     } finally {
       setBusyAction(null)
     }
   }
 
-  const exportProject = async (type: 'docx' | 'pdf' | 'xlsx' | 'pptx') => {
-    if (!session?.access_token || !activeProject) return
+  const exportProject = async (type: 'docx' | 'pdf') => {
+    if (!token || !activeProject) return
     setBusyAction('export')
-    setError(null)
     try {
-      const data = await workspaceFetch<{ artifact: { fileName: string }; mimeType: string; base64: string }>(session.access_token, '/api/workspace/export', {
+      const d = await workspaceFetch<{ artifact: { fileName: string }; mimeType: string; base64: string }>(token, '/api/workspace/export', {
         method: 'POST',
         body: JSON.stringify({ projectId: activeProject.id, type }),
       })
-      downloadBlob(data.base64, data.mimeType, data.artifact.fileName)
-    } catch (exportError) {
-      setError(exportError instanceof Error ? exportError.message : 'Failed to export project.')
+      downloadBlob(d.base64, d.mimeType, d.artifact.fileName)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Export failed.')
     } finally {
       setBusyAction(null)
     }
   }
 
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault()
+      void sendMessage()
+    }
+  }
+
+  /* ── loading state ── */
   if (loading) {
     return (
-      <div className="flex min-h-[60vh] items-center justify-center">
+      <div className="flex h-[calc(100vh-64px)] items-center justify-center">
         <Loader2 className="h-6 w-6 animate-spin text-cyan-500" />
       </div>
     )
   }
 
+  /* ── main layout ── */
   return (
-    <div className="mx-auto flex w-full max-w-[1600px] flex-col gap-6 px-4 py-6 lg:px-8 lg:py-8">
-      <WorkspacePageHeader
-        eyebrow="Academic workbench"
-        title="Claude-like project workspace"
-        description="Chat, source collection, grading, revision-to-90, and the live final document now sit on top of your existing Humara product as a separate scholarly workspace."
-        action={
-          <>
-            <Button variant="outline" onClick={createProject} disabled={creating}>
-              {creating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
-              New project
-            </Button>
-            <Button asChild>
-              <Link href="/workspace/scholar">
-                Open scholar search
-                <ArrowRight className="h-4 w-4" />
-              </Link>
-            </Button>
-          </>
-        }
-      />
+    <div className="flex h-[calc(100vh-64px)] overflow-hidden">
 
-      <WorkspaceStatGrid project={activeProject} />
-
-      {error ? (
-        <div className="rounded-2xl border border-red-300/60 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-500/30 dark:bg-red-950/30 dark:text-red-200">
-          {error}
-        </div>
-      ) : null}
-
-      <div className="grid gap-6 xl:grid-cols-[280px_minmax(0,1fr)_420px]">
-        <div className="space-y-6">
-          <ProjectMiniSidebar
-            projects={projects}
-            activeProjectId={activeProject?.id ?? null}
-            onSelect={setActiveProjectId}
-          />
-          {activeProject ? <ProgressRail progress={activeProject.progress} /> : null}
+      {/* ─── LEFT: Conversation sidebar ─── */}
+      <aside className="hidden w-72 shrink-0 flex-col border-r border-slate-200 bg-slate-50/80 dark:border-white/10 dark:bg-[#0b0d15] md:flex">
+        <div className="flex items-center justify-between px-4 py-4">
+          <h2 className="text-sm font-semibold text-slate-900 dark:text-white">Projects</h2>
+          <Button size="sm" variant="ghost" className="h-8 w-8 p-0" onClick={createProject} disabled={creating}>
+            {creating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+          </Button>
         </div>
 
-        <div className="space-y-6">
-          {activeProject ? <MessageThread messages={activeProject.messages} /> : null}
-          <Card className="gap-4 bg-white/90 py-4 dark:bg-[#0d0f18]/90">
-            <CardHeader className="px-4 pb-0">
-              <CardTitle className="text-sm">Continuous improvement chat</CardTitle>
-              <CardDescription>Tell Humara to strengthen sections, change citation style, add sources, or convert the artifact into new deliverables.</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4 px-4 pt-0">
-              <Textarea
-                value={message}
-                onChange={(event) => setMessage(event.target.value)}
-                className="min-h-[120px] rounded-2xl"
-                placeholder="Make section 3 stronger, reduce repetition, convert to APA 7, or add 2 more scholarly sources."
-              />
-              <div className="flex flex-wrap items-center gap-2">
-                <Button onClick={sendMessage} disabled={sending || !message.trim()}>
-                  {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-                  Send
-                </Button>
-                <Button variant="outline" onClick={regradeProject} disabled={busyAction !== null}>
-                  {busyAction === 'regrade' ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCcw className="h-4 w-4" />}
-                  Regrade
-                </Button>
-                <Button variant="secondary" onClick={reviseProject} disabled={busyAction !== null}>
-                  {busyAction === 'revise' ? <Loader2 className="h-4 w-4 animate-spin" /> : <WandSparkles className="h-4 w-4" />}
-                  Auto-revise to 90+
+        <ScrollArea className="flex-1 px-2">
+          <div className="space-y-1 pb-4">
+            {projects.map((p) => {
+              const active = p.id === activeProjectId
+              const pScore = p.scoreHistory.at(-1)
+              return (
+                <button
+                  key={p.id}
+                  onClick={() => setActiveProjectId(p.id)}
+                  className={cn(
+                    'group flex w-full items-start gap-3 rounded-lg px-3 py-2.5 text-left transition-colors',
+                    active
+                      ? 'bg-white shadow-sm dark:bg-white/10'
+                      : 'hover:bg-white/60 dark:hover:bg-white/5',
+                  )}
+                >
+                  <MessageSquare className={cn('mt-0.5 h-4 w-4 shrink-0', active ? 'text-cyan-500' : 'text-slate-400 dark:text-zinc-600')} />
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-sm font-medium text-slate-900 dark:text-white">{p.title}</div>
+                    <div className="mt-0.5 text-[11px] text-slate-500 dark:text-zinc-500">
+                      {p.messages.length} messages{pScore ? ` · ${pScore.overallScore}/100` : ''}
+                    </div>
+                  </div>
+                </button>
+              )
+            })}
+            {projects.length === 0 && (
+              <div className="px-3 py-6 text-center text-xs text-slate-400 dark:text-zinc-600">
+                No projects yet. Click + to start.
+              </div>
+            )}
+          </div>
+        </ScrollArea>
+
+        {/* quick links */}
+        <div className="space-y-1 border-t border-slate-200 px-3 py-3 dark:border-white/10">
+          <Link href="/workspace/scholar" className="flex items-center gap-2 rounded-lg px-3 py-2 text-xs text-slate-600 transition-colors hover:bg-white/60 dark:text-zinc-400 dark:hover:bg-white/5">
+            <Bot className="h-3.5 w-3.5" /> Scholar Search
+          </Link>
+          {activeProject && (
+            <Link href={`/workspace/document/${activeProject.id}`} className="flex items-center gap-2 rounded-lg px-3 py-2 text-xs text-slate-600 transition-colors hover:bg-white/60 dark:text-zinc-400 dark:hover:bg-white/5">
+              <FileText className="h-3.5 w-3.5" /> Open Editor
+            </Link>
+          )}
+        </div>
+      </aside>
+
+      {/* ─── CENTER: Chat area ─── */}
+      <main className="flex min-w-0 flex-1 flex-col">
+
+        {/* top bar with score + quick actions */}
+        {activeProject && (
+          <div className="flex items-center justify-between border-b border-slate-200 bg-white/80 px-4 py-2.5 backdrop-blur dark:border-white/10 dark:bg-[#0d0f18]/80">
+            <div className="flex items-center gap-3">
+              <h3 className="text-sm font-semibold text-slate-900 dark:text-white">{activeProject.title}</h3>
+              {score && (
+                <span className={cn(
+                  'rounded-full px-2 py-0.5 text-[11px] font-semibold',
+                  score.overallScore >= 90
+                    ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300'
+                    : 'bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300',
+                )}>
+                  {score.overallScore}/100
+                </span>
+              )}
+            </div>
+            <div className="flex items-center gap-1.5">
+              <Button size="sm" variant="ghost" onClick={regrade} disabled={busyAction !== null} className="h-7 gap-1 text-xs">
+                {busyAction === 'regrade' ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCcw className="h-3 w-3" />}
+                Regrade
+              </Button>
+              <Button size="sm" variant="ghost" onClick={revise} disabled={busyAction !== null} className="h-7 gap-1 text-xs">
+                {busyAction === 'revise' ? <Loader2 className="h-3 w-3 animate-spin" /> : <WandSparkles className="h-3 w-3" />}
+                Revise to 90+
+              </Button>
+              <Button size="sm" variant="ghost" onClick={() => exportProject('docx')} disabled={busyAction !== null} className="h-7 gap-1 text-xs">
+                {busyAction === 'export' ? <Loader2 className="h-3 w-3 animate-spin" /> : <FileDown className="h-3 w-3" />}
+                DOCX
+              </Button>
+              <Button size="sm" variant="ghost" onClick={() => exportProject('pdf')} disabled={busyAction !== null} className="h-7 gap-1 text-xs">
+                <FileDown className="h-3 w-3" /> PDF
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {/* messages */}
+        <div className="flex-1 overflow-y-auto">
+          <div className="mx-auto max-w-3xl px-4 py-6">
+            {!activeProject ? (
+              <div className="flex flex-col items-center justify-center py-32 text-center">
+                <div className="mb-4 rounded-full bg-cyan-500/10 p-4">
+                  <MessageSquare className="h-8 w-8 text-cyan-500" />
+                </div>
+                <h2 className="text-xl font-semibold text-slate-900 dark:text-white">Academic Workbench</h2>
+                <p className="mt-2 max-w-md text-sm text-slate-500 dark:text-zinc-400">
+                  Start a new project to chat, search scholarly sources, grade your draft, and revise until it scores 90+.
+                </p>
+                <Button className="mt-6" onClick={createProject} disabled={creating}>
+                  {creating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+                  New project
                 </Button>
               </div>
-            </CardContent>
-          </Card>
-          {activeProject && activeDraft ? <ArtifactPreview project={activeProject} draft={activeDraft} /> : null}
+            ) : activeProject.messages.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-32 text-center">
+                <MessageSquare className="mb-3 h-6 w-6 text-slate-300 dark:text-zinc-700" />
+                <p className="text-sm text-slate-400 dark:text-zinc-600">Send a message to start working on this project.</p>
+              </div>
+            ) : (
+              <div className="space-y-6">
+                {activeProject.messages.map((msg) => (
+                  <div key={msg.id} className={cn('flex', msg.role === 'user' ? 'justify-end' : 'justify-start')}>
+                    <div className={cn(
+                      'max-w-[80%] rounded-2xl px-4 py-3',
+                      msg.role === 'user'
+                        ? 'bg-cyan-600 text-white'
+                        : 'bg-slate-100 text-slate-800 dark:bg-white/5 dark:text-zinc-100',
+                    )}>
+                      {msg.role === 'assistant' && (
+                        <div className="mb-1.5 flex items-center gap-1.5 text-[11px] font-medium text-slate-500 dark:text-zinc-500">
+                          <Bot className="h-3 w-3" /> Humara
+                        </div>
+                      )}
+                      <p className="whitespace-pre-wrap text-sm leading-relaxed">{msg.content}</p>
+                      <div className="mt-1.5 text-[10px] opacity-50">
+                        {new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+                <div ref={bottomRef} />
+              </div>
+            )}
+          </div>
         </div>
 
-        <div className="space-y-6">
-          {activeProject ? <WorkspaceControlTabs project={activeProject} score={latestScore} /> : null}
-          <Card className="gap-4 bg-white/90 py-4 dark:bg-[#0d0f18]/90">
-            <CardHeader className="px-4 pb-0">
-              <CardTitle className="text-sm">Export panel</CardTitle>
-              <CardDescription>Export the artifact to Word or PDF now, with spreadsheet and slide blueprints also available.</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4 px-4 pt-0">
-              <ExportToolbar onExport={exportProject} />
-              {activeProject ? <ScorePanel score={latestScore} /> : null}
-            </CardContent>
-          </Card>
-        </div>
-      </div>
+        {/* error banner */}
+        {error && (
+          <div className="border-t border-red-200 bg-red-50 px-4 py-2 text-xs text-red-700 dark:border-red-500/30 dark:bg-red-950/30 dark:text-red-300">
+            {error}
+            <button onClick={() => setError(null)} className="ml-2 underline">dismiss</button>
+          </div>
+        )}
+
+        {/* sticky input bar */}
+        {activeProject && (
+          <div className="border-t border-slate-200 bg-white px-4 py-3 dark:border-white/10 dark:bg-[#0d0f18]">
+            <div className="mx-auto flex max-w-3xl items-end gap-3">
+              <textarea
+                ref={inputRef}
+                value={message}
+                onChange={(e) => setMessage(e.target.value)}
+                onKeyDown={handleKeyDown}
+                placeholder="Ask Humara to improve your draft, add sources, change format…"
+                rows={1}
+                className="flex-1 resize-none rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-900 placeholder-slate-400 outline-none transition-colors focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500/30 dark:border-white/10 dark:bg-white/5 dark:text-white dark:placeholder-zinc-600"
+                style={{ minHeight: 42, maxHeight: 160 }}
+                onInput={(e) => {
+                  const t = e.currentTarget
+                  t.style.height = 'auto'
+                  t.style.height = `${Math.min(t.scrollHeight, 160)}px`
+                }}
+              />
+              <Button
+                onClick={() => void sendMessage()}
+                disabled={sending || !message.trim()}
+                className="h-[42px] w-[42px] shrink-0 rounded-xl p-0"
+              >
+                {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+              </Button>
+            </div>
+          </div>
+        )}
+      </main>
     </div>
   )
 }

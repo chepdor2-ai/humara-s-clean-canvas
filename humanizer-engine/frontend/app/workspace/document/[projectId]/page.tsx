@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
-import { GitCompareArrows, Loader2, RefreshCcw, Save, WandSparkles } from 'lucide-react'
+import { Loader2, RefreshCcw, Save, WandSparkles } from 'lucide-react'
 import { useAuth } from '@/app/AuthProvider'
 import {
   ExportToolbar,
@@ -13,7 +13,6 @@ import {
   WorkspaceStatGrid,
 } from '@/components/workspace/workspace-ui'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { buildDraftFromSections, downloadBlob, getActiveDraft, getLatestScore, workspaceFetch } from '@/lib/workspace/client'
@@ -31,97 +30,91 @@ export default function WorkspaceDocumentPage() {
   const [busyAction, setBusyAction] = useState<'regrade' | 'revise' | 'export' | null>(null)
   const [error, setError] = useState<string | null>(null)
 
+  const token = session?.access_token
+
   useEffect(() => {
-    const load = async () => {
-      if (!session?.access_token || !projectId) return
-      setLoading(true)
-      setError(null)
-      try {
-        const data = await workspaceFetch<{ project: WorkspaceProject }>(session.access_token, `/api/workspace/projects/${projectId}`)
-        setProject(data.project)
-        const activeDraft = getActiveDraft(data.project)
-        setTitle(activeDraft?.contentJson.title ?? data.project.title)
-        setSections(activeDraft?.contentJson.sections ?? [])
-      } catch (loadError) {
-        setError(loadError instanceof Error ? loadError.message : 'Failed to load document workspace.')
-      } finally {
-        setLoading(false)
-      }
-    }
-    void load()
-  }, [projectId, session?.access_token])
+    if (!token || !projectId) return
+    setLoading(true)
+    setError(null)
+    workspaceFetch<{ project: WorkspaceProject }>(token, `/api/workspace/projects/${projectId}`)
+      .then((d) => {
+        setProject(d.project)
+        const draft = getActiveDraft(d.project)
+        setTitle(draft?.contentJson.title ?? d.project.title)
+        setSections(draft?.contentJson.sections ?? [])
+      })
+      .catch((e) => setError(e instanceof Error ? e.message : 'Failed to load document.'))
+      .finally(() => setLoading(false))
+  }, [projectId, token])
 
   const latestScore = useMemo(() => getLatestScore(project), [project])
   const activeDraft = useMemo(() => getActiveDraft(project), [project])
 
-  const saveDocument = async () => {
-    if (!session?.access_token || !project) return
-    const updatedDraft = buildDraftFromSections(project, title, sections)
-    if (!updatedDraft) return
+  const save = async () => {
+    if (!token || !project) return
+    const updated = buildDraftFromSections(project, title, sections)
+    if (!updated) return
     setSaving(true)
     setError(null)
     try {
-      const data = await workspaceFetch<{ project: WorkspaceProject }>(session.access_token, `/api/workspace/projects/${project.id}`, {
+      const d = await workspaceFetch<{ project: WorkspaceProject }>(token, `/api/workspace/projects/${project.id}`, {
         method: 'PATCH',
-        body: JSON.stringify({ title, draft: updatedDraft }),
+        body: JSON.stringify({ title, draft: updated }),
       })
-      setProject(data.project)
-    } catch (saveError) {
-      setError(saveError instanceof Error ? saveError.message : 'Failed to save document.')
+      setProject(d.project)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Save failed.')
     } finally {
       setSaving(false)
     }
   }
 
-  const regradeProject = async () => {
-    if (!session?.access_token || !project) return
+  const regrade = async () => {
+    if (!token || !project) return
     setBusyAction('regrade')
-    setError(null)
     try {
-      const data = await workspaceFetch<{ project: WorkspaceProject }>(session.access_token, '/api/workspace/chat/regrade', {
+      const d = await workspaceFetch<{ project: WorkspaceProject }>(token, '/api/workspace/chat/regrade', {
         method: 'POST',
         body: JSON.stringify({ projectId: project.id }),
       })
-      setProject(data.project)
-    } catch (regradeError) {
-      setError(regradeError instanceof Error ? regradeError.message : 'Failed to regrade project.')
+      setProject(d.project)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Regrade failed.')
     } finally {
       setBusyAction(null)
     }
   }
 
-  const reviseProject = async () => {
-    if (!session?.access_token || !project) return
+  const revise = async () => {
+    if (!token || !project) return
     setBusyAction('revise')
-    setError(null)
     try {
-      const data = await workspaceFetch<{ project: WorkspaceProject }>(session.access_token, '/api/workspace/chat/revise', {
+      const d = await workspaceFetch<{ project: WorkspaceProject }>(token, '/api/workspace/chat/revise', {
         method: 'POST',
         body: JSON.stringify({ projectId: project.id }),
       })
-      setProject(data.project)
-      const draft = getActiveDraft(data.project)
-      setTitle(draft?.contentJson.title ?? data.project.title)
+      setProject(d.project)
+      const draft = getActiveDraft(d.project)
+      setTitle(draft?.contentJson.title ?? d.project.title)
       setSections(draft?.contentJson.sections ?? [])
-    } catch (reviseError) {
-      setError(reviseError instanceof Error ? reviseError.message : 'Failed to revise project.')
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Revision failed.')
     } finally {
       setBusyAction(null)
     }
   }
 
-  const exportProject = async (type: 'docx' | 'pdf' | 'xlsx' | 'pptx') => {
-    if (!session?.access_token || !project) return
+  const exportDoc = async (type: 'docx' | 'pdf' | 'xlsx' | 'pptx') => {
+    if (!token || !project) return
     setBusyAction('export')
-    setError(null)
     try {
-      const data = await workspaceFetch<{ artifact: { fileName: string }; mimeType: string; base64: string }>(session.access_token, '/api/workspace/export', {
+      const d = await workspaceFetch<{ artifact: { fileName: string }; mimeType: string; base64: string }>(token, '/api/workspace/export', {
         method: 'POST',
         body: JSON.stringify({ projectId: project.id, type }),
       })
-      downloadBlob(data.base64, data.mimeType, data.artifact.fileName)
-    } catch (exportError) {
-      setError(exportError instanceof Error ? exportError.message : 'Failed to export project.')
+      downloadBlob(d.base64, d.mimeType, d.artifact.fileName)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Export failed.')
     } finally {
       setBusyAction(null)
     }
@@ -129,7 +122,7 @@ export default function WorkspaceDocumentPage() {
 
   if (loading) {
     return (
-      <div className="flex min-h-[60vh] items-center justify-center">
+      <div className="flex h-[calc(100vh-64px)] items-center justify-center">
         <Loader2 className="h-6 w-6 animate-spin text-cyan-500" />
       </div>
     )
@@ -137,145 +130,104 @@ export default function WorkspaceDocumentPage() {
 
   if (!project) {
     return (
-      <div className="mx-auto max-w-4xl px-4 py-10">
-        <Card>
-          <CardHeader>
-            <CardTitle>Project not found</CardTitle>
-            <CardDescription>The requested document workspace is unavailable.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Button asChild>
-              <Link href="/workspace/chat">Back to workspace chat</Link>
-            </Button>
-          </CardContent>
-        </Card>
+      <div className="flex h-[calc(100vh-64px)] flex-col items-center justify-center gap-4">
+        <p className="text-sm text-slate-500 dark:text-zinc-400">Project not found.</p>
+        <Button variant="outline" size="sm" asChild>
+          <Link href="/workspace/chat">Back to chat</Link>
+        </Button>
       </div>
     )
   }
 
   return (
-    <div className="mx-auto flex w-full max-w-[1700px] flex-col gap-6 px-4 py-6 lg:px-8 lg:py-8">
+    <div className="mx-auto flex w-full max-w-5xl flex-col gap-5 px-4 py-6 lg:py-8">
+      {/* header row */}
       <WorkspacePageHeader
-        eyebrow="Editable artifact"
-        title="Document workspace"
-        description="Edit the final document directly, keep versioned project state, regrade or auto-revise on demand, and export into submission-friendly deliverables."
+        title={project.title}
         action={
-          <div className="flex flex-wrap gap-2">
-            <Button variant="outline" asChild>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button variant="outline" size="sm" asChild>
               <Link href="/workspace/chat">Back to chat</Link>
             </Button>
-            <Button onClick={saveDocument} disabled={saving}>
-              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-              Save document
+            <Button size="sm" onClick={save} disabled={saving}>
+              {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+              Save
             </Button>
+            <Button size="sm" variant="ghost" onClick={regrade} disabled={busyAction !== null}>
+              {busyAction === 'regrade' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCcw className="h-3.5 w-3.5" />}
+              Regrade
+            </Button>
+            <Button size="sm" variant="ghost" onClick={revise} disabled={busyAction !== null}>
+              {busyAction === 'revise' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <WandSparkles className="h-3.5 w-3.5" />}
+              Revise to 90+
+            </Button>
+            <ExportToolbar onExport={exportDoc} />
           </div>
         }
       />
 
       <WorkspaceStatGrid project={project} />
 
-      {error ? (
-        <div className="rounded-2xl border border-red-300/60 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-500/30 dark:bg-red-950/30 dark:text-red-200">
+      {error && (
+        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-xs text-red-700 dark:border-red-500/30 dark:bg-red-950/30 dark:text-red-300">
           {error}
+          <button onClick={() => setError(null)} className="ml-2 underline">dismiss</button>
         </div>
-      ) : null}
+      )}
 
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_420px]">
-        <div className="space-y-6">
-          <Card className="gap-5 bg-white/90 py-4 dark:bg-[#0d0f18]/90">
-            <CardHeader className="px-4 pb-0">
-              <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-                <div>
-                  <CardTitle className="text-sm">Rich document editor</CardTitle>
-                  <CardDescription>Edit headings, structure, citations, and section content before export.</CardDescription>
-                </div>
-                <ExportToolbar onExport={exportProject} />
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_280px]">
+        {/* editor */}
+        <div className="space-y-4">
+          <Input
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            className="h-10 border-none bg-transparent px-0 text-2xl font-semibold shadow-none focus-visible:ring-0"
+            placeholder="Document title"
+          />
+          {sections.map((section, i) => (
+            <div key={section.id} className="rounded-xl border border-slate-200 bg-white p-4 dark:border-white/10 dark:bg-[#0d0f18]">
+              <Input
+                value={section.title}
+                onChange={(e) => setSections((cur) => cur.map((s, si) => si === i ? { ...s, title: e.target.value } : s))}
+                className="mb-2 border-none bg-transparent px-0 text-base font-semibold shadow-none focus-visible:ring-0"
+              />
+              <Textarea
+                value={section.body}
+                onChange={(e) => setSections((cur) => cur.map((s, si) => si === i ? { ...s, body: e.target.value } : s))}
+                className="min-h-[140px] resize-none border-slate-200 text-sm leading-7 dark:border-white/10"
+              />
+              <div className="mt-2 text-[11px] text-slate-400 dark:text-zinc-600">
+                {section.goal}{section.citations.length > 0 ? ` · ${section.citations.join(', ')}` : ''}
               </div>
-            </CardHeader>
-            <CardContent className="space-y-6 px-4 pt-0">
-              <div className="rounded-[28px] border border-slate-200 bg-slate-50 p-5 dark:border-white/10 dark:bg-[#0b0d15]">
-                <Input
-                  value={title}
-                  onChange={(event) => setTitle(event.target.value)}
-                  className="mb-6 h-12 rounded-2xl border-none bg-transparent px-0 text-3xl font-semibold shadow-none focus-visible:ring-0"
-                />
-                <div className="space-y-5">
-                  {sections.map((section, index) => (
-                    <div key={section.id} className="rounded-2xl border border-white bg-white p-4 shadow-sm dark:border-white/10 dark:bg-white/5">
-                      <Input
-                        value={section.title}
-                        onChange={(event) => {
-                          setSections((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, title: event.target.value } : item))
-                        }}
-                        className="mb-3 rounded-xl border-slate-200 bg-transparent text-lg font-semibold dark:border-white/10"
-                      />
-                      <Textarea
-                        value={section.body}
-                        onChange={(event) => {
-                          setSections((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, body: event.target.value } : item))
-                        }}
-                        className="min-h-[180px] rounded-2xl border-slate-200 leading-7 dark:border-white/10"
-                      />
-                      <div className="mt-3 text-xs text-slate-500 dark:text-zinc-500">Goal: {section.goal} · Citations: {section.citations.join(', ') || 'None'}</div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="gap-4 bg-white/90 py-4 dark:bg-[#0d0f18]/90">
-            <CardHeader className="px-4 pb-0">
-              <CardTitle className="text-sm">Version controls</CardTitle>
-              <CardDescription>Compare draft versions, regrade the current artifact, or run the section-based revision engine again.</CardDescription>
-            </CardHeader>
-            <CardContent className="flex flex-wrap gap-2 px-4 pt-0">
-              <Button variant="outline" onClick={regradeProject} disabled={busyAction !== null}>
-                {busyAction === 'regrade' ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCcw className="h-4 w-4" />}
-                Regrade paper
-              </Button>
-              <Button variant="secondary" onClick={reviseProject} disabled={busyAction !== null}>
-                {busyAction === 'revise' ? <Loader2 className="h-4 w-4 animate-spin" /> : <WandSparkles className="h-4 w-4" />}
-                Auto-revise
-              </Button>
-              <Button variant="ghost" disabled>
-                <GitCompareArrows className="h-4 w-4" />
-                Compare versions
-              </Button>
-            </CardContent>
-          </Card>
+            </div>
+          ))}
         </div>
 
-        <div className="space-y-6">
+        {/* right rail: score + sources + versions */}
+        <div className="space-y-4">
           <ScorePanel score={latestScore} />
-          <Card className="gap-4 bg-white/90 py-4 dark:bg-[#0d0f18]/90">
-            <CardHeader className="px-4 pb-0">
-              <CardTitle className="text-sm">Draft history</CardTitle>
-              <CardDescription>Track changes style timeline for the current project.</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-3 px-4 pt-0">
-              {project.drafts.slice().reverse().map((draft) => (
-                <div key={draft.id} className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3 dark:border-white/10 dark:bg-white/5">
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <div className="text-sm font-medium text-slate-900 dark:text-white">Version {draft.versionNumber}</div>
-                      <div className="mt-1 text-xs text-slate-500 dark:text-zinc-500">{draft.status} · {new Date(draft.updatedAt).toLocaleString()}</div>
-                    </div>
-                    {draft.id === activeDraft?.id ? <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-cyan-600 dark:text-cyan-300">Active</div> : null}
-                  </div>
-                </div>
-              ))}
-            </CardContent>
-          </Card>
-          <Card className="gap-4 bg-white/90 py-4 dark:bg-[#0d0f18]/90">
-            <CardHeader className="px-4 pb-0">
-              <CardTitle className="text-sm">Side-by-side source panel</CardTitle>
-              <CardDescription>Saved sources stay visible while you edit the artifact.</CardDescription>
-            </CardHeader>
-            <CardContent className="px-4 pt-0">
+
+          {project.sourceLibrary.length > 0 && (
+            <div className="space-y-2">
+              <h4 className="text-xs font-semibold uppercase text-slate-500 dark:text-zinc-500">Sources</h4>
               <SourceCards sources={project.sourceLibrary} compact />
-            </CardContent>
-          </Card>
+            </div>
+          )}
+
+          <div className="space-y-2">
+            <h4 className="text-xs font-semibold uppercase text-slate-500 dark:text-zinc-500">Versions</h4>
+            {project.drafts.slice().reverse().map((draft) => (
+              <div key={draft.id} className="flex items-center justify-between rounded-lg bg-slate-50 px-3 py-2 dark:bg-white/5">
+                <div>
+                  <div className="text-xs font-medium text-slate-900 dark:text-white">v{draft.versionNumber}</div>
+                  <div className="text-[10px] text-slate-400 dark:text-zinc-600">{draft.status}</div>
+                </div>
+                {draft.id === activeDraft?.id && (
+                  <span className="text-[10px] font-semibold text-cyan-600 dark:text-cyan-400">Active</span>
+                )}
+              </div>
+            ))}
+          </div>
         </div>
       </div>
     </div>

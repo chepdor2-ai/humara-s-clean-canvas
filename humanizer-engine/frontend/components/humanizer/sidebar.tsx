@@ -9,9 +9,12 @@ import {
   BookOpen,
   Code2,
   FileText,
+  GraduationCap,
   LayoutDashboard,
   LogOut,
   Palette,
+  PenLine,
+  Search,
   Settings,
   Shield,
   ShieldCheck,
@@ -39,9 +42,6 @@ type NavItem = {
 
 const primary: NavItem[] = [
   { label: "Dashboard", icon: LayoutDashboard, href: "/app/dashboard" },
-  { label: "Workspace Chat", icon: Wand2, href: "/workspace/chat" },
-  { label: "Scholar Search", icon: BookOpen, href: "/workspace/scholar" },
-  { label: "Artifact Editor", icon: FileText, href: "/workspace/document/project_seed_how_humara_works" },
   { label: "Humanizer", icon: Wand2, href: "/app" },
   { label: "Documents", icon: FileText, href: "/app/documents" },
   { label: "AI Detector", icon: ShieldCheck, href: "/app/detector" },
@@ -51,6 +51,12 @@ const primary: NavItem[] = [
   { label: "API", icon: Code2, href: "/app/api-dashboard" },
   { label: "Docs", icon: BookOpen, href: "/app/docs" },
   { label: "Settings", icon: Settings, href: "/app/settings" },
+]
+
+const workspace: NavItem[] = [
+  { label: "Workbench", icon: GraduationCap, href: "/workspace/chat" },
+  { label: "Scholar Search", icon: Search, href: "/workspace/scholar" },
+  { label: "Artifact Editor", icon: PenLine, href: "/workspace/document/project_seed_how_humara_works" },
 ]
 
 const explore: NavItem[] = [
@@ -158,6 +164,17 @@ export function Sidebar({ open, onClose }: { open?: boolean; onClose?: () => voi
               <NavRow key={item.label} item={item} active={isActive(item.href)} onNavigate={onClose} />
             ))}
           </div>
+
+        <div>
+          <div className="px-3 pb-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+            Workspace
+          </div>
+          <div className="space-y-0.5">
+            {workspace.map((item) => (
+              <NavRow key={item.label} item={item} active={isActive(item.href)} onNavigate={onClose} />
+            ))}
+          </div>
+        </div>
 
         <div>
           <div className="px-3 pb-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
