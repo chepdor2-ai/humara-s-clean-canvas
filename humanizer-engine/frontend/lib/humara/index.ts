@@ -189,7 +189,7 @@ function humanizeBlock(text: string, options: Required<HumaraOptions>): string {
 
   // Light grammar/coherence cleanup (no sentence splitting to avoid citation breakage)
   output = repairGrammar(output);
-  output = output.replace(/\s{2,}/g, ' ').trim();
+  output = output.replace(/[ \t]{2,}/g, ' ').trim();
 
   return output;
 }

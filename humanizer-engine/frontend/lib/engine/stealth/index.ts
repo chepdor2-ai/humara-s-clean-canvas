@@ -535,7 +535,7 @@ const EXTRA_REPLACEMENTS: Record<string, string[]> = {
   student: ['learner', 'scholar', 'pupil', 'trainee'],
   teacher: ['educator', 'instructor', 'professor', 'mentor'],
   educator: ['instructor', 'teacher', 'mentor', 'trainer'],
-  technology: ['innovation', 'advancement', 'technique', 'engineering'],
+  technology: ['innovation', 'tool', 'method', 'system'],
   society: ['community', 'populace', 'civilization', 'culture'],
   process: ['procedure', 'method', 'course', 'operation'],
   processes: ['procedures', 'methods', 'steps', 'operations'],
@@ -575,13 +575,13 @@ const EXTRA_REPLACEMENTS: Record<string, string[]> = {
   acknowledge: ['recognize', 'accept', 'concede', 'admit'],
   identify: ['detect', 'recognize', 'pinpoint', 'determine'],
   // ── More academic nouns that WordNet garbles ──
-  care: ['treatment', 'attention', 'support', 'service'],
+  care: ['treatment', 'support', 'aid', 'service'],
   setting: ['context', 'environment', 'domain', 'space'],
   challenge: ['difficulty', 'obstacle', 'hurdle', 'complication'],
   vast: ['large', 'extensive', 'broad', 'sweeping'],
   observer: ['reviewer', 'analyst', 'examiner', 'assessor'],
   integration: ['incorporation', 'blending', 'merging', 'unification'],
-  potential: ['capacity', 'promise', 'capability', 'prospect'],
+  potential: ['likely', 'possible', 'probable', 'expected'],
   adoption: ['uptake', 'acceptance', 'incorporation', 'implementation'],
   // ── Words that produce catastrophic WordNet garble ──
   federal: ['national', 'governmental', 'central', 'public'],
@@ -1900,9 +1900,9 @@ export function stealthHumanize(
   // Fix repeated word/phrase patterns across entire output
   result = result.replace(/\b(\w+)\s+\1\b/gi, '$1');
 
-  // Fix spacing issues
-  result = result.replace(/\s{2,}/g, ' ');
-  result = result.replace(/\s+([.,;:!?])/g, '$1');
+  // Fix spacing issues — use [ \t] to preserve \n\n paragraph breaks
+  result = result.replace(/[ \t]{2,}/g, ' ');
+  result = result.replace(/[ \t]+([.,;:!?])/g, '$1');
   
   // Independent detector specific deep cleaning phases
   result = runFullDetectorForensicsCleanup(result);

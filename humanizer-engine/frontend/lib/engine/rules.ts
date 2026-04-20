@@ -540,7 +540,7 @@ export const SYNONYM_BANK: Record<string, string[]> = {
   "effects": ["outcomes", "consequences", "results"],
   "issues": ["problems", "matters", "topics"],
   "problems": ["issues", "difficulties", "complications"],
-  "solutions": ["remedies", "answers", "responses"],
+  "solutions": ["remedies", "approaches", "methods"],
   "trends": ["patterns", "tendencies", "shifts"],
   "gap": ["divide", "disparity", "discrepancy"],
   "role": ["position", "function"],
