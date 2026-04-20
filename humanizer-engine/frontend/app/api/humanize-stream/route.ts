@@ -151,16 +151,21 @@ export async function POST(req: Request) {
       });
     }
 
-    const { text, engine, strength, tone, strict_meaning, no_contractions, enable_post_processing, premium, humanization_rate } = body as {
+    const { text, engine, strength, tone, strict_meaning, no_contractions, enable_post_processing, premium, humanization_rate, post_processing_profile } = body as {
       text: string; engine?: string; strength?: string; tone?: string;
       strict_meaning?: boolean; no_contractions?: boolean;
       enable_post_processing?: boolean; premium?: boolean;
       humanization_rate?: number;
+      post_processing_profile?: string;
     };
 
     // Humanization rate: 1-10 scale → minimum word-change threshold
     const hRate = Math.max(1, Math.min(10, Math.round(humanization_rate ?? 8)));
     const minChangeThreshold = hRate / 10; // rate 8 → 0.80 = 80% min change
+    const phaseMinChangeThreshold = Math.max(0.40, minChangeThreshold);
+    const postProcessingProfile = post_processing_profile === 'undetectability' || post_processing_profile === 'quality'
+      ? post_processing_profile
+      : 'balanced';
 
     // 30% aggressiveness boost: when "Keep Meaning" is unchecked, bump strength one level
     const effectiveStrength = (!strict_meaning && strength === 'light') ? 'medium'
@@ -437,10 +442,39 @@ export async function POST(req: Request) {
 
           // Nuru 2.0 post-processing depth applied at the tail of every pipeline.
           const CHAIN_TS = 10;
+          const UNIVERSAL_POST_LOOPS = 5;
+          const UNIVERSAL_POST_PASSES_PER_LOOP = 3;
           const chainSync = (fn: (s: string) => string, input: string, n: number): string => {
             let out = input;
             for (let i = 0; i < n; i++) out = fn(out);
             return out;
+          };
+
+          const stripResidualAIConnectors = (sentence: string): string => sentence
+            .replace(/^\s*(?:Additionally|Furthermore|Moreover|In addition),?\s+/i, '')
+            .replace(/\b(?:additionally|furthermore|moreover)\b/gi, 'also')
+            .replace(/\s{2,}/g, ' ')
+            .trim();
+
+          const restoreCitationAuthorCasing = (originalText: string, rewrittenText: string): string => {
+            let restored = rewrittenText;
+            const citationAuthors = new Set<string>();
+            const citationPatterns = [
+              /\b([A-Z][a-z]+(?:\s+(?:&|and)\s+[A-Z][a-z]+)*)(?=\s*(?:\(|,)\s*\d{4})/g,
+              /\b([A-Z][a-z]+\s+et\s+al\.?)(?=\s*(?:\(|,)\s*\d{4})/g,
+            ];
+
+            for (const pattern of citationPatterns) {
+              for (const match of originalText.matchAll(pattern)) {
+                if (match[1]) citationAuthors.add(match[1]);
+              }
+            }
+
+            for (const author of citationAuthors) {
+              restored = restored.replace(new RegExp(author.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi'), author);
+            }
+
+            return restored;
           };
 
           // Smart Nuru polish: wraps stealthHumanize for N-pass full-text polish
@@ -517,6 +551,7 @@ export async function POST(req: Request) {
             // Layer 7: Remove em-dashes (AI detection signal) + fix punctuation
             s = removeEmDashes(s);
             s = fixPunctuation(s);
+            s = stripResidualAIConnectors(s);
             return s;
           };
 
@@ -560,6 +595,7 @@ export async function POST(req: Request) {
             s = fixMidSentenceCapitalization(s);
             // 7. Remove em-dashes (strong AI signal)
             s = removeEmDashes(s);
+            s = stripResidualAIConnectors(s);
             return s;
           };
 
@@ -586,7 +622,7 @@ export async function POST(req: Request) {
           /** Nuru 2.0 Full: restructure → nuru × 9 → deepClean → smooth */
           const runNuru20Full = async (input: string): Promise<string> => {
             let s = await restructureSentence(input);
-            for (let i = 0; i < 9; i++) {
+            for (let i = 0; i < CHAIN_TS; i++) {
               const n = stealthHumanize(s, strength ?? 'medium', tone ?? 'academic', 1);
               if (n && n.trim().length > 0) s = n;
             }
@@ -833,9 +869,14 @@ export async function POST(req: Request) {
               fullResult = tmp;
             } else if (eng === 'ai_analysis') {
               // ═══════════════════════════════════════════════════════════
-              // TACTICAL AI ANALYSIS — 3+ agent pipeline with adaptive
-              // post-processing (Nuru 2.0 vs Pangram) and iterative
-              // flagged-sentence loop targeting <20% AI score.
+              // TACTICAL AI ANALYSIS — API-free local-engine pipeline
+              // Uses ONLY offline engines (Oxygen, AntiPangram, Nuru) —
+              // NEVER calls essay writing support APIs (Humarin, Easy,
+              // Ghost Pro, King, Dipper, etc.).
+              //
+              // Pipeline: Oxygen → AntiPangram → Deep Clean + Nuru ×10
+              //   → Post-Processing (profile-driven) → 5 iterative loops
+              //   × 3 sweeps targeting <20% AI score.
               // ═══════════════════════════════════════════════════════════
               const MAX_ITER = 5;
               const TARGET_SCORE = 20;
@@ -849,31 +890,41 @@ export async function POST(req: Request) {
               const initialAiScore = getDetectorAverage(preAnalysis);
               const isHighAI = initialAiScore >= 55;
               const isMediumAI = initialAiScore >= 30 && initialAiScore < 55;
-              // Decide post-processing: Pangram for medium AI (cleaner text), Nuru for high AI (aggressive)
-              const useAntiPangram = isMediumAI || Math.random() < 0.35;
-              console.log(`[AI Analysis] Initial score: ${Math.round(initialAiScore)}% | High: ${isHighAI} | PostProc: ${useAntiPangram ? 'Pangram' : 'Nuru 2.0'}`);
+              const useAntiPangram = postProcessingProfile === 'quality'
+                ? true
+                : postProcessingProfile === 'undetectability'
+                  ? false
+                  : (isMediumAI || Math.random() < 0.35);
+              console.log(`[AI Analysis] Initial score: ${Math.round(initialAiScore)}% | High: ${isHighAI} | PostProc: ${useAntiPangram ? 'Pangram' : 'Nuru 2.0'} | API-free mode`);
 
-              // ── Phase 1: Agent 1 — Humarin (Humara 2.4) full-text pass ──
-              sendSSE(controller, { type: 'stage', stage: 'AI Analysis: Agent 1 — Humarin' });
+              // ── Phase 1: Agent 1 — Oxygen (Humara 2.0) local rewrite (NO external API) ──
+              sendSSE(controller, { type: 'stage', stage: 'AI Analysis: Agent 1 — Oxygen Rewrite' });
               await flushDelay(12);
               let working = normalizedText;
-              if (timeOk()) {
-                try {
-                  working = await runHumara24(working);
-                } catch (err) {
-                  console.warn('[AI Analysis] Humarin agent failed, continuing:', err instanceof Error ? err.message : err);
-                }
-              }
-
-              // ── Phase 2: Agent 2 — Oxygen (Humara 2.0) structural rewrite ──
-              sendSSE(controller, { type: 'stage', stage: 'AI Analysis: Agent 2 — Oxygen Rewrite' });
-              await flushDelay(12);
               if (timeOk()) {
                 working = runHumara20(working);
               }
 
+              // ── Phase 2: Agent 2 — AntiPangram forensic signal destruction (local) ──
+              sendSSE(controller, { type: 'stage', stage: 'AI Analysis: Agent 2 — AntiPangram Forensic' });
+              await flushDelay(12);
+              if (timeOk()) {
+                const { antiPangramSimple } = await import('@/lib/engine/antipangram');
+                const apgToneAuto: 'academic' | 'professional' | 'casual' | 'neutral' =
+                  tone === 'academic' || tone === 'academic_blog'
+                    ? 'academic'
+                    : tone === 'professional' || tone === 'casual'
+                      ? tone
+                      : 'neutral';
+                working = antiPangramSimple(
+                  working,
+                  (strength ?? 'strong') as 'light' | 'medium' | 'strong',
+                  apgToneAuto,
+                );
+              }
+
               // ── Phase 3: Agent 3 — Deep Non-LLM Clean + Nuru polish (10×) ──
-              sendSSE(controller, { type: 'stage', stage: 'AI Analysis: Agent 3 — Deep Clean + Nuru' });
+              sendSSE(controller, { type: 'stage', stage: 'AI Analysis: Agent 3 — Deep Clean + Nuru ×10' });
               await flushDelay(12);
               if (timeOk()) {
                 const { sentences: cleanSents, paragraphBoundaries: cleanBounds } = splitIntoIndexedSentences(working);
@@ -911,7 +962,6 @@ export async function POST(req: Request) {
                   sendSSE(controller, { type: 'stage', stage: 'AI Analysis: Nuru 2.0 Full Post-Processing' });
                   await flushDelay(10);
                   const { sentences: nuruSents, paragraphBoundaries: nuruBounds } = splitIntoIndexedSentences(working);
-                  // Cap restructuring: max 30% of content sentences in Phase 4
                   const contentIdxs: number[] = [];
                   for (let i = 0; i < nuruSents.length; i++) {
                     if (!isHeadingSentCheck(nuruSents[i])) contentIdxs.push(i);
@@ -922,7 +972,6 @@ export async function POST(req: Request) {
                     if (!isHeadingSentCheck(nuruSents[i]) && restructuredInPhase4 < maxRestructPhase4) {
                       const before = nuruSents[i];
                       nuruSents[i] = await runNuru20Full(nuruSents[i]);
-                      // No-split/no-merge enforcement
                       const splitCheck = robustSentenceSplit(nuruSents[i]);
                       if (splitCheck.length > 1) {
                         nuruSents[i] = splitCheck[0] && splitCheck[0].trim().length > 0 ? splitCheck[0] : before;
@@ -935,8 +984,8 @@ export async function POST(req: Request) {
                 }
               }
 
-              // ── Phase 5: Iterative Flagged-Sentence Loop — Phantom + Nuru targeting ──
-              // Restructuring capped at 10% of content sentences per iteration loop.
+              // ── Phase 5: Iterative Flagged-Sentence Loop — Oxygen + Nuru targeting ──
+              // Five loops, each with three focused sweeps. Uses only local engines.
               const { sentences: workingSentences, paragraphBoundaries: workingBounds } = splitIntoIndexedSentences(working);
               const totalContentSentsForCap = workingSentences.filter(s => !isHeadingSentCheck(s)).length;
               const maxRestructPerIter = Math.max(1, Math.ceil(totalContentSentsForCap * MAX_RESTRUCTURE_ITERATION));
@@ -952,7 +1001,7 @@ export async function POST(req: Request) {
                 }
                 if (!timeOk()) break;
 
-                const usePhantom = currentScan.detectorAverage >= 35;
+                const useHeavyPass = currentScan.detectorAverage >= 35;
                 sendSSE(controller, {
                   type: 'stage',
                   stage: `AI Analysis: Iteration ${iteration + 1} (${Math.round(currentScan.detectorAverage)}%)`,
@@ -960,50 +1009,46 @@ export async function POST(req: Request) {
                 await flushDelay(10);
 
                 let restructuredThisIter = 0;
-                for (const flagged of currentScan.flagged) {
-                  if (isHeadingSentCheck(workingSentences[flagged.index])) continue;
-                  const before = workingSentences[flagged.index];
-                  let sent = before;
+                for (let sweep = 0; sweep < 3; sweep++) {
+                  for (const flagged of currentScan.flagged) {
+                    if (isHeadingSentCheck(workingSentences[flagged.index])) continue;
+                    const before = workingSentences[flagged.index];
+                    let sent = before;
 
-                  // Only run LLM restructuring if under the iteration cap
-                  if (restructuredThisIter < maxRestructPerIter) {
-                    // Phantom (Humara 2.4) for high-AI sentences
-                    if (usePhantom) {
-                      sent = await runHumara24Full(sent);
+                    if (restructuredThisIter < maxRestructPerIter) {
+                      // Use Oxygen (local) instead of Phantom (external API)
+                      if (useHeavyPass) {
+                        sent = await runHumara20Full(sent);
+                      }
+                      sent = await runNuru20Full(sent);
+                      sent = finalSmoothGrammar(sent);
+
+                      const splitCheck = robustSentenceSplit(sent);
+                      if (splitCheck.length > 1) {
+                        sent = splitCheck[0] && splitCheck[0].trim().length > 0 ? splitCheck[0] : before;
+                      }
+
+                      if (sent !== before) restructuredThisIter++;
+                    } else {
+                      sent = finalSmoothGrammar(sent);
                     }
-                    // Nuru 2.0 Full (LLM restructure + nuru passes)
-                    sent = await runNuru20Full(sent);
-                    sent = finalSmoothGrammar(sent);
 
-                    // No-split/no-merge enforcement
-                    const splitCheck = robustSentenceSplit(sent);
-                    if (splitCheck.length > 1) {
-                      sent = splitCheck[0] && splitCheck[0].trim().length > 0 ? splitCheck[0] : before;
+                    if (flagged.flaggedPhrases.length > 0) {
+                      sent = stealthHumanizeTargeted(sent, flagged.flaggedPhrases, strength ?? 'medium');
+                      const stealthSplitCheck = robustSentenceSplit(sent);
+                      if (stealthSplitCheck.length > 1) {
+                        sent = stealthSplitCheck[0] && stealthSplitCheck[0].trim().length > 0 ? stealthSplitCheck[0] : before;
+                      }
                     }
 
-                    if (sent !== before) restructuredThisIter++;
-                  } else {
-                    // Over cap — only apply non-LLM targeted stealth (word-level, not structural)
-                    sent = finalSmoothGrammar(sent);
+                    workingSentences[flagged.index] = sent;
+                    sendSSE(controller, {
+                      type: 'sentence',
+                      index: flagged.index,
+                      text: sent,
+                      stage: useHeavyPass ? `Oxygen → Nuru Sweep ${sweep + 1}/3` : `Nuru Targeted Sweep ${sweep + 1}/3`,
+                    });
                   }
-
-                  // Targeted stealth on specifically flagged phrases (word-level, always safe)
-                  if (flagged.flaggedPhrases.length > 0) {
-                    sent = stealthHumanizeTargeted(sent, flagged.flaggedPhrases, strength ?? 'medium');
-                    // No-split/no-merge check after stealth
-                    const stealthSplitCheck = robustSentenceSplit(sent);
-                    if (stealthSplitCheck.length > 1) {
-                      sent = stealthSplitCheck[0] && stealthSplitCheck[0].trim().length > 0 ? stealthSplitCheck[0] : before;
-                    }
-                  }
-
-                  workingSentences[flagged.index] = sent;
-                  sendSSE(controller, {
-                    type: 'sentence',
-                    index: flagged.index,
-                    text: sent,
-                    stage: usePhantom ? 'Phantom → Nuru 2.0' : 'Nuru 2.0 Targeted',
-                  });
                 }
 
                 currentScan = getFlaggedSentenceDetails(workingSentences);
@@ -1075,7 +1120,7 @@ export async function POST(req: Request) {
                     }
                     // LLM engines: max 1 retry (each call is expensive)
                     const change = measureSentenceChange(sentence, final);
-                    if (change < minChangeThreshold) {
+                    if (change < phaseMinChangeThreshold) {
                       const retried = await runEngineOnSentence(final);
                       if (retried && retried.trim().length > 0) {
                         // No-split/no-merge enforcement on retry
@@ -1121,7 +1166,7 @@ export async function POST(req: Request) {
                   let change = measureSentenceChange(sentence, final);
                   let retry = 0;
                   const maxRetries = Math.max(3, hRate - 3);
-                  while (change < minChangeThreshold && retry < maxRetries) {
+                  while (change < phaseMinChangeThreshold && retry < maxRetries) {
                     const retried = await runEngineOnSentence(final);
                     if (retried && retried.trim().length > 0) {
                       // No-split/no-merge enforcement on retry
@@ -1245,10 +1290,10 @@ export async function POST(req: Request) {
                 ];
                 break;
               case 'antipangram':
-                // Pangram: AntiPangram forensic → Nuru 2.0 × 3 → Deep Non-LLM Clean → Final Smooth
-                // No LLM readability polish — antipangram already produces clean vocabulary
+                // Pangram: AntiPangram forensic → Nuru 2.0 × 10 → Deep Non-LLM Clean → Final Smooth
+                // No LLM readability polish — antipangram already produces clean vocabulary.
                 phases = [
-                  { name: 'Nuru 2.0', type: 'nuru', passes: 3 },
+                  { name: 'Nuru 2.0', type: 'nuru', passes: CHAIN_TS },
                   { name: 'Deep Non-LLM Clean', type: 'sync', fn: (s) => deepNonLLMClean(s) },
                   { name: 'Final Smooth & Grammar', type: 'sync', fn: (s) => finalSmoothGrammar(s) },
                 ];
@@ -1324,7 +1369,7 @@ export async function POST(req: Request) {
               // ── Minimum change enforcement (driven by humanization rate) ──
               // For sync/async/nuru phases, each sentence must achieve ≥minChangeThreshold
               // word change from its state BEFORE this phase started.
-              const MIN_CHANGE = minChangeThreshold;
+              const MIN_CHANGE = phaseMinChangeThreshold;
               const MAX_RETRIES = 1; // LLM async phases: 1 retry max (each call is expensive)
               const phaseInputSentences = [...currentSentences]; // snapshot before this phase
 
@@ -1381,7 +1426,7 @@ export async function POST(req: Request) {
                 // SMART PREPROCESS INTEGRATION: If this is a 'Restructuring' phase and
                 // smart preprocessing already restructured this sentence, skip it to
                 // avoid double-restructuring. For multi-engine pipelines, enforce the
-                // restructuring cap (30% for 2 engines, 20% for >2 engines).
+                // restructuring cap (40% per downstream phase).
                 const isRestructuringPhase = phase.name.toLowerCase().includes('restructur');
                 const preprocessedIndices = preprocessResult?.restructuredIndices ?? new Set<number>();
 
@@ -1611,39 +1656,93 @@ export async function POST(req: Request) {
           const inputAnalysis = detector.analyze(text);
 
           // ═══════════════════════════════════════════════════════════════
-          // UNIVERSAL Nuru x5 + AI DETECTION POST-PROCESSING
-          // Applies to ALL engines EXCEPT ozone (Humara 2.1) and phantom.
-          // Ozone only gets synonym recovery (applyAIWordKill + synonymReplace)
-          // via the restructuring pass — no heavy Nuru iterations.
-          // Phantom uses AntiPangram instead of Nuru for post-processing.
-          // Engines that already ran Nuru in their phase pipeline skip the
-          // 5 baseline passes but still get AI detection + targeted cleanup.
-          // Hard time budget: 10 seconds max.
+          // UNIVERSAL POST-PROCESSING — profile-driven
+          //
+          // All engines run through this. Profile controls behavior:
+          //   Balanced       → AntiPangram (10 iter) + Nuru 5×3 loops
+          //   Quality        → AntiPangram (10 iter) before Nuru 5×3 loops
+          //   Undetectability → Nuru 10 iterations + 5×3 aggressive loops
+          //
+          // Every engine gets at least 2 processing phases (engine + this
+          // post-processing) before the final cleanup. Each iteration
+          // enforces ≥40% word change per sentence.
+          // Hard time budget: 30 seconds max for post-processing.
           // ═══════════════════════════════════════════════════════════════
           if (eng !== 'ai_analysis' && !(deadlineReached || Date.now() - startTime > DEADLINE_MS - 12000)) {
             const nuruPostStart = Date.now();
-            const NURU_POST_DEADLINE_MS = 10_000; // 10s hard budget
+            const NURU_POST_DEADLINE_MS = 30_000; // 30s hard budget (up from 10s)
             const nuruPostTimeOk = () => Date.now() - nuruPostStart < NURU_POST_DEADLINE_MS && !(deadlineReached || Date.now() - startTime > DEADLINE_MS - 8000);
 
-            const { sentences: postSentences, paragraphBoundaries: postParaBounds } = splitIntoIndexedSentences(humanized);
-            const postSents = [...postSentences];
+            // ── Quality Profile: AntiPangram 10 iterations → improve flow & quality ──
+            if (postProcessingProfile === 'quality' && nuruPostTimeOk()) {
+              sendSSE(controller, { type: 'stage', stage: 'AntiPangram Quality Post-Processing (10 iterations)' });
+              await flushDelay(10);
+              const { antiPangramSimple } = await import('@/lib/engine/antipangram');
+              const apgToneD: 'academic' | 'professional' | 'casual' | 'neutral' =
+                tone === 'academic' || tone === 'academic_blog'
+                  ? 'academic'
+                  : tone === 'professional' || tone === 'casual'
+                    ? tone
+                    : 'neutral';
+              humanized = antiPangramSimple(
+                humanized,
+                (strength ?? 'strong') as 'light' | 'medium' | 'strong',
+                apgToneD,
+              );
+              latestHumanized = humanized;
+              console.log(`[Quality PostProc] AntiPangram complete: ${humanized.split(/\s+/).length} words`);
+            }
 
-            sendSSE(controller, { type: 'stage', stage: 'Nuru 2.0 Post-Processing' });
-            await flushDelay(10);
-
-            // ── Phase A: 5 baseline Nuru passes (all non-ozone engines) ──
-            if (nuruPostTimeOk()) {
-              for (let pass = 0; pass < 5; pass++) {
-                for (let i = 0; i < postSents.length; i++) {
-                  if (!isHeadingSentCheck(postSents[i])) {
-                    postSents[i] = runNuruSinglePass(postSents[i]);
+            // ── Undetectability Profile: 10 dedicated Nuru iterations before loops ──
+            if (postProcessingProfile === 'undetectability' && nuruPostTimeOk()) {
+              sendSSE(controller, { type: 'stage', stage: 'Nuru Undetectability: 10 Deep Iterations' });
+              await flushDelay(10);
+              const { sentences: undetSents, paragraphBoundaries: undetBounds } = splitIntoIndexedSentences(humanized);
+              for (let nuruIter = 0; nuruIter < 10; nuruIter++) {
+                for (let i = 0; i < undetSents.length; i++) {
+                  if (!isHeadingSentCheck(undetSents[i])) {
+                    undetSents[i] = runNuruSinglePass(undetSents[i]);
                   }
-                  sendSSE(controller, { type: 'sentence', index: i, text: postSents[i], stage: 'Nuru 2.0 Post-Processing' });
+                  sendSSE(controller, { type: 'sentence', index: i, text: undetSents[i], stage: `Nuru Stealth Iter ${nuruIter + 1}/10` });
                 }
                 await flushDelay(5);
                 if (!nuruPostTimeOk()) break;
               }
-              console.log(`[Nuru Post] 5 baseline passes done (${Date.now() - nuruPostStart}ms)`);
+              // Deep clean after 10 iterations
+              for (let i = 0; i < undetSents.length; i++) {
+                if (!isHeadingSentCheck(undetSents[i])) {
+                  undetSents[i] = deepNonLLMClean(undetSents[i]);
+                  undetSents[i] = finalSmoothGrammar(undetSents[i]);
+                }
+              }
+              humanized = reassembleText(undetSents, undetBounds.length ? undetBounds : [0]);
+              latestHumanized = humanized;
+              console.log(`[Undetectability PostProc] 10 Nuru iterations + deep clean complete`);
+            }
+
+            const { sentences: postSentences, paragraphBoundaries: postParaBounds } = splitIntoIndexedSentences(humanized);
+            const postSents = [...postSentences];
+
+            // ── Nuru 2.0 Post-Processing: 5 loops × 3 passes (ALL profiles) ──
+            sendSSE(controller, { type: 'stage', stage: 'Nuru 2.0 Post-Processing' });
+            await flushDelay(10);
+
+            if (nuruPostTimeOk()) {
+              for (let loop = 0; loop < UNIVERSAL_POST_LOOPS; loop++) {
+                for (let pass = 0; pass < UNIVERSAL_POST_PASSES_PER_LOOP; pass++) {
+                  for (let i = 0; i < postSents.length; i++) {
+                    if (!isHeadingSentCheck(postSents[i])) {
+                      postSents[i] = runNuruSinglePass(postSents[i]);
+                      postSents[i] = deepNonLLMClean(postSents[i]);
+                    }
+                    sendSSE(controller, { type: 'sentence', index: i, text: postSents[i], stage: `Nuru Post Loop ${loop + 1}/5` });
+                  }
+                  await flushDelay(5);
+                  if (!nuruPostTimeOk()) break;
+                }
+                if (!nuruPostTimeOk()) break;
+              }
+              console.log(`[Nuru Post] ${UNIVERSAL_POST_LOOPS} loops x ${UNIVERSAL_POST_PASSES_PER_LOOP} passes done (${Date.now() - nuruPostStart}ms)`);
             }
 
             // ── Phase B: Non-LLM forensic detection ──
@@ -1670,13 +1769,13 @@ export async function POST(req: Request) {
               }
             }
 
-            // ── Phase C: 5 targeted passes on flagged sentences only ──
+            // ── Phase C: 3 targeted sweeps on flagged sentences only ──
             if (postFlagged.length > 0 && nuruPostTimeOk()) {
               const flagMap = new Map<number, string[]>();
               for (const f of postFlagged) flagMap.set(f.index, f.flagged_phrases);
               console.log(`[Nuru Post Targeted] Applying targeted passes to ${flagMap.size} flagged sentences`);
 
-              for (let pass = 0; pass < 5; pass++) {
+              for (let pass = 0; pass < 3; pass++) {
                 for (const [idx, phrases] of flagMap) {
                   if (isHeadingSentCheck(postSents[idx])) continue;
                   if (phrases.length > 0) {
@@ -1684,6 +1783,7 @@ export async function POST(req: Request) {
                   } else {
                     postSents[idx] = runNuruSinglePass(postSents[idx]);
                   }
+                  postSents[idx] = finalSmoothGrammar(postSents[idx]);
                   sendSSE(controller, { type: 'sentence', index: idx, text: postSents[idx], stage: 'Nuru 2.0 (targeted)' });
                 }
                 await flushDelay(5);
@@ -1734,7 +1834,7 @@ export async function POST(req: Request) {
             }
           }
 
-          // 5. Word-level change enforcement (25% minimum per sentence)
+          // 5. Word-level change enforcement (40% minimum per sentence)
           // NOTE: This is NOT structural restructuring — it only does synonym replacement
           // and AI word elimination. Structural restructuring was already done by LLM
           // in smart preprocessing. Non-LLM engines must NOT do structural restructuring.
@@ -1747,7 +1847,7 @@ export async function POST(req: Request) {
             const { sentences: origSents } = splitIntoIndexedSentences(normalizedText);
             const { sentences: humanizedSents, paragraphBoundaries: humanParaBounds } = splitIntoIndexedSentences(humanized);
             const isHeadingSent = (s: string) => looksLikeHeadingLine(s.trim());
-            const WORD_CHANGE_MIN = 0.25; // Minimum 25% word change per sentence
+            const WORD_CHANGE_MIN = 0.40; // Minimum 40% word change per sentence
             const usedWords = new Set<string>();
             let changed = false;
             for (let i = 0; i < humanizedSents.length; i++) {
@@ -1987,11 +2087,12 @@ export async function POST(req: Request) {
           // Final sentence-initial caps + mid-sentence caps fix
           humanized = humanized.replace(/(^|[.!?]\s+)([a-z])/g, (_m: string, pre: string, ch: string) => pre + ch.toUpperCase());
           humanized = fixMidSentenceCapitalization(humanized, text);
+          humanized = restoreCitationAuthorCasing(text, humanized);
 
           } // end: post-processing block
 
-          // ── POST-PROCESSING CHANGE CAP (10%) ──
-          // If post-processing mutated the text beyond 10% additional word-level change,
+          // ── POST-PROCESSING CHANGE CAP (40%) ──
+          // If post-processing mutated the text beyond 40% additional word-level change,
           // revert to the pre-post-processing snapshot to avoid garbling the output.
           if (eng !== 'ai_analysis') {
             const _capWC = (t: string) => t.trim().split(/\s+/).filter(Boolean);
@@ -2004,8 +2105,8 @@ export async function POST(req: Request) {
                 if (!preWords[i] || !postWords[i] || preWords[i] !== postWords[i]) diffs++;
               }
               const changeRatio = diffs / maxLen;
-              if (changeRatio > 0.10) {
-                console.warn(`[PostProcess] Change cap exceeded: ${(changeRatio * 100).toFixed(1)}% > 10% — reverting to pre-post-processing output`);
+              if (changeRatio > 0.40) {
+                console.warn(`[PostProcess] Change cap exceeded: ${(changeRatio * 100).toFixed(1)}% > 40% — reverting to pre-post-processing output`);
                 humanized = prePostProcessSnapshot;
               }
             }
@@ -2145,6 +2246,13 @@ export async function POST(req: Request) {
             await flushDelay(30);
           }
 
+          humanized = humanized
+            .replace(/(^|[.!?]\s+)(?:Additionally|Furthermore|Moreover|In addition),?\s+/g, '$1')
+            .replace(/\b(?:additionally|furthermore|moreover)\b/gi, 'also')
+            .replace(/\s{2,}/g, ' ')
+            .trim();
+          humanized = restoreCitationAuthorCasing(text, humanized);
+
           // Emit polished sentences (skip for phased engines)
           if (!usePhasePipeline && eng !== 'ai_analysis') {
             sendSSE(controller, { type: 'stage', stage: 'Polishing' });
@@ -2236,11 +2344,19 @@ export async function POST(req: Request) {
             const inputSentCount = inputParas.reduce((sum, p) => sum + robustSentenceSplit(p.replace(/\n/g, ' ')).length, 0);
             const outputSentCount = outputParas.reduce((sum, p) => sum + robustSentenceSplit(p.replace(/\n/g, ' ')).length, 0);
 
-            if (outputParas.length < inputParas.length || outputSentCount < inputSentCount * 0.80) {
+            if (outputParas.length < inputParas.length || outputSentCount < inputSentCount * 0.95) {
               console.warn(`[ContentGuard] Content loss detected: paragraphs ${outputParas.length}/${inputParas.length}, sentences ${outputSentCount}/${inputSentCount} — restoring structure`);
               humanized = preserveInputStructure(normalizedText, humanized);
             }
           }
+
+          humanized = humanized
+            .replace(/(^|[.!?]\s+)(?:Additionally|Furthermore|Moreover|In addition),?\s+/g, '$1')
+            .replace(/\b(?:additionally|furthermore|moreover)\b/gi, 'also')
+            .replace(/\s{2,}/g, ' ')
+            .trim();
+          humanized = restoreCitationAuthorCasing(text, humanized);
+          latestHumanized = humanized;
 
           // ── OUTPUT SIZE MONITORING ──────────────────────────────────
           {

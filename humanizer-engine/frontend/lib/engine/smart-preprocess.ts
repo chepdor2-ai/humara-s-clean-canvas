@@ -5,8 +5,8 @@
  * Intelligent pre-humanization pipeline that:
  * 1. Analyzes AI scores per-sentence using non-LLM forensic detection
  * 2. Ranks sentences by AI likelihood
- * 3. Selects sentences for LLM structural rephrasing (≥40% of content sentences)
- * 4. Computes per-sentence aggression level (25%–85% change target)
+ * 3. Selects sentences for LLM structural rephrasing (≥70% of content sentences)
+ * 4. Computes per-sentence aggression level (40%–85% change target)
  * 5. Routes selected sentences through LLM restructuring
  * 6. Tracks which sentences were restructured to prevent re-restructuring
  * 
@@ -15,14 +15,13 @@
  * - Non-LLM engines must NOT do structural restructuring (they produce unrealistic results)
  * - NO sentence splitting or merging — 1:1 sentence correspondence enforced
  * - Titles, figures, values, decimals, brackets, percentages are protected
- * - Min change per sentence: 25%, Max change: 85%
- * - At least 40% of content sentences go through LLM structural rephrasing
+ * - Min change per sentence: 40%, Max change: 85%
+ * - At least 70% of content sentences go through LLM structural rephrasing
  * 
  * MULTI-ENGINE RESTRUCTURING CAPS:
- * - Single engine: up to 40% sentences restructured in preprocessing
- * - 2 engines: max 30% sentences restructured per subsequent engine
- * - >2 engines: max 20% restructured per subsequent engine
- * - Iteration loops: max 10% restructured per loop
+ * - Single engine: up to 70% sentences restructured in preprocessing
+ * - Subsequent engine phases: max 40% sentences restructured per phase
+ * - Iteration loops: max 40% restructured per loop
  */
 
 import { TextSignals, getDetector } from './multi-detector';
@@ -78,10 +77,10 @@ export interface PreprocessResult {
 // ═══════════════════════════════════════════════════════════════════════
 
 /** Minimum percentage of content sentences that must go through LLM rephrasing */
-const MIN_REPHRASING_RATIO = 0.40;
+const MIN_REPHRASING_RATIO = 0.70;
 
-/** Minimum word change per sentence (25%) */
-const MIN_CHANGE = 0.25;
+/** Minimum word change per sentence (40%) */
+const MIN_CHANGE = 0.40;
 
 /** Maximum word change per sentence (85%) */
 const MAX_CHANGE = 0.85;
@@ -92,14 +91,14 @@ const LOW_RISK_THRESHOLD = 20;
 /** AI score threshold above which sentences are high-risk */
 const HIGH_RISK_THRESHOLD = 60;
 
-/** Max restructured sentences per subsequent engine (2 engines) */
-export const MAX_RESTRUCTURE_2_ENGINES = 0.30;
+/** Max restructured sentences per downstream engine phase */
+export const MAX_RESTRUCTURE_2_ENGINES = 0.70;
 
-/** Max restructured sentences per subsequent engine (>2 engines) */
-export const MAX_RESTRUCTURE_MULTI_ENGINES = 0.20;
+/** Max restructured sentences per downstream engine phase when chaining multiple engines */
+export const MAX_RESTRUCTURE_MULTI_ENGINES = 0.70;
 
 /** Max restructured sentences per iteration loop */
-export const MAX_RESTRUCTURE_ITERATION = 0.10;
+export const MAX_RESTRUCTURE_ITERATION = 0.70;
 
 // ═══════════════════════════════════════════════════════════════════════
 // Helpers
@@ -130,11 +129,11 @@ export function measureWordChange(original: string, modified: string): number {
 
 /**
  * Compute aggression level from AI score.
- * Maps AI score (0–100) to aggression (0.25–0.85).
+ * Maps AI score (0–100) to aggression (0.40–0.85).
  * Higher AI score → more aggressive handling.
  */
 function computeAggression(aiScore: number): number {
-  // Linear mapping: score 0 → 0.25, score 100 → 0.85
+  // Linear mapping: score 0 → 0.40, score 100 → 0.85
   const normalized = Math.max(0, Math.min(100, aiScore)) / 100;
   return MIN_CHANGE + normalized * (MAX_CHANGE - MIN_CHANGE);
 }
@@ -219,7 +218,7 @@ function analyzeSentences(
 
 /**
  * Select which sentences go through LLM structural rephrasing.
- * At least 40% of content sentences must be selected.
+ * At least 70% of content sentences must be selected.
  * Selection prioritizes highest AI scores first.
  */
 function selectSentencesForRephrasing(
@@ -232,7 +231,7 @@ function selectSentencesForRephrasing(
 
   if (contentAnalyses.length === 0) return;
 
-  // Calculate minimum count (at least 40%)
+  // Calculate minimum count (at least 70%)
   const minCount = Math.ceil(contentAnalyses.length * MIN_REPHRASING_RATIO);
 
   // First: select all high-risk sentences (AI score ≥ HIGH_RISK_THRESHOLD)

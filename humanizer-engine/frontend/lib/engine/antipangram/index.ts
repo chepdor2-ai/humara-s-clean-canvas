@@ -46,7 +46,7 @@ const DEFAULT_CONFIG: AntiPangramConfig = {
   strength: 'strong',
   tone: 'academic',
   preserveMeaning: true,
-  maxIterations: 3,
+  maxIterations: 10,
 };
 
 // ═══════════════════════════════════════════════════════════════════
@@ -61,6 +61,37 @@ const QUALITY_TARGETS = {
   maxStarterRepetition: 0.25,// Starter repetition must be below this
   minChangeRatio: 0.28,     // Minimum word-level change from original
 };
+
+function protectCriticalSpans(text: string): { text: string; map: Map<string, string> } {
+  const map = new Map<string, string>();
+  let idx = 0;
+  let result = text;
+
+  const patterns = [
+    /\((?:[A-Z][a-zA-Z.'-]+(?:\s+(?:&|and)\s+[A-Z][a-zA-Z.'-]+)?(?:\s+et\s+al\.)?,\s*\d{4}[a-z]?)\)/g,
+    /\b\d+(?:\.\d+)?%\b/g,
+    /\b\d+-\d+%\b/g,
+    /\$\d+(?:,\d{3})*(?:\.\d+)?\s*(?:billion|million|trillion|thousand)?\b/gi,
+  ];
+
+  for (const pattern of patterns) {
+    result = result.replace(pattern, (match) => {
+      const placeholder = `__APG_PROT_${idx++}__`;
+      map.set(placeholder, match);
+      return placeholder;
+    });
+  }
+
+  return { text: result, map };
+}
+
+function restoreCriticalSpans(text: string, map: Map<string, string>): string {
+  let result = text;
+  for (const [placeholder, original] of map) {
+    result = result.replace(new RegExp(placeholder, 'g'), original);
+  }
+  return result;
+}
 
 // ═══════════════════════════════════════════════════════════════════
 // MEANING PRESERVATION CHECK
@@ -489,6 +520,7 @@ export function antiPangramHumanize(
 ): TransformResult {
   const cfg = { ...DEFAULT_CONFIG, ...config };
   const startTime = Date.now();
+  const { text: protectedText, map: protectedMap } = protectCriticalSpans(text);
 
   // ── Pass 1: Forensic Analysis ──
   const forensicBefore = buildForensicProfile(text);
@@ -501,13 +533,13 @@ export function antiPangramHumanize(
   console.log(`[AntiPangram] Connector density: ${forensicBefore.connectorDensity.toFixed(3)}`);
   console.log(`[AntiPangram] Parallel score: ${forensicBefore.parallelStructureScore.toFixed(3)}`);
 
-  let humanized = text;
+  let humanized = protectedText;
   const intensityMap = { light: 0.4, medium: 0.65, strong: 0.85 };
   const intensity = intensityMap[cfg.strength];
 
   // ── Pass 2-5: Main transformation pipeline ──
   for (let iteration = 0; iteration < cfg.maxIterations; iteration++) {
-    const iterForensic = buildForensicProfile(humanized);
+    const iterForensic = buildForensicProfile(restoreCriticalSpans(humanized, protectedMap));
 
     // Check if we've already hit quality targets
     if (
@@ -543,7 +575,7 @@ export function antiPangramHumanize(
     }
 
     // Pass 5: Meaning preservation gate
-    if (cfg.preserveMeaning && !isMeaningPreserved(text, humanized)) {
+    if (cfg.preserveMeaning && !isMeaningPreserved(text, restoreCriticalSpans(humanized, protectedMap))) {
       console.warn(`[AntiPangram] Meaning drift detected at iteration ${iteration}, rolling back aggressive changes`);
       // Keep the less-aggressive version
       humanized = prevHumanized;
@@ -570,6 +602,7 @@ export function antiPangramHumanize(
   // Hard rule: do not introduce first-person pronouns (I, we, my, our, me, us)
   // unless the original input already contained them.
   humanized = guardFirstPerson(text, humanized);
+  humanized = restoreCriticalSpans(humanized, protectedMap);
 
   // ── Final forensic profile ──
   const forensicAfter = buildForensicProfile(humanized);

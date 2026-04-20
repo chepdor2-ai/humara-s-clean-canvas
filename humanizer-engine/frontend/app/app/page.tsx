@@ -207,7 +207,7 @@ const ENGINE_GUIDES: Record<string, string> = {
   ninja_5: 'Omega — Easy → Humara 2.4 → full 10× Nuru. Maximum transformation depth.',
   ghost_trial_2: 'Specter — Humara 2.4 → Humara 2.0 → full 10× Nuru. Ghost-grade signal removal.',
   phantom: 'Phantom — Humara 2.4 → 10× Nuru → deep clean → AntiPangram forensic cleanup.',
-  ai_analysis: 'AI Analysis — Smart auto-selector. Uses API-free offline passes (Oxygen + AntiPangram + Nuru), then loops until under 20% AI across all detectors.',
+  ai_analysis: 'AI Analysis — Smart auto-selector. Uses API-free offline passes (Oxygen + AntiPangram + Nuru ×10), then 5 loops × 3 sweeps until under 20% AI across all detectors. No essay-writing APIs.',
 };
 
 const DEFAULT_PROCESSING_MESSAGES = [
@@ -292,6 +292,12 @@ const TONES = [
   { id: 'professional', label: 'Business' },
   { id: 'simple', label: 'Direct' },
 ];
+const POST_PROCESS_PROFILES = [
+  { id: 'balanced', label: 'Balanced' },
+  { id: 'undetectability', label: 'Undetectability' },
+  { id: 'quality', label: 'Quality' },
+] as const;
+type PostProcessProfileId = typeof POST_PROCESS_PROFILES[number]['id'];
 
 /* ── Page ───────────────────────────────────────────────────────────────── */
 export default function EditorPage() {
@@ -312,6 +318,7 @@ function EditorPageInner() {
   const [engineDropdownOpen, setEngineDropdownOpen] = useState(false);
   const [strength, setStrength] = useState('medium');
   const [tone, setTone] = useState('academic');
+  const [postProcessingProfile, setPostProcessingProfile] = useState<PostProcessProfileId>('balanced');
   const [strictMeaning, setStrictMeaning] = useState(true);
   const [humanizationRate, setHumanizationRate] = useState(8);
   const [grammarCorrection, setGrammarCorrection] = useState(false);
@@ -788,6 +795,7 @@ function EditorPageInner() {
       engine,
       strength,
       tone,
+      post_processing_profile: postProcessingProfile,
       strict_meaning: strictMeaning,
       enable_post_processing: true,
       humanization_rate: humanizationRate,
@@ -1753,6 +1761,14 @@ function EditorPageInner() {
             </select>
           </div>
           <div className={`auto-sync-divider w-px h-4 hidden sm:block ${autoModelEnabled ? 'auto-glow-divider' : 'bg-slate-200 dark:bg-cyan-950/70'}`} />
+          <div className="flex items-center gap-1.5">
+            <span className="text-[10px] font-semibold uppercase text-slate-500 dark:text-zinc-500">Post</span>
+            <select value={postProcessingProfile} onChange={(e) => setPostProcessingProfile(e.target.value as PostProcessProfileId)} title="Post-processing profile"
+              className="auto-sync-rate-select bg-slate-100 dark:bg-zinc-950/60 border rounded-md px-2 py-1 text-[10px] font-semibold text-slate-700 dark:text-zinc-300 outline-none border-slate-200 dark:border-cyan-900/40 focus:border-cyan-500">
+              {POST_PROCESS_PROFILES.map(profile => <option key={profile.id} value={profile.id}>{profile.label}</option>)}
+            </select>
+          </div>
+          <div className={`auto-sync-divider w-px h-4 hidden sm:block ${autoModelEnabled ? 'auto-glow-divider' : 'bg-slate-200 dark:bg-cyan-950/70'}`} />
           <label className="flex items-center gap-1.5 cursor-pointer select-none">
             <span className="text-[10px] font-semibold uppercase text-slate-500 dark:text-zinc-500">Meaning</span>
             <button onClick={() => setStrictMeaning(!strictMeaning)} title={strictMeaning ? 'On' : 'Off'}
@@ -1800,6 +1816,7 @@ function EditorPageInner() {
             <span className="text-[9px] px-2 py-0.5 rounded-full border bg-cyan-50 dark:bg-cyan-950/50 border-cyan-200 dark:border-cyan-900/60 text-cyan-700 dark:text-cyan-200">{autoModelEnabled ? 'Auto Model' : MODE_LABELS[mode]}</span>
             <span className="text-[9px] px-2 py-0.5 rounded-full border bg-slate-100 dark:bg-zinc-900/70 border-slate-200 dark:border-zinc-800 text-slate-700 dark:text-zinc-300">{ENGINES.find(e => e.id === engine)?.label}</span>
             <span className="text-[9px] px-2 py-0.5 rounded-full border bg-slate-100 dark:bg-zinc-900/70 border-slate-200 dark:border-zinc-800 text-slate-700 dark:text-zinc-300">{TONES.find(t => t.id === tone)?.label}</span>
+            <span className="text-[9px] px-2 py-0.5 rounded-full border bg-slate-100 dark:bg-zinc-900/70 border-slate-200 dark:border-zinc-800 text-slate-700 dark:text-zinc-300">{POST_PROCESS_PROFILES.find(profile => profile.id === postProcessingProfile)?.label}</span>
             {grammarCorrection && (
               <span className="text-[9px] px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-900/60 text-emerald-700 dark:text-emerald-200">Grammar ✓</span>
             )}

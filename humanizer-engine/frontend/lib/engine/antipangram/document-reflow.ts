@@ -41,6 +41,38 @@ function computeLengthCV(sentences: string[]): number {
   return Math.sqrt(variance) / avg;
 }
 
+function splitParagraphPreservingLists(paragraph: string): string[] {
+  if (!/(?:^|\n)\s*[-•]\s/m.test(paragraph)) {
+    return splitToSentences(paragraph);
+  }
+
+  const lines = paragraph.split('\n').map(line => line.trim()).filter(Boolean);
+  const sentences: string[] = [];
+  let proseBuffer: string[] = [];
+
+  const flushBuffer = () => {
+    if (!proseBuffer.length) return;
+    sentences.push(...splitToSentences(proseBuffer.join(' ').trim()));
+    proseBuffer = [];
+  };
+
+  for (const line of lines) {
+    if (/^[-•]\s/.test(line)) {
+      flushBuffer();
+      sentences.push(line);
+      continue;
+    }
+
+    proseBuffer.push(line);
+    if (/[:.!?]$/.test(line)) {
+      flushBuffer();
+    }
+  }
+
+  flushBuffer();
+  return sentences;
+}
+
 function injectBurstiness(sentences: string[], targetCV: number = 0.45): string[] {
   const result = [...sentences];
   let iterations = 0;
@@ -245,7 +277,8 @@ export function reflowDocument(
 
   for (let pIdx = 0; pIdx < paragraphs.length; pIdx++) {
     const para = paragraphs[pIdx].trim();
-    let sentences = splitToSentences(para);
+    const hasBulletList = /(?:^|\n)\s*[-•]\s/m.test(para);
+    let sentences = splitParagraphPreservingLists(para);
 
     // ── Phase 1: Sentence-level transforms ──
     sentences = sentences.map((sent, sIdx) => {
@@ -298,7 +331,7 @@ export function reflowDocument(
     // ── Phase 2: Paragraph-level transforms ──
 
     // 2a. Burstiness injection — target higher CV for more human-like variation
-    if (forensic.sentenceLengthVariance < 0.45) {
+    if (!hasBulletList && forensic.sentenceLengthVariance < 0.45) {
       sentences = injectBurstiness(sentences, 0.45 + intensity * 0.10);
     }
 
@@ -306,7 +339,7 @@ export function reflowDocument(
     sentences = diversifyStarters(sentences);
 
     // 2c. Paragraph structure disruption (deterministic by paragraph index)
-    if (intensity >= 0.65 && pIdx % 3 === 1) {
+    if (!hasBulletList && intensity >= 0.65 && pIdx % 3 === 1) {
       sentences = disruptParagraphStructure(sentences);
     }
 
