@@ -96,9 +96,9 @@ const SURFER_FLUFF: Array<{ match: RegExp; rep: string }> = [
   { match: /\ba (?:must[- ]have|must[- ]read|must[- ]know|game[- ]changer|no[- ]brainer)\b/gi, rep: 'worth your time' },
   { match: /\bin the (?:fast[- ]paced|ever[- ]changing|ever[- ]evolving|rapidly changing) (?:world|landscape|environment)\b/gi, rep: 'today' },
   { match: /\bunlock(?:s|ed|ing)? the (?:power|potential|secrets|mysteries|key) of\b/gi, rep: 'make the most of' },
-  { match: /\bharness(?:es|ed|ing)? the (?:power|potential|capabilities) of\b/gi, rep: 'use' },
-  { match: /\btap(?:s|ped|ping)? into the (?:power|potential) of\b/gi, rep: 'use' },
-  { match: /\bin today'?s (?:fast[- ]paced|rapidly[- ]changing|digital) (?:world|age|landscape)\b/gi, rep: 'today' },
+  { match: /\bharness(?:es|ed|ing)? the (?:power|potential|capabilities) of\b/gi, rep: 'put to good use the strengths of' },
+  { match: /\btap(?:s|ped|ping)? into the (?:power|potential) of\b/gi, rep: 'draw on the strengths of' },
+  { match: /\bin today'?s (?:fast[- ]paced|rapidly[- ]changing|digital) (?:world|age|landscape)\b/gi, rep: 'in the current climate' },
 ];
 
 export function cleanSurferSEOPass(text: string): string {
@@ -129,10 +129,10 @@ const ORIGINALITY_PREDICTABLE: Array<{ match: RegExp; rep: string }> = [
   { match: /\binnovative\s+(solution|approach|method|strategy|framework|way)\b/gi, rep: 'new $1' },
   { match: /\bcutting[- ]edge\s+(technology|research|solution|approach|tool)\b/gi, rep: 'advanced $1' },
   { match: /\bstate[- ]of[- ]the[- ]art\s+(system|solution|technology|model|tool|approach)\b/gi, rep: 'advanced $1' },
-  { match: /\bplays?\s+a\s+(?:crucial|vital|pivotal|critical|significant|key|central|fundamental|instrumental)\s+role\s+in\b/gi, rep: 'shapes' },
-  { match: /\bin\s+the\s+(?:realm|sphere|domain|landscape|arena|world)\s+of\b/gi, rep: 'in' },
-  { match: /\ba\s+(?:myriad|plethora|multitude|host|wealth)\s+of\b/gi, rep: 'many' },
-  { match: /\ba\s+wide\s+(?:range|array|spectrum|variety)\s+of\b/gi, rep: 'many' },
+  { match: /\bplays?\s+a\s+(?:crucial|vital|pivotal|critical|significant|key|central|fundamental|instrumental)\s+role\s+in\b/gi, rep: 'is central to' },
+  { match: /\bin\s+the\s+(?:realm|sphere|domain|landscape|arena|world)\s+of\b/gi, rep: 'in the field of' },
+  { match: /\ba\s+(?:myriad|plethora|multitude|host|wealth)\s+of\b/gi, rep: 'a range of' },
+  { match: /\ba\s+wide\s+(?:range|array|spectrum|variety)\s+of\b/gi, rep: 'a number of' },
   { match: /\bshed(?:s|ding)?\s+light\s+on\b/gi, rep: 'clarifies' },
   { match: /\bpave(?:s|d)?\s+the\s+way\s+for\b/gi, rep: 'enables' },
   { match: /\bgive(?:s|n)?\s+rise\s+to\b/gi, rep: 'leads to' },
@@ -262,7 +262,7 @@ export function cleanPangramPass(text: string): string {
  * ───────────────────────────────────────────────────────────────────── */
 
 const TURNITIN_FLUFF: Array<{ match: RegExp; rep: string }> = [
-  { match: /\b(?:It is worth noting that|It is important to note that|It is essential to (?:note|recognize|understand) that|It should be noted that|It is evident that|It is clear that|It is obvious that|It is apparent that|It is well[- ]known that|It is widely (?:recognized|acknowledged|accepted) that|It goes without saying that|There is no doubt that|Needless to say,)\s+/gi, rep: '' },
+  { match: /\b(?:It is worth noting that|It is important to note that|It is essential to (?:note|recognize|understand) that|It should be noted that|It is evident that|It is clear that|It is obvious that|It is apparent that|It is well[- ]known that|It is widely (?:recognized|acknowledged|accepted) that|It goes without saying that|There is no doubt that|Needless to say,)\s+/gi, rep: 'Notably, ' },
   { match: /\bIn conclusion,\s+/gi, rep: 'Overall, ' },
   { match: /\bTo summarize,\s+/gi, rep: 'In short, ' },
   { match: /\bIn summary,\s+/gi, rep: 'In short, ' },
@@ -382,12 +382,12 @@ export function universalPhraseSweep(text: string): string {
   let cleaned = text;
   const sweepRules: Array<{ pattern: RegExp; rep: string }> = [
     { pattern: /\bto put it (?:simply|briefly|plainly)\b/gi, rep: 'simply put' },
-    { pattern: /\bsimply put,?\s+/gi, rep: '' },
-    { pattern: /\bmore (?:importantly|specifically|notably),?\s+/gi, rep: '' },
-    { pattern: /\bin other words,?\s+/gi, rep: '' },
-    { pattern: /\bto put it differently,?\s+/gi, rep: '' },
-    { pattern: /\bto be sure,?\s+/gi, rep: '' },
-    { pattern: /\bneedless to say,?\s+/gi, rep: '' },
+    { pattern: /\bsimply put,?\s+/gi, rep: 'Put plainly, ' },
+    { pattern: /\bmore (?:importantly|specifically|notably),?\s+/gi, rep: 'Of note, ' },
+    { pattern: /\bin other words,?\s+/gi, rep: 'That is, ' },
+    { pattern: /\bto put it differently,?\s+/gi, rep: 'Put another way, ' },
+    { pattern: /\bto be sure,?\s+/gi, rep: 'Granted, ' },
+    { pattern: /\bneedless to say,?\s+/gi, rep: 'Clearly, ' },
     { pattern: /\bfor all intents and purposes\b/gi, rep: 'essentially' },
     { pattern: /\bgoing forward\b/gi, rep: 'ahead' },
     { pattern: /\bmoving forward\b/gi, rep: 'ahead' },
@@ -440,6 +440,20 @@ export function swapAIMarkers(text: string, aggressive = false): string {
  * ───────────────────────────────────────────────────────────────────── */
 
 export function stripAIStarters(text: string): string {
+  // Only strip multi-word filler openers that add zero meaning.
+  // Single-word connectors (furthermore, moreover, etc.) are handled by
+  // detector-specific passes which REPLACE them rather than DELETE them.
+  // This prevents word-count erosion from double-stripping.
+  const STRIP_ONLY_STARTERS = new Set([
+    "it is important", "it is crucial", "it is essential", "it is worth noting",
+    "it is worth mentioning", "it is worth highlighting", "it should be noted",
+    "it must be noted", "it can be argued", "it can be seen", "it is clear",
+    "it is evident", "it is apparent", "it is obvious", "it stands to reason",
+    "in today's", "in the modern", "in the current", "in the contemporary",
+    "in the digital age", "in this digital age", "in the 21st century",
+    "since the dawn of",
+  ]);
+
   const paragraphs = text.split(/(\n\s*\n)/);
   for (let p = 0; p < paragraphs.length; p++) {
     if (/^\n\s*\n$/.test(paragraphs[p])) continue;
@@ -450,9 +464,9 @@ export function stripAIStarters(text: string): string {
       .map((s) => {
         const trimmed = s.trim();
         if (!trimmed) return s;
-        for (const starter of AI_SENTENCE_STARTERS) {
+        for (const starter of STRIP_ONLY_STARTERS) {
           if (trimmed.toLowerCase().startsWith(starter)) {
-            const after = trimmed.slice(starter.length).trim();
+            const after = trimmed.slice(starter.length).replace(/^[,;:\s]+/, '').trim();
             if (after.length < 5) return s;
             const trailing = s.match(/\s+$/)?.[0] ?? '';
             return recapAfter(after) + trailing;

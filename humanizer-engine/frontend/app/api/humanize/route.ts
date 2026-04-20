@@ -1086,13 +1086,26 @@ export async function POST(req: Request) {
 
     const ozoneKeywordRestoreOnly = false; // Ozone removed — all engines get full post-processing
 
+    // ── Word count preservation tracking ────────────────────────
+    const inputWordCount = normalizedText.trim().split(/\s+/).filter(Boolean).length;
+    const preNuruWordCount = humanized.trim().split(/\s+/).filter(Boolean).length;
+
     // ═══════════════════════════════════════════════════════════════
     // UNIVERSAL NURU POST-PROCESSING: Non-LLM Deep AI Clean
     // Applies to ALL engines EXCEPT ozone (Humara 2.1) and phantom.
     // ═══════════════════════════════════════════════════════════════
     if (engine !== 'phantom') {
       const nuruPostStart = Date.now();
+      const preNuruText = humanized;
       humanized = applySmartNuruPolish(humanized, 15);
+
+      // Word count floor guard: if Nuru post-processing dropped
+      // more than 20% of words, revert to the pre-Nuru output
+      const postNuruWordCount = humanized.trim().split(/\s+/).filter(Boolean).length;
+      if (postNuruWordCount < inputWordCount * 0.80) {
+        console.log(`[WordCountGuard] Nuru post-processing dropped too many words: ${preNuruWordCount} → ${postNuruWordCount} (input: ${inputWordCount}). Reverting.`);
+        humanized = preNuruText;
+      }
 
       const splitIntoIndexedSentences = (textStr: string): { sentences: string[]; paragraphBoundaries: number[]; headingIndices: Set<number> } => {
         const paragraphs = textStr.split(/\n\s*\n/).filter(p => p.trim());
@@ -1629,6 +1642,15 @@ export async function POST(req: Request) {
     // Detector feedback/Oxygen polishing can reintroduce stray Title Case.
     // Run the body-text capitalization repair again after those passes.
     humanized = fixMidSentenceCapitalization(humanized, text);
+    }
+
+    // ── FINAL WORD COUNT FLOOR GUARD ──────────────────────────────
+    // After all post-processing, verify word count did not drop below 85%
+    // of the input. If it did, log a warning. This is informational —
+    // the per-stage guards above should catch most cases.
+    const finalWordCount = humanized.trim().split(/\s+/).filter(Boolean).length;
+    if (finalWordCount < inputWordCount * 0.85) {
+      console.warn(`[WordCountGuard] Final output has ${finalWordCount} words vs ${inputWordCount} input words (${((finalWordCount / inputWordCount) * 100).toFixed(1)}%). Some content may have been lost.`);
     }
 
     // Generate per-sentence alternatives (3 candidates each, best already picked by engines)

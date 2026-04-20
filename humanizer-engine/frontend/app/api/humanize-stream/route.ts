@@ -426,7 +426,7 @@ export async function POST(req: Request) {
           };
 
           const runNuru = (input: string): string => {
-            const output = stealthHumanize(input, strength ?? 'medium', tone ?? 'academic');
+            const output = stealthHumanize(input, effectiveStrength ?? 'medium', tone ?? 'academic');
             return output && output.trim().length > 0 ? output : input;
           };
 
@@ -435,7 +435,7 @@ export async function POST(req: Request) {
           const runNuruSinglePass = (input: string): string => {
             // Protect special content (numbers, stats, citations) from Nuru transforms
             const { text: protectedInput, map: protMap } = protectSpecialContent(input);
-            const raw = stealthHumanize(protectedInput, strength ?? 'medium', tone ?? 'academic', 1);
+            const raw = stealthHumanize(protectedInput, effectiveStrength ?? 'medium', tone ?? 'academic', 1);
             const output = raw && raw.trim().length > 0 ? raw : protectedInput;
             return restoreSpecialContent(output, protMap);
           };
@@ -479,7 +479,7 @@ export async function POST(req: Request) {
 
           // Smart Nuru polish: wraps stealthHumanize for N-pass full-text polish
           const applySmartNuruPolish = (input: string, maxPasses = 15): string => {
-            const output = stealthHumanize(input, strength ?? 'medium', tone ?? 'academic', maxPasses);
+            const output = stealthHumanize(input, effectiveStrength ?? 'medium', tone ?? 'academic', maxPasses);
             return output && output.trim().length > 0 ? output : input;
           };
 
@@ -534,20 +534,23 @@ export async function POST(req: Request) {
             return result;
           };
 
-          // ── Deep non-LLM cleaning (per-sentence): academic-grade AI signal removal ──
+          // Tone-aware contraction policy: academic/academic_blog → expand; others → preserve
+          const isAcademicTone = tone === 'academic' || tone === 'academic_blog';
+
+          // ── Deep non-LLM cleaning (per-sentence): AI signal removal ──
           const deepNonLLMClean = (sentence: string): string => {
             // Layer 1: Kill flagged AI vocabulary (utilize→use, leverage→draw on, etc.)
             let s = applyAIWordKill(sentence);
-            // Layer 2: Vary connectors with academic alternatives (NOT casual)
+            // Layer 2: Vary connectors with alternatives
             s = academicConnectorVariation(s);
-            // Layer 3: Phrase-level academic transforms (verb phrases, hedging, transitions)
+            // Layer 3: Phrase-level transforms (verb phrases, hedging, transitions)
             s = applyPhrasePatterns(s);
-            // Layer 4: Collocation replacement (academic multi-word phrase variation)
+            // Layer 4: Collocation replacement (multi-word phrase variation)
             s = replaceCollocations(s);
-            // Layer 5: Compress wordy AI phrases to concise academic phrasing
+            // Layer 5: Compress wordy AI phrases to concise phrasing
             s = compressPhrases(s);
-            // Layer 6: Expand any contractions back to full forms (academic standard)
-            s = expandAllContractions(s);
+            // Layer 6: Expand contractions only for academic tones
+            if (isAcademicTone) s = expandAllContractions(s);
             // Layer 7: Remove em-dashes (AI detection signal) + fix punctuation
             s = removeEmDashes(s);
             s = fixPunctuation(s);
@@ -555,9 +558,9 @@ export async function POST(req: Request) {
             return s;
           };
 
-          // ── Smoothing pass (per-sentence): academic flow & grammar repair ──
+          // ── Smoothing pass (per-sentence): flow & grammar repair ──
           // Applied after heavy engines to fix grammar breaks and ensure
-          // the text reads as coherent academic prose, not patchy transforms.
+          // the text reads as coherent prose, not patchy transforms.
           const smoothingPass = (sentence: string): string => {
             // 1. Grammar repair: irregular verbs, subject-verb agreement, tense consistency
             let s = postCleanGrammar(sentence);
@@ -565,10 +568,10 @@ export async function POST(req: Request) {
             s = fixOutOfContextSynonyms(s);
             // 3. Validate adjective-noun collocations sound natural
             s = validateCollocations(s);
-            // 4. Vary any repeated connectors with academic alternatives
+            // 4. Vary any repeated connectors with alternatives
             s = academicConnectorVariation(s);
-            // 5. Expand contractions (academic papers should not have contractions)
-            s = expandAllContractions(s);
+            // 5. Expand contractions only for academic tones
+            if (isAcademicTone) s = expandAllContractions(s);
             // 6. Punctuation + capitalization cleanup
             s = fixPunctuation(s);
             s = fixMidSentenceCapitalization(s);
@@ -576,20 +579,20 @@ export async function POST(req: Request) {
             return s;
           };
 
-          // ── Final smoothing & grammar (per-sentence): deep intelligent academic polish ──
-          // Last phase — ensures output reads as polished university-level writing.
+          // ── Final smoothing & grammar (per-sentence): deep intelligent polish ──
+          // Last phase — ensures output reads as polished writing.
           // Every step uses deterministic linguistic rules; no random template shuffling.
           const finalSmoothGrammar = (sentence: string): string => {
             // 1. Full grammar repair: irregular verbs, agreement, tense, structural fixes
             let s = postCleanGrammar(sentence);
             // 2. Fix out-of-context synonyms that earlier phases introduced
             s = fixOutOfContextSynonyms(s);
-            // 3. Validate that adjective-noun collocations are natural academic pairings
+            // 3. Validate that adjective-noun collocations are natural pairings
             s = validateCollocations(s);
-            // 4. Vary any remaining AI-pattern connectors with academic alternatives
+            // 4. Vary any remaining AI-pattern connectors with alternatives
             s = academicConnectorVariation(s);
-            // 5. Expand ALL contractions — must read as formal academic prose
-            s = expandAllContractions(s);
+            // 5. Expand contractions only for academic tones
+            if (isAcademicTone) s = expandAllContractions(s);
             // 6. Final punctuation + capitalization pass
             s = fixPunctuation(s);
             s = fixMidSentenceCapitalization(s);
@@ -623,7 +626,7 @@ export async function POST(req: Request) {
           const runNuru20Full = async (input: string): Promise<string> => {
             let s = await restructureSentence(input);
             for (let i = 0; i < CHAIN_TS; i++) {
-              const n = stealthHumanize(s, strength ?? 'medium', tone ?? 'academic', 1);
+              const n = stealthHumanize(s, effectiveStrength ?? 'medium', tone ?? 'academic', 1);
               if (n && n.trim().length > 0) s = n;
             }
             s = deepNonLLMClean(s);
@@ -1370,11 +1373,35 @@ export async function POST(req: Request) {
               // For sync/async/nuru phases, each sentence must achieve ≥minChangeThreshold
               // word change from its state BEFORE this phase started.
               const MIN_CHANGE = phaseMinChangeThreshold;
-              const MAX_RETRIES = 1; // LLM async phases: 1 retry max (each call is expensive)
+              const MAX_RETRIES = 2; // Retries for sync/async phases when change is below threshold
               const phaseInputSentences = [...currentSentences]; // snapshot before this phase
 
               if (phase.type === 'emit') {
+                // ── EMIT phases now apply mandatory deepNonLLMClean + synonymReplace ──
+                // Previously emit phases just re-sent text unchanged. Now they apply
+                // real transformations so every phase actually modifies the text.
+                const usedEmitWords = new Set<string>();
                 for (let i = 0; i < currentSentences.length; i++) {
+                  if (!isHeadingSentCheck(currentSentences[i])) {
+                    const original = phaseInputSentences[i];
+                    const { text: protectedSent, map: sentMap } = protectSpecialContent(currentSentences[i]);
+                    let result = deepNonLLMClean(protectedSent);
+                    result = synonymReplace(result, 0.6, usedEmitWords);
+                    result = restoreSpecialContent(result, sentMap);
+                    // Enforce no split/merge
+                    const emitSentCount = robustSentenceSplit(result).length;
+                    if (emitSentCount > 1) {
+                      const firstSent = robustSentenceSplit(result)[0];
+                      result = firstSent && firstSent.trim().length > 0 ? firstSent : currentSentences[i];
+                    }
+                    // If still below threshold, apply AI word kill as fallback
+                    const change = measureSentenceChange(original, result);
+                    if (change < MIN_CHANGE) {
+                      result = applyAIWordKill(result);
+                      result = synonymReplace(result, 0.9, usedEmitWords);
+                    }
+                    currentSentences[i] = result;
+                  }
                   sendSSE(controller, { type: 'sentence', index: i, text: currentSentences[i], stage: phaseLabel });
                 }
               } else if (phase.type === 'sync') {
@@ -1504,8 +1531,16 @@ export async function POST(req: Request) {
                 const MIN_NURU_PASSES = Math.min(phase.passes, 5);
                 const maxNuruPasses = Math.max(phase.passes, MIN_NURU_PASSES);
 
+                // Scale Nuru passes based on post-processing profile:
+                // 'undetectability': +3 extra baseline, +3 targeted → more aggressive AI removal
+                // 'quality': -1 baseline → preserve more natural flow
+                // 'balanced': default behavior
+                const profileBaselineBonus = postProcessingProfile === 'undetectability' ? 3 : postProcessingProfile === 'quality' ? -1 : 0;
+                const profileTargetedBonus = postProcessingProfile === 'undetectability' ? 3 : 0;
+                const adjustedBaseline = Math.max(2, MIN_NURU_PASSES + profileBaselineBonus);
+
                 // ── Phase 1: Baseline passes on ALL sentences ──
-                for (let pass = 0; pass < MIN_NURU_PASSES; pass++) {
+                for (let pass = 0; pass < adjustedBaseline; pass++) {
                   for (let i = 0; i < currentSentences.length; i++) {
                     if (!isHeadingSentCheck(currentSentences[i])) {
                       currentSentences[i] = runNuruSinglePass(currentSentences[i]);
@@ -1570,7 +1605,7 @@ export async function POST(req: Request) {
 
                 // ── Phase 4: 5 targeted passes on FLAGGED sentences only ──
                 if (flaggedSentences.length > 0 && !(deadlineReached || Date.now() - startTime > DEADLINE_MS - 8000)) {
-                  const TARGETED_PASSES = 5;
+                  const TARGETED_PASSES = 5 + profileTargetedBonus;
                   const flaggedSet = new Map<number, string[]>();
                   for (const f of flaggedSentences) {
                     flaggedSet.set(f.index, f.flagged_phrases);
@@ -1582,7 +1617,7 @@ export async function POST(req: Request) {
                       if (isHeadingSentCheck(currentSentences[idx])) continue;
                       if (phrases.length > 0) {
                         // Use phrase-targeted Nuru that focuses on suspicious spans
-                        currentSentences[idx] = stealthHumanizeTargeted(currentSentences[idx], phrases, strength ?? 'medium');
+                        currentSentences[idx] = stealthHumanizeTargeted(currentSentences[idx], phrases, effectiveStrength ?? 'medium');
                       } else {
                         currentSentences[idx] = runNuruSinglePass(currentSentences[idx]);
                       }
@@ -1598,11 +1633,19 @@ export async function POST(req: Request) {
                   const original = phaseInputSentences[i];
                   let change = measureSentenceChange(original, currentSentences[i]);
                   let retry = 0;
-                  while (change < MIN_CHANGE && retry < MAX_RETRIES) {
+                  const NURU_MIN_RETRIES = 3; // More retries for Nuru phases (cheap, non-LLM)
+                  while (change < MIN_CHANGE && retry < NURU_MIN_RETRIES) {
                     currentSentences[i] = runNuruSinglePass(currentSentences[i]);
                     change = measureSentenceChange(original, currentSentences[i]);
                     sendSSE(controller, { type: 'sentence', index: i, text: currentSentences[i], stage: phaseLabel });
                     retry++;
+                  }
+                  // Final fallback: if still below threshold after retries, apply synonym replacement
+                  if (change < MIN_CHANGE) {
+                    const usedFallback = new Set<string>();
+                    currentSentences[i] = applyAIWordKill(currentSentences[i]);
+                    currentSentences[i] = synonymReplace(currentSentences[i], 0.9, usedFallback);
+                    sendSSE(controller, { type: 'sentence', index: i, text: currentSentences[i], stage: phaseLabel });
                   }
                 }
               }
@@ -1797,7 +1840,7 @@ export async function POST(req: Request) {
                 for (const [idx, phrases] of flagMap) {
                   if (isHeadingSentCheck(postSents[idx])) continue;
                   if (phrases.length > 0) {
-                    postSents[idx] = stealthHumanizeTargeted(postSents[idx], phrases, strength ?? 'medium');
+                    postSents[idx] = stealthHumanizeTargeted(postSents[idx], phrases, effectiveStrength ?? 'medium');
                   } else {
                     postSents[idx] = runNuruSinglePass(postSents[idx]);
                   }
@@ -1984,7 +2027,8 @@ export async function POST(req: Request) {
           if (!isDeepKill) humanized = preserveInputStructure(normalizedText, humanized);
 
           // 11. Contraction & em-dash enforcement
-          humanized = expandContractions(humanized);
+          // Only expand contractions for academic/academic_blog tones; other tones keep them
+          if (isAcademicTone) humanized = expandContractions(humanized);
           humanized = removeEmDashes(humanized);
 
           // 12. Grammar sanitizer

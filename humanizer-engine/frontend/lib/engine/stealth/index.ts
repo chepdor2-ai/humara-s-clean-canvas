@@ -142,9 +142,9 @@ const PHRASE_REPLACEMENTS: Array<{ pattern: RegExp; replacements: string[] }> = 
   { pattern: /\bfor example\b/gi, replacements: ['for instance', 'to illustrate'] },
   { pattern: /\bin terms of\b/gi, replacements: ['regarding', 'when it comes to'] },
   { pattern: /\bwith regard to\b/gi, replacements: ['about', 'regarding'] },
-  { pattern: /\bit is important to note that\s*/gi, replacements: [''] },
-  { pattern: /\bit should be noted that\s*/gi, replacements: [''] },
-  { pattern: /\bit is worth mentioning that\s*/gi, replacements: [''] },
+  { pattern: /\bit is important to note that\s*/gi, replacements: ['Notably, ', 'Significantly, ', 'Worth noting, '] },
+  { pattern: /\bit should be noted that\s*/gi, replacements: ['Of note, ', 'Notably, ', 'It bears mention that '] },
+  { pattern: /\bit is worth mentioning that\s*/gi, replacements: ['Significantly, ', 'Worth noting, ', 'Notably, '] },
   { pattern: /\bin the context of\b/gi, replacements: ['within', 'in'] },
   { pattern: /\bon the basis of\b/gi, replacements: ['based on', 'from'] },
   { pattern: /\bat the same time\b/gi, replacements: ['simultaneously', 'concurrently'] },
@@ -1112,6 +1112,25 @@ const AI_TELL_PATTERNS = [
   /\binnovative approach\b/i,
   /\boverall,?\s/i,
   /\bin today's (?:world|society|era|age|landscape)\b/i,
+  // Extended AI-tell patterns — detectors flag these heavily
+  /\bit is (?:widely|generally|commonly) (?:known|recognized|accepted|acknowledged) that\b/i,
+  /\bin (?:the|this) (?:realm|sphere|domain|landscape|arena) of\b/i,
+  /\ba (?:myriad|plethora|multitude|wealth) of\b/i,
+  /\bnavigat(?:e|es|ed|ing) (?:the )?(?:complexities|challenges|intricacies|landscape)\b/i,
+  /\bpave(?:s|d)? the way for\b/i,
+  /\bshed(?:s|ding)? light on\b/i,
+  /\bgive(?:s|n)? rise to\b/i,
+  /\bat the (?:core|heart|forefront) of\b/i,
+  /\bcutting[- ]edge\b/i,
+  /\bstate[- ]of[- ]the[- ]art\b/i,
+  /\bone of the (?:most|key|main|primary|greatest|biggest|major)\b/i,
+  /\bin recent years\b/i,
+  /\bthere (?:are|is) (?:a )?(?:growing|increasing|mounting)\b/i,
+  /\bthis (?:study|paper|research|article|analysis) (?:aims|seeks|attempts) to\b/i,
+  /\bwhich contributes? to (?:better|improved|enhanced|greater)\b/i,
+  /\bfoster(?:s|ed|ing)? (?:a )?(?:sense|culture|environment|atmosphere) of\b/i,
+  /\bparadigm shift\b/i,
+  /\bholistic (?:approach|understanding|view|perspective)\b/i,
 ];
 
 function scoreReadability(sentence: string, original: string): number {
@@ -1138,12 +1157,13 @@ function scoreReadability(sentence: string, original: string): number {
   if (badArticleA) score -= badArticleA.length * 0.08;
   if (badArticleAn) score -= badArticleAn.length * 0.08;
 
-  // 5. Penalize AI-tell patterns still present
+  // 5. Penalize AI-tell patterns still present — heavier weight drives selection
+  //    toward candidates that have fewer AI signals
   let aiTells = 0;
   for (const pattern of AI_TELL_PATTERNS) {
     if (pattern.test(sentence)) aiTells++;
   }
-  score -= aiTells * 0.10;
+  score -= aiTells * 0.18;
 
   // 6. Penalize contractions (academic must not have them)
   const contractions = sentence.match(/\b\w+[''\u2019](?:t|s|re|ve|ll|d|m)\b/gi);
@@ -1198,8 +1218,17 @@ function compositeQualityScore(
     ? changeRatio / 0.80
     : 1.0 - (changeRatio - 0.80) * 0.3;
 
-  // Weights: balance change and readability equally for deep humanization
-  return (changeScore * 0.50) + (readability * 0.50);
+  // Word count preservation: penalize candidates that shrink word count
+  const origWordCount = original.split(/\s+/).filter(Boolean).length;
+  const candWordCount = candidate.split(/\s+/).filter(Boolean).length;
+  const wordCountRatio = origWordCount > 0 ? candWordCount / origWordCount : 1;
+  // Candidates below 85% of original word count get penalized
+  const wordCountPenalty = wordCountRatio < 0.85
+    ? (0.85 - wordCountRatio) * 1.5  // steep penalty for word loss
+    : 0;
+
+  // Weights: balance change, readability, and word count preservation
+  return (changeScore * 0.45) + (readability * 0.45) + (0.10 * Math.min(1, wordCountRatio)) - wordCountPenalty;
 }
 
 /* ── Sentence-Level Restructuring ─────────────────────────────────
@@ -1255,12 +1284,12 @@ function applySentenceRestructuring(sentence: string, strategy: number): string 
   // Strategy 4: Connector disruption (strip or downgrade formal connectors)
   if (strategy >= 2) {
     const connectorRemovals: Record<string, string[]> = {
-      'furthermore': [''], 'moreover': [''], 'additionally': [''],
-      'consequently': ['so'], 'nevertheless': ['still'], 'nonetheless': ['still'],
-      'subsequently': ['then'], 'accordingly': ['so'], 'therefore': ['so'],
-      'hence': ['so'], 'indeed': [''], 'in contrast': ['but'],
-      'as a result': ['so'], 'in addition': ['also'],
-      'in conclusion': [''], 'in summary': [''], 'in essence': [''],
+      'furthermore': ['Beyond that', 'On top of this', 'Also'], 'moreover': ['Also', 'Besides', 'On top of that'], 'additionally': ['Also', 'Plus', 'On top of that'],
+      'consequently': ['So', 'Because of this'], 'nevertheless': ['Still', 'Even so'], 'nonetheless': ['Still', 'Even so'],
+      'subsequently': ['Then', 'After that', 'Later'], 'accordingly': ['So', 'On that basis'], 'therefore': ['So', 'For that reason'],
+      'hence': ['So', 'For that reason'], 'indeed': ['In fact', 'Actually'], 'in contrast': ['But', 'By comparison'],
+      'as a result': ['So', 'Because of this'], 'in addition': ['Also', 'Plus'],
+      'in conclusion': ['To wrap up', 'Overall'], 'in summary': ['In short', 'Overall'], 'in essence': ['At its core', 'Basically'],
     };
     for (const [conn, repls] of Object.entries(connectorRemovals)) {
       const re = new RegExp(`^${conn}[,;]?\\s*`, 'i');
