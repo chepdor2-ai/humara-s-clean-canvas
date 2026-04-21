@@ -18,6 +18,9 @@ import { humaraHumanize } from '@/lib/humara';
 import { nuruHumanize } from '@/lib/engine/nuru-humanizer';
 import { stealthHumanize, stealthHumanizeTargeted, type StealthHumanizeOptions } from '@/lib/engine/stealth';
 import { detectorTargetedPolish } from '@/lib/engine/detector-targeted-polish';
+import { profilePaper, summarizeProfile, type PaperProfile } from '@/lib/engine/paper-profiler';
+import { deriveHumanizationPlan, summarizePlan, type HumanizationPlan } from '@/lib/engine/paper-strategy-selector';
+import { sentenceFlowPolish } from '@/lib/engine/sentence-flow-polish';
 import { applySentenceStartersDistribution, applyNuruDocumentFlowCalibration } from '@/lib/engine/stealth/nuru-document-phases';
 import { omegaHumanize } from '@/lib/engine/omega-humanizer';
 import { easyHumanize } from '@/lib/engine/easy-humanizer';
@@ -173,7 +176,39 @@ interface AdaptiveCleanupPlan {
   maxAdaptiveCycles: number;
 }
 
-function buildAdaptiveCleanupPlan(text: string, score: number, requestedTone: string | undefined, postProfile: string): AdaptiveCleanupPlan {
+function buildAdaptiveCleanupPlan(
+  text: string,
+  score: number,
+  requestedTone: string | undefined,
+  postProfile: string,
+  paperPlan?: HumanizationPlan,
+): AdaptiveCleanupPlan {
+  // ── Hard minimums (user-mandated) ──
+  //   • Every engine: ≥ 10 iterations
+  //   • Undetectability: Nuru ≥ 10 on top of adaptive
+  //   • Quality: AntiPangram ≥ 10 on top of adaptive
+  //   • Universal post-processing: ≥ 10 passes
+  const MIN = 10;
+
+  // Preferred path: use the profile-driven HumanizationPlan if provided,
+  // falling back to pure heuristic calculation when it is not.
+  if (paperPlan) {
+    return {
+      targetScore: paperPlan.targetScore,
+      detectorPressure: paperPlan.detectorPressure,
+      antiPangramIterations: Math.max(MIN, paperPlan.antiPangramIterations),
+      antiPangramVariance: paperPlan.antiPangramVariance,
+      readabilityBias: paperPlan.readabilityBias,
+      nuruIterations: Math.max(MIN, paperPlan.nuruIterations),
+      nuruLoops: paperPlan.nuruLoops,
+      targetedSweeps: paperPlan.targetedSweeps,
+      universalCleaningPasses: Math.max(MIN, paperPlan.universalCleaningPasses),
+      leadRewriteThreshold: paperPlan.leadRewriteThreshold,
+      maxAdaptiveCycles: paperPlan.maxAdaptiveCycles,
+    };
+  }
+
+  // ── Heuristic fallback (no profile supplied) ──
   const ctx = analyzeContext(text);
   const toneId = requestedTone ?? 'neutral';
   const academicish = toneId === 'academic' || toneId === 'academic_blog' || ctx.tone === 'formal';
@@ -185,16 +220,28 @@ function buildAdaptiveCleanupPlan(text: string, score: number, requestedTone: st
   const lengthBias = clamp01((ctx.totalWords - 220) / 900);
   const sentenceDensity = clamp01((ctx.avgSentenceLength - 18) / 16);
   const readabilityBias = clamp01((blogish ? 0.90 : academicish ? 0.76 : 0.70) - (technical ? 0.05 : 0) + (social ? 0.03 : 0));
+
+  // Nuru: ≥ 10 base + adaptive boost. Undetectability adds baseline 4 on top.
+  const nuruBase = postProfile === 'undetectability' ? MIN + 4 : MIN;
+  const nuruIterations = Math.max(MIN, Math.min(24, Math.round(nuruBase + detectorPressure * 6 + sentenceDensity * 2)));
+
+  // AntiPangram: ≥ 10 base + adaptive boost. Quality adds baseline 4 on top.
+  const apBase = postProfile === 'quality' ? MIN + 4 : MIN;
+  const antiPangramIterations = Math.max(MIN, Math.min(24, Math.round(apBase + detectorPressure * 6 + lengthBias * 2 + (technical ? 1 : 0))));
+
+  // Universal post-processing: ≥ 10, adaptive on top.
+  const universalCleaningPasses = Math.max(MIN, Math.min(18, Math.round(MIN + detectorPressure * 4 + lengthBias + (blogish ? 1 : 0))));
+
   return {
     targetScore,
     detectorPressure,
-    antiPangramIterations: Math.max(10, Math.min(20, Math.round(10 + detectorPressure * 6 + lengthBias * 2 + (technical ? 1 : 0)))),
+    antiPangramIterations,
     antiPangramVariance: Math.min(0.18, 0.04 + detectorPressure * 0.10 + (blogish ? 0.03 : 0)),
     readabilityBias,
-    nuruIterations: Math.max(10, Math.min(18, Math.round(10 + detectorPressure * 5 + sentenceDensity * 2 + (postProfile === 'undetectability' ? 2 : 0)))),
+    nuruIterations,
     nuruLoops: Math.max(4, Math.min(10, Math.round(4 + detectorPressure * 5 + lengthBias + (postProfile !== 'quality' ? 1 : 0)))),
     targetedSweeps: Math.max(3, Math.min(8, Math.round(3 + detectorPressure * 4 + (technical ? 1 : 0)))),
-    universalCleaningPasses: Math.max(3, Math.min(10, Math.round(3 + detectorPressure * 6 + lengthBias + (blogish ? 1 : 0)))),
+    universalCleaningPasses,
     leadRewriteThreshold: 24 + detectorPressure * 18,
     maxAdaptiveCycles: Math.max(2, Math.min(5, Math.round(2 + detectorPressure * 3 + (lengthBias > 0.4 ? 1 : 0)))),
   };
@@ -404,6 +451,41 @@ export async function POST(req: Request) {
           normalizedText = normalizedText.replace(
             /([.!?])\n(?!\n)(?=(?:[IVXLCDM]+\.\s|[A-Z]\.\s|#{1,6}\s|(?:Part|Section|Chapter)\s+\d))/gim, "$1\n\n"
           );
+
+          // ══════════════════════════════════════════════════════════════
+          // PAPER PROFILER (Stage 1) + STRATEGY SELECTOR (Stage 3)
+          //
+          // Runs once per request. Characterizes the paper across domain,
+          // register, length, sections, per-paragraph AI metrics, then
+          // derives a HumanizationPlan whose iteration counts respect the
+          // mandated minimums (Nuru/AntiPangram/universal ≥ 10) and add
+          // adaptive boost on top based on composite AI score + length.
+          //
+          // The plan flows through every downstream phase so intensity is
+          // consistent: Nuru, AntiPangram, detector-targeted polish, and
+          // the sentence-flow polisher all read from the same plan.
+          // ══════════════════════════════════════════════════════════════
+          let paperProfile: PaperProfile | null = null;
+          let humanizationPlan: HumanizationPlan | null = null;
+          try {
+            paperProfile = profilePaper(normalizedText);
+            humanizationPlan = deriveHumanizationPlan(
+              paperProfile,
+              postProcessingProfile as 'balanced' | 'quality' | 'undetectability',
+              (strength ?? 'strong') as 'light' | 'medium' | 'strong',
+            );
+            console.log('[PaperProfile]', summarizeProfile(paperProfile));
+            console.log('[HumanizationPlan]', summarizePlan(humanizationPlan));
+            sendSSE(controller, {
+              type: 'stage',
+              stage: `Profile: ${paperProfile.domain.primary}/${paperProfile.register}/${paperProfile.lengthBucket} (${paperProfile.overallCompositeAi}% composite AI)`,
+            });
+            await flushDelay(8);
+          } catch (profileErr) {
+            console.warn('[PaperProfiler] failed, falling back to heuristic plans:', profileErr);
+            paperProfile = null;
+            humanizationPlan = null;
+          }
 
           // 3. Engine stage — the main humanization
           let humanized: string;
@@ -1033,7 +1115,7 @@ export async function POST(req: Request) {
               const detector = getDetector();
               const preAnalysis = detector.analyze(normalizedText);
               const initialAiScore = getDetectorAverage(preAnalysis);
-              let aiAdaptivePlan = buildAdaptiveCleanupPlan(normalizedText, initialAiScore, tone ?? 'neutral', postProcessingProfile);
+              let aiAdaptivePlan = buildAdaptiveCleanupPlan(normalizedText, initialAiScore, tone ?? 'neutral', postProcessingProfile, humanizationPlan ?? undefined);
               const MAX_ITER = Math.max(5, aiAdaptivePlan.maxAdaptiveCycles + 2);
               const TARGET_SCORE = aiAdaptivePlan.targetScore;
               const isHighAI = initialAiScore >= 55;
@@ -1147,7 +1229,7 @@ export async function POST(req: Request) {
               const totalContentSentsForCap = workingSentences.filter(s => !isHeadingSentCheck(s)).length;
               const maxRestructPerIter = Math.max(1, Math.ceil(totalContentSentsForCap * MAX_RESTRUCTURE_ITERATION));
               let currentScan = getFlaggedSentenceDetails(workingSentences);
-              aiAdaptivePlan = buildAdaptiveCleanupPlan(reassembleText(workingSentences, workingBounds.length ? workingBounds : [0]), currentScan.detectorAverage, tone ?? 'neutral', postProcessingProfile);
+              aiAdaptivePlan = buildAdaptiveCleanupPlan(reassembleText(workingSentences, workingBounds.length ? workingBounds : [0]), currentScan.detectorAverage, tone ?? 'neutral', postProcessingProfile, humanizationPlan ?? undefined);
               sendSSE(controller, { type: 'stage', stage: `AI Analysis: Post-Agent Score ${Math.round(currentScan.detectorAverage)}%` });
               await flushDelay(12);
 
@@ -1160,7 +1242,7 @@ export async function POST(req: Request) {
                 if (!timeOk()) break;
 
                 const useHeavyPass = currentScan.detectorAverage >= 35;
-                aiAdaptivePlan = buildAdaptiveCleanupPlan(reassembleText(workingSentences, workingBounds.length ? workingBounds : [0]), currentScan.detectorAverage, tone ?? 'neutral', postProcessingProfile);
+                aiAdaptivePlan = buildAdaptiveCleanupPlan(reassembleText(workingSentences, workingBounds.length ? workingBounds : [0]), currentScan.detectorAverage, tone ?? 'neutral', postProcessingProfile, humanizationPlan ?? undefined);
                 sendSSE(controller, {
                   type: 'stage',
                   stage: `AI Analysis: Iteration ${iteration + 1} (${Math.round(currentScan.detectorAverage)}%)`,
@@ -1211,7 +1293,7 @@ export async function POST(req: Request) {
                 }
 
                 currentScan = getFlaggedSentenceDetails(workingSentences);
-                aiAdaptivePlan = buildAdaptiveCleanupPlan(reassembleText(workingSentences, workingBounds.length ? workingBounds : [0]), currentScan.detectorAverage, tone ?? 'neutral', postProcessingProfile);
+                aiAdaptivePlan = buildAdaptiveCleanupPlan(reassembleText(workingSentences, workingBounds.length ? workingBounds : [0]), currentScan.detectorAverage, tone ?? 'neutral', postProcessingProfile, humanizationPlan ?? undefined);
                 await flushDelay(8);
               }
 
@@ -1911,7 +1993,7 @@ export async function POST(req: Request) {
             const NURU_POST_DEADLINE_MS = 30_000;
             const nuruPostTimeOk = () => Date.now() - nuruPostStart < NURU_POST_DEADLINE_MS && !(deadlineReached || Date.now() - startTime > DEADLINE_MS - 8000);
             let currentAdaptiveScore = getDetectorAverage(detector.analyze(humanized));
-            adaptivePostPlan = buildAdaptiveCleanupPlan(normalizedText, currentAdaptiveScore, tone ?? 'neutral', postProcessingProfile);
+            adaptivePostPlan = buildAdaptiveCleanupPlan(normalizedText, currentAdaptiveScore, tone ?? 'neutral', postProcessingProfile, humanizationPlan ?? undefined);
 
             const collectPostFlagged = (sentences: string[]) => {
               const postFullText = sentences.filter(s => !isHeadingSentCheck(s)).join(' ');
@@ -1948,7 +2030,7 @@ export async function POST(req: Request) {
               );
               latestHumanized = humanized;
               currentAdaptiveScore = getDetectorAverage(detector.analyze(humanized));
-              adaptivePostPlan = buildAdaptiveCleanupPlan(normalizedText, currentAdaptiveScore, tone ?? 'neutral', postProcessingProfile);
+              adaptivePostPlan = buildAdaptiveCleanupPlan(normalizedText, currentAdaptiveScore, tone ?? 'neutral', postProcessingProfile, humanizationPlan ?? undefined);
             };
 
             if ((postProcessingProfile === 'quality' || postProcessingProfile === 'balanced') && nuruPostTimeOk()) {
@@ -2035,7 +2117,7 @@ export async function POST(req: Request) {
               humanized = reassembleText(postSents, postParaBounds.length ? postParaBounds : [0]);
               latestHumanized = humanized;
               currentAdaptiveScore = getDetectorAverage(detector.analyze(humanized));
-              adaptivePostPlan = buildAdaptiveCleanupPlan(normalizedText, currentAdaptiveScore, tone ?? 'neutral', postProcessingProfile);
+              adaptivePostPlan = buildAdaptiveCleanupPlan(normalizedText, currentAdaptiveScore, tone ?? 'neutral', postProcessingProfile, humanizationPlan ?? undefined);
 
               const { sentences: nuruPostSents, paragraphBoundaries: sharedBounds } = splitIntoIndexedSentences(humanized);
               const { sentences: sharedSource } = splitIntoIndexedSentences(normalizedText);
@@ -2044,7 +2126,7 @@ export async function POST(req: Request) {
               humanized = reassembleText(nuruPostSents, sharedBounds.length ? sharedBounds : [0]);
               latestHumanized = humanized;
               currentAdaptiveScore = getDetectorAverage(detector.analyze(humanized));
-              adaptivePostPlan = buildAdaptiveCleanupPlan(normalizedText, currentAdaptiveScore, tone ?? 'neutral', postProcessingProfile);
+              adaptivePostPlan = buildAdaptiveCleanupPlan(normalizedText, currentAdaptiveScore, tone ?? 'neutral', postProcessingProfile, humanizationPlan ?? undefined);
 
               if (currentAdaptiveScore <= adaptivePostPlan.targetScore) break;
               if ((postProcessingProfile === 'undetectability' || currentAdaptiveScore > 12) && nuruPostTimeOk()) {
@@ -2083,7 +2165,7 @@ export async function POST(req: Request) {
                   humanized = polish.text;
                   latestHumanized = humanized;
                   currentAdaptiveScore = getDetectorAverage(detector.analyze(humanized));
-                  adaptivePostPlan = buildAdaptiveCleanupPlan(normalizedText, currentAdaptiveScore, tone ?? 'neutral', postProcessingProfile);
+                  adaptivePostPlan = buildAdaptiveCleanupPlan(normalizedText, currentAdaptiveScore, tone ?? 'neutral', postProcessingProfile, humanizationPlan ?? undefined);
                   sendSSE(controller, {
                     type: 'stage',
                     stage: `Detector polish complete: ${polish.signalsFixed.slice(0, 3).join(', ') || 'no gaps'} (~${Math.round(currentAdaptiveScore)}%)`,
@@ -2096,9 +2178,55 @@ export async function POST(req: Request) {
             }
           }
 
+          // ══════════════════════════════════════════════════════════════
+          // SENTENCE-FLOW POLISH (final humanization pass)
+          //
+          // Runs for EVERY engine — including ai_analysis — right before
+          // the universal cleaning. Works strictly sentence-by-sentence
+          // and paragraph-by-paragraph.
+          //
+          // Techniques:
+          //   • Rotates repeated formal connectors into a natural pool
+          //     (Furthermore → "Beyond that", "In practice", "Still", ...)
+          //   • De-duplicates adjacent sentence starters
+          //   • Anchors ambiguous "This shows/means" with a real noun
+          //   • Diversifies paragraph-lead structure across paragraphs
+          //   • Smooths abrupt short→short declarative transitions
+          //   • Cleans surviving trailing "-ing X" participial tails
+          //
+          // Deterministic per-input via a seeded RNG.
+          // ══════════════════════════════════════════════════════════════
+          if (!(deadlineReached || Date.now() - startTime > DEADLINE_MS - 4000)) {
+            try {
+              const flowIterations = humanizationPlan?.flowPolishIterations ?? 2;
+              sendSSE(controller, { type: 'stage', stage: `Sentence Flow Polish (${flowIterations}×)` });
+              await flushDelay(6);
+              const flowResult = sentenceFlowPolish(humanized, {
+                profile: paperProfile ?? undefined,
+                plan: humanizationPlan ?? undefined,
+                iterations: flowIterations,
+                onStage: async (stage: string) => {
+                  sendSSE(controller, { type: 'stage', stage });
+                  await flushDelay(4);
+                },
+              });
+              if (flowResult.text && flowResult.text.trim().length >= humanized.trim().length * 0.75) {
+                humanized = flowResult.text;
+                latestHumanized = humanized;
+                sendSSE(controller, {
+                  type: 'stage',
+                  stage: `Flow polish complete (${flowResult.iterationsRun} iter)`,
+                });
+                await flushDelay(6);
+              }
+            } catch (flowErr) {
+              console.warn('[FlowPolish] skipped:', flowErr);
+            }
+          }
+
           if (!(deadlineReached || Date.now() - startTime > DEADLINE_MS - 6000)) {
             const { sentences: cleanSentences, paragraphBoundaries: cleanBounds } = splitIntoIndexedSentences(humanized);
-            const finalPlan = adaptivePostPlan ?? buildAdaptiveCleanupPlan(normalizedText, getDetectorAverage(detector.analyze(humanized)), tone ?? 'neutral', postProcessingProfile);
+            const finalPlan = adaptivePostPlan ?? buildAdaptiveCleanupPlan(normalizedText, getDetectorAverage(detector.analyze(humanized)), tone ?? 'neutral', postProcessingProfile, humanizationPlan ?? undefined);
             const paragraphLeadSet = new Set(cleanBounds);
             for (let pass = 0; pass < finalPlan.universalCleaningPasses; pass++) {
               sendSSE(controller, { type: 'stage', stage: `Universal Cleaning ${pass + 1}/${finalPlan.universalCleaningPasses}` });
