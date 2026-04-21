@@ -850,3 +850,384 @@ async function createExportArtifactLegacy(project: WorkspaceProject, type: Works
     base64: Buffer.from(JSON.stringify(blueprint, null, 2), 'utf8').toString('base64'),
   }
 }
+
+export async function createExportArtifact(project: WorkspaceProject, type: WorkspaceExportArtifact['type']) {
+  const activeDraft = getActiveDraft(project)
+  const fileStem = `${slug(project.title || 'workspace-project')}-${type}`
+  const createdAt = nowIso()
+
+  if (!activeDraft) {
+    return createExportArtifactLegacy(project, type)
+  }
+
+  const profile = createFormattingProfile(project.citationStyle, activeDraft.contentJson.title, project.instructions)
+  const parsed = parseDocumentText(activeDraft.contentMarkdown, activeDraft.contentJson.title)
+  const references = parsed.references.length > 0
+    ? parsed.references
+    : buildReferenceEntriesFromSources(project.sourceLibrary, project.citationStyle)
+
+  if (type === 'docx') {
+    const footnoteMap = new Map(parsed.footnotes.map((footnote) => [footnote.id, footnote.text]))
+    const runsWithFootnotes = (text: string) =>
+      text.split(/(\[\^\d+\])/g).filter(Boolean).map((part) => {
+        const match = part.match(/^\[\^(\d+)\]$/)
+        if (match && footnoteMap.has(Number(match[1]))) {
+          return new FootnoteReferenceRun(Number(match[1]))
+        }
+        return new TextRun({ text: part, size: profile.fontSizePt * 2, font: profile.fontFamily })
+      })
+
+    const children: Paragraph[] = []
+    if (profile.coverPage) {
+      children.push(
+        new Paragraph({
+          alignment: AlignmentType.CENTER,
+          spacing: { before: 2400, after: 360, line: 480 },
+          children: [new TextRun({ text: parsed.title, bold: true, size: 28, font: profile.fontFamily })],
+        }),
+        new Paragraph({
+          alignment: AlignmentType.CENTER,
+          spacing: { after: 240, line: 480 },
+          children: [new TextRun({ text: profile.style, size: 24, font: profile.fontFamily })],
+        }),
+        new Paragraph({
+          alignment: AlignmentType.CENTER,
+          spacing: { after: 240, line: 480 },
+          children: [new TextRun({ text: `Prepared ${new Date().toLocaleDateString('en-US')}`, size: 24, font: profile.fontFamily })],
+        }),
+        new Paragraph({ children: [new PageBreak()] }),
+      )
+    } else {
+      children.push(
+        new Paragraph({
+          heading: HeadingLevel.TITLE,
+          alignment: AlignmentType.CENTER,
+          spacing: { after: 360, line: 480 },
+          children: [new TextRun({ text: parsed.title, bold: true, size: 28, font: profile.fontFamily })],
+        }),
+      )
+    }
+
+    for (const section of parsed.sections) {
+      if (section.heading !== 'Body') {
+        children.push(
+          new Paragraph({
+            heading: section.level === 2 ? HeadingLevel.HEADING_1 : HeadingLevel.HEADING_2,
+            spacing: { before: 240, after: 120 },
+            children: [new TextRun({ text: section.heading, bold: true, size: 24, font: profile.fontFamily })],
+          }),
+        )
+      }
+      for (const paragraph of section.paragraphs) {
+        children.push(
+          new Paragraph({
+            spacing: { after: 160, line: 480 },
+            indent: { firstLine: convertInchesToTwip(profile.paragraphIndentInches) },
+            children: runsWithFootnotes(paragraph),
+          }),
+        )
+      }
+    }
+
+    if (references.length > 0) {
+      children.push(
+        new Paragraph({
+          heading: HeadingLevel.HEADING_1,
+          alignment: AlignmentType.CENTER,
+          spacing: { before: 360, after: 160 },
+          children: [new TextRun({ text: profile.bibliographyHeading, bold: true, size: 24, font: profile.fontFamily })],
+        }),
+        ...references.map((reference) =>
+          new Paragraph({
+            spacing: { after: 160, line: 480 },
+            indent: { hanging: convertInchesToTwip(0.5) },
+            children: [new TextRun({ text: reference, size: 24, font: profile.fontFamily })],
+          }),
+        ),
+      )
+    }
+
+    const doc = new Document({
+      creator: 'HumaraGPT Workspace',
+      title: parsed.title,
+      description: `${profile.style} formatted academic export`,
+      footnotes: Object.fromEntries(
+        parsed.footnotes.map((footnote) => [
+          String(footnote.id),
+          {
+            children: [
+              new Paragraph({
+                children: [new TextRun({ text: footnote.text, size: 20, font: profile.fontFamily })],
+              }),
+            ],
+          },
+        ]),
+      ),
+      sections: [
+        {
+          properties: {
+            page: {
+              margin: {
+                top: convertInchesToTwip(1),
+                right: convertInchesToTwip(1),
+                bottom: convertInchesToTwip(1),
+                left: convertInchesToTwip(1),
+              },
+            },
+          },
+          headers: {
+            default: new Header({
+              children: [
+                new Paragraph({
+                  alignment: AlignmentType.RIGHT,
+                  children: [
+                    ...(profile.showRunningHead ? [new TextRun({ text: `${profile.runningHead} `, size: 20, font: profile.fontFamily })] : []),
+                    new TextRun({ children: [PageNumber.CURRENT], size: 20, font: profile.fontFamily }),
+                  ],
+                }),
+              ],
+            }),
+          },
+          footers: {
+            default: new Footer({
+              children: [
+                new Paragraph({
+                  alignment: AlignmentType.CENTER,
+                  children: [new TextRun({ text: `${profile.style} ${profile.paperMode} paper`, size: 18, font: profile.fontFamily })],
+                }),
+              ],
+            }),
+          },
+          children,
+        },
+      ],
+    })
+
+    return {
+      artifact: {
+        id: makeId('export'),
+        type,
+        fileName: `${fileStem}.docx`,
+        createdAt,
+        status: 'ready' as const,
+      },
+      mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      base64: await Packer.toBase64String(doc),
+    }
+  }
+
+  if (type === 'pdf') {
+    const pdf = new jsPDF({ unit: 'pt', format: 'a4' })
+    const margin = 72
+    const pageWidth = pdf.internal.pageSize.getWidth()
+    const pageHeight = pdf.internal.pageSize.getHeight()
+    let y = margin
+
+    const addPageIfNeeded = (height = 24) => {
+      if (y + height > pageHeight - margin) {
+        pdf.addPage()
+        y = margin
+      }
+    }
+
+    if (profile.coverPage) {
+      pdf.setFont('times', 'bold')
+      pdf.setFontSize(18)
+      pdf.text(parsed.title, pageWidth / 2, pageHeight / 2 - 36, { align: 'center' })
+      pdf.setFont('times', 'normal')
+      pdf.setFontSize(12)
+      pdf.text(profile.style, pageWidth / 2, pageHeight / 2, { align: 'center' })
+      pdf.text(`Prepared ${new Date().toLocaleDateString('en-US')}`, pageWidth / 2, pageHeight / 2 + 24, { align: 'center' })
+      pdf.addPage()
+      y = margin
+    } else {
+      pdf.setFont('times', 'bold')
+      pdf.setFontSize(16)
+      pdf.text(parsed.title, pageWidth / 2, y, { align: 'center' })
+      y += 36
+    }
+
+    for (const section of parsed.sections) {
+      if (section.heading !== 'Body') {
+        addPageIfNeeded(36)
+        pdf.setFont('times', 'bold')
+        pdf.setFontSize(13)
+        pdf.text(section.heading, margin, y)
+        y += 24
+      }
+
+      pdf.setFont('times', 'normal')
+      pdf.setFontSize(12)
+      for (const paragraph of section.paragraphs) {
+        const lines = pdf.splitTextToSize(paragraph.replace(/\[\^(\d+)\]/g, '$1'), pageWidth - margin * 2)
+        addPageIfNeeded(lines.length * 24)
+        pdf.text(lines, margin, y)
+        y += lines.length * 24 + 12
+      }
+    }
+
+    if (references.length > 0) {
+      addPageIfNeeded(48)
+      pdf.setFont('times', 'bold')
+      pdf.text(profile.bibliographyHeading, pageWidth / 2, y, { align: 'center' })
+      y += 28
+      pdf.setFont('times', 'normal')
+      for (const reference of references) {
+        const lines = pdf.splitTextToSize(reference, pageWidth - margin * 2)
+        addPageIfNeeded(lines.length * 24)
+        pdf.text(lines, margin + 36, y)
+        y += lines.length * 24 + 10
+      }
+    }
+
+    const totalPages = pdf.getNumberOfPages()
+    for (let page = 1; page <= totalPages; page += 1) {
+      pdf.setPage(page)
+      pdf.setFont('times', 'normal')
+      pdf.setFontSize(10)
+      const header = profile.showRunningHead ? `${profile.runningHead} ${page}` : String(page)
+      pdf.text(header, pageWidth - margin, 40, { align: 'right' })
+      pdf.text(`${profile.style} ${profile.paperMode} paper`, pageWidth / 2, pageHeight - 36, { align: 'center' })
+    }
+
+    return {
+      artifact: {
+        id: makeId('export'),
+        type,
+        fileName: `${fileStem}.pdf`,
+        createdAt,
+        status: 'ready' as const,
+      },
+      mimeType: 'application/pdf',
+      base64: Buffer.from(pdf.output('arraybuffer')).toString('base64'),
+    }
+  }
+
+  if (type === 'pptx') {
+    const pptx = new PptxGenJS()
+    pptx.layout = 'LAYOUT_WIDE'
+    pptx.author = 'HumaraGPT Workspace'
+    pptx.subject = `${profile.style} academic presentation`
+    pptx.title = activeDraft.contentJson.title
+    pptx.company = 'HumaraGPT'
+
+    const addFooter = (slide: ReturnType<typeof pptx.addSlide>, index: number) => {
+      slide.addText(`${profile.style} | ${index}`, {
+        x: 0.5,
+        y: 7.05,
+        w: 12.3,
+        h: 0.2,
+        fontFace: 'Aptos',
+        fontSize: 8,
+        color: '666666',
+        align: 'right',
+      })
+    }
+
+    const titleSlide = pptx.addSlide()
+    titleSlide.background = { color: 'F8FAFC' }
+    titleSlide.addText(activeDraft.contentJson.title, {
+      x: 0.8,
+      y: 2.35,
+      w: 11.7,
+      h: 0.8,
+      fontFace: 'Aptos Display',
+      fontSize: 30,
+      bold: true,
+      color: '0F172A',
+      align: 'center',
+    })
+    titleSlide.addText(`${profile.style} source-backed presentation`, {
+      x: 0.8,
+      y: 3.25,
+      w: 11.7,
+      h: 0.35,
+      fontFace: 'Aptos',
+      fontSize: 15,
+      color: '334155',
+      align: 'center',
+    })
+    titleSlide.addNotes(`Generated from the Humara Workspace draft.\n${references.slice(0, 3).join('\n')}`)
+    addFooter(titleSlide, 1)
+
+    activeDraft.contentJson.sections.forEach((section, index) => {
+      const slide = pptx.addSlide()
+      slide.background = { color: 'FFFFFF' }
+      slide.addText(section.title, {
+        x: 0.6,
+        y: 0.45,
+        w: 12,
+        h: 0.45,
+        fontFace: 'Aptos Display',
+        fontSize: 24,
+        bold: true,
+        color: '0F172A',
+      })
+      const bullets = section.body
+        .replace(/\([^)]*\d{4}[^)]*\)/g, '')
+        .split(/(?<=[.!?])\s+/)
+        .map((sentence) => sentence.trim())
+        .filter(Boolean)
+        .slice(0, 5)
+
+      slide.addText(bullets.map((text) => ({ text, options: { bullet: { type: 'bullet' } } })), {
+        x: 0.85,
+        y: 1.25,
+        w: 11.2,
+        h: 4.9,
+        fontFace: 'Aptos',
+        fontSize: 15,
+        color: '1E293B',
+        fit: 'shrink',
+        valign: 'top',
+      })
+      const citations = section.citations
+        .map((sourceId) => project.sourceLibrary.find((source) => source.id === sourceId))
+        .filter((source): source is WorkspaceSource => Boolean(source))
+        .map((source) => formatBibliographyEntry(source, project.citationStyle))
+      slide.addNotes(citations.length > 0 ? citations.join('\n') : references.slice(0, 3).join('\n'))
+      addFooter(slide, index + 2)
+    })
+
+    if (references.length > 0) {
+      const referencesSlide = pptx.addSlide()
+      referencesSlide.background = { color: 'F8FAFC' }
+      referencesSlide.addText(profile.bibliographyHeading, {
+        x: 0.6,
+        y: 0.45,
+        w: 12,
+        h: 0.45,
+        fontFace: 'Aptos Display',
+        fontSize: 24,
+        bold: true,
+        color: '0F172A',
+      })
+      referencesSlide.addText(references.slice(0, 6).join('\n\n'), {
+        x: 0.75,
+        y: 1.15,
+        w: 11.7,
+        h: 5.55,
+        fontFace: 'Aptos',
+        fontSize: 9,
+        color: '334155',
+        fit: 'shrink',
+        valign: 'top',
+      })
+      addFooter(referencesSlide, activeDraft.contentJson.sections.length + 2)
+    }
+
+    return {
+      artifact: {
+        id: makeId('export'),
+        type,
+        fileName: `${fileStem}.pptx`,
+        createdAt,
+        status: 'ready' as const,
+      },
+      mimeType: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+      base64: await pptx.write({ outputType: 'base64' }) as string,
+    }
+  }
+
+  return createExportArtifactLegacy(project, type)
+}

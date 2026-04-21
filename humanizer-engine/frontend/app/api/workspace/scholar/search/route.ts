@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { requireWorkspaceUser } from '@/lib/workspace/api'
+import { searchLiveScholarSources } from '@/lib/workspace/scholar'
 import { searchScholarCatalog } from '@/lib/workspace/service'
 
 export async function GET(request: Request) {
@@ -16,16 +17,33 @@ export async function GET(request: Request) {
     const journal = url.searchParams.get('journal') ?? undefined
     const sort = (url.searchParams.get('sort') as 'relevance' | 'year' | 'citation_count' | null) ?? 'relevance'
 
-    const results = searchScholarCatalog(query, {
+    const filters = {
       yearFrom: yearFrom ? Number(yearFrom) : undefined,
       yearTo: yearTo ? Number(yearTo) : undefined,
       openAccessOnly,
       author,
       journal,
       sort,
-    })
+    }
 
-    return NextResponse.json({ results })
+    try {
+      const liveResults = await searchLiveScholarSources(query, filters)
+      return NextResponse.json(liveResults)
+    } catch {
+      const results = searchScholarCatalog(query, filters)
+
+      return NextResponse.json({
+        results,
+        googleResults: [],
+        meta: {
+          count: results.length,
+          page: 1,
+          perPage: results.length,
+          googleEnabled: false,
+          freshAsOf: new Date().toISOString(),
+        },
+      })
+    }
   } catch {
     return NextResponse.json({ error: 'Failed to search scholarly sources.' }, { status: 500 })
   }

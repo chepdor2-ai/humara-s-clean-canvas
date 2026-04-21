@@ -1,4 +1,5 @@
 import type { WorkspaceDraft, WorkspaceProject } from '@/lib/workspace/types'
+import { buildDraftHtml, buildDraftMarkdown } from '@/lib/workspace/document-format'
 
 export async function workspaceFetch<T>(token: string, input: RequestInfo | URL, init?: RequestInit): Promise<T> {
   const response = await fetch(input, {
@@ -57,24 +58,11 @@ export function buildDraftFromSections(project: WorkspaceProject, title: string,
     sections,
   }
 
-  const contentMarkdown = [
-    `# ${title}`,
-    '',
-    ...sections.flatMap((section) => [`## ${section.title}`, '', section.body, '']),
-  ].join('\n')
-
-  const contentHtml = [
-    `<article class="workspace-document">`,
-    `<h1>${title}</h1>`,
-    ...sections.map((section) => `<section><h2>${section.title}</h2><p>${section.body}</p></section>`),
-    `</article>`,
-  ].join('')
-
   return {
     ...activeDraft,
     contentJson,
-    contentMarkdown,
-    contentHtml,
+    contentMarkdown: buildDraftMarkdown(contentJson, project.sourceLibrary, project.citationStyle),
+    contentHtml: buildDraftHtml(contentJson, project.sourceLibrary, project.citationStyle),
     updatedAt: new Date().toISOString(),
   }
 }

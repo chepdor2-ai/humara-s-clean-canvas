@@ -11,15 +11,26 @@ import {
   Calendar,
   Filter,
   Loader2,
-  ExternalLink
+  ExternalLink,
+  Copy
 } from 'lucide-react'
 import { motion } from 'framer-motion'
 import { cn } from '@/lib/utils'
+import type { WorkspaceSource } from '@/lib/workspace/types'
+import { formatBibliographyEntry } from '@/lib/workspace/document-format'
+
+interface GoogleResult {
+  title: string
+  url: string
+  snippet: string
+  displayLink: string
+}
 
 export function ScholarSearch() {
   const [query, setQuery] = useState('')
   const [activeQuery, setActiveQuery] = useState('')
-  const [results, setResults] = useState<any[]>([])
+  const [results, setResults] = useState<WorkspaceSource[]>([])
+  const [googleResults, setGoogleResults] = useState<GoogleResult[]>([])
   const [meta, setMeta] = useState<{count: number, page: number}>({ count: 0, page: 1 })
   const [loading, setLoading] = useState(false)
   const [sort, setSort] = useState('relevance')
@@ -40,6 +51,7 @@ export function ScholarSearch() {
       if (!res.ok) throw new Error('Search failed')
       const data = await res.json()
       setResults(data.results || [])
+      setGoogleResults(data.googleResults || [])
       setMeta({
         count: data.meta?.count || 0,
         page: data.meta?.page || 1
@@ -47,6 +59,7 @@ export function ScholarSearch() {
     } catch (err) {
       console.error(err)
       setResults([])
+      setGoogleResults([])
     } finally {
       setLoading(false)
     }
@@ -65,11 +78,6 @@ export function ScholarSearch() {
       fetchResults(activeQuery, page, sort, yearFilter)
     }
   }, [page, sort, yearFilter, activeQuery, fetchResults])
-
-  const formatAuthors = (authorships: any[]) => {
-    if (!authorships || authorships.length === 0) return 'Unknown Author'
-    return authorships.map((a: any) => a.author?.display_name).join(', ')
-  }
 
   const currentYear = new Date().getFullYear()
 
@@ -176,40 +184,63 @@ export function ScholarSearch() {
                   About {meta.count.toLocaleString()} results (Page {meta.page})
                 </div>
                 
-                {results.map((work) => (
-                  <article key={work.id} className="group flex flex-col gap-1">
-                    <a href={work.doi || work.id} target="_blank" rel="noreferrer" className="text-lg font-semibold text-blue-700 hover:underline dark:text-blue-400 leading-snug">
-                      {work.title || 'Untitled Work'}
+                {results.map((source) => {
+                  const sourceHref = source.fullTextUrl || source.sourceUrl || (source.doi ? `https://doi.org/${source.doi}` : source.openAlexId) || '#'
+                  return (
+                  <article key={source.id} className="group flex flex-col gap-1">
+                    <a href={sourceHref} target="_blank" rel="noreferrer" className="text-lg font-semibold text-blue-700 hover:underline dark:text-blue-400 leading-snug">
+                      {source.title || 'Untitled Work'}
                     </a>
                     
                     <div className="text-sm text-emerald-700 dark:text-emerald-500 mb-1">
-                      {formatAuthors(work.authorships)} - {work.primary_location?.source?.display_name || 'Publisher'}, {work.publication_year}
+                      {(source.authors.length > 0 ? source.authors.join(', ') : 'Unknown author')} - {source.journal || 'Publisher'}, {source.year}
                     </div>
                     
-                    {/* Abstract snippet heuristic */}
                     <div className="text-sm text-slate-600 dark:text-zinc-400 line-clamp-3 leading-relaxed mb-2">
-                       {work.abstract_inverted_index 
-                         ? Object.keys(work.abstract_inverted_index).slice(0, 40).join(' ') + '...'
-                         : 'No abstract available.'}
+                       {source.abstractPreview || 'No abstract available.'}
                     </div>
 
                     <div className="flex items-center gap-4 text-xs font-medium text-slate-500 dark:text-zinc-500">
                       <div className="flex items-center gap-1">
-                         <Quote className="h-3 w-3" /> Cited by {work.cited_by_count || 0}
+                         <Quote className="h-3 w-3" /> Cited by {source.citationCount || 0}
                       </div>
-                      {work.is_oa && (
+                      {source.openAccess && (
                         <div className="flex items-center gap-1 text-amber-600 dark:text-amber-500">
                           <Star className="h-3 w-3 fill-current" /> Open Access
                         </div>
                       )}
-                      {work.doi && (
-                         <a href={work.doi} target="_blank" rel="noreferrer" className="flex items-center gap-1 hover:text-blue-600 dark:hover:text-blue-400 hover:underline">
+                      {sourceHref !== '#' && (
+                         <a href={sourceHref} target="_blank" rel="noreferrer" className="flex items-center gap-1 hover:text-blue-600 dark:hover:text-blue-400 hover:underline">
                            <ExternalLink className="h-3 w-3" /> View Source
                          </a>
                       )}
+                      <button
+                        type="button"
+                        onClick={() => void navigator.clipboard.writeText(formatBibliographyEntry(source, 'APA 7'))}
+                        className="flex items-center gap-1 hover:text-blue-600 dark:hover:text-blue-400 hover:underline"
+                      >
+                        <Copy className="h-3 w-3" /> Copy APA
+                      </button>
                     </div>
                   </article>
-                ))}
+                  )
+                })}
+
+                {googleResults.length > 0 && (
+                  <section className="space-y-4 rounded-xl border border-slate-200 bg-white p-5 dark:border-white/10 dark:bg-white/5">
+                    <div>
+                      <h3 className="text-sm font-semibold text-slate-800 dark:text-zinc-100">Recent web verification</h3>
+                      <p className="mt-1 text-xs text-slate-500 dark:text-zinc-500">Supplemental Google results for newer context and full-text discovery.</p>
+                    </div>
+                    {googleResults.map((result) => (
+                      <a key={result.url} href={result.url} target="_blank" rel="noreferrer" className="block rounded-lg border border-slate-100 p-3 transition-colors hover:bg-slate-50 dark:border-white/10 dark:hover:bg-white/5">
+                        <div className="text-sm font-medium text-blue-700 dark:text-blue-400">{result.title}</div>
+                        <div className="mt-0.5 text-[11px] text-emerald-700 dark:text-emerald-500">{result.displayLink}</div>
+                        <p className="mt-1 text-xs leading-5 text-slate-600 dark:text-zinc-400">{result.snippet}</p>
+                      </a>
+                    ))}
+                  </section>
+                )}
 
                 {/* Pagination */}
                 <div className="mt-12 flex items-center justify-center gap-4 border-t border-slate-200 pt-8 dark:border-zinc-800">

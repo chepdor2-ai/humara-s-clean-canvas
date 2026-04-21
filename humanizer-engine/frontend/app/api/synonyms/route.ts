@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import fs from 'fs';
-import path from 'path';
+import synonymData from '@/data/curated_synonyms.json';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -9,31 +8,10 @@ interface SynonymMap {
   [key: string]: string[];
 }
 
-let synonymCache: SynonymMap | null = null;
-
-function getDictionaryPaths(): string[] {
-  return [
-    path.join(/* turbopackIgnore: true */ process.cwd(), 'data', 'curated_synonyms.json'),
-    path.join(/* turbopackIgnore: true */ process.cwd(), '..', 'dictionaries', 'curated_synonyms.json'),
-    path.join(/* turbopackIgnore: true */ process.cwd(), 'dictionaries', 'curated_synonyms.json'),
-  ];
-}
+const synonymCache = synonymData as SynonymMap;
 
 function loadSynonyms(): SynonymMap {
-  if (synonymCache) return synonymCache;
-
-  for (const dictionaryPath of getDictionaryPaths()) {
-    try {
-      if (!fs.existsSync(dictionaryPath)) continue;
-      const data = fs.readFileSync(dictionaryPath, 'utf-8');
-      synonymCache = JSON.parse(data);
-      return synonymCache || {};
-    } catch (error) {
-      console.error('Failed to load curated_synonyms.json:', dictionaryPath, error);
-    }
-  }
-
-  return {};
+  return synonymCache;
 }
 
 export async function POST(req: NextRequest) {

@@ -1,5 +1,4 @@
 ﻿import type { Metadata } from 'next';
-import { Inter } from 'next/font/google';
 import Script from 'next/script';
 import './globals.css';
 import './light-overrides.css';
@@ -8,12 +7,6 @@ import ThemeProvider from './ThemeProvider';
 import { AuthProvider } from './AuthProvider';
 
 const SITE_URL = 'https://www.humaragpt.com';
-
-const inter = Inter({
-  subsets: ['latin'],
-  variable: '--font-inter',
-  display: 'swap',
-});
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
@@ -75,7 +68,7 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={inter.variable} suppressHydrationWarning>
+    <html lang="en" suppressHydrationWarning>
       <head>
         <Script
           id="theme-init"

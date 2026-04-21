@@ -20,7 +20,7 @@ export async function POST(request: Request) {
       : 'ai_analysis';
 
     // Call the internal humanizer API to process the document text
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || new URL(request.url).origin;
     
     const response = await fetch(`${baseUrl}/api/humanize`, {
       method: 'POST',

@@ -1,3 +1,6 @@
+import { formatBibliographyEntry } from '@/lib/workspace/document-format';
+import { searchLiveScholarSources } from '@/lib/workspace/scholar';
+
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
@@ -46,6 +49,64 @@ interface ChatMessage {
   content: string;
 }
 
+const GROUNDED_WRITER_PROMPT = `You are HumaraGPT, a careful academic writing workbench assistant. Answer ordinary questions directly. When the user asks for a paper, essay, report, literature review, dissertation section, case study, or presentation, produce a complete source-grounded artifact.
+
+For complete documents, wrap the final work in:
+<artifact type="document" title="Your Document Title" format="APA" coverpage="true">
+...
+</artifact>
+
+Use APA 7 by default when no style is specified. Use MLA 9, Chicago, or Harvard when requested. Include the exact marker ---REFERENCES--- before the final reference list.
+
+Formatting rules:
+- APA 7: 1-inch margins, double spacing, 12 pt academic font, title page by default, page numbers, and running head only for professional manuscripts unless requested.
+- MLA 9: 1-inch margins, double spacing, 12 pt Times New Roman, running header/page number, and Works Cited.
+- Chicago: support footnotes with [^1] markers and [^1]: note definitions when the user asks for footnotes.
+- Harvard: author-year citations and a References section.
+- Use markdown ## and ### for headings. Do not wrap headings in asterisks.
+
+Source rules:
+- If LIVE SOURCE CONTEXT is provided, cite only those sources.
+- Do not invent authors, titles, years, journals, DOIs, URLs, or citation counts.
+- Prefer recent OpenAlex sources. Use Google results only as supplemental web context or full-text discovery links.
+- If the live context is insufficient, say what is missing instead of fabricating citations.`;
+
+function shouldFetchSourceContext(message: string) {
+  return /\b(essay|paper|report|literature review|research|dissertation|thesis|citation|cite|sources?|references?|presentation|powerpoint|slides|case study)\b/i.test(message);
+}
+
+async function buildLiveSourceContext(message: string) {
+  if (!shouldFetchSourceContext(message)) return '';
+
+  try {
+    const currentYear = new Date().getFullYear();
+    const bundle = await searchLiveScholarSources(message, {
+      yearFrom: currentYear - 5,
+      sort: 'year',
+    });
+
+    const scholarly = bundle.results.slice(0, 8).map((source, index) =>
+      `${index + 1}. ${formatBibliographyEntry(source, 'APA 7')} [OpenAlex: ${source.openAlexId ?? source.id}; cited by ${source.citationCount}; OA: ${source.openAccess ? 'yes' : 'no'}]`,
+    );
+
+    const google = bundle.googleResults.slice(0, 5).map((result, index) =>
+      `${index + 1}. ${result.title} - ${result.displayLink} - ${result.url}`,
+    );
+
+    return [
+      'LIVE SOURCE CONTEXT',
+      `Fetched at: ${bundle.meta.freshAsOf}`,
+      scholarly.length > 0 ? 'OpenAlex scholarly sources:' : 'OpenAlex scholarly sources: none returned.',
+      ...scholarly,
+      google.length > 0 ? 'Google supplemental web results:' : 'Google supplemental web results: unavailable or not configured.',
+      ...google,
+    ].join('\n');
+  } catch (error) {
+    console.error('Live source context failed:', error);
+    return 'LIVE SOURCE CONTEXT\nOpenAlex/Google lookup failed. Do not invent citations; ask the user to retry source lookup or provide sources if citations are required.';
+  }
+}
+
 // Resolve the Groq model — avoid OpenAI models on Groq
 function resolveModel(preferred?: string | null, fallback = 'llama-3.3-70b-versatile'): string {
   const openaiRe = /^(?:gpt-|o\d|text-embedding|whisper-|tts-|dall-e)/i;
@@ -77,9 +138,16 @@ export async function POST(request: Request) {
       });
     }
 
+    const latestUserText =
+      userMessage.trim() ||
+      [...messages].reverse().find((msg) => msg.role === 'user')?.content ||
+      '';
+    const liveSourceContext = await buildLiveSourceContext(latestUserText);
+
     // Build conversation history
     const conversationMessages: ChatMessage[] = [
-      { role: 'system', content: SYSTEM_PROMPT },
+      { role: 'system', content: GROUNDED_WRITER_PROMPT },
+      ...(liveSourceContext ? [{ role: 'system' as const, content: liveSourceContext }] : []),
       ...messages.slice(-20),
     ];
 

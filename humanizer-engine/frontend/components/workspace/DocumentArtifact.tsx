@@ -26,6 +26,7 @@ import {
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
+import { createFormattingProfile, parseDocumentText } from '@/lib/workspace/document-format'
 
 interface DocumentArtifactProps {
   title: string
@@ -390,24 +391,125 @@ export function DocumentArtifact({
 
       if (type === 'docx') {
         try {
-          const { Document, Packer, Paragraph, TextRun, HeadingLevel } = await import('docx')
-          const paragraphs = text.split('\n').filter(Boolean)
+          const {
+            AlignmentType,
+            Document,
+            Footer,
+            Header,
+            HeadingLevel,
+            Packer,
+            PageBreak,
+            PageNumber,
+            Paragraph,
+            TextRun,
+            convertInchesToTwip,
+          } = await import('docx')
+          const profile = createFormattingProfile(format, title)
+          const parsed = parseDocumentText(text, title)
+          const children: InstanceType<typeof Paragraph>[] = []
+
+          if (coverpage ?? profile.coverPage) {
+            children.push(
+              new Paragraph({
+                alignment: AlignmentType.CENTER,
+                spacing: { before: 2400, after: 360, line: 480 },
+                children: [new TextRun({ text: parsed.title, bold: true, size: 28, font: selectedFont })],
+              }),
+              new Paragraph({
+                alignment: AlignmentType.CENTER,
+                spacing: { after: 240, line: 480 },
+                children: [new TextRun({ text: profile.style, size: 24, font: selectedFont })],
+              }),
+              new Paragraph({ children: [new PageBreak()] }),
+            )
+          } else {
+            children.push(
+              new Paragraph({
+                heading: HeadingLevel.TITLE,
+                alignment: AlignmentType.CENTER,
+                spacing: { after: 360, line: 480 },
+                children: [new TextRun({ text: parsed.title, bold: true, size: 28, font: selectedFont })],
+              }),
+            )
+          }
+
+          for (const section of parsed.sections) {
+            if (section.heading !== 'Body') {
+              children.push(
+                new Paragraph({
+                  heading: section.level === 2 ? HeadingLevel.HEADING_1 : HeadingLevel.HEADING_2,
+                  spacing: { before: 240, after: 120 },
+                  children: [new TextRun({ text: section.heading, bold: true, size: 24, font: selectedFont })],
+                }),
+              )
+            }
+            for (const paragraph of section.paragraphs) {
+              children.push(
+                new Paragraph({
+                  children: [new TextRun({ text: paragraph, size: 24, font: selectedFont })],
+                  spacing: { after: 160, line: 480 },
+                  indent: { firstLine: convertInchesToTwip(profile.paragraphIndentInches) },
+                }),
+              )
+            }
+          }
+
+          if (parsed.references.length > 0) {
+            children.push(
+              new Paragraph({
+                heading: HeadingLevel.HEADING_1,
+                alignment: AlignmentType.CENTER,
+                spacing: { before: 360, after: 160 },
+                children: [new TextRun({ text: profile.bibliographyHeading, bold: true, size: 24, font: selectedFont })],
+              }),
+              ...parsed.references.map(
+                (reference) =>
+                  new Paragraph({
+                    children: [new TextRun({ text: reference, size: 24, font: selectedFont })],
+                    spacing: { after: 160, line: 480 },
+                    indent: { hanging: convertInchesToTwip(0.5) },
+                  }),
+              ),
+            )
+          }
+
           const doc = new Document({
             sections: [
               {
-                children: [
-                  new Paragraph({
-                    heading: HeadingLevel.TITLE,
-                    children: [new TextRun({ text: title, bold: true, size: 32 })],
-                  }),
-                  ...paragraphs.map(
-                    (p) =>
+                properties: {
+                  page: {
+                    margin: {
+                      top: convertInchesToTwip(1),
+                      right: convertInchesToTwip(1),
+                      bottom: convertInchesToTwip(1),
+                      left: convertInchesToTwip(1),
+                    },
+                  },
+                },
+                headers: {
+                  default: new Header({
+                    children: [
                       new Paragraph({
-                        children: [new TextRun({ text: p, size: 24, font: selectedFont })],
-                        spacing: { after: 200, line: 480 },
+                        alignment: AlignmentType.RIGHT,
+                        children: [
+                          ...(profile.showRunningHead ? [new TextRun({ text: `${profile.runningHead} `, size: 20, font: selectedFont })] : []),
+                          new TextRun({ children: [PageNumber.CURRENT], size: 20, font: selectedFont }),
+                        ],
                       }),
-                  ),
-                ],
+                    ],
+                  }),
+                },
+                footers: {
+                  default: new Footer({
+                    children: [
+                      new Paragraph({
+                        alignment: AlignmentType.CENTER,
+                        children: [new TextRun({ text: `${profile.style} ${profile.paperMode} paper`, size: 18, font: selectedFont })],
+                      }),
+                    ],
+                  }),
+                },
+                children,
               },
             ],
           })
@@ -430,27 +532,48 @@ export function DocumentArtifact({
         try {
           const pptxgen = (await import('pptxgenjs')).default
           const pptx = new pptxgen()
+          const profile = createFormattingProfile(format, title)
+          pptx.layout = 'LAYOUT_WIDE'
+          pptx.author = 'HumaraGPT Workspace'
+          let slideNumber = 1
+          const addFooter = (slide: ReturnType<typeof pptx.addSlide>) => {
+            slide.addText(`${profile.style} | ${slideNumber}`, {
+              x: 0.5,
+              y: 7.05,
+              w: 12.3,
+              h: 0.2,
+              fontFace: 'Aptos',
+              fontSize: 8,
+              color: '666666',
+              align: 'right',
+            })
+            slideNumber += 1
+          }
           
           let slide = pptx.addSlide()
           slide.addText(title, { x: 1, y: 3, w: '80%', h: 1, align: 'center', fontSize: 32, bold: true })
           if (format) {
              slide.addText(`Format: ${format}`, { x: 1, y: 4, w: '80%', h: 1, align: 'center', fontSize: 16 })
           }
+          addFooter(slide)
 
           const paragraphs = text.split('\n').filter(Boolean)
           let currentSlide = pptx.addSlide()
           let yPos = 0.5
+          addFooter(currentSlide)
           
           for (const p of paragraphs) {
             if (yPos > 4.5) {
                currentSlide = pptx.addSlide()
                yPos = 0.5
+               addFooter(currentSlide)
             }
             if (p.startsWith('## ') || p.startsWith('# ')) {
                const cleanTitle = p.replace(/#/g, '').trim()
                currentSlide = pptx.addSlide()
                currentSlide.addText(cleanTitle, { x: 0.5, y: 0.5, w: '90%', fontSize: 24, bold: true })
                yPos = 1.5
+               addFooter(currentSlide)
             } else {
                const cleanP = p.replace(/\*\*/g, '').trim()
                if (!cleanP) continue
@@ -488,6 +611,8 @@ export function DocumentArtifact({
     setTimeout(() => document.addEventListener('click', handleClick), 0)
     return () => document.removeEventListener('click', handleClick)
   }, [showExportMenu])
+
+  const previewProfile = createFormattingProfile(format, title)
 
   return (
     <div
@@ -675,6 +800,10 @@ export function DocumentArtifact({
           className="doc-a4-page relative mx-auto"
           onClick={() => editorRef.current?.focus()}
         >
+          <div className="pointer-events-none absolute left-[72px] right-[72px] top-8 flex items-center justify-between text-[10px] uppercase tracking-normal text-slate-400">
+            <span>{previewProfile.showRunningHead ? previewProfile.runningHead : ''}</span>
+            <span>1</span>
+          </div>
           {/* Editable area */}
           <div
             ref={editorRef}
