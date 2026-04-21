@@ -2,7 +2,7 @@ import { robustSentenceSplit, protectSpecialContent, restoreSpecialContent, type
 import { getDetector, TextSignals } from '@/lib/engine/multi-detector';
 import { isMeaningPreserved, isMeaningPreservedSync } from '@/lib/engine/semantic-guard';
 import { fixCapitalization, applyPhrasePatterns, fixPunctuation, expandAllContractions } from '@/lib/engine/shared-dictionaries';
-import { deduplicateRepeatedPhrases } from '@/lib/engine/premium-deep-clean';
+import { deduplicateRepeatedPhrases, expandWordCount } from '@/lib/engine/premium-deep-clean';
 import { preserveInputStructure, looksLikeHeadingLine } from '@/lib/engine/structure-preserver';
 import { structuralPostProcess } from '@/lib/engine/structural-post-processor';
 import { unifiedSentenceProcess } from '@/lib/sentence-processor';
@@ -2502,6 +2502,17 @@ export async function POST(req: Request) {
             humanized = structuralPostProcess(humanized);
           }
 
+          // 9b. Word count restoration — ensure output is at least as long as input.
+          // Engines that do multi-pass paraphrasing naturally compress text; we add
+          // natural adverb qualifiers to bring the word count back to ≥ input level.
+          if (eng !== 'ai_analysis') {
+            const inputWCTarget = normalizedText.trim().split(/\s+/).filter(Boolean).length;
+            const outputWCNow = humanized.trim().split(/\s+/).filter(Boolean).length;
+            if (outputWCNow < inputWCTarget) {
+              humanized = expandWordCount(humanized, inputWCTarget);
+            }
+          }
+
           // 10. Structure preservation — skip for engines that preserve structure internally
           if (!isDeepKill) humanized = preserveInputStructure(normalizedText, humanized);
 
@@ -2632,26 +2643,11 @@ export async function POST(req: Request) {
 
           } // end: post-processing block
 
-          // ── POST-PROCESSING CHANGE CAP (40%) ──
-          // If post-processing mutated the text beyond 40% additional word-level change,
-          // revert to the pre-post-processing snapshot to avoid garbling the output.
-          if (eng !== 'ai_analysis') {
-            const _capWC = (t: string) => t.trim().split(/\s+/).filter(Boolean);
-            const preWords = _capWC(prePostProcessSnapshot);
-            const postWords = _capWC(humanized);
-            const maxLen = Math.max(preWords.length, postWords.length);
-            if (maxLen > 0) {
-              let diffs = 0;
-              for (let i = 0; i < maxLen; i++) {
-                if (!preWords[i] || !postWords[i] || preWords[i] !== postWords[i]) diffs++;
-              }
-              const changeRatio = diffs / maxLen;
-              if (changeRatio > 0.40) {
-                console.warn(`[PostProcess] Change cap exceeded: ${(changeRatio * 100).toFixed(1)}% > 40% — reverting to pre-post-processing output`);
-                humanized = prePostProcessSnapshot;
-              }
-            }
-          }
+          // POST-PROCESSING CHANGE CAP REMOVED:
+          // Word-position alignment breaks with any insertion — adding 1 word in the middle
+          // causes all subsequent positions to mismatch, falsely reporting 50%+ "change".
+          // Content quality is guarded by the sentence-count check and strict-meaning
+          // setting downstream. Do not add another positional cap here.
 
           // Structure preservation (restores heading placement from original)
           // Skip for phased engines — they already called preserveInputStructure at end of pipeline

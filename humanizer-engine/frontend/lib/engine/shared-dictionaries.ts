@@ -2075,7 +2075,13 @@ function pickAcademicStarter(sent: string, usedStarters: Set<string>): string | 
     const first = starter.split(/\s+/)[0]?.toLowerCase() ?? "";
     if (!usedStarters.has(first)) return starter;
   }
-  // Fallback: use first from addition category
+  // Fallback: scan all categories before resorting to random
+  for (const cat of Object.keys(ACADEMIC_STARTERS) as (keyof typeof ACADEMIC_STARTERS)[]) {
+    for (const starter of ACADEMIC_STARTERS[cat]) {
+      const first = starter.split(/\s+/)[0]?.toLowerCase() ?? "";
+      if (!usedStarters.has(first)) return starter;
+    }
+  }
   return ACADEMIC_STARTERS.addition[Math.floor(Math.random() * ACADEMIC_STARTERS.addition.length)];
 }
 

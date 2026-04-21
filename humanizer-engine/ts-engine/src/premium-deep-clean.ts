@@ -313,6 +313,7 @@ function injectBurstiness(sentences: string[]): string[] {
   // Phase B: Merge short adjacent sentences (both <10 words) 
   const merged: string[] = [];
   const mergeConnectors = [", and ", ", but ", ", so ", "; ", ", yet "];
+  let mergeConnIdx = 0;
   let skip = false;
   for (let i = 0; i < result.length; i++) {
     if (skip) { skip = false; continue; }
@@ -323,7 +324,9 @@ function injectBurstiness(sentences: string[]): string[] {
       if (wc2 < 10 && wc2 >= 3 && Math.random() < 0.5) {
         const clean1 = result[i].replace(/\.\s*$/, "");
         const lower2 = next[0]?.toLowerCase() + next.slice(1);
-        const conn = mergeConnectors[Math.floor(Math.random() * mergeConnectors.length)];
+        // Cycle through connectors so consecutive merges never use the same one
+        const conn = mergeConnectors[mergeConnIdx % mergeConnectors.length];
+        mergeConnIdx++;
         merged.push(clean1 + conn + lower2);
         skip = true;
         continue;
@@ -438,33 +441,53 @@ function diversifyPunctuation(sentences: string[]): string[] {
 // FUNCTION WORD PROFILE ADJUSTER — shift toward human function word dist
 // ══════════════════════════════════════════════════════════════════════════
 
-const FILLER_INSERTIONS = [
-  { after: /\b(was|were|is|are)\b/gi, insert: " in fact" },
-  { after: /\b(would|could|should)\b/gi, insert: " well" },
-  { after: /\b(but)\b/gi, insert: " then" },
+// Contextually natural insertions — each tied to a grammatical trigger
+// to mimic the small imperfections of real writing without being formulaic.
+const FILLER_INSERTIONS: { after: RegExp; insert: string }[] = [
+  { after: /\b(is|are)\b(?! (a |an |the |not |just |only |also |already |still |now |here |there |very |quite |rather ))/, insert: " without doubt" },
+  { after: /\b(was|were)\b(?! not )/, insert: " at the time" },
+  { after: /\b(but)\b/, insert: " even so" },
+  { after: /\b(has|have)\b(?! (not |never |always |already |just ))/, insert: " in practice" },
+  { after: /\b(can)\b(?! (not |never |always ))/, insert: " in theory" },
+  { after: /\b(should)\b(?! (not |never ))/, insert: " by rights" },
+  { after: /\b(would)\b(?! (not |never ))/, insert: " in principle" },
 ];
 
 function adjustFunctionWordProfile(sentences: string[]): string[] {
-  // Light touch: insert 1-2 filler phrases per ~10 sentences to break AI profile
+  // Light touch: insert at most 1 phrase per ~12 sentences to break AI profile.
+  // Tracks used inserts to avoid repeating the same phrase across the text.
   const result = [...sentences];
   let insertionCount = 0;
-  const maxInsertions = Math.max(1, Math.floor(result.length / 10));
+  const maxInsertions = Math.max(1, Math.floor(result.length / 12));
+  const usedInserts = new Set<string>();
+  // Shuffle insertion candidates so they are not always the same
+  const shuffledFillers = [...FILLER_INSERTIONS].sort(() => Math.random() - 0.5);
 
   for (let i = 0; i < result.length && insertionCount < maxInsertions; i++) {
-    if (i % 7 !== 2) continue; // sparse
+    // Sparse: only try every 8th sentence (not always the same position)
+    if ((i + 1) % 8 !== 0) continue;
     const words = result[i].split(/\s+/);
-    if (words.length < 10 || words.length > 25) continue;
+    if (words.length < 10 || words.length > 28) continue;
 
-    const filler = FILLER_INSERTIONS[i % FILLER_INSERTIONS.length];
-    if (filler.after.test(result[i])) {
-      // Only insert once per sentence
-      let inserted = false;
-      result[i] = result[i].replace(filler.after, (match) => {
-        if (inserted) return match;
-        inserted = true;
-        return match + filler.insert;
-      });
-      if (inserted) insertionCount++;
+    // Pick a filler that has not been used yet and whose trigger matches
+    for (const filler of shuffledFillers) {
+      if (usedInserts.has(filler.insert)) continue;
+      // Reset regex lastIndex
+      filler.after.lastIndex = 0;
+      if (filler.after.test(result[i])) {
+        let inserted = false;
+        filler.after.lastIndex = 0;
+        result[i] = result[i].replace(filler.after, (match) => {
+          if (inserted) return match;
+          inserted = true;
+          return match + filler.insert;
+        });
+        if (inserted) {
+          usedInserts.add(filler.insert);
+          insertionCount++;
+        }
+        break;
+      }
     }
   }
 

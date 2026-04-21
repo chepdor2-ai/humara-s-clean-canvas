@@ -318,17 +318,37 @@ export function breakStarterRepetition(sentences: string[]): string[] {
     "Looking at it differently,", "From another angle,", "Oddly enough,",
     "At a glance,", "Step back and", "Zoom in and", "Taken together,",
     "On closer look,", "The key insight here is that",
-    "A closer reading shows", "Dig deeper and", "Strip it down and",
+    "Dig deeper and", "Strip it down and",
     "What stands out is that", "Worth noting:", "Consider this:",
   ];
+
+  // Track which prefixes have already been used to avoid repetition
+  const usedPrefixes = new Set<string>();
+  // Shuffle so selection order is non-deterministic across runs
+  const shuffled = [...humanPrefixes].sort(() => Math.random() - 0.5);
 
   for (let i = 1; i < result.length; i++) {
     const prevStarter = result[i - 1].split(/\s+/)[0]?.toLowerCase().replace(/[^a-z]/g, "") ?? "";
     const currStarter = result[i].split(/\s+/)[0]?.toLowerCase().replace(/[^a-z]/g, "") ?? "";
 
     if (prevStarter === currStarter && result[i].split(/\s+/).length > 6) {
-      const prefix = humanPrefixes[i % humanPrefixes.length];
-      result[i] = prefix + " " + result[i][0].toLowerCase() + result[i].slice(1);
+      // Pick the first unused prefix
+      let chosen: string | null = null;
+      for (const prefix of shuffled) {
+        const prefixKey = prefix.split(/\s+/)[0]?.toLowerCase().replace(/[^a-z]/g, "") ?? "";
+        if (!usedPrefixes.has(prefixKey)) {
+          chosen = prefix;
+          usedPrefixes.add(prefixKey);
+          break;
+        }
+      }
+      if (!chosen) {
+        // All prefixes used — clear the set and reuse (still avoids consecutive duplicates)
+        usedPrefixes.clear();
+        chosen = shuffled[0];
+        usedPrefixes.add(shuffled[0].split(/\s+/)[0]?.toLowerCase().replace(/[^a-z]/g, "") ?? "");
+      }
+      result[i] = chosen + " " + result[i][0].toLowerCase() + result[i].slice(1);
     }
   }
 

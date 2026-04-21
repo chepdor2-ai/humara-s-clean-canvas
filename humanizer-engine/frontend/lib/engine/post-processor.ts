@@ -12,36 +12,36 @@ import { applyAIWordKill, applyPhrasePatterns, applyConnectorNaturalization } fr
 // ── Phase 1: Filler removal ──
 
 const FILLER_REPLACEMENTS: [RegExp, string][] = [
-  [/\bit is (?:important|crucial|essential|vital) to (?:understand |recognize |note )?that\s*/gi, ""],
-  [/\bit (?:should|must|can) be (?:noted|argued|emphasized|stressed) that\s*/gi, ""],
-  [/\bit is worth (?:noting|mentioning|pointing out) that\s*/gi, ""],
-  [/\bone could argue that\s*/gi, ""],
-  [/\bthere is no denying (?:the fact )?that\s*/gi, ""],
-  [/\bneedless to say,?\s*/gi, ""],
-  [/\bthe fact (?:of the matter |)is that\s*/gi, ""],
-  [/\bas a matter of fact,?\s*/gi, ""],
-  [/\bin (?:actual|point of) fact,?\s*/gi, ""],
-  [/\ball things considered,?\s*/gi, ""],
-  [/\bat the end of the day,?\s*/gi, ""],
-  [/\bwhen all is said and done,?\s*/gi, ""],
-  [/\bin the grand scheme of things,?\s*/gi, ""],
-  [/\bfor all intents and purposes,?\s*/gi, ""],
-  [/\bby and large,?\s*/gi, ""],
-  [/\bmore often than not,?\s*/gi, ""],
-  [/\bin no small (?:measure|part),?\s*/gi, ""],
-  [/\bin a very real sense,?\s*/gi, ""],
-  [/\bit goes without saying that\s*/gi, ""],
-  [/\bto a (?:large|great|significant) (?:extent|degree),?\s*/gi, ""],
-  [/\bin the final analysis,?\s*/gi, ""],
-  [/\bthe (?:plain|simple) truth is that\s*/gi, ""],
-  [/\bwhat this means is that\s*/gi, ""],
-  [/\bthe bottom line is that\s*/gi, ""],
-  [/\bas has been (?:noted|mentioned|discussed|established),?\s*/gi, ""],
-  [/\bas previously (?:mentioned|noted|stated|discussed),?\s*/gi, ""],
-  [/\bhaving said that,?\s*/gi, ""],
-  [/\bthat being said,?\s*/gi, ""],
-  [/\bwith that in mind,?\s*/gi, ""],
-  [/\bwith this in mind,?\s*/gi, ""],
+  [/\bit is (?:important|crucial|essential|vital) to (?:understand |recognize |note )?that\s*/gi, "note that "],
+  [/\bit (?:should|must|can) be (?:noted|argued|emphasized|stressed) that\s*/gi, "note that "],
+  [/\bit is worth (?:noting|mentioning|pointing out) that\s*/gi, "notably, "],
+  [/\bone could argue that\s*/gi, "arguably, "],
+  [/\bthere is no denying (?:the fact )?that\s*/gi, "clearly, "],
+  [/\bneedless to say,?\s*/gi, "naturally, "],
+  [/\bthe fact (?:of the matter |)is that\s*/gi, "in reality, "],
+  [/\bas a matter of fact,?\s*/gi, "in reality, "],
+  [/\bin (?:actual|point of) fact,?\s*/gi, "in reality, "],
+  [/\ball things considered,?\s*/gi, "on balance, "],
+  [/\bat the end of the day,?\s*/gi, "ultimately, "],
+  [/\bwhen all is said and done,?\s*/gi, "ultimately, "],
+  [/\bin the grand scheme of things,?\s*/gi, "broadly speaking, "],
+  [/\bfor all intents and purposes,?\s*/gi, "effectively, "],
+  [/\bby and large,?\s*/gi, "generally, "],
+  [/\bmore often than not,?\s*/gi, "typically, "],
+  [/\bin no small (?:measure|part),?\s*/gi, "significantly, "],
+  [/\bin a very real sense,?\s*/gi, "in practice, "],
+  [/\bit goes without saying that\s*/gi, "of course, "],
+  [/\bto a (?:large|great|significant) (?:extent|degree),?\s*/gi, "substantially, "],
+  [/\bin the final analysis,?\s*/gi, "on reflection, "],
+  [/\bthe (?:plain|simple) truth is that\s*/gi, "simply put, "],
+  [/\bwhat this means is that\s*/gi, "in effect, "],
+  [/\bthe bottom line is that\s*/gi, "in short, "],
+  [/\bas has been (?:noted|mentioned|discussed|established),?\s*/gi, "as noted, "],
+  [/\bas previously (?:mentioned|noted|stated|discussed),?\s*/gi, "as noted, "],
+  [/\bhaving said that,?\s*/gi, "still, "],
+  [/\bthat being said,?\s*/gi, "still, "],
+  [/\bwith that in mind,?\s*/gi, "with this in view, "],
+  [/\bwith this in mind,?\s*/gi, "given this, "],
   // ── Bureaucratic "the [noun] of" → gerund (from Python) ──
   [/,?\s*among others\b/gi, ""],
   [/\bcan be linked to the fact that\b/gi, "means that"],
@@ -241,6 +241,7 @@ function dedupConnectors(text: string): string {
   return paragraphs.map((para) => {
     const sentences = robustSentenceSplit(para);
     const result: string[] = [];
+    const connectorAltIdx = new Map<string, number>();
     for (const sent of sentences) {
       let modified = sent;
       for (const conn of CONNECTORS) {
@@ -250,7 +251,10 @@ function dedupConnectors(text: string): string {
           if (count >= 2) {
             const alts = CONNECTOR_ALTS[conn];
             if (alts) {
-              const alt = alts[Math.floor(Math.random() * alts.length)];
+              // Cycle through alternatives deterministically instead of random
+              const idx = connectorAltIdx.get(conn) ?? 0;
+              const alt = alts[idx % alts.length];
+              connectorAltIdx.set(conn, idx + 1);
               modified = alt + sent.slice(conn.length);
             }
           }

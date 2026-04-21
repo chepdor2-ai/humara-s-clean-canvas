@@ -319,16 +319,30 @@ export function breakStarterRepetition(sentences: string[]): string[] {
     "Looking at it differently,", "From another angle,", "Oddly enough,",
     "At a glance,", "Step back and", "Zoom in and", "Taken together,",
     "On closer look,", "The key insight here is that",
-    "A closer reading shows", "Dig deeper and", "Strip it down and",
+    "Dig deeper and", "Strip it down and",
     "What stands out is that", "Worth noting:", "Consider this:",
   ];
+
+  // Shuffle the pool each call so the same prefix isn't assigned to the same position
+  const shuffled = [...humanPrefixes].sort(() => Math.random() - 0.5);
+  const usedPrefixes = new Set<string>();
+  let poolIdx = 0;
 
   for (let i = 1; i < result.length; i++) {
     const prevStarter = result[i - 1].split(/\s+/)[0]?.toLowerCase().replace(/[^a-z]/g, "") ?? "";
     const currStarter = result[i].split(/\s+/)[0]?.toLowerCase().replace(/[^a-z]/g, "") ?? "";
 
     if (prevStarter === currStarter && result[i].split(/\s+/).length > 6) {
-      const prefix = humanPrefixes[i % humanPrefixes.length];
+      // Advance past already-used prefixes
+      while (poolIdx < shuffled.length && usedPrefixes.has(shuffled[poolIdx])) poolIdx++;
+      if (poolIdx >= shuffled.length) {
+        // All used — pick least-recently-used from original pool
+        poolIdx = 0;
+        usedPrefixes.clear();
+      }
+      const prefix = shuffled[poolIdx];
+      usedPrefixes.add(prefix);
+      poolIdx++;
       result[i] = prefix + " " + result[i][0].toLowerCase() + result[i].slice(1);
     }
   }

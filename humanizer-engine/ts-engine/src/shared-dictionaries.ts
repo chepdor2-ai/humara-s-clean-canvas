@@ -995,12 +995,28 @@ export function diversifyStarters(text: string): string {
         }
       }
 
-      // Check for duplicate starter
+      // Check for duplicate starter: pick from unused reroutes (shuffled so order varies)
       const currentStarter = sent.split(/\s+/)[0]?.toLowerCase().replace(/[^a-z]/g, "") ?? "";
       if (usedStarters.has(currentStarter) && sent.split(/\s+/).length > 6) {
-        const reroute = NATURAL_REROUTES[rerouteIdx % NATURAL_REROUTES.length];
-        rerouteIdx++;
-        sent = reroute + " " + sent[0].toLowerCase() + sent.slice(1);
+        // Find a reroute whose first word hasn't been used as a starter yet
+        let reroute: string | null = null;
+        for (let ri = 0; ri < NATURAL_REROUTES.length; ri++) {
+          const candidate = NATURAL_REROUTES[(rerouteIdx + ri) % NATURAL_REROUTES.length];
+          const candFirst = candidate.split(/\s+/)[0]?.toLowerCase().replace(/[^a-z]/g, "") ?? "";
+          if (!usedStarters.has(candFirst)) {
+            reroute = candidate;
+            rerouteIdx = (rerouteIdx + ri + 1) % NATURAL_REROUTES.length;
+            break;
+          }
+        }
+        if (!reroute) {
+          // All reroutes exhausted — just strip the duplicate starter word
+          const spaceIdx = sent.indexOf(" ");
+          if (spaceIdx > 0) sent = sent.slice(spaceIdx + 1).trim();
+          if (sent[0]) sent = sent[0].toUpperCase() + sent.slice(1);
+        } else {
+          sent = reroute + " " + sent[0].toLowerCase() + sent.slice(1);
+        }
       }
 
       usedStarters.add(sent.split(/\s+/)[0]?.toLowerCase().replace(/[^a-z]/g, "") ?? "");
@@ -2158,8 +2174,18 @@ function pickAcademicStarter(sent: string, usedStarters: Set<string>): string | 
     const first = starter.split(/\s+/)[0]?.toLowerCase() ?? "";
     if (!usedStarters.has(first)) return starter;
   }
-  // Fallback: use first from addition category
-  return ACADEMIC_STARTERS.addition[Math.floor(Math.random() * ACADEMIC_STARTERS.addition.length)];
+  // Fallback: scan ALL other categories for an unused starter before giving up
+  const allCategories = Object.keys(ACADEMIC_STARTERS) as (keyof typeof ACADEMIC_STARTERS)[];
+  for (const cat of allCategories) {
+    if (cat === category) continue;
+    for (const starter of ACADEMIC_STARTERS[cat]) {
+      const first = starter.split(/\s+/)[0]?.toLowerCase() ?? "";
+      if (!usedStarters.has(first)) return starter;
+    }
+  }
+  // Last resort: pick a random one (all have been used)
+  const allStarters = allCategories.flatMap(c => ACADEMIC_STARTERS[c]);
+  return allStarters[Math.floor(Math.random() * allStarters.length)];
 }
 
 /**

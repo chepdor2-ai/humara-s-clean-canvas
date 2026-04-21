@@ -241,6 +241,9 @@ function dedupConnectors(text: string): string {
   return paragraphs.map((para) => {
     const sentences = robustSentenceSplit(para);
     const result: string[] = [];
+    // Track which alternative index was last used per connector,
+    // so we cycle through alts instead of randomly picking (which can repeat).
+    const connectorAltIdx = new Map<string, number>();
     for (const sent of sentences) {
       let modified = sent;
       for (const conn of CONNECTORS) {
@@ -250,7 +253,11 @@ function dedupConnectors(text: string): string {
           if (count >= 2) {
             const alts = CONNECTOR_ALTS[conn];
             if (alts) {
-              const alt = alts[Math.floor(Math.random() * alts.length)];
+              // Advance index (skip the current connector word to avoid the same swap twice in a row)
+              const prevIdx = connectorAltIdx.get(conn) ?? 0;
+              const nextIdx = (prevIdx + 1) % alts.length;
+              connectorAltIdx.set(conn, nextIdx);
+              const alt = alts[nextIdx];
               modified = alt + sent.slice(conn.length);
             }
           }
