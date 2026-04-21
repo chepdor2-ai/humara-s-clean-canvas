@@ -2903,6 +2903,18 @@ export async function POST(req: Request) {
           }
 
           // Final done event — includes updated usage so frontend can reflect immediately
+          // Run detection on input + output so the client can show before/after AI scores
+          const doneDetector = getDetector();
+          const doneInputAnalysis = doneDetector.analyze(text);
+          const doneOutputAnalysis = doneDetector.analyze(humanized);
+          const toDoneDetection = (analysis: ReturnType<ReturnType<typeof getDetector>['analyze']>) => ({
+            overall: Math.round(analysis.summary.overall_ai_score),
+            detectors: analysis.detectors.map((d) => ({
+              detector: d.detector,
+              ai_score: Math.round(d.ai_score),
+              human_score: Math.round(d.human_score),
+            })),
+          });
           finishStream({
             humanized,
             word_count: outputWords,
@@ -2910,6 +2922,8 @@ export async function POST(req: Request) {
             engine_used: eng,
             meaning_preserved: meaningCheck.isSafe,
             meaning_similarity: Math.round(meaningCheck.similarity * 100) / 100,
+            input_detector_results: toDoneDetection(doneInputAnalysis),
+            output_detector_results: toDoneDetection(doneOutputAnalysis),
             ...(usageUpdate.words_used !== undefined ? { usage_words_used: usageUpdate.words_used, usage_words_limit: usageUpdate.words_limit } : {}),
           });
         } catch (err) {
@@ -2929,6 +2943,8 @@ export async function POST(req: Request) {
         'Content-Type': 'text/event-stream',
         'Cache-Control': 'no-cache, no-transform',
         Connection: 'keep-alive',
+        'X-Accel-Buffering': 'no',
+        'Transfer-Encoding': 'chunked',
       },
     });
   } catch {
