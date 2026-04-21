@@ -1050,9 +1050,14 @@ export function antiPangramHumanize(
 export function antiPangramSimple(
   text: string,
   strength: 'light' | 'medium' | 'strong' = 'strong',
-  tone: 'academic' | 'professional' | 'casual' | 'neutral' = 'academic',
+  tone: 'academic' | 'academic_blog' | 'professional' | 'casual' | 'neutral' = 'academic',
   config: Partial<AntiPangramConfig> = {}
 ): string {
-  const result = antiPangramHumanize(text, { ...config, strength, tone, maxIterations: Math.max(10, config.maxIterations ?? DEFAULT_CONFIG.maxIterations) });
+  // academic_blog preserves the same structural rules as academic but passes
+  // blog cadence through the output profile layer; normalise to 'academic'
+  // for the AntiPangram internals which use the narrow union.
+  const internalTone: 'academic' | 'professional' | 'casual' | 'neutral' =
+    tone === 'academic_blog' ? 'academic' : tone;
+  const result = antiPangramHumanize(text, { ...config, strength, tone: internalTone, maxIterations: Math.max(10, config.maxIterations ?? DEFAULT_CONFIG.maxIterations) });
   return result.humanized;
 }

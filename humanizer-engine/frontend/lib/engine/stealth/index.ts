@@ -18,15 +18,15 @@
 import { AI_WORD_REPLACEMENTS } from '../shared-dictionaries';
 import { getBestReplacement } from './dictionary-service';
 import { runFullDetectorForensicsCleanup, deepSignalClean } from './forensics';
-import { detectDomain, getProtectedTermsForDomain } from '../domain-detector';
+import { detectDomain, getProtectedTermsForDomain, type Domain } from '../domain-detector';
+import { scoreSentenceRisk } from '../sentence-risk-scorer';
 import { resolveStrategy, type DomainStrategy } from '../domain-strategies';
 import { resolveTone, type ToneSettings } from '../ai-signal-dictionary';
 import { isSafeSwap, pickBestReplacement, contextFor } from '../synonym-safety';
 
-// Module-level strategy populated per-call by stealthHumanize
-let _stealthStrategy: DomainStrategy | null = null;
-// Module-level tone settings populated per-call by stealthHumanize
-let _activeTone: ToneSettings | null = null;
+// NOTE: _stealthStrategy and _activeTone were formerly module-level globals.
+// They are now per-call locals inside stealthHumanize, passed as parameters
+// to processSentence — this eliminates the race condition under concurrent requests.
 
 export interface StealthHumanizeOptions {
   detectorPressure?: number;
@@ -34,6 +34,10 @@ export interface StealthHumanizeOptions {
   preserveLeadSentences?: boolean;
   humanVariance?: number;
   readabilityBias?: number;
+  /** Override auto-detected domain instead of re-detecting from text. */
+  domain?: Domain;
+  /** Allow first-person pronouns to remain (default: inherit from input). */
+  firstPersonAllowed?: boolean;
 }
 
 function clamp01(value: number): number {
@@ -65,6 +69,9 @@ function applyToneAdjustment(text: string, tone: ToneSettings): string {
       "we're": "we are", "we've": "we have", "we'd": "we would",
       "we'll": "we will", "they're": "they are", "they've": "they have",
       "you're": "you are", "you've": "you have",
+      "they'd": "they would", "you'd": "you would", "you'll": "you will",
+      "she's": "she is", "he's": "he is",
+      "she'd": "she would", "he'd": "he would",
     };
     for (const [c, e] of Object.entries(CONTRACTION_EXPANSIONS)) {
       result = result.replace(new RegExp(`\\b${c}\\b`, 'gi'), (m) =>
@@ -1456,6 +1463,7 @@ function processSentence(
   strength: string,
   isParagraphLead = false,
   detectorPressure = 0,
+  strategy: DomainStrategy | null = null,
 ): string {
   if (!sentence || sentence.trim().length < 8) return sentence;
   const original = sentence;
@@ -1558,7 +1566,7 @@ function processSentence(
   const baseReplacementRate = Math.min(0.92, (strength === 'strong' ? 0.80 : 0.70) + pressure * 0.10);
   // Domain strategy can INCREASE replacement rate but NEVER reduce below baseline
   // (reducing replacement lets AI patterns survive → higher detection scores)
-  const domainRate = _stealthStrategy ? _stealthStrategy.synonymIntensity + 0.15 : baseReplacementRate;
+  const domainRate = strategy ? strategy.synonymIntensity + 0.15 : baseReplacementRate;
   const leadRateCap = isParagraphLead ? (0.72 + pressure * 0.12) : 1;
   const maxReplacements = Math.ceil(wordCount * Math.max(baseReplacementRate, domainRate) * leadRateCap);
   const alreadyReplaced = new Set<string>(); // Track Step 2 output words
@@ -1690,7 +1698,10 @@ function processSentence(
       }
 
       // Fallback: extended dictionary with POS-suffix consistency
-      if (!replaced && Math.random() < 0.00) { // disabled: ext dict is source of garble
+      // Extended dictionary — enabled at 20% probability for sentences that
+      // have below-average coverage after curated replacements. Guarded by the
+      // full REPLACEMENT_BLACKLIST + POS-suffix consistency check.
+      if (!replaced && wordChangeRatio(original, result2.join('')) < 0.50 && Math.random() < 0.20) { // formerly 0.00 (dead)
         let syn = getBestReplacement(lower, text);
         if (!syn || syn.toLowerCase() === lower) {
           if (stemmed !== lower) syn = getBestReplacement(stemmed, text);
@@ -1731,7 +1742,7 @@ function processSentence(
   // Swap independent clauses around ", and ", ", but ", ", which " etc.
   // This adds structural change without changing any words.
   // Domain strategy can INCREASE structural rate but never reduce below 0.25 baseline
-  const clauseReorderRate = (_stealthStrategy ? Math.max(0.25, _stealthStrategy.structuralRate) : 0.25) * (isParagraphLead ? 0.55 + pressure * 0.25 : 1);
+  const clauseReorderRate = (strategy ? Math.max(0.25, strategy.structuralRate) : 0.25) * (isParagraphLead ? 0.55 + pressure * 0.25 : 1);
   if (Math.random() < clauseReorderRate && text.length > 40) {
     // Try swapping clauses around ", and " or ", but "
     const clauseSwapRe = /^(.{15,}?),\s+(and|but|yet)\s+(.{15,})$/i;
@@ -1753,7 +1764,7 @@ function processSentence(
   // ─── Step 3c: Passive ↔ Active voice toggle ─────────────────
   // ~20% chance: convert "X is/was Yed by Z" → "Z Yed X" or vice versa
   // Domain strategy can INCREASE voice toggle rate but never reduce below 0.15 baseline
-  const voiceToggleRate = (_stealthStrategy ? Math.max(0.15, _stealthStrategy.structuralRate * 0.6) : 0.15) * (isParagraphLead ? 0.45 + pressure * 0.30 : 1);
+  const voiceToggleRate = (strategy ? Math.max(0.15, strategy.structuralRate * 0.6) : 0.15) * (isParagraphLead ? 0.45 + pressure * 0.30 : 1);
   if (Math.random() < voiceToggleRate && text.length > 30) {
     // Passive → Active: "X is/was <verb>ed by Y" → "Y <verb>s X"
     const passiveRe = /\b(\w[\w\s]{2,30}?)\s+(is|are|was|were)\s+(\w+ed)\s+by\s+(\w[\w\s]{2,30}?)([.,;])/i;
@@ -1770,10 +1781,10 @@ function processSentence(
   const starterRoll = Math.random();
   const alreadyHasStarter = /^(However|Although|Though|Moreover|Furthermore|Thus|Therefore|Hence|Consequently|Because|Since|Yet|Meanwhile|Additionally|Instead|Despite|In spite|Driven by|As a|As the|Notably|Historically|Traditionally|In practice|In broad|From a|At its|On balance|By extension|In reality|Against|Under these|For instance|For example|To illustrate|In particular|More specifically)/i.test(text) || /^[A-Z][a-z]+,\s/.test(text);
   // Domain strategy can INCREASE starter rate but never reduce below 0.05 baseline
-  const starterRate = (_stealthStrategy ? Math.max(0.05, _stealthStrategy.starterInjectionRate) : 0.05) * (isParagraphLead ? 0.15 : 1 + pressure * 0.15);
+  const starterRate = (strategy ? Math.max(0.05, strategy.starterInjectionRate) : 0.05) * (isParagraphLead ? 0.15 : 1 + pressure * 0.15);
   if (starterRoll < starterRate && !alreadyHasStarter && sentenceIndex > 0 && !isParagraphLead && text.length > 30) {
     // Merge domain-specific starters with academic starters
-    const domainStarters = _stealthStrategy ? _stealthStrategy.domainStarters : [];
+    const domainStarters = strategy ? strategy.domainStarters : [];
     const allStarters = [...new Set([...STARTERS_ACADEMIC, ...domainStarters])];
     const available = allStarters.filter(s => !usedStarters.has(s));
     if (available.length > 0) {
@@ -1879,15 +1890,15 @@ export function stealthHumanize(
   if (!text || text.trim().length === 0) return text;
 
   // Resolve tone — determines contraction policy, openers, max length, etc.
-  _activeTone = resolveTone(_tone);
-  console.log(`[NURU_V2] Tone: ${_activeTone.id} (${_activeTone.label})`);
+  const activeTone = resolveTone(_tone);
+  console.log(`[NURU_V2] Tone: ${activeTone.id} (${activeTone.label})`);
 
   // Detect domain and merge domain-specific protected terms into the static set
   const domainResult = detectDomain(text);
   const domainProtected = getProtectedTermsForDomain(domainResult);
   for (const term of domainProtected) PROTECTED.add(term.toLowerCase());
-  _stealthStrategy = resolveStrategy(domainResult);
-  console.log(`[NURU_V2] Domain: ${domainResult.primary} (${(domainResult.confidence * 100).toFixed(0)}%) — added ${domainProtected.size} protected terms, synInt=${_stealthStrategy.synonymIntensity.toFixed(2)}, structRate=${_stealthStrategy.structuralRate.toFixed(2)}`);
+  const stealthStrategy = resolveStrategy(domainResult);
+  console.log(`[NURU_V2] Domain: ${domainResult.primary} (${(domainResult.confidence * 100).toFixed(0)}%) — added ${domainProtected.size} protected terms, synInt=${stealthStrategy.synonymIntensity.toFixed(2)}, structRate=${stealthStrategy.structuralRate.toFixed(2)}`);
 
   const hasFirstPerson = /\b(I|we|my|our|me|us|myself|ourselves)\b/.test(text);
   const paragraphs = text.split(/\n\s*\n/).filter(p => p.trim());
@@ -1913,10 +1924,25 @@ export function stealthHumanize(
       const originalSent = sent;
       const isParagraphLead = preserveLeadSentences && outputSentences.length === 0;
 
+      // Risk-score the sentence to determine how aggressively to iterate
+      const sentRisk = scoreSentenceRisk(sent, domainResult);
+      if (sentRisk.tier === 'protected') {
+        // Skip all processing — heading, citation, or very short fragment
+        outputSentences.push(sent);
+        globalSentenceIdx++;
+        continue;
+      }
+      // Scale max iterations per sentence based on its risk tier
+      const sentMaxIter = sentRisk.tier === 'low'
+        ? Math.min(5, enforcedMaxIterations)
+        : sentRisk.tier === 'critical'
+          ? Math.round(enforcedMaxIterations * 1.25)
+          : enforcedMaxIterations;
+
       // First pass uses real sentenceIndex (enables starter injection on non-first sentences)
       let best = processSentence(
         sent, hasFirstPerson, globalSentenceIdx, totalSentences,
-        usedStarters, strength, isParagraphLead, detectorPressure,
+        usedStarters, strength, isParagraphLead, detectorPressure, stealthStrategy,
       );
       let bestScore = compositeQualityScore(originalSent, best, 0.35 + readabilityBias * 0.30);
 
@@ -1925,11 +1951,11 @@ export function stealthHumanize(
       // balancing change ratio, readability, and AI signal absence).
       // Subsequent passes use sentenceIndex=0 to prevent duplicate starter injection.
       let iter = 1;
-        while (iter <= enforcedMaxIterations) {
+        while (iter <= sentMaxIter) {
           const iterStrength = iter > 5 ? 'strong' : strength;
           const next = processSentence(
             originalSent, hasFirstPerson, iter === 1 ? globalSentenceIdx : 0,
-            totalSentences, usedStarters, iterStrength as any, isParagraphLead, detectorPressure,
+            totalSentences, usedStarters, iterStrength as any, isParagraphLead, detectorPressure, stealthStrategy,
           );
           const nextScore = compositeQualityScore(originalSent, next, 0.35 + readabilityBias * 0.30);
           if (nextScore > bestScore) {
@@ -1955,12 +1981,12 @@ export function stealthHumanize(
       if (item.needsReprocess && item.text.trim().length >= 8) {
         // Run 3 iterations on the new sentence and pick the best
         let reprocessBest = processSentence(
-          item.text, hasFirstPerson, 0, totalSentences, usedStarters, strength, false, detectorPressure,
+          item.text, hasFirstPerson, 0, totalSentences, usedStarters, strength, false, detectorPressure, stealthStrategy,
         );
         let reprocessBestScore = compositeQualityScore(item.text, reprocessBest, 0.35 + readabilityBias * 0.30);
         for (let ri = 0; ri < 3; ri++) {
           const candidate = processSentence(
-            item.text, hasFirstPerson, 0, totalSentences, usedStarters, strength, false, detectorPressure,
+            item.text, hasFirstPerson, 0, totalSentences, usedStarters, strength, false, detectorPressure, stealthStrategy,
           );
           const score = compositeQualityScore(item.text, candidate, 0.35 + readabilityBias * 0.30);
           if (score > reprocessBestScore) {
@@ -1996,8 +2022,8 @@ export function stealthHumanize(
   result = runFullDetectorForensicsCleanup(result);
 
   // Apply tone-specific polish (contractions, cadence, openers)
-  if (_activeTone) {
-    result = applyToneAdjustment(result, _activeTone);
+  if (activeTone) {
+    result = applyToneAdjustment(result, activeTone);
   }
 
   if (humanVariance > 0) {

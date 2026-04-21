@@ -38,6 +38,8 @@ import { fixMidSentenceCapitalization, validateAndRepairOutput } from '@/lib/eng
 import { analyzeDocumentCoherence, fixDocumentCoherence } from '@/lib/engine/document-coherence';
 import { analyzeStyleStability, normalizeStyleStability } from '@/lib/engine/style-stability';
 import { analyze as analyzeContext } from '@/lib/engine/context-analyzer';
+import { detectDomain } from '@/lib/engine/domain-detector';
+import { applyOutputProfile, resolveOutputProfile } from '@/lib/engine/output-profiles';
 import { createServiceClient } from '@/lib/supabase';
 import { getUsageStatsCompat, incrementUsageCompat } from '@/lib/server/usage-tracking';
 import { smartPreprocess, getMaxRestructureCount, selectForDownstreamRestructure, reassemblePreprocessed, measureWordChange, type SentenceAnalysis, type PreprocessResult, MAX_RESTRUCTURE_ITERATION } from '@/lib/engine/smart-preprocess';
@@ -287,46 +289,133 @@ function buildAdaptiveCleanupPlan(
   };
 }
 
-function resolveAutoEngine(text: string, requestedTone?: string): { mode: 'core_engines' | 'detection_control'; engine: string } {
-  const ctx = analyzeContext(text);
-  const toneId = requestedTone ?? 'neutral';
-  const academicish = toneId === 'academic' || toneId === 'academic_blog' || ctx.tone === 'formal';
-  const conversational = toneId === 'casual' || toneId === 'simple' || ctx.tone === 'casual';
-  const technicalTopic = new Set(['technology', 'science', 'health', 'economics', 'politics', 'education']).has(ctx.primaryTopic);
-  const socialTopic = new Set(['society', 'education', 'politics', 'economics']).has(ctx.primaryTopic);
+/**
+ * Deterministic text hash (djb2) — same text always returns the same integer.
+ * Used to seed engine selection so the same input always resolves to the same engine.
+ */
+function hashText(s: string): number {
+  let h = 5381;
+  for (let i = 0; i < Math.min(s.length, 512); i++) {
+    h = ((h << 5) + h) ^ s.charCodeAt(i);
+    h = h >>> 0; // keep unsigned 32-bit
+  }
+  return h;
+}
 
-  let coreWeight = 3;
-  let detectionWeight = 3;
-  if (academicish) detectionWeight += 4;
-  if (technicalTopic) detectionWeight += 3;
-  if (socialTopic) detectionWeight += 1;
-  if (toneId === 'academic_blog') detectionWeight += 2;
-  if (conversational) coreWeight += 4;
-  if (ctx.totalWords < 220) coreWeight += 2;
-  if (ctx.totalWords > 700) detectionWeight += 2;
+/**
+ * Deterministically pick one value from a weighted options array.
+ * Uses a hash of the text as a seed instead of Math.random(), so the
+ * same input always resolves to the same engine across requests.
+ */
+function pickDeterministic<T>(options: Array<{ value: T; weight: number }>, seed: number): T {
+  const total = options.reduce((s, o) => s + o.weight, 0);
+  let pos = seed % total;
+  for (const o of options) {
+    pos -= o.weight;
+    if (pos < 0) return o.value;
+  }
+  return options[options.length - 1].value;
+}
 
-  const mode = pickWeighted([
-    { value: 'core_engines' as const, weight: coreWeight },
-    { value: 'detection_control' as const, weight: detectionWeight },
-  ]);
-
-  if (mode === 'core_engines') {
-    const engine = pickWeighted([
-      { value: 'easy', weight: conversational ? 7 : academicish ? 4 : 6 },
-      { value: 'ninja_1', weight: academicish || technicalTopic ? 5 : 3 },
-      { value: 'antipangram', weight: technicalTopic || ctx.totalWords > 500 ? 2 : 1 },
-    ]);
-    return { mode, engine };
+function resolveAutoEngine(
+  text: string,
+  requestedTone?: string,
+  initialAiScore?: number,
+): { mode: 'core_engines' | 'detection_control'; engine: string } {
+  // Override: if the text is already fairly clean, prefer lightweight Nuru
+  if (typeof initialAiScore === 'number' && initialAiScore < 25) {
+    return { mode: 'detection_control', engine: 'nuru_v2' };
   }
 
-  const engine = pickWeighted([
-    { value: 'humara_v3_3', weight: ctx.primaryTopic === 'health' || ctx.primaryTopic === 'education' ? 6 : academicish ? 5 : 3 },
-    { value: 'oxygen', weight: ctx.primaryTopic === 'technology' || ctx.primaryTopic === 'science' ? 6 : toneId === 'academic_blog' ? 4 : 3 },
-    { value: 'king', weight: toneId === 'academic_blog' || socialTopic ? 5 : academicish ? 4 : 2 },
-    { value: 'nuru_v2', weight: technicalTopic && ctx.totalWords < 300 ? 3 : 2 },
-    { value: 'ghost_pro_wiki', weight: academicish || socialTopic ? 6 : 2 },
-  ]);
-  return { mode, engine };
+  const domain = detectDomain(text);
+  const ctx = analyzeContext(text);
+  const toneId = requestedTone ?? 'neutral';
+  const seed = hashText(text);
+  const words = ctx.totalWords;
+
+  // ── Primary domain-based routing ──────────────────────────────────
+  switch (domain.primary) {
+    case 'medical':
+      // Medical: heavy restructure to preserve clinical precision
+      return {
+        mode: 'detection_control',
+        engine: words < 200 ? 'king' : 'humara_v3_3',
+      };
+
+    case 'legal':
+      // Legal: encyclopedic prose, precise term-preservation
+      return { mode: 'detection_control', engine: 'ghost_pro_wiki' };
+
+    case 'stem':
+    case 'technical':
+      // STEM/Technical: domain-protected adaptive chain keeps equations intact
+      return { mode: 'detection_control', engine: 'oxygen' };
+
+    case 'business':
+      // Business: LLM for longer texts, Humarin for medium
+      return {
+        mode: 'detection_control',
+        engine: words > 400 ? 'king' : 'humara_v3_3',
+      };
+
+    case 'humanities':
+      // Humanities: LLM excels at philosophical/cultural register
+      return { mode: 'detection_control', engine: 'king' };
+
+    case 'creative':
+      // Creative: persona-shifting LLM + stealth chain
+      return { mode: 'core_engines', engine: 'ninja_1' };
+
+    case 'academic': {
+      // Academic (generic): size-adaptive choice
+      const engine = words < 300 ? 'nuru_v2' : 'humara_v3_3';
+      return { mode: 'detection_control', engine };
+    }
+
+    case 'general':
+    default: {
+      // General: deterministic weighted picker (tone + length signals)
+      const academicish = toneId === 'academic' || toneId === 'academic_blog' || ctx.tone === 'formal';
+      const conversational = toneId === 'casual' || toneId === 'simple' || ctx.tone === 'casual';
+
+      // Decide mode
+      let coreW = 3;
+      let detectW = 3;
+      if (academicish) detectW += 4;
+      if (conversational) coreW += 4;
+      if (words < 220) coreW += 2;
+      if (words > 700) detectW += 2;
+
+      const mode = pickDeterministic(
+        [{ value: 'core_engines' as const, weight: coreW }, { value: 'detection_control' as const, weight: detectW }],
+        seed,
+      );
+
+      if (mode === 'core_engines') {
+        const engine = pickDeterministic(
+          [
+            { value: 'easy', weight: conversational ? 7 : academicish ? 4 : 6 },
+            { value: 'ninja_1', weight: academicish ? 5 : 3 },
+            { value: 'antipangram', weight: words > 500 ? 2 : 1 },
+          ],
+          seed + 1,
+        );
+        return { mode, engine };
+      }
+
+      const engine = pickDeterministic(
+        [
+          { value: 'humara_v3_3', weight: academicish ? 5 : 3 },
+          { value: 'oxygen', weight: toneId === 'academic_blog' ? 4 : 3 },
+          { value: 'king', weight: toneId === 'academic_blog' ? 5 : academicish ? 4 : 2 },
+          { value: 'nuru_v2', weight: words < 300 ? 3 : 2 },
+          { value: 'ghost_pro_wiki', weight: academicish ? 6 : 2 },
+        ],
+        seed + 2,
+      );
+      return { mode, engine };
+    }
+  }
 }
 
 export async function POST(req: Request) {
@@ -341,13 +430,14 @@ export async function POST(req: Request) {
       });
     }
 
-    const { text, engine, strength, tone, strict_meaning, no_contractions, enable_post_processing, premium, humanization_rate, post_processing_profile, auto_model } = body as {
+    const { text, engine, strength, tone, strict_meaning, no_contractions, enable_post_processing, premium, humanization_rate, post_processing_profile, auto_model, auto_model_allow_llm } = body as {
       text: string; engine?: string; strength?: string; tone?: string;
       strict_meaning?: boolean; no_contractions?: boolean;
       enable_post_processing?: boolean; premium?: boolean;
       humanization_rate?: number;
       post_processing_profile?: string;
       auto_model?: boolean;
+      auto_model_allow_llm?: boolean;
     };
 
     // Humanization rate: 1-10 scale → minimum word-change threshold
@@ -546,7 +636,7 @@ export async function POST(req: Request) {
             ai_analysis: 'AI Analysis',
           };
           if (auto_model === true) {
-            const autoSelection = resolveAutoEngine(normalizedText, tone ?? 'neutral');
+            const autoSelection = resolveAutoEngine(normalizedText, tone ?? 'neutral', paperProfile?.overallCompositeAi);
             eng = autoSelection.engine;
             sendSSE(controller, {
               type: 'stage',
@@ -1168,11 +1258,14 @@ export async function POST(req: Request) {
               console.log(`[AI Analysis] Initial score: ${Math.round(initialAiScore)}% | High: ${isHighAI} | PostProc: ${useAntiPangram ? 'Pangram' : 'Nuru 2.0'} | API-free mode`);
 
               // ── Phase 1: Agent 1 — Oxygen (Humara 2.0) local rewrite (NO external API) ──
+              // Quality gate: skip if score is already low (< 40%) — Oxygen can over-process clean text
               sendSSE(controller, { type: 'stage', stage: 'AI Analysis: Agent 1 — Oxygen Rewrite' });
               await flushDelay(12);
               let working = normalizedText;
-              if (timeOk()) {
+              if (timeOk() && initialAiScore >= 40) {
                 working = runHumara20(working);
+              } else if (initialAiScore < 40) {
+                console.log(`[AI Analysis] Phase 1 skipped — score ${Math.round(initialAiScore)}% already below 40% threshold`);
               }
 
               // ── Phase 2: Agent 2 — AntiPangram forensic signal destruction (local) ──
@@ -1195,15 +1288,19 @@ export async function POST(req: Request) {
                 );
               }
 
-              // ── Phase 3: Agent 3 — Deep Non-LLM Clean + Nuru polish (10×) ──
-              sendSSE(controller, { type: 'stage', stage: 'AI Analysis: Agent 3 — Deep Clean + Nuru ×10' });
+              // ── Phase 3: Agent 3 — Deep Non-LLM Clean + Nuru polish ──
+              // Escalate Nuru iterations when score is very high (≥75%)
+              const phase3NuruIterations = initialAiScore >= 75
+                ? aiAdaptivePlan.nuruIterations * 2
+                : aiAdaptivePlan.nuruIterations;
+              sendSSE(controller, { type: 'stage', stage: `AI Analysis: Agent 3 — Deep Clean + Nuru ×${phase3NuruIterations}` });
               await flushDelay(12);
               if (timeOk()) {
                 const { sentences: cleanSents, paragraphBoundaries: cleanBounds } = splitIntoIndexedSentences(working);
                 for (let i = 0; i < cleanSents.length; i++) {
                   if (!isHeadingSentCheck(cleanSents[i])) {
                     cleanSents[i] = deepNonLLMClean(cleanSents[i]);
-                    for (let p = 0; p < aiAdaptivePlan.nuruIterations; p++) {
+                    for (let p = 0; p < phase3NuruIterations; p++) {
                       cleanSents[i] = runNuruSinglePass(cleanSents[i], {
                         detectorPressure: aiAdaptivePlan.detectorPressure,
                         preserveLeadSentences: true,
@@ -1213,7 +1310,7 @@ export async function POST(req: Request) {
                     }
                     cleanSents[i] = finalSmoothGrammar(cleanSents[i]);
                   }
-                  sendSSE(controller, { type: 'sentence', index: i, text: cleanSents[i], stage: `Deep Clean + Nuru ×${aiAdaptivePlan.nuruIterations}` });
+                  sendSSE(controller, { type: 'sentence', index: i, text: cleanSents[i], stage: `Deep Clean + Nuru ×${phase3NuruIterations}` });
                 }
                 working = reassembleText(cleanSents, cleanBounds.length ? cleanBounds : [0]);
               }
@@ -1297,9 +1394,14 @@ export async function POST(req: Request) {
                     let sent = before;
 
                     if (restructuredThisIter < maxRestructPerIter) {
-                      // Use Oxygen (local) instead of Phantom (external API)
+                      // Use Oxygen (local) by default; escalate to LLM if auto_model_allow_llm is set
                       if (useHeavyPass) {
-                        sent = await runHumara20Full(sent);
+                        if (auto_model_allow_llm && currentScan.detectorAverage >= 50) {
+                          // LLM escalation: restructure via deep AI clean when score is high
+                          sent = await deepAICleanOneSentence(sent);
+                        } else {
+                          sent = await runHumara20Full(sent);
+                        }
                       }
                       sent = await runNuru20Full(sent);
                       sent = finalSmoothGrammar(sent);
@@ -1380,6 +1482,15 @@ export async function POST(req: Request) {
               fullResult = runHumara20(normalizedText);
             }
             if (!fullResult || fullResult.trim().length === 0) fullResult = normalizedText;
+
+            // Output profile: apply tonal post-processing to match the intended writing style
+            {
+              const outputProfile = resolveOutputProfile(tone ?? undefined, eng ?? undefined);
+              if (outputProfile !== 'general') {
+                const docDomain = detectDomain(normalizedText);
+                fullResult = applyOutputProfile(fullResult, outputProfile, docDomain.primary);
+              }
+            }
 
             // ── Length guard: prevent engines from bloating output ──
             const inputWC = normalizedText.split(/\s+/).filter(Boolean).length;

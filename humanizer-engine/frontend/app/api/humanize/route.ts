@@ -33,6 +33,9 @@ import { postCleanGrammar } from '@/lib/engine/grammar-cleaner';
 import { apexHumanize } from '@/lib/engine/apex-humanizer';
 import { kingHumanize } from '@/lib/engine/king-humanizer';
 import { analyzeDocumentCoherence, fixDocumentCoherence, type CoherenceReport } from '@/lib/engine/document-coherence';
+import { scoreSentenceRisk } from '@/lib/engine/sentence-risk-scorer';
+import { detectDomain } from '@/lib/engine/domain-detector';
+import { applyOutputProfile, resolveOutputProfile } from '@/lib/engine/output-profiles';
 
 export const maxDuration = 300; // LLM engines need more time
 
@@ -278,7 +281,10 @@ function adaptiveOxygenChain(
   const MIN_TOTAL = 3;           // minimum passes before gate check
   const MAX_ITERATIONS = 3;      // reduced cap (was 6 — too many passes compound errors)
   const TARGET_CHANGE = 0.25;    // 25% word-level change from phase-1 per sentence
-  const SENT_PASS_RATE = 0.60;   // permissive for faster exits
+  const SENT_PASS_RATE = 0.65;   // 65% of sentences must meet per-sentence target before early exit
+
+  // Pre-compute per-sentence risk targets so high-AI sentences demand more change
+  const documentDomain = detectDomain(phaseOneOutput);
 
   let current = phaseOneOutput;
   // Gate compares against phase-1 output — how much the oxygen chain added on top of the LLM
@@ -308,13 +314,20 @@ function adaptiveOxygenChain(
       const curSentences = robustSentenceSplit(current);
       let metCount = 0;
       for (const curSent of curSentences) {
+        // Protected sentences (headings, fragments) automatically count as passing
+        const risk = scoreSentenceRisk(curSent, documentDomain);
+        if (risk.tier === 'protected') { metCount++; continue; }
+
+        // Per-sentence change target: higher for high/critical risk sentences
+        const sentTarget = risk.changeTarget > 0 ? risk.changeTarget : TARGET_CHANGE;
+
         // Find closest phase-1 sentence and measure how much oxygen chain changed it
         let bestChange = 0;
         for (const p1Sent of phase1Sentences) {
           const c = measureSentenceChange(p1Sent, curSent);
           if (c > bestChange) bestChange = c;
         }
-        if (bestChange >= TARGET_CHANGE) metCount++;
+        if (bestChange >= sentTarget) metCount++;
       }
       const total = curSentences.length;
       if (total > 0 && metCount / total >= SENT_PASS_RATE) {
@@ -836,6 +849,25 @@ export async function POST(req: Request) {
       }
     };
 
+    /**
+     * Measure the AI score of `text` and decide whether the next engine pass
+     * is still worth running.  Returns `run: false` when the score is already
+     * at or below `targetScore` so the caller can skip the pass entirely.
+     * Also returns an adaptive `strength` so later passes escalate correctly.
+     */
+    const shouldRunNextStage = (
+      text: string,
+      targetScore = 20,
+      currentScore?: number,
+    ): { run: boolean; score: number; adaptedStrength: 'light' | 'medium' | 'strong' } => {
+      const score = currentScore ?? detector.analyze(text).summary.overall_ai_score;
+      const run = score > targetScore;
+      const adaptedStrength: 'light' | 'medium' | 'strong' =
+        score > 65 ? 'strong' : score > 35 ? 'medium' : 'light';
+      if (!run) console.log(`[QualityGate] Skipping next stage — score already ${Math.round(score)}% (target ≤${targetScore}%)`);
+      return { run, score, adaptedStrength };
+    };
+
     let humanized: string;
 
     if (engine === 'easy') {
@@ -862,9 +894,7 @@ export async function POST(req: Request) {
           s = removeEmDashes(s);
           // Final Smooth & Grammar
           s = postCleanGrammar(s);
-          s = expandContractions(s);
           s = fixMidSentenceCapitalization(s);
-          s = removeEmDashes(s);
           sents[i] = s;
         }
         processedParas.push(sents.join(' '));
@@ -876,10 +906,14 @@ export async function POST(req: Request) {
 
       // AntiPangram forensic cleanup
       const { antiPangramSimple } = await import('@/lib/engine/antipangram');
+      const phantomApgTone: 'academic' | 'academic_blog' | 'professional' | 'casual' | 'neutral' =
+        (tone === 'academic' || tone === 'academic_blog' || tone === 'professional' || tone === 'casual' || tone === 'neutral')
+          ? (tone as 'academic' | 'academic_blog' | 'professional' | 'casual' | 'neutral')
+          : 'academic';
       humanized = antiPangramSimple(
         humanized,
         (strength ?? 'strong') as 'light' | 'medium' | 'strong',
-        (tone ?? 'academic') as 'academic' | 'professional' | 'casual' | 'neutral',
+        phantomApgTone,
       );
     } else if (engine === 'ninja_3') {
       // Alpha (speed-optimized): Humara 2.0 (non-LLM, instant) → Smart Nuru
@@ -887,17 +921,28 @@ export async function POST(req: Request) {
       humanized = applySmartNuruPolish(stage1);
     } else if (engine === 'ninja_2') {
       // Beta: Easy (Swift) → Humara 2.0 → Smart Nuru
+      // If the LLM stage timed out / failed (returns raw input unchanged), skip
+      // Humara 2.0 and run two Nuru passes instead of returning near-raw text.
       const stage1 = await runGuarded('ninja_2_stage_1', () => runHumara22Clean(normalizedText), normalizedText, 35_000);
-      const stage2 = runHumara20(stage1);
-      humanized = applySmartNuruPolish(stage2);
+      if (stage1 === normalizedText) {
+        // LLM failed — double Nuru polish is better than a raw pass-through
+        humanized = applySmartNuruPolish(applySmartNuruPolish(normalizedText));
+      } else {
+        const gate1 = shouldRunNextStage(stage1, 20);
+        const stage2 = gate1.run ? runHumara20(stage1) : stage1;
+        humanized = applySmartNuruPolish(stage2);
+      }
     } else if (engine === 'ninja_5') {
-      // Omega: Humara 2.4 → 15× Smart Nuru
+      // Omega: Humara 2.4 → 15× Smart Nuru (skip Nuru if Humara 2.4 already clean)
       const stage1 = await runGuarded('ninja_5_stage_1', () => runHumara24(normalizedText), normalizedText);
-      humanized = applySmartNuruPolish(stage1);
+      const gate1 = shouldRunNextStage(stage1, 20);
+      humanized = gate1.run ? applySmartNuruPolish(stage1) : stage1;
     } else if (engine === 'ghost_trial_2') {
       // Specter: Humara 2.4 → Humara 2.0 → Smart Nuru
+      // Quality gate: only run Humara 2.0 second pass if score is still above threshold
       const stage1 = await runGuarded('ghost_trial_2_stage_1', () => runHumara24(normalizedText), normalizedText);
-      const stage2 = runHumara20(stage1);
+      const gate1 = shouldRunNextStage(stage1, 20);
+      const stage2 = gate1.run ? runHumara20(stage1) : stage1;
       humanized = applySmartNuruPolish(stage2);
     } else if (engine === 'humara_v1_3') {
       // Humara v1.3: Stealth Humanizer Engine v5 from coursework-champ
@@ -925,8 +970,13 @@ export async function POST(req: Request) {
       // Phase 1: Deep rewrite (29 Wikipedia AI Cleanup rules)
       // Phase 2: Self-audit ("what makes this AI?")
       // Phase 3: Targeted revision (fix Phase 2 findings)
-      const kingResult = await kingHumanize(normalizedText);
-      humanized = applySmartNuruPolish(kingResult.humanized);
+      const kingHumanizedText = await runGuarded(
+        'king_stage_1',
+        async () => (await kingHumanize(normalizedText)).humanized,
+        normalizedText,
+        60_000,
+      );
+      humanized = applySmartNuruPolish(kingHumanizedText);
     } else if (engine === 'humara') {
       // Humara: Independent humanizer engine — phrase-level, strategy-diverse
       const humaraStrength: 'light' | 'medium' | 'heavy' =
@@ -959,7 +1009,8 @@ export async function POST(req: Request) {
     } else if (engine === 'ninja_1') {
       // Ninja 1: Ninja LLM → Humara 2.0 (oxygen) → Nuru 2.0 (single pass) → [15× Smart Nuru]
       const stage1 = await runGuarded('ninja1_stage_1', () => llmHumanize(normalizedText, strength ?? 'medium', true, strict_meaning ?? true, tone ?? 'academic', no_contractions !== false, enable_post_processing !== false), normalizedText);
-      const stage2 = runHumara20(stage1);
+      const gate1 = shouldRunNextStage(stage1, 20);
+      const stage2 = gate1.run ? runHumara20(stage1) : stage1;
       const stage3 = runNuruSinglePass(stage2);
       humanized = applySmartNuruPolish(stage3);
     } else if (engine === 'undetectable') {
@@ -1123,8 +1174,9 @@ export async function POST(req: Request) {
           } else {
             // Normalize hard wraps within the paragraph to spaces before splitting
             const normalizedPara = trimmed.replace(/\n/g, ' ').replace(/\s+/g, ' ').trim();
-            const sents = normalizedPara.match(/[^.!?]+[.!?]+/g)?.map(s => s.trim()) || [normalizedPara];
-            S.push(...sents);
+            // Use robustSentenceSplit to correctly handle abbreviations (Dr., U.S., e.g.)
+            const sents = robustSentenceSplit(normalizedPara).filter(s => s.trim());
+            S.push(...(sents.length ? sents : [normalizedPara]));
           }
         }
         return { sentences: S, paragraphBoundaries: B, headingIndices: H };
@@ -1174,6 +1226,12 @@ export async function POST(req: Request) {
     // Skip for humara/nuru/omega: they have their own capitalization handling
     // Pass original text so proper nouns from the input are preserved
     if (engine !== 'humara' && engine !== 'humara_v1_3' && engine !== 'nuru' && engine !== 'nuru_v2' && engine !== 'omega' && engine !== 'oxygen' && engine !== 'apex' && engine !== 'king' && !isDeepKill) {
+      // Apply output profile before capitalization to let profile changes be normalized correctly
+      const outputProfile = resolveOutputProfile(tone ?? undefined, engine ?? undefined);
+      if (outputProfile !== 'general') {
+        const docDomain = detectDomain(text);
+        humanized = applyOutputProfile(humanized, outputProfile, docDomain.primary);
+      }
       humanized = fixCapitalization(humanized, text);
     }
 
@@ -1608,7 +1666,7 @@ export async function POST(req: Request) {
     // Skip for nuru_v2: it handles its own sentence-by-sentence quality.
     if (engine !== 'ghost_pro_wiki' && engine !== 'nuru_v2') {
       const FEEDBACK_MAX_ITERS = 1; // reduced from 2 — saves 10-20s latency on Vercel
-      const FEEDBACK_AI_THRESHOLD = 50.0; // raised from 30 — only re-run if heavily AI
+      const FEEDBACK_AI_THRESHOLD = 30.0; // lowered: fire feedback loop for outputs still above 30%
       const FEEDBACK_STRENGTHS = ['light', 'medium', 'strong'] as const;
 
       for (let fbIter = 0; fbIter < FEEDBACK_MAX_ITERS; fbIter++) {
