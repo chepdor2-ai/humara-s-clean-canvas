@@ -1140,7 +1140,7 @@ function EditorPageInner() {
         }
 
         // Add to temporary history
-        const finalAiBefore = inputDetectorResults ? inputDetectorResults.overall : 0;
+        const finalAiBefore = inputDetection ? inputDetection.overallAi : 0;
         const finalAiAfter = outputDetectorResults ? outputDetectorResults.overall : 0;
         addToHistory(text, currentResult, (finalData.engine_used as string) || engine, finalAiBefore, finalAiAfter, (finalData.word_count as number) || outputWords);
 
