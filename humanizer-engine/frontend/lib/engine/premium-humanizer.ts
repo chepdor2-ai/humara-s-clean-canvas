@@ -56,7 +56,10 @@ import {
   enforceCapitalization,
   enforceStrictRules,
   enforceSingleSentence,
-import { getWordChangePercent, type SurgeryItem, type InputFeatures as SurgeryInputFeatures } from "./sentence-surgery";
+  getWordChangePercent,
+  type SurgeryItem,
+  type InputFeatures as SurgeryInputFeatures,
+} from "./sentence-surgery";
 import OpenAI from "openai";
 import { getGroqClient } from "./groq-client";
 
