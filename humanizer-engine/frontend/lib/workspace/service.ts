@@ -5,6 +5,7 @@ import {
   FootnoteReferenceRun,
   Header,
   HeadingLevel,
+  PageBreak,
   Packer,
   PageNumber,
   Paragraph,
@@ -543,11 +544,23 @@ export function buildAssistantReply(project: WorkspaceProject, prompt: string): 
       current.citationStyle = 'APA 7'
       current.instructionProfile.citationStyle = 'APA 7'
     }
+    if (lowered.includes('mla')) {
+      current.citationStyle = 'MLA 9'
+      current.instructionProfile.citationStyle = 'MLA 9'
+    }
+    if (lowered.includes('harvard')) {
+      current.citationStyle = 'Harvard'
+      current.instructionProfile.citationStyle = 'Harvard'
+    }
+    if (lowered.includes('chicago') || lowered.includes('footnote')) {
+      current.citationStyle = 'Chicago'
+      current.instructionProfile.citationStyle = 'Chicago'
+    }
     if (lowered.includes('slides') || lowered.includes('powerpoint')) {
       current.mode = 'presentation'
     }
-    activeDraft.contentMarkdown = createDraftMarkdown(activeDraft.contentJson)
-    activeDraft.contentHtml = createDraftHtml(activeDraft.contentJson)
+    activeDraft.contentMarkdown = createDraftMarkdown(activeDraft.contentJson, current.sourceLibrary, current.citationStyle)
+    activeDraft.contentHtml = createDraftHtml(activeDraft.contentJson, current.sourceLibrary, current.citationStyle)
     activeDraft.updatedAt = nowIso()
   }
 
@@ -555,7 +568,7 @@ export function buildAssistantReply(project: WorkspaceProject, prompt: string): 
   const message = {
     id: makeId('msg'),
     role: 'assistant' as const,
-    content: `I updated the current project state for your request: “${prompt}”. The artifact, source plan, and grading state now reflect that direction.`,
+    content: `I updated the current project state for your request: "${prompt}". The artifact, source plan, and grading state now reflect that direction.`,
     createdAt: nowIso(),
   }
   current.messages.push(message)
@@ -662,6 +675,32 @@ export async function getProjectById(supabase: any, userId: string, projectId: s
   }
 }
 
+async function resolveInitialSourcesForProject(input: {
+  title: string
+  instructions: string
+  citationStyle?: string
+}): Promise<WorkspaceSource[]> {
+  const currentYear = new Date().getFullYear()
+  const query = `${input.title} ${input.instructions}`.replace(/\s+/g, ' ').trim()
+
+  try {
+    const bundle = await searchLiveScholarSources(query, {
+      yearFrom: currentYear - 5,
+      sort: 'year',
+    })
+
+    if (bundle.results.length > 0) {
+      return bundle.results.slice(0, 5)
+    }
+  } catch (error) {
+    if (process.env.NODE_ENV !== 'production') {
+      console.warn('Live scholar search fallback active:', error)
+    }
+  }
+
+  return scholarlyCatalog
+}
+
 export async function createProjectRecord(supabase: any, userId: string, input: {
   title: string
   instructions: string
@@ -670,7 +709,8 @@ export async function createProjectRecord(supabase: any, userId: string, input: 
   citationStyle?: string
   targetWordCount?: number
 }) {
-  const project = createInitialProject(input)
+  const sources = await resolveInitialSourcesForProject(input)
+  const project = createInitialProject({ ...input, sources })
   saveFallbackProject(userId, project)
   await upsertProjectWithFallback(supabase, userId, project)
   return project
@@ -695,7 +735,7 @@ export function createSeedProject() {
   return project
 }
 
-export async function createExportArtifact(project: WorkspaceProject, type: WorkspaceExportArtifact['type']) {
+async function createExportArtifactLegacy(project: WorkspaceProject, type: WorkspaceExportArtifact['type']) {
   const activeDraft = getActiveDraft(project)
   const fileStem = `${slug(project.title || 'workspace-project')}-${type}`
   const createdAt = nowIso()

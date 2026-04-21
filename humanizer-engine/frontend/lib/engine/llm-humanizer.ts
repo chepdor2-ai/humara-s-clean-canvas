@@ -868,7 +868,7 @@ export async function nuruReadabilityPolish(sentence: string): Promise<string> {
   const maxTokens = Math.max(150, Math.ceil(trimmed.split(/\s+/).length * 2));
 
   try {
-    let result = await llmCallWithFallback(NURU_READABILITY_SYSTEM, userPrompt, temp, maxTokens);
+      let result = await llmCall(NURU_READABILITY_SYSTEM, userPrompt, temp, maxTokens);
     if (!result || result.trim().length < llmInput.length * 0.5) return trimmed;
     result = result.replace(/^["']|["']$/g, '').trim();
     result = result.replace(/^SENTENCE:\s*/i, '').trim();
