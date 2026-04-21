@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import synonymData from '@/data/curated_synonyms.json';
+import fs from 'fs';
+import path from 'path';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -8,9 +9,31 @@ interface SynonymMap {
   [key: string]: string[];
 }
 
-const synonymCache = synonymData as SynonymMap;
+let synonymCache: SynonymMap | null = null;
 
 function loadSynonyms(): SynonymMap {
+  if (synonymCache) return synonymCache;
+
+  const possiblePaths = [
+    path.join(process.cwd(), '..', 'dictionaries', 'curated_synonyms.json'),
+    path.join(process.cwd(), 'dictionaries', 'curated_synonyms.json'),
+    path.join(process.cwd(), '..', '..', 'dictionaries', 'curated_synonyms.json'),
+    path.join(process.cwd(), 'humanizer-engine', 'dictionaries', 'curated_synonyms.json'),
+  ];
+
+  for (const dictPath of possiblePaths) {
+    try {
+      if (!fs.existsSync(dictPath)) continue;
+      const data = fs.readFileSync(dictPath, 'utf-8');
+      synonymCache = JSON.parse(data) as SynonymMap;
+      return synonymCache;
+    } catch (error) {
+      console.error('Failed to load synonyms from:', dictPath, error);
+    }
+  }
+
+  console.error('Could not find curated_synonyms.json in any expected path. CWD:', process.cwd());
+  synonymCache = {};
   return synonymCache;
 }
 
