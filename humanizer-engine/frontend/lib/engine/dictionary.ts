@@ -4,19 +4,11 @@
  */
 
 import { readFileSync, existsSync } from "fs";
-import { join, resolve } from "path";
+import { join } from "path";
 
-// Resolve dictionary directory: try multiple possible locations
+// Keep runtime file tracing scoped to frontend/data for Turbopack builds.
 function findDictDir(): string {
-  const candidates = [
-    join(/* turbopackIgnore: true */ process.cwd(), "..", "dictionaries"),
-    join(/* turbopackIgnore: true */ process.cwd(), "dictionaries"),
-    resolve(__dirname, "..", "..", "..", "..", "dictionaries"), // relative to this file
-  ];
-  for (const dir of candidates) {
-    if (existsSync(dir)) return dir;
-  }
-  return candidates[0]; // fallback
+  return join(process.cwd(), "data");
 }
 
 const DICT_DIR = findDictDir();
