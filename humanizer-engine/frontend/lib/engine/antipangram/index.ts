@@ -28,6 +28,7 @@
 import type { AntiPangramConfig, TransformResult, ForensicProfile } from './types';
 import { buildForensicProfile, buildDocumentContext, splitToSentences, profileSentence } from './pangram-forensics';
 import { reflowDocument, deduplicateCrossParagraph } from './document-reflow';
+import { isSafeSwap, pickBestReplacement, contextFor } from '../synonym-safety';
 import {
   disruptConnector,
   surgicalEvaluativeRewrite,
@@ -360,18 +361,38 @@ function deepWordSwapBoost(text: string, protectedTerms: Set<string>): string {
       let result = sent;
       for (const [word, replacements] of Object.entries(DEEP_SWAP_MAP)) {
         if (protectedTerms.has(word.toLowerCase())) continue;
+        // Single-word replacements are the only safe pool here (multi-word
+        // replacements inside DEEP_SWAP_MAP produce odd bigrams like
+        // "research puts forward findings"). Filter them out before the gate.
+        const singleWordPool = replacements.filter((r) => !r.includes(' '));
+        if (singleWordPool.length === 0) continue;
         const re = new RegExp(`\\b${word}\\b`, 'gi');
-        if (re.test(result)) {
-          re.lastIndex = 0;
-          const replacement = replacements[result.length % replacements.length];
-          result = result.replace(re, (match) => {
-            // Preserve capitalization
-            if (match.charAt(0) === match.charAt(0).toUpperCase()) {
-              return replacement.charAt(0).toUpperCase() + replacement.slice(1);
-            }
-            return replacement;
-          });
-        }
+        result = result.replace(re, (match, offset: number) => {
+          // Build tokenized left/right context around this specific occurrence
+          // so the safety gate can score the bigram fit.
+          const tokens = result.split(/(\b)/);
+          // Find which token index corresponds to `offset` by walking lengths.
+          let pos = 0;
+          let tokenIdx = -1;
+          for (let k = 0; k < tokens.length; k++) {
+            if (pos === offset) { tokenIdx = k; break; }
+            pos += tokens[k].length;
+          }
+          const ctx = tokenIdx >= 0
+            ? { sentence: result, ...contextFor(tokens, tokenIdx) }
+            : { sentence: result, leftWord: '', rightWord: '' };
+          const wordLower = match.toLowerCase();
+          const safePick = pickBestReplacement(wordLower, singleWordPool, ctx);
+          if (!safePick || !isSafeSwap(wordLower, safePick, ctx)) {
+            // Safety gate rejected all candidates → keep original.
+            return match;
+          }
+          // Preserve capitalization
+          if (match.charAt(0) === match.charAt(0).toUpperCase()) {
+            return safePick.charAt(0).toUpperCase() + safePick.slice(1);
+          }
+          return safePick;
+        });
       }
       return result;
     }).join(' ');

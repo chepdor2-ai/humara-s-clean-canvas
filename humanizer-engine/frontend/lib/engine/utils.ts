@@ -6,6 +6,7 @@
 import nlp from "compromise";
 import * as rules from "./rules";
 import { getDictionary, ACADEMIC_INPUT_GUARD } from "./dictionary";
+import { isSafeSwap, pickBestReplacement, contextFor } from "./synonym-safety";
 
 // ── Real word validation cache ──
 
@@ -418,7 +419,22 @@ export function synonymReplace(
       continue;
     }
 
-    let replacement = valid[Math.floor(Math.random() * valid.length)];
+    // ── Synonym-safety gate ──
+    // Block swaps that would break a protected collocation (e.g.
+    // "statistically significant"), cross a register (academic →
+    // casual), or produce a known-bad result bigram. Also picks the
+    // replacement whose left/right bigrams are most natural.
+    const { leftWord, rightWord } = contextFor(tokens, i);
+    const safePick = pickBestReplacement(lower, valid, {
+      sentence,
+      leftWord,
+      rightWord,
+    });
+    if (!safePick || !isSafeSwap(lower, safePick, { sentence, leftWord, rightWord })) {
+      newTokens.push(tok);
+      continue;
+    }
+    let replacement = safePick;
 
     // POS guard: skip replacement if POS category clearly mismatches
     const origTag = tagMap.get(lower);

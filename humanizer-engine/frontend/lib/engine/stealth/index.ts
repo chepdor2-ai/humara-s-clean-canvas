@@ -21,6 +21,7 @@ import { runFullDetectorForensicsCleanup, deepSignalClean } from './forensics';
 import { detectDomain, getProtectedTermsForDomain } from '../domain-detector';
 import { resolveStrategy, type DomainStrategy } from '../domain-strategies';
 import { resolveTone, type ToneSettings } from '../ai-signal-dictionary';
+import { isSafeSwap, pickBestReplacement, contextFor } from '../synonym-safety';
 
 // Module-level strategy populated per-call by stealthHumanize
 let _stealthStrategy: DomainStrategy | null = null;
@@ -1663,18 +1664,28 @@ function processSentence(
         const pool = reps.filter(r => /^[a-zA-Z]+$/.test(r) && r.length >= 2
           && !REPLACEMENT_BLACKLIST.has(r.toLowerCase()) && r.toLowerCase() !== lower);
         if (pool.length > 0) {
-          let rep = pool[Math.floor(Math.random() * Math.min(3, pool.length))];
-          if (usedStem) rep = transferMorphology(tk, rep);
-          if (tk[0] === tk[0].toUpperCase()) {
-            rep = rep.charAt(0).toUpperCase() + rep.slice(1);
+          // Consult safety gate — picks the best replacement in this context
+          // and vetoes collocation-breakers / register drops / bad bigrams.
+          const { leftWord, rightWord } = contextFor(tokens2, i);
+          const safePick = pickBestReplacement(lower, pool, {
+            sentence: text,
+            leftWord,
+            rightWord,
+          });
+          if (safePick && isSafeSwap(lower, safePick, { sentence: text, leftWord, rightWord })) {
+            let rep = safePick;
+            if (usedStem) rep = transferMorphology(tk, rep);
+            if (tk[0] === tk[0].toUpperCase()) {
+              rep = rep.charAt(0).toUpperCase() + rep.slice(1);
+            }
+            const tkStem = naiveStem(tk.toLowerCase());
+            if (tkStem !== tk.toLowerCase() && /s$/.test(tk) && !/s$/.test(rep) && tk.length > 4) {
+              rep = addPlural(rep);
+            }
+            result2.push(rep);
+            extraSwaps++;
+            replaced = true;
           }
-          const tkStem = naiveStem(tk.toLowerCase());
-          if (tkStem !== tk.toLowerCase() && /s$/.test(tk) && !/s$/.test(rep) && tk.length > 4) {
-            rep = addPlural(rep);
-          }
-          result2.push(rep);
-          extraSwaps++;
-          replaced = true;
         }
       }
 
