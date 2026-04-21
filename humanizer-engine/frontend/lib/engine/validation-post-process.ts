@@ -771,6 +771,19 @@ export function fixMidSentenceCapitalization(text: string, originalText?: string
   // Only adds the comma when one is not already present before the year.
   text = text.replace(/\(([^)]+?[^,\s])(\s+)(\d{4})\)/g, '($1, $3)');
 
+  // Fix sentence-starting "Which" used as a determiner (not a relative pronoun)
+  // "Which main goal is to guarantee safety" → "The main goal is to guarantee safety"
+  // Only fires at sentence boundaries (after .!? or at text start), not mid-sentence relative clauses.
+  text = text.replace(/([.!?]\s+)Which\b/g, '$1The');
+  text = text.replace(/^Which\b/, 'The');
+
+  // Fix missing article "The" before subject noun phrases that commonly lose it via LLM paraphrasing:
+  // "Control model focuses on..." → "The control model focuses on..."
+  // "Responsibility model..." → "The responsibility model..."
+  // "Primary/Main goal is to..." → "The primary/main goal is to..."
+  const ARTICLE_DROP_PATTERN = /([.!?]\s+|^)((?:Control|Responsibility|Consensual|Primary|Main|Key|Core|Initial|Final|Overall)\s+(?:model|goal|aim|purpose|objective|approach|framework|strategy|method)\s+(?:is|was|are|were|focuses|centers|highlights|emphasizes|operates|stresses|promotes|advances|requires|generates|props up|extends|advocates))/g;
+  text = text.replace(ARTICLE_DROP_PATTERN, (_, prefix, phrase) => `${prefix}The ${phrase[0].toLowerCase()}${phrase.slice(1)}`);
+
   const { properNouns, properPhrases } = originalText
     ? extractProperNounSignals(originalText)
     : { properNouns: new Set<string>(), properPhrases: [] };

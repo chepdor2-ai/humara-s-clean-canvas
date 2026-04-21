@@ -2898,5 +2898,8 @@ export async function ghostProHumanize(
   const validated = validateAndRepairOutput(original, result);
   result = validated.text;
 
+  // Final dedup pass — catches duplicates introduced by repairHumanizedOutput
+  result = cleanOutputRepetitions(result);
+
   return result;
 }

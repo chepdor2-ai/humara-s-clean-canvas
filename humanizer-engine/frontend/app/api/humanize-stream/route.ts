@@ -1,4 +1,4 @@
-import { robustSentenceSplit, protectSpecialContent, restoreSpecialContent, type ProtectionMap } from '@/lib/engine/content-protection';
+import { robustSentenceSplit, protectSpecialContent, restoreSpecialContent, cleanOutputRepetitions, type ProtectionMap } from '@/lib/engine/content-protection';
 import { getDetector, TextSignals } from '@/lib/engine/multi-detector';
 import { isMeaningPreserved, isMeaningPreservedSync } from '@/lib/engine/semantic-guard';
 import { fixCapitalization, applyPhrasePatterns, fixPunctuation, expandAllContractions } from '@/lib/engine/shared-dictionaries';
@@ -757,6 +757,7 @@ export async function POST(req: Request) {
             const humarinMode = strength === 'strong' ? 'quality' : strength === 'light' ? 'turbo' : 'fast';
             const humarinResult = await humarinHumanize(input, humarinMode, inputWordCount <= 220);
             let output = humarinResult.humanized;
+            output = cleanOutputRepetitions(output);
             output = adaptiveOxygenChain(output);
             return output;
           };

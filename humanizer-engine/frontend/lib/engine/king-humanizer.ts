@@ -21,7 +21,7 @@
  *   - Title-case enforcement inside body text is corrected
  */
 
-import { robustSentenceSplit, humanizeTitle } from "./content-protection";
+import { robustSentenceSplit, humanizeTitle, cleanOutputRepetitions } from "./content-protection";
 import {
   applyAIWordKill,
   expandAllContractions,
@@ -477,6 +477,9 @@ export async function kingHumanize(text: string): Promise<KingResult> {
 
   // ── Post-processing (non-LLM cleanup) ──
   humanized = postProcess(humanized, text);
+
+  // ── Dedup: remove repeated sentences introduced by multi-phase LLM rewrites ──
+  humanized = cleanOutputRepetitions(humanized);
 
   const totalChange = measureWordChange(text, humanized);
   const outputWords = humanized.trim().split(/\s+/).length;

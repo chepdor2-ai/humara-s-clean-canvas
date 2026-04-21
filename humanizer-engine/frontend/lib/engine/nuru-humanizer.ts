@@ -786,7 +786,7 @@ function enforceMinimumChange(original: string, current: string, seed: number): 
     const origWords = original.toLowerCase().replace(/[^a-z\s]/g, '').split(/\s+/).filter(w => w.length > 3);
     const origSet = new Set(origWords);
     const BRUTE_SWAPS: Record<string, string> = {
-      'that': 'which', 'which': 'that', 'have': 'possess', 'make': 'render',
+      'have': 'possess', 'make': 'render',
       'give': 'grant', 'take': 'adopt', 'come': 'arrive', 'keep': 'retain',
       'need': 'demand', 'help': 'assist', 'find': 'discover', 'tell': 'inform',
       'know': 'recognize', 'think': 'consider', 'feel': 'sense', 'work': 'function',
@@ -1505,6 +1505,12 @@ export function nuruHumanize(
     // ── Quantifiers ──
     'many': 'numerous', 'most': 'the majority of', 'much': 'a great deal of',
     'few': 'a handful of', 'several': 'a number of', 'little': 'scant',
+    // ── High-frequency compensating swaps ──
+    'each': 'every', 'new': 'fresh', 'real': 'genuine', 'full': 'complete',
+    'likely': 'probable', 'issue': 'concern', 'key': 'pivotal',
+    'own': 'respective', 'goal': 'aim', 'main': 'primary',
+    'large': 'extensive', 'well': 'effectively', 'able': 'capable',
+    'set': 'established', 'given': 'provided',
   };
   for (let pIdx = 0; pIdx < reassembledParagraphs.length; pIdx++) {
     const para = reassembledParagraphs[pIdx];
