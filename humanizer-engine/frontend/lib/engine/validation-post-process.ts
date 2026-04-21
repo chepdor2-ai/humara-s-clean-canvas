@@ -767,6 +767,10 @@ function extractProperNounSignals(originalText: string): ProperNounSignals {
 export function fixMidSentenceCapitalization(text: string, originalText?: string): string {
   if (!text || !text.trim()) return text;
 
+  // Fix missing commas in parenthetical citations: (Author et al. YEAR) → (Author et al., YEAR)
+  // Only adds the comma when one is not already present before the year.
+  text = text.replace(/\(([^)]+?[^,\s])(\s+)(\d{4})\)/g, '($1, $3)');
+
   const { properNouns, properPhrases } = originalText
     ? extractProperNounSignals(originalText)
     : { properNouns: new Set<string>(), properPhrases: [] };
@@ -892,12 +896,23 @@ function fixLineCapitalization(line: string, properNouns: Set<string>): string {
         const prevCore = getTokenCore(prevToken).toLowerCase();
         const nextCore = getTokenCore(nextToken).toLowerCase();
 
+        // Detect patterns where this title-case word is an author/proper noun:
+        // - "Stojkovic & Lovell" (& connector)
+        // - "Stojkovic et al." (et al.)
+        // - "Stojkovic along with Lovell" (conjunction after proper noun)
+        // - "Stojkovic plus Lovell" (plus as conjunction)
+        // - "Stojkovic and Lovell" (and as conjunction between proper nouns)
         const isInlineNamePattern = prevToken === '&'
           || nextToken === '&'
           || nextCore === 'et'
           || prevCore === 'et'
           || nextCore === 'al'
-          || prevCore === 'al';
+          || prevCore === 'al'
+          || prevCore === 'plus'
+          || prevCore === 'along'
+          || prevCore === 'alongside'
+          || prevCore === 'together'
+          || prevCore === 'and';
 
         if (isInlineNamePattern) {
           return token;

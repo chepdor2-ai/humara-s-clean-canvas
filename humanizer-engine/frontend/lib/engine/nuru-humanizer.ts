@@ -914,8 +914,13 @@ const ACADEMIC_STARTERS = [
   'In a broader sense, ', 'On closer inspection, ', 'As a result, ',
 ];
 
+// Phrases that already mark a sentence as having a transition — don't stack another on top
+const ALREADY_TRANSITIONED_RE = /^(?:In this regard|On this point|Notably|To that end|By extension|In particular|Along these lines|Accordingly|From this standpoint|With this in mind|At the same time|In a broader sense|On closer inspection|As a result|In addition|Furthermore|Moreover|Additionally|Consequently|Nevertheless|Nonetheless|However|Therefore|Thus|Hence|Indeed|That said|Meanwhile|By contrast|In contrast|On the other hand|In other words|In essence|Specifically|For example|For instance|As such|Beyond this|Building on this|Alongside this|What is more|On a related note|Even so|Regardless|To conclude|In summary|On balance|For this reason|Put differently|Especially|Given this|With this aim|On the contrary|Fundamentally|Equally,|Also,|Still,|In response|Correspondingly|Of particular note|Significantly|To illustrate|Conversely|From another perspective),?\s/i;
+
 function applyStarterVariation(sentence: string, sentIdx: number, usedStarters: Set<string>): string {
   if (sentence.length < 20) return sentence;
+  // Guard: don't stack a second transition phrase onto a sentence that already begins with one
+  if (ALREADY_TRANSITIONED_RE.test(sentence)) return sentence;
   const starter = ACADEMIC_STARTERS[(sentIdx + sentence.charCodeAt(0)) % ACADEMIC_STARTERS.length];
   if (usedStarters.has(starter)) return sentence;
   usedStarters.add(starter);
@@ -1404,17 +1409,15 @@ export function nuruHumanize(
   // This is garble-safe because it only does word-level replacement.
   const origSentencesFlat = paragraphs.flatMap(p => robustSentenceSplit(p));
   const FINAL_SAFE_SWAPS: Record<string, string> = {
-    // ── Determiners / Articles ──
-    'the': 'this', 'that': 'which',
     // ── Conjunctions / Connectives ──
-    'and': 'as well as', 'but': 'yet', 'because': 'since', 'although': 'though',
+    'but': 'yet', 'because': 'since', 'although': 'though',
     'while': 'whereas', 'however': 'nonetheless', 'therefore': 'thus',
     'also': 'likewise', 'yet': 'still', 'hence': 'as a result',
     'moreover': 'besides', 'furthermore': 'in addition', 'nevertheless': 'even so',
     'consequently': 'as a result', 'nonetheless': 'all the same',
     'despite': 'notwithstanding', 'rather': 'instead', 'thus': 'hence',
     // ── Prepositions ──
-    'with': 'alongside', 'about': 'concerning', 'regarding': 'concerning',
+    'about': 'concerning', 'regarding': 'concerning',
     'upon': 'on', 'within': 'inside', 'through': 'via', 'toward': 'towards',
     'among': 'amongst', 'between': 'amid', 'beyond': 'past',
     // ── Pronouns / Reference ──
@@ -1488,7 +1491,7 @@ export function nuruHumanize(
     'effect': 'impact', 'problem': 'difficulty', 'question': 'inquiry',
     'answer': 'response', 'reason': 'rationale', 'nature': 'character',
     'truth': 'veracity', 'goods': 'assets', 'thought': 'reasoning',
-    'knowledge': 'understanding', 'model': 'paradigm', 'school': 'tradition',
+    'knowledge': 'understanding', 'school': 'tradition',
     'center': 'core', 'part': 'segment', 'level': 'tier', 'type': 'category',
     'area': 'domain', 'field': 'discipline', 'world': 'sphere',
     'right': 'entitlement', 'power': 'authority', 'interest': 'stake',

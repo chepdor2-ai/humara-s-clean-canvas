@@ -953,11 +953,11 @@ export function antiPangramHumanize(
   // ── Pass 11b: FINAL SAFE-SWAP PASS ──
   // Apply per-word synonym replacement to ensure 40% minimum change.
   const FINAL_APG_SWAPS: Record<string, string> = {
-    'the': 'this', 'that': 'which', 'and': 'as well as', 'but': 'yet',
+    'that': 'which', 'but': 'yet',
     'because': 'since', 'although': 'though', 'while': 'whereas',
     'however': 'nonetheless', 'therefore': 'thus', 'also': 'likewise',
     'yet': 'still', 'despite': 'notwithstanding', 'rather': 'instead',
-    'with': 'alongside', 'about': 'concerning', 'regarding': 'concerning',
+    'about': 'concerning', 'regarding': 'concerning',
     'through': 'via', 'among': 'amongst', 'which': 'that',
     'such': 'this kind of', 'these': 'those', 'some': 'certain',
     'other': 'additional', 'very': 'quite', 'often': 'frequently',
@@ -991,7 +991,7 @@ export function antiPangramHumanize(
     'basis': 'foundation', 'perspective': 'viewpoint', 'environment': 'climate',
     'argument': 'contention', 'discussion': 'discourse', 'analysis': 'examination',
     'point': 'aspect', 'work': 'research', 'truth': 'veracity',
-    'knowledge': 'understanding', 'model': 'paradigm', 'center': 'core',
+    'knowledge': 'understanding', 'center': 'core',
     'morality': 'ethics', 'integrity': 'soundness', 'freedom': 'liberty',
     'justice': 'equity', 'based': 'grounded', 'associated': 'linked',
     'related': 'connected', 'thought': 'reasoning', 'world': 'sphere',

@@ -532,7 +532,7 @@ const PERPLEXITY_BOOSTS: Array<{ pattern: RegExp; replacements: string[] }> = [
   { pattern: /\bidentify\b/gi, replacements: ['spot', 'catch', 'pick up on', 'notice'] },
   { pattern: /\brespond\b/gi, replacements: ['react', 'deal with', 'handle'] },
   { pattern: /\bmanage\b/gi, replacements: ['handle', 'deal with', 'work through'] },
-  { pattern: /\bcontrol\b/gi, replacements: ['handle', 'rein in', 'keep in check'] },
+  { pattern: /\bcontrol\b(?!\s+(?:model|group|period|variable|condition|theory|analysis|system|mechanism))/gi, replacements: ['handle', 'manage', 'oversee'] },
   { pattern: /\badopt\b/gi, replacements: ['pick up', 'take on', 'start using'] },
   { pattern: /\bovercome\b/gi, replacements: ['get past', 'push through', 'work through'] },
   { pattern: /\bsuch as\b/gi, replacements: ['like', 'including'] },
@@ -595,6 +595,7 @@ export function naturalizeVocabulary(
   }
 
   // Phase 3: Perplexity boosts (apply more aggressively at strong intensity)
+  // NOTE: Respects protectedTerms — words in the protected set are never replaced.
   for (const { pattern, replacements } of PERPLEXITY_BOOSTS) {
     pattern.lastIndex = 0;
     if (pattern.test(result)) {
@@ -602,10 +603,11 @@ export function naturalizeVocabulary(
       if (shouldApply) {
         pattern.lastIndex = 0;
         const replacement = replacements[result.length % replacements.length];
-        // Replace only first match
+        // Replace only first match, skipping if matched word is protected
         let replaced = false;
         result = result.replace(pattern, (match) => {
           if (replaced) return match;
+          if (protectedTerms.has(match.toLowerCase())) return match;
           replaced = true;
           if (match.charAt(0) === match.charAt(0).toUpperCase()) {
             return replacement.charAt(0).toUpperCase() + replacement.slice(1);
