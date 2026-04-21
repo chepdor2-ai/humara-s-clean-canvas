@@ -56,11 +56,9 @@ import {
   enforceCapitalization,
   enforceStrictRules,
   enforceSingleSentence,
-  getWordChangePercent,
-  type SurgeryItem,
-  type InputFeatures as SurgeryInputFeatures,
-} from "./sentence-surgery";
+import { getWordChangePercent, type SurgeryItem, type InputFeatures as SurgeryInputFeatures } from "./sentence-surgery";
 import OpenAI from "openai";
+import { getGroqClient } from "./groq-client";
 
 // ── Config — OpenAI only (gpt-4o-mini → gpt-4.1-nano → AntiPangram fallback) ──
 
@@ -77,6 +75,30 @@ function getOpenAIClient(): OpenAI {
   return _openaiClient;
 }
 
+async function groqCall(
+  system: string,
+  user: string,
+  temperature: number,
+  maxTokens = 4096,
+): Promise<string> {
+  const client = getGroqClient();
+  try {
+    const r = await client.chat.completions.create({
+      model: "llama-3.3-70b-versatile",
+      messages: [
+        { role: "system", content: system },
+        { role: "user", content: user },
+      ],
+      temperature,
+      max_tokens: maxTokens,
+    });
+    return r.choices[0]?.message?.content?.trim() ?? "";
+  } catch (err: unknown) {
+    console.warn(`[Premium] Groq fallback failed: ${err instanceof Error ? err.message : String(err)}`);
+    throw err;
+  }
+}
+
 async function llmCall(
   system: string,
   user: string,
@@ -84,24 +106,22 @@ async function llmCall(
   maxTokens = 4096,
 ): Promise<string> {
   const client = getOpenAIClient();
-  for (const model of [LLM_MODEL, LLM_FALLBACK_MODEL]) {
-    try {
-      const r = await client.chat.completions.create({
-        model,
-        messages: [
-          { role: "system", content: system },
-          { role: "user", content: user },
-        ],
-        temperature,
-        max_tokens: maxTokens,
-      });
-      const content = r.choices[0]?.message?.content?.trim() ?? "";
-      if (content) return content;
-    } catch (err: unknown) {
-      console.warn(`[Premium] ${model} failed: ${err instanceof Error ? err.message : String(err)}`);
-    }
+  try {
+    const r = await client.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [
+        { role: "system", content: system },
+        { role: "user", content: user },
+      ],
+      temperature,
+      max_tokens: maxTokens,
+    });
+    const content = r.choices[0]?.message?.content?.trim();
+    if (content) return content;
+  } catch (err: unknown) {
+    console.warn(`[Premium] gpt-4o-mini failed: ${err instanceof Error ? err.message : String(err)}. Falling back to Groq.`);
   }
-  throw new Error("All OpenAI models failed — AntiPangram fallback will apply.");
+  return groqCall(system, user, temperature, maxTokens);
 }
 
 // ── Input Feature Detection ──

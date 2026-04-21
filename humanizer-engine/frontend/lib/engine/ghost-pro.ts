@@ -122,7 +122,7 @@ async function groqCall(system: string, user: string, temperature: number, maxTo
 
 async function llmCall(system: string, user: string, temperature: number, maxTokens?: number, modelOverride?: string): Promise<string> {
   const client = getOpenAIClient();
-  const models = modelOverride ? [modelOverride] : [LLM_MODEL, LLM_FALLBACK_MODEL];
+  const models = modelOverride ? [modelOverride] : [LLM_MODEL];
 
   for (let i = 0; i < models.length; i++) {
     const model = models[i];
@@ -144,10 +144,11 @@ async function llmCall(system: string, user: string, temperature: number, maxTok
     } catch (err: unknown) {
       const errMsg = err instanceof Error ? err.message : String(err);
       console.warn(`  [GhostPro] Model ${model} failed: ${errMsg}`);
-      if (i < models.length - 1) console.log(`  [GhostPro] Falling back to ${models[i + 1]}...`);
     }
   }
-  throw new Error("All LLM models failed (gpt-4o-mini and gpt-4.1-nano).");
+  
+  console.log(`  [GhostPro] Falling back to Groq...`);
+  return groqCall(system, user, temperature, maxTokens);
 }
 
 // ── Input Feature Detection ──

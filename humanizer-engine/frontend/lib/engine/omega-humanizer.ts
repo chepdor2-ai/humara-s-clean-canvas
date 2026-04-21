@@ -34,6 +34,7 @@ import { getDetector } from "./multi-detector";
 import { robustSentenceSplit, humanizeTitle } from "./content-protection";
 import { validateAndRepairOutput } from "./validation-post-process";
 import OpenAI from "openai";
+import { getGroqClient } from "./groq-client";
 
 // ── MODEL SELECTION — OpenAI only (gpt-4o-mini → gpt-4.1-nano → AntiPangram fallback) ──
 const LLM_MODEL = process.env.LLM_MODEL ?? 'gpt-4o-mini';
@@ -49,6 +50,30 @@ function getOpenAIClient(): OpenAI {
   return _openaiClient;
 }
 
+async function groqCall(
+  system: string,
+  user: string,
+  temperature: number,
+  maxTokens = 512,
+): Promise<string> {
+  const client = getGroqClient();
+  try {
+    const r = await client.chat.completions.create({
+      model: "llama-3.3-70b-versatile",
+      messages: [
+        { role: "system", content: system },
+        { role: "user", content: user },
+      ],
+      temperature,
+      max_tokens: maxTokens,
+    });
+    return r.choices[0]?.message?.content?.trim() ?? "";
+  } catch (err: unknown) {
+    console.warn(`[Omega] Groq fallback failed: ${err instanceof Error ? err.message : String(err)}`);
+    throw err;
+  }
+}
+
 async function llmCall(
   system: string,
   user: string,
@@ -56,24 +81,22 @@ async function llmCall(
   maxTokens = 512,
 ): Promise<string> {
   const client = getOpenAIClient();
-  for (const model of [LLM_MODEL, LLM_FALLBACK_MODEL]) {
-    try {
-      const r = await client.chat.completions.create({
-        model,
-        messages: [
-          { role: "system", content: system },
-          { role: "user", content: user },
-        ],
-        temperature,
-        max_tokens: maxTokens,
-      });
-      const content = r.choices[0]?.message?.content?.trim() ?? "";
-      if (content) return content;
-    } catch (err: unknown) {
-      console.warn(`[Omega] ${model} failed: ${err instanceof Error ? err.message : String(err)}`);
-    }
+  try {
+    const r = await client.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [
+        { role: "system", content: system },
+        { role: "user", content: user },
+      ],
+      temperature,
+      max_tokens: maxTokens,
+    });
+    const content = r.choices[0]?.message?.content?.trim();
+    if (content) return content;
+  } catch (err: unknown) {
+    console.warn(`[Omega] gpt-4o-mini failed: ${err instanceof Error ? err.message : String(err)}. Falling back to Groq.`);
   }
-  throw new Error("All OpenAI models failed — AntiPangram fallback will apply.");
+  return groqCall(system, user, temperature, maxTokens);
 }
 
 // ══════════════════════════════════════════════════════════════════════════

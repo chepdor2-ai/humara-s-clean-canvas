@@ -16,7 +16,8 @@ import { premiumHumanize } from '@/lib/engine/premium-humanizer';
 import { humanizeV11 } from '@/lib/engine/v11';
 import { humaraHumanize } from '@/lib/humara';
 import { nuruHumanize } from '@/lib/engine/nuru-humanizer';
-import { stealthHumanize, stealthHumanizeTargeted } from '@/lib/engine/stealth';
+import { stealthHumanize, stealthHumanizeTargeted, type StealthHumanizeOptions } from '@/lib/engine/stealth';
+import { detectorTargetedPolish } from '@/lib/engine/detector-targeted-polish';
 import { applySentenceStartersDistribution, applyNuruDocumentFlowCalibration } from '@/lib/engine/stealth/nuru-document-phases';
 import { omegaHumanize } from '@/lib/engine/omega-humanizer';
 import { easyHumanize } from '@/lib/engine/easy-humanizer';
@@ -29,7 +30,10 @@ import { oxygen3Humanize } from '@/lib/engine/oxygen3-humanizer';
 import { synonymReplace } from '@/lib/engine/utils';
 import { applyAIWordKill } from '@/lib/engine/shared-dictionaries';
 import { postCleanGrammar } from '@/lib/engine/grammar-cleaner';
-import { fixMidSentenceCapitalization } from '@/lib/engine/validation-post-process';
+import { fixMidSentenceCapitalization, validateAndRepairOutput } from '@/lib/engine/validation-post-process';
+import { analyzeDocumentCoherence, fixDocumentCoherence } from '@/lib/engine/document-coherence';
+import { analyzeStyleStability, normalizeStyleStability } from '@/lib/engine/style-stability';
+import { analyze as analyzeContext } from '@/lib/engine/context-analyzer';
 import { createServiceClient } from '@/lib/supabase';
 import { getUsageStatsCompat, incrementUsageCompat } from '@/lib/server/usage-tracking';
 import { smartPreprocess, getMaxRestructureCount, selectForDownstreamRestructure, reassemblePreprocessed, measureWordChange, type SentenceAnalysis, type PreprocessResult, MAX_RESTRUCTURE_ITERATION } from '@/lib/engine/smart-preprocess';
@@ -139,6 +143,105 @@ function measureSentenceChange(original: string, modified: string): number {
   return changed / len;
 }
 
+function pickWeighted<T>(options: Array<{ value: T; weight: number }>): T {
+  const normalized = options.map((option) => ({ value: option.value, weight: Math.max(0, option.weight) }));
+  const total = normalized.reduce((sum, option) => sum + option.weight, 0);
+  if (total <= 0) return normalized[0].value;
+  let cursor = Math.random() * total;
+  for (const option of normalized) {
+    cursor -= option.weight;
+    if (cursor <= 0) return option.value;
+  }
+  return normalized[normalized.length - 1].value;
+}
+
+function clamp01(value: number): number {
+  return Math.max(0, Math.min(1, value));
+}
+
+interface AdaptiveCleanupPlan {
+  targetScore: number;
+  detectorPressure: number;
+  antiPangramIterations: number;
+  antiPangramVariance: number;
+  readabilityBias: number;
+  nuruIterations: number;
+  nuruLoops: number;
+  targetedSweeps: number;
+  universalCleaningPasses: number;
+  leadRewriteThreshold: number;
+  maxAdaptiveCycles: number;
+}
+
+function buildAdaptiveCleanupPlan(text: string, score: number, requestedTone: string | undefined, postProfile: string): AdaptiveCleanupPlan {
+  const ctx = analyzeContext(text);
+  const toneId = requestedTone ?? 'neutral';
+  const academicish = toneId === 'academic' || toneId === 'academic_blog' || ctx.tone === 'formal';
+  const blogish = toneId === 'academic_blog' || toneId === 'casual' || toneId === 'simple';
+  const technical = new Set(['technology', 'science', 'health', 'economics']).has(ctx.primaryTopic);
+  const social = new Set(['society', 'education', 'politics']).has(ctx.primaryTopic);
+  const targetScore = 5;
+  const detectorPressure = clamp01((Math.max(score, targetScore) - targetScore) / 55);
+  const lengthBias = clamp01((ctx.totalWords - 220) / 900);
+  const sentenceDensity = clamp01((ctx.avgSentenceLength - 18) / 16);
+  const readabilityBias = clamp01((blogish ? 0.90 : academicish ? 0.76 : 0.70) - (technical ? 0.05 : 0) + (social ? 0.03 : 0));
+  return {
+    targetScore,
+    detectorPressure,
+    antiPangramIterations: Math.max(10, Math.min(20, Math.round(10 + detectorPressure * 6 + lengthBias * 2 + (technical ? 1 : 0)))),
+    antiPangramVariance: Math.min(0.18, 0.04 + detectorPressure * 0.10 + (blogish ? 0.03 : 0)),
+    readabilityBias,
+    nuruIterations: Math.max(10, Math.min(18, Math.round(10 + detectorPressure * 5 + sentenceDensity * 2 + (postProfile === 'undetectability' ? 2 : 0)))),
+    nuruLoops: Math.max(4, Math.min(10, Math.round(4 + detectorPressure * 5 + lengthBias + (postProfile !== 'quality' ? 1 : 0)))),
+    targetedSweeps: Math.max(3, Math.min(8, Math.round(3 + detectorPressure * 4 + (technical ? 1 : 0)))),
+    universalCleaningPasses: Math.max(3, Math.min(10, Math.round(3 + detectorPressure * 6 + lengthBias + (blogish ? 1 : 0)))),
+    leadRewriteThreshold: 24 + detectorPressure * 18,
+    maxAdaptiveCycles: Math.max(2, Math.min(5, Math.round(2 + detectorPressure * 3 + (lengthBias > 0.4 ? 1 : 0)))),
+  };
+}
+
+function resolveAutoEngine(text: string, requestedTone?: string): { mode: 'core_engines' | 'detection_control'; engine: string } {
+  const ctx = analyzeContext(text);
+  const toneId = requestedTone ?? 'neutral';
+  const academicish = toneId === 'academic' || toneId === 'academic_blog' || ctx.tone === 'formal';
+  const conversational = toneId === 'casual' || toneId === 'simple' || ctx.tone === 'casual';
+  const technicalTopic = new Set(['technology', 'science', 'health', 'economics', 'politics', 'education']).has(ctx.primaryTopic);
+  const socialTopic = new Set(['society', 'education', 'politics', 'economics']).has(ctx.primaryTopic);
+
+  let coreWeight = 3;
+  let detectionWeight = 3;
+  if (academicish) detectionWeight += 4;
+  if (technicalTopic) detectionWeight += 3;
+  if (socialTopic) detectionWeight += 1;
+  if (toneId === 'academic_blog') detectionWeight += 2;
+  if (conversational) coreWeight += 4;
+  if (ctx.totalWords < 220) coreWeight += 2;
+  if (ctx.totalWords > 700) detectionWeight += 2;
+
+  const mode = pickWeighted([
+    { value: 'core_engines' as const, weight: coreWeight },
+    { value: 'detection_control' as const, weight: detectionWeight },
+  ]);
+
+  if (mode === 'core_engines') {
+    const engine = pickWeighted([
+      { value: 'easy', weight: conversational ? 7 : academicish ? 4 : 6 },
+      { value: 'ninja_1', weight: academicish || technicalTopic ? 5 : 3 },
+      { value: 'antipangram', weight: technicalTopic || ctx.totalWords > 500 ? 2 : 1 },
+    ]);
+    return { mode, engine };
+  }
+
+  const engine = pickWeighted([
+    { value: 'humara_v3_3', weight: ctx.primaryTopic === 'health' || ctx.primaryTopic === 'education' ? 6 : academicish ? 5 : 3 },
+    { value: 'oxygen', weight: ctx.primaryTopic === 'technology' || ctx.primaryTopic === 'science' ? 6 : toneId === 'academic_blog' ? 4 : 3 },
+    { value: 'king', weight: toneId === 'academic_blog' || socialTopic ? 5 : academicish ? 4 : 2 },
+    { value: 'nuru_v2', weight: technicalTopic && ctx.totalWords < 300 ? 3 : 2 },
+    { value: 'ghost_pro_wiki', weight: academicish || socialTopic ? 6 : 2 },
+  ]);
+  return { mode, engine };
+}
+
 export async function POST(req: Request) {
   try {
     let body: Record<string, unknown>;
@@ -151,12 +254,13 @@ export async function POST(req: Request) {
       });
     }
 
-    const { text, engine, strength, tone, strict_meaning, no_contractions, enable_post_processing, premium, humanization_rate, post_processing_profile } = body as {
+    const { text, engine, strength, tone, strict_meaning, no_contractions, enable_post_processing, premium, humanization_rate, post_processing_profile, auto_model } = body as {
       text: string; engine?: string; strength?: string; tone?: string;
       strict_meaning?: boolean; no_contractions?: boolean;
       enable_post_processing?: boolean; premium?: boolean;
       humanization_rate?: number;
       post_processing_profile?: string;
+      auto_model?: boolean;
     };
 
     // Humanization rate: 1-10 scale → minimum word-change threshold
@@ -239,15 +343,16 @@ export async function POST(req: Request) {
       }
     }
 
+    let resolvedEngineUsed = engine ?? 'oxygen';
     const stream = new ReadableStream({
       async start(controller) {
-        // ── Deadline safety: send partial results before Vercel kills the function ──
-        const DEADLINE_MS = 295_000; // 295s — 5s before Vercel's 300s hard cutoff
+        const DEADLINE_MS = 295_000;
         const startTime = Date.now();
         let deadlineReached = false;
-        let latestHumanized = text; // always holds the best result so far
+        let latestHumanized = text;
         let streamClosed = false;
         let deadlineTimer: ReturnType<typeof setTimeout> | null = null;
+
         const finishStream = (payload: Record<string, unknown>) => {
           if (streamClosed) return;
           streamClosed = true;
@@ -258,7 +363,7 @@ export async function POST(req: Request) {
               humanized: latestHumanized || text,
               word_count: (latestHumanized || text).split(/\s+/).filter(Boolean).length,
               input_word_count: text.split(/\s+/).filter(Boolean).length,
-              engine_used: engine ?? 'oxygen',
+              engine_used: resolvedEngineUsed,
               ...payload,
             });
           } finally {
@@ -302,7 +407,7 @@ export async function POST(req: Request) {
 
           // 3. Engine stage — the main humanization
           let humanized: string;
-          const eng = engine ?? 'oxygen';
+          let eng = engine ?? 'oxygen';
 
           // Engine display names for phase labels
           const ENGINE_DISPLAY: Record<string, string> = {
@@ -318,6 +423,16 @@ export async function POST(req: Request) {
             antipangram: 'Pangram',
             ai_analysis: 'AI Analysis',
           };
+          if (auto_model === true) {
+            const autoSelection = resolveAutoEngine(normalizedText, tone ?? 'neutral');
+            eng = autoSelection.engine;
+            sendSSE(controller, {
+              type: 'stage',
+              stage: `Auto Model: ${autoSelection.mode === 'core_engines' ? 'Core' : 'Detection'} → ${ENGINE_DISPLAY[eng] || eng}`,
+            });
+            await flushDelay(12);
+          }
+          resolvedEngineUsed = eng;
           const engineDisplayName = ENGINE_DISPLAY[eng] || eng;
 
           // Fast-loop engine detection (used for phase labeling + pipeline selection)
@@ -332,6 +447,33 @@ export async function POST(req: Request) {
             'ai_analysis',
           ]);
           const usePhasePipeline = PHASED_ENGINES.has(eng) && eng !== 'ai_analysis';
+          const ENGINES_WITH_BUILTIN_NURU = new Set([
+            'easy', 'ghost_pro_wiki', 'ninja_1', 'oxygen', 'nuru_v2',
+            'king', 'humara_v3_3', 'phantom', 'antipangram',
+            'ninja_2', 'ninja_3', 'ninja_5', 'ghost_trial_2',
+          ]);
+          const skipUniversalNuruPost = ENGINES_WITH_BUILTIN_NURU.has(eng);
+
+          const inputRiskReport = analyzeStyleStability(normalizedText, {
+            sourceText: text,
+            tone: tone ?? 'neutral',
+            engine: eng,
+          });
+          const inputRiskByIndex = new Map(inputRiskReport.sentences.map((sentence) => [sentence.index, sentence]));
+          const getRiskAdaptiveMinChange = (sentenceIndex: number, baseMin: number): number => {
+            const sentenceRisk = inputRiskByIndex.get(sentenceIndex);
+            if (!sentenceRisk) return baseMin;
+            if (sentenceRisk.styleClass === 'fact' || sentenceRisk.styleClass === 'citation') return Math.min(baseMin, 0.18);
+            if (sentenceRisk.riskLevel === 'low') return Math.min(baseMin, 0.22);
+            if (sentenceRisk.riskLevel === 'medium') return Math.min(baseMin, 0.32);
+            return baseMin;
+          };
+
+          sendSSE(controller, { type: 'stage', stage: 'Sentence Risk Analysis' });
+          await flushDelay(10);
+          console.log(
+            `[InputRisk] overall=${inputRiskReport.overallScore} profile=${inputRiskReport.profile} high=${inputRiskReport.highRiskCount}/${inputRiskReport.sentenceCount} flatness=${inputRiskReport.flatnessScore} opener=${inputRiskReport.openerDiversityScore}`,
+          );
 
           // Emit initial stage for non-phased engines only
           // (phased engines emit their own Phase labels inside the pipeline below)
@@ -424,18 +566,23 @@ export async function POST(req: Request) {
             const easyResult = await easyHumanize(input, effectiveStrength, tone ?? 'academic', easySBS);
             return easyResult.humanized;
           };
+          const runHumara22Full = async (input: string): Promise<string> => {
+            let s = await runHumara22(input);
+            s = deepNonLLMClean(s);
+            return s;
+          };
 
-          const runNuru = (input: string): string => {
-            const output = stealthHumanize(input, effectiveStrength ?? 'medium', tone ?? 'academic');
+          const runNuru = (input: string, options: StealthHumanizeOptions = {}): string => {
+            const output = stealthHumanize(input, effectiveStrength ?? 'medium', tone ?? 'academic', 15, options);
             return output && output.trim().length > 0 ? output : input;
           };
 
           // Single-pass Nuru for the outer iteration loop (1 internal iteration).
           // The 10-cycle outer loop provides the 10 total Nuru iterations.
-          const runNuruSinglePass = (input: string): string => {
+          const runNuruSinglePass = (input: string, options: StealthHumanizeOptions = {}): string => {
             // Protect special content (numbers, stats, citations) from Nuru transforms
             const { text: protectedInput, map: protMap } = protectSpecialContent(input);
-            const raw = stealthHumanize(protectedInput, effectiveStrength ?? 'medium', tone ?? 'academic', 1);
+            const raw = stealthHumanize(protectedInput, effectiveStrength ?? 'medium', tone ?? 'academic', 1, options);
             const output = raw && raw.trim().length > 0 ? raw : protectedInput;
             return restoreSpecialContent(output, protMap);
           };
@@ -478,9 +625,15 @@ export async function POST(req: Request) {
           };
 
           // Smart Nuru polish: wraps stealthHumanize for N-pass full-text polish
-          const applySmartNuruPolish = (input: string, maxPasses = 15): string => {
-            const output = stealthHumanize(input, effectiveStrength ?? 'medium', tone ?? 'academic', maxPasses);
+          const applySmartNuruPolish = (input: string, maxPasses = 15, options: StealthHumanizeOptions = {}): string => {
+            const output = stealthHumanize(input, effectiveStrength ?? 'medium', tone ?? 'academic', maxPasses, options);
             return output && output.trim().length > 0 ? output : input;
+          };
+
+          const applyProtectedSentenceTransform = (sentence: string, transform: (value: string) => string): string => {
+            const { text: protectedSentence, map } = protectSpecialContent(sentence);
+            const transformed = transform(protectedSentence);
+            return restoreCitationAuthorCasing(sentence, restoreSpecialContent(transformed, map));
           };
 
           // ══════════════════════════════════════════════════════════════
@@ -534,72 +687,76 @@ export async function POST(req: Request) {
             return result;
           };
 
-          // Tone-aware contraction policy: academic/academic_blog → expand; others → preserve
-          const isAcademicTone = tone === 'academic' || tone === 'academic_blog';
+          // Tone-aware style policy:
+          // - academic: formal, fully expanded prose
+          // - academic_blog: cleaner blog cadence with lighter formality
+          const isAcademicTone = tone === 'academic';
+          const isAcademicBlogTone = tone === 'academic_blog';
+          const shouldExpandContractions = isAcademicTone;
+          const antiPangramToneNarrow: 'academic' | 'professional' | 'casual' | 'neutral' =
+            isAcademicTone
+              ? 'academic'
+              : tone === 'professional' || tone === 'casual'
+                ? tone
+                : 'neutral';
+          const humaraToneNarrow: 'neutral' | 'academic' | 'professional' | 'casual' =
+            isAcademicTone
+              ? 'academic'
+              : isAcademicBlogTone
+                ? 'professional'
+                : tone === 'professional' || tone === 'casual'
+                  ? tone
+                  : 'neutral';
 
           // ── Deep non-LLM cleaning (per-sentence): AI signal removal ──
           const deepNonLLMClean = (sentence: string): string => {
-            // Layer 1: Kill flagged AI vocabulary (utilize→use, leverage→draw on, etc.)
-            let s = applyAIWordKill(sentence);
-            // Layer 2: Vary connectors with alternatives
-            s = academicConnectorVariation(s);
-            // Layer 3: Phrase-level transforms (verb phrases, hedging, transitions)
-            s = applyPhrasePatterns(s);
-            // Layer 4: Collocation replacement (multi-word phrase variation)
-            s = replaceCollocations(s);
-            // Layer 5: Compress wordy AI phrases to concise phrasing
-            s = compressPhrases(s);
-            // Layer 6: Expand contractions only for academic tones
-            if (isAcademicTone) s = expandAllContractions(s);
-            // Layer 7: Remove em-dashes (AI detection signal) + fix punctuation
-            s = removeEmDashes(s);
-            s = fixPunctuation(s);
-            s = stripResidualAIConnectors(s);
-            return s;
+            return applyProtectedSentenceTransform(sentence, (protectedSentence) => {
+              let s = applyAIWordKill(protectedSentence);
+              s = academicConnectorVariation(s);
+              s = applyPhrasePatterns(s);
+              s = replaceCollocations(s);
+              s = compressPhrases(s);
+              if (shouldExpandContractions) s = expandAllContractions(s);
+              s = removeEmDashes(s);
+              s = fixPunctuation(s);
+              s = stripResidualAIConnectors(s);
+              return s;
+            });
           };
 
           // ── Smoothing pass (per-sentence): flow & grammar repair ──
           // Applied after heavy engines to fix grammar breaks and ensure
           // the text reads as coherent prose, not patchy transforms.
           const smoothingPass = (sentence: string): string => {
-            // 1. Grammar repair: irregular verbs, subject-verb agreement, tense consistency
-            let s = postCleanGrammar(sentence);
-            // 2. Fix synonyms that landed in the wrong semantic context
-            s = fixOutOfContextSynonyms(s);
-            // 3. Validate adjective-noun collocations sound natural
-            s = validateCollocations(s);
-            // 4. Vary any repeated connectors with alternatives
-            s = academicConnectorVariation(s);
-            // 5. Expand contractions only for academic tones
-            if (isAcademicTone) s = expandAllContractions(s);
-            // 6. Punctuation + capitalization cleanup
-            s = fixPunctuation(s);
-            s = fixMidSentenceCapitalization(s);
-            s = removeEmDashes(s);
-            return s;
+            return applyProtectedSentenceTransform(sentence, (protectedSentence) => {
+              let s = postCleanGrammar(protectedSentence);
+              s = fixOutOfContextSynonyms(s);
+              s = validateCollocations(s);
+              s = academicConnectorVariation(s);
+              if (shouldExpandContractions) s = expandAllContractions(s);
+              s = fixPunctuation(s);
+              s = fixMidSentenceCapitalization(s);
+              s = removeEmDashes(s);
+              return s;
+            });
           };
 
           // ── Final smoothing & grammar (per-sentence): deep intelligent polish ──
           // Last phase — ensures output reads as polished writing.
           // Every step uses deterministic linguistic rules; no random template shuffling.
           const finalSmoothGrammar = (sentence: string): string => {
-            // 1. Full grammar repair: irregular verbs, agreement, tense, structural fixes
-            let s = postCleanGrammar(sentence);
-            // 2. Fix out-of-context synonyms that earlier phases introduced
-            s = fixOutOfContextSynonyms(s);
-            // 3. Validate that adjective-noun collocations are natural pairings
-            s = validateCollocations(s);
-            // 4. Vary any remaining AI-pattern connectors with alternatives
-            s = academicConnectorVariation(s);
-            // 5. Expand contractions only for academic tones
-            if (isAcademicTone) s = expandAllContractions(s);
-            // 6. Final punctuation + capitalization pass
-            s = fixPunctuation(s);
-            s = fixMidSentenceCapitalization(s);
-            // 7. Remove em-dashes (strong AI signal)
-            s = removeEmDashes(s);
-            s = stripResidualAIConnectors(s);
-            return s;
+            return applyProtectedSentenceTransform(sentence, (protectedSentence) => {
+              let s = postCleanGrammar(protectedSentence);
+              s = fixOutOfContextSynonyms(s);
+              s = validateCollocations(s);
+              s = academicConnectorVariation(s);
+              if (shouldExpandContractions) s = expandAllContractions(s);
+              s = fixPunctuation(s);
+              s = fixMidSentenceCapitalization(s);
+              s = removeEmDashes(s);
+              s = stripResidualAIConnectors(s);
+              return s;
+            });
           };
 
           // ══════════════════════════════════════════════════════════════
@@ -763,8 +920,7 @@ export async function POST(req: Request) {
               // Phase 1 only: Easy (Swift) — remaining phases handled in pipeline
               return await runGuarded('ninja_2_s1', () => runHumara22Clean(sentence), sentence, 35_000);
             } else if (eng === 'ninja_5') {
-              // Phase 1 only: Humara 2.2 — remaining phases handled in pipeline
-              return await runGuarded('ninja_5_s1', () => runHumara22(sentence), sentence, 35_000);
+              return await runGuarded('ninja_5_s1', () => runHumara24Full(sentence), sentence);
             } else if (eng === 'ghost_trial_2') {
               // Phase 1 only: Humara 2.4 — remaining phases handled in pipeline
               return await runGuarded('gt2_s1', () => runHumara24Full(sentence), sentence);
@@ -776,12 +932,6 @@ export async function POST(req: Request) {
             } else if (eng === 'nuru') {
               return nuruHumanize(sentence, strength ?? 'medium', tone ?? 'academic');
             } else if (eng === 'humara') {
-              const humaraToneNarrow: 'neutral' | 'academic' | 'professional' | 'casual' =
-                tone === 'academic' || tone === 'academic_blog'
-                  ? 'academic'
-                  : tone === 'professional' || tone === 'casual'
-                    ? tone
-                    : 'neutral';
               return humaraHumanize(sentence, {
                 strength: strength === 'high' ? 'heavy' : strength === 'low' ? 'light' : (strength ?? 'medium') as 'light' | 'medium' | 'heavy',
                 tone: humaraToneNarrow,
@@ -827,16 +977,10 @@ export async function POST(req: Request) {
             } else if (eng === 'antipangram') {
               // Standalone AntiPangram engine: forensic signal destruction on full text + Nuru post-processing
               const { antiPangramSimple } = await import('@/lib/engine/antipangram');
-              const apgToneA: 'academic' | 'professional' | 'casual' | 'neutral' =
-                tone === 'academic' || tone === 'academic_blog'
-                  ? 'academic'
-                  : tone === 'professional' || tone === 'casual'
-                    ? tone
-                    : 'neutral';
               fullResult = antiPangramSimple(
                 normalizedText,
                 (strength ?? 'strong') as 'light' | 'medium' | 'strong',
-                apgToneA,
+                antiPangramToneNarrow,
               );
             } else if (eng === 'ninja_3') {
               // Alpha (stealth loop optimized): Wiki → Nuru → Phantom until score < 20
@@ -881,8 +1025,6 @@ export async function POST(req: Request) {
               //   → Post-Processing (profile-driven) → 5 iterative loops
               //   × 3 sweeps targeting <20% AI score.
               // ═══════════════════════════════════════════════════════════
-              const MAX_ITER = 5;
-              const TARGET_SCORE = 20;
               const timeOk = () => !(deadlineReached || Date.now() - startTime > DEADLINE_MS - 12000);
 
               // ── Phase 0: Pre-Analysis ──
@@ -891,6 +1033,9 @@ export async function POST(req: Request) {
               const detector = getDetector();
               const preAnalysis = detector.analyze(normalizedText);
               const initialAiScore = getDetectorAverage(preAnalysis);
+              let aiAdaptivePlan = buildAdaptiveCleanupPlan(normalizedText, initialAiScore, tone ?? 'neutral', postProcessingProfile);
+              const MAX_ITER = Math.max(5, aiAdaptivePlan.maxAdaptiveCycles + 2);
+              const TARGET_SCORE = aiAdaptivePlan.targetScore;
               const isHighAI = initialAiScore >= 55;
               const isMediumAI = initialAiScore >= 30 && initialAiScore < 55;
               const useAntiPangram = postProcessingProfile === 'quality'
@@ -913,16 +1058,18 @@ export async function POST(req: Request) {
               await flushDelay(12);
               if (timeOk()) {
                 const { antiPangramSimple } = await import('@/lib/engine/antipangram');
-                const apgToneAuto: 'academic' | 'professional' | 'casual' | 'neutral' =
-                  tone === 'academic' || tone === 'academic_blog'
-                    ? 'academic'
-                    : tone === 'professional' || tone === 'casual'
-                      ? tone
-                      : 'neutral';
                 working = antiPangramSimple(
                   working,
                   (strength ?? 'strong') as 'light' | 'medium' | 'strong',
-                  apgToneAuto,
+                  antiPangramToneNarrow,
+                  {
+                    maxIterations: aiAdaptivePlan.antiPangramIterations,
+                    targetAiScore: aiAdaptivePlan.targetScore,
+                    detectorPressure: aiAdaptivePlan.detectorPressure,
+                    preserveLeadSentence: true,
+                    humanVariance: aiAdaptivePlan.antiPangramVariance,
+                    readabilityBias: aiAdaptivePlan.readabilityBias,
+                  },
                 );
               }
 
@@ -934,12 +1081,17 @@ export async function POST(req: Request) {
                 for (let i = 0; i < cleanSents.length; i++) {
                   if (!isHeadingSentCheck(cleanSents[i])) {
                     cleanSents[i] = deepNonLLMClean(cleanSents[i]);
-                    for (let p = 0; p < 10; p++) {
-                      cleanSents[i] = runNuruSinglePass(cleanSents[i]);
+                    for (let p = 0; p < aiAdaptivePlan.nuruIterations; p++) {
+                      cleanSents[i] = runNuruSinglePass(cleanSents[i], {
+                        detectorPressure: aiAdaptivePlan.detectorPressure,
+                        preserveLeadSentences: true,
+                        humanVariance: 0.02 + aiAdaptivePlan.detectorPressure * 0.04,
+                        readabilityBias: aiAdaptivePlan.readabilityBias,
+                      });
                     }
                     cleanSents[i] = finalSmoothGrammar(cleanSents[i]);
                   }
-                  sendSSE(controller, { type: 'sentence', index: i, text: cleanSents[i], stage: 'Deep Clean + Nuru ×10' });
+                  sendSSE(controller, { type: 'sentence', index: i, text: cleanSents[i], stage: `Deep Clean + Nuru ×${aiAdaptivePlan.nuruIterations}` });
                 }
                 working = reassembleText(cleanSents, cleanBounds.length ? cleanBounds : [0]);
               }
@@ -950,16 +1102,18 @@ export async function POST(req: Request) {
                   sendSSE(controller, { type: 'stage', stage: 'AI Analysis: Pangram Forensic Clean' });
                   await flushDelay(10);
                   const { antiPangramSimple } = await import('@/lib/engine/antipangram');
-                  const apgToneB: 'academic' | 'professional' | 'casual' | 'neutral' =
-                    tone === 'academic' || tone === 'academic_blog'
-                      ? 'academic'
-                      : tone === 'professional' || tone === 'casual'
-                        ? tone
-                        : 'neutral';
                   working = antiPangramSimple(
                     working,
                     (strength ?? 'strong') as 'light' | 'medium' | 'strong',
-                    apgToneB,
+                    antiPangramToneNarrow,
+                    {
+                      maxIterations: aiAdaptivePlan.antiPangramIterations,
+                      targetAiScore: aiAdaptivePlan.targetScore,
+                      detectorPressure: aiAdaptivePlan.detectorPressure,
+                      preserveLeadSentence: true,
+                      humanVariance: aiAdaptivePlan.antiPangramVariance,
+                      readabilityBias: aiAdaptivePlan.readabilityBias,
+                    },
                   );
                 } else {
                   sendSSE(controller, { type: 'stage', stage: 'AI Analysis: Nuru 2.0 Full Post-Processing' });
@@ -993,6 +1147,7 @@ export async function POST(req: Request) {
               const totalContentSentsForCap = workingSentences.filter(s => !isHeadingSentCheck(s)).length;
               const maxRestructPerIter = Math.max(1, Math.ceil(totalContentSentsForCap * MAX_RESTRUCTURE_ITERATION));
               let currentScan = getFlaggedSentenceDetails(workingSentences);
+              aiAdaptivePlan = buildAdaptiveCleanupPlan(reassembleText(workingSentences, workingBounds.length ? workingBounds : [0]), currentScan.detectorAverage, tone ?? 'neutral', postProcessingProfile);
               sendSSE(controller, { type: 'stage', stage: `AI Analysis: Post-Agent Score ${Math.round(currentScan.detectorAverage)}%` });
               await flushDelay(12);
 
@@ -1005,6 +1160,7 @@ export async function POST(req: Request) {
                 if (!timeOk()) break;
 
                 const useHeavyPass = currentScan.detectorAverage >= 35;
+                aiAdaptivePlan = buildAdaptiveCleanupPlan(reassembleText(workingSentences, workingBounds.length ? workingBounds : [0]), currentScan.detectorAverage, tone ?? 'neutral', postProcessingProfile);
                 sendSSE(controller, {
                   type: 'stage',
                   stage: `AI Analysis: Iteration ${iteration + 1} (${Math.round(currentScan.detectorAverage)}%)`,
@@ -1012,7 +1168,7 @@ export async function POST(req: Request) {
                 await flushDelay(10);
 
                 let restructuredThisIter = 0;
-                for (let sweep = 0; sweep < 3; sweep++) {
+                for (let sweep = 0; sweep < aiAdaptivePlan.targetedSweeps; sweep++) {
                   for (const flagged of currentScan.flagged) {
                     if (isHeadingSentCheck(workingSentences[flagged.index])) continue;
                     const before = workingSentences[flagged.index];
@@ -1055,10 +1211,44 @@ export async function POST(req: Request) {
                 }
 
                 currentScan = getFlaggedSentenceDetails(workingSentences);
+                aiAdaptivePlan = buildAdaptiveCleanupPlan(reassembleText(workingSentences, workingBounds.length ? workingBounds : [0]), currentScan.detectorAverage, tone ?? 'neutral', postProcessingProfile);
                 await flushDelay(8);
               }
 
               fullResult = reassembleText(workingSentences, workingBounds.length ? workingBounds : [0]);
+
+              // ── Phase 6: Detector-Signal-Targeted Polish ──
+              // Last pass: read the 20-signal vector and attack the remaining
+              // worst offenders. Drives scores below the adaptive target.
+              if (timeOk() && currentScan.detectorAverage > TARGET_SCORE) {
+                try {
+                  sendSSE(controller, { type: 'stage', stage: `AI Analysis: Detector Polish (${Math.round(currentScan.detectorAverage)}%)` });
+                  await flushDelay(8);
+                  const polish = await detectorTargetedPolish(fullResult, {
+                    targetScore: aiAdaptivePlan.targetScore,
+                    maxIterations: 4,
+                    timeBudgetMs: Math.max(4_000, DEADLINE_MS - (Date.now() - startTime) - 10_000),
+                    preserveLeadSentences: true,
+                    tone: tone ?? 'academic',
+                    strength: (strength ?? 'strong') as 'light' | 'medium' | 'strong',
+                    readabilityBias: aiAdaptivePlan.readabilityBias,
+                    onStage: async (stage: string, score: number) => {
+                      sendSSE(controller, { type: 'stage', stage: `AI Analysis: ${stage} (~${Math.round(score)}%)` });
+                      await flushDelay(4);
+                    },
+                  });
+                  if (polish.text && polish.text.trim().length >= fullResult.trim().length * 0.7) {
+                    fullResult = polish.text;
+                    sendSSE(controller, {
+                      type: 'stage',
+                      stage: `AI Analysis: Polish complete (${polish.signalsFixed.slice(0, 3).join(', ') || 'no gaps'})`,
+                    });
+                    await flushDelay(6);
+                  }
+                } catch (polishErr) {
+                  console.warn('[AI Analysis] DetectorPolish skipped:', polishErr);
+                }
+              }
             } else if (eng === 'humara_v3_3' || eng === 'phantom') {
               fullResult = await runHumara24(normalizedText);
             } else if (eng === 'easy') {
@@ -1245,15 +1435,12 @@ export async function POST(req: Request) {
                   { name: 'Restructuring', type: 'async', fn: (s) => restructureSentence(s) },
                   { name: 'Nuru 2.0', type: 'nuru', passes: 10 },
                   { name: 'Deep Non-LLM Clean', type: 'sync', fn: (s) => deepNonLLMClean(s) },
-                  { name: 'Nuru 2.0 (Targeted)', type: 'nuru', passes: 5 },
                   { name: 'Readability Polish', type: 'async', fn: (s) => nuruReadabilityPolish(s) },
                   { name: 'Final Smooth & Grammar', type: 'sync', fn: (s) => finalSmoothGrammar(s) },
                 ];
                 break;
               case 'nuru_v2':
                 phases = [
-                  { name: 'Restructuring', type: 'async', fn: (s) => restructureSentence(s) },
-                  { name: 'Deep Clean', type: 'nuru', passes: 10 },
                   { name: 'Deep Non-LLM Clean', type: 'sync', fn: (s) => deepNonLLMClean(s) },
                   { name: 'Readability Polish', type: 'async', fn: (s) => nuruReadabilityPolish(s) },
                   { name: 'Final Smooth & Grammar', type: 'sync', fn: (s) => finalSmoothGrammar(s) },
@@ -1324,10 +1511,9 @@ export async function POST(req: Request) {
                 ];
                 break;
               case 'ninja_5':
-                // Humara 2.2 → Humara 2.4 (Full) → Nuru 2.0 → Deep Non-LLM Clean → Readability Polish → Final Smooth
                 phases = [
-                  { name: 'Humara 2.2', type: 'emit' },
-                  { name: 'Humara 2.4 (Full)', type: 'async', fn: (s) => runHumara24Full(s) },
+                  { name: 'Humara 2.4', type: 'emit' },
+                  { name: 'Humara 2.2 (Full)', type: 'async', fn: (s) => runHumara22Full(s) },
                   { name: 'Nuru 2.0', type: 'nuru', passes: CHAIN_TS },
                   { name: 'Deep Non-LLM Clean', type: 'sync', fn: (s) => deepNonLLMClean(s) },
                   { name: 'Readability Polish', type: 'async', fn: (s) => nuruReadabilityPolish(s) },
@@ -1372,7 +1558,7 @@ export async function POST(req: Request) {
               // ── Minimum change enforcement (driven by humanization rate) ──
               // For sync/async/nuru phases, each sentence must achieve ≥minChangeThreshold
               // word change from its state BEFORE this phase started.
-              const MIN_CHANGE = phaseMinChangeThreshold;
+              const BASE_MIN_CHANGE = phaseMinChangeThreshold;
               const MAX_RETRIES = 2; // Retries for sync/async phases when change is below threshold
               const phaseInputSentences = [...currentSentences]; // snapshot before this phase
 
@@ -1383,6 +1569,7 @@ export async function POST(req: Request) {
                 const usedEmitWords = new Set<string>();
                 for (let i = 0; i < currentSentences.length; i++) {
                   if (!isHeadingSentCheck(currentSentences[i])) {
+                    const sentenceMinChange = getRiskAdaptiveMinChange(i, BASE_MIN_CHANGE);
                     const original = phaseInputSentences[i];
                     const { text: protectedSent, map: sentMap } = protectSpecialContent(currentSentences[i]);
                     let result = deepNonLLMClean(protectedSent);
@@ -1396,7 +1583,7 @@ export async function POST(req: Request) {
                     }
                     // If still below threshold, apply AI word kill as fallback
                     const change = measureSentenceChange(original, result);
-                    if (change < MIN_CHANGE) {
+                    if (change < sentenceMinChange) {
                       result = applyAIWordKill(result);
                       result = synonymReplace(result, 0.9, usedEmitWords);
                     }
@@ -1412,6 +1599,7 @@ export async function POST(req: Request) {
                 // Sentence count must remain exactly the same (no splits or merges).
                 for (let i = 0; i < currentSentences.length; i++) {
                   if (!isHeadingSentCheck(currentSentences[i])) {
+                    const sentenceMinChange = getRiskAdaptiveMinChange(i, BASE_MIN_CHANGE);
                     const original = phaseInputSentences[i];
                     const { text: protectedSent, map: sentMap } = protectSpecialContent(currentSentences[i]);
                     let result = phase.fn(protectedSent);
@@ -1427,7 +1615,7 @@ export async function POST(req: Request) {
 
                     let change = measureSentenceChange(original, result);
                     let retry = 0;
-                    while (change < MIN_CHANGE && retry < MAX_RETRIES) {
+                    while (change < sentenceMinChange && retry < MAX_RETRIES) {
                       const { text: rp, map: rm } = protectSpecialContent(result);
                       result = phase.fn(rp);
                       result = restoreSpecialContent(result, rm);
@@ -1480,6 +1668,7 @@ export async function POST(req: Request) {
                     }
 
                     const original = phaseInputSentences[i];
+                    const sentenceMinChange = getRiskAdaptiveMinChange(i, BASE_MIN_CHANGE);
                     try {
                       const { text: protectedSent, map: sentMap } = protectSpecialContent(sent);
                       let result = await phase.fn(protectedSent);
@@ -1494,7 +1683,7 @@ export async function POST(req: Request) {
 
                       let change = measureSentenceChange(original, result);
                       let retry = 0;
-                      while (change < MIN_CHANGE && retry < MAX_RETRIES) {
+                      while (change < sentenceMinChange && retry < MAX_RETRIES) {
                         const { text: rp, map: rm } = protectSpecialContent(result);
                         result = await phase.fn(rp);
                         result = restoreSpecialContent(result, rm);
@@ -1521,26 +1710,7 @@ export async function POST(req: Request) {
                   sendSSE(controller, { type: 'sentence', index: i, text: currentSentences[i], stage: phaseLabel });
                 }
               } else if (phase.type === 'nuru') {
-                // ═══════════════════════════════════════════════════════
-                // ADAPTIVE NURU WITH NON-LLM FORENSIC AI DETECTION
-                // Phase 1: 5 baseline passes (minimum for ALL engines)
-                // Phase 2: Non-LLM sentence-level forensic analysis
-                // Phase 3: Score-based extra bulk passes (0-5 more)
-                // Phase 4: 5 targeted passes on flagged sentences ONLY
-                // ═══════════════════════════════════════════════════════
-                const MIN_NURU_PASSES = Math.min(phase.passes, 5);
-                const maxNuruPasses = Math.max(phase.passes, MIN_NURU_PASSES);
-
-                // Scale Nuru passes based on post-processing profile:
-                // 'undetectability': +3 extra baseline, +3 targeted → more aggressive AI removal
-                // 'quality': -1 baseline → preserve more natural flow
-                // 'balanced': default behavior
-                const profileBaselineBonus = postProcessingProfile === 'undetectability' ? 3 : postProcessingProfile === 'quality' ? -1 : 0;
-                const profileTargetedBonus = postProcessingProfile === 'undetectability' ? 3 : 0;
-                const adjustedBaseline = Math.max(2, MIN_NURU_PASSES + profileBaselineBonus);
-
-                // ── Phase 1: Baseline passes on ALL sentences ──
-                for (let pass = 0; pass < adjustedBaseline; pass++) {
+                if (skipUniversalNuruPost) {
                   for (let i = 0; i < currentSentences.length; i++) {
                     if (!isHeadingSentCheck(currentSentences[i])) {
                       currentSentences[i] = runNuruSinglePass(currentSentences[i]);
@@ -1548,51 +1718,27 @@ export async function POST(req: Request) {
                     sendSSE(controller, { type: 'sentence', index: i, text: currentSentences[i], stage: phaseLabel });
                   }
                   await flushDelay(10);
-                }
+                } else {
+                  // ═══════════════════════════════════════════════════════
+                  // ADAPTIVE NURU WITH NON-LLM FORENSIC AI DETECTION
+                  // Phase 1: 5 baseline passes (minimum for ALL engines)
+                  // Phase 2: Non-LLM sentence-level forensic analysis
+                  // Phase 3: Score-based extra bulk passes (0-5 more)
+                  // Phase 4: 5 targeted passes on flagged sentences ONLY
+                  // ═══════════════════════════════════════════════════════
+                  const MIN_NURU_PASSES = Math.min(phase.passes, 5);
+                  const maxNuruPasses = Math.max(phase.passes, MIN_NURU_PASSES);
 
-                // ── Phase 2: Non-LLM forensic sentence-level AI detection ──
-                interface FlaggedSentence {
-                  index: number;
-                  ai_score: number;
-                  flagged_phrases: string[];
-                }
-                let overallAiScore = 50;
-                let flaggedSentences: FlaggedSentence[] = [];
+                  // Scale Nuru passes based on post-processing profile:
+                  // 'undetectability': +3 extra baseline, +3 targeted → more aggressive AI removal
+                  // 'quality': -1 baseline → preserve more natural flow
+                  // 'balanced': default behavior
+                  const profileBaselineBonus = postProcessingProfile === 'undetectability' ? 3 : postProcessingProfile === 'quality' ? -1 : 0;
+                  const profileTargetedBonus = postProcessingProfile === 'undetectability' ? 3 : 0;
+                  const adjustedBaseline = Math.max(2, MIN_NURU_PASSES + profileBaselineBonus);
 
-                try {
-                  const fullText = currentSentences.filter(s => !isHeadingSentCheck(s)).join(' ');
-                  const sigObj = new TextSignals(fullText);
-                  const allSignals = sigObj.getAllSignals();
-                  overallAiScore = Math.round(allSignals.per_sentence_ai_ratio ?? 50);
-
-                  // Get per-sentence details for targeted passes
-                  // Build a TextSignals from the joined non-heading sentences, then map back
-                  const nonHeadingIndices: number[] = [];
-                  for (let i = 0; i < currentSentences.length; i++) {
-                    if (!isHeadingSentCheck(currentSentences[i])) nonHeadingIndices.push(i);
-                  }
-                  const perSentDetails = sigObj.perSentenceDetails();
-                  // Map internal sentence indices back to currentSentences indices
-                  flaggedSentences = perSentDetails.map(d => ({
-                    index: nonHeadingIndices[d.index] ?? d.index,
-                    ai_score: d.ai_score,
-                    flagged_phrases: d.flagged_phrases,
-                  })).filter(d => d.index >= 0 && d.index < currentSentences.length);
-
-                  console.log(`[Nuru Non-LLM Forensic] Overall AI score: ${overallAiScore}, flagged sentences: ${flaggedSentences.length}/${currentSentences.length}`);
-                } catch (e: any) {
-                  console.warn(`[Nuru Non-LLM Forensic] Detection failed, using defaults: ${e.message}`);
-                }
-
-                // ── Phase 3: Score-based extra bulk Nuru passes (0-5 more) ──
-                if (maxNuruPasses > MIN_NURU_PASSES) {
-                  const extraPasses = Math.round(
-                    Math.max(0, Math.min(maxNuruPasses - MIN_NURU_PASSES,
-                      ((overallAiScore - 30) / 50) * (maxNuruPasses - MIN_NURU_PASSES)))
-                  );
-                  console.log(`[Nuru Adaptive] AI score ${overallAiScore} → +${extraPasses} bulk passes (total ${MIN_NURU_PASSES + extraPasses}/${maxNuruPasses})`);
-
-                  for (let pass = 0; pass < extraPasses; pass++) {
+                  // ── Phase 1: Baseline passes on ALL sentences ──
+                  for (let pass = 0; pass < adjustedBaseline; pass++) {
                     for (let i = 0; i < currentSentences.length; i++) {
                       if (!isHeadingSentCheck(currentSentences[i])) {
                         currentSentences[i] = runNuruSinglePass(currentSentences[i]);
@@ -1601,47 +1747,101 @@ export async function POST(req: Request) {
                     }
                     await flushDelay(10);
                   }
-                }
 
-                // ── Phase 4: 5 targeted passes on FLAGGED sentences only ──
-                if (flaggedSentences.length > 0 && !(deadlineReached || Date.now() - startTime > DEADLINE_MS - 8000)) {
-                  const TARGETED_PASSES = 5 + profileTargetedBonus;
-                  const flaggedSet = new Map<number, string[]>();
-                  for (const f of flaggedSentences) {
-                    flaggedSet.set(f.index, f.flagged_phrases);
+                  // ── Phase 2: Non-LLM forensic sentence-level AI detection ──
+                  interface FlaggedSentence {
+                    index: number;
+                    ai_score: number;
+                    flagged_phrases: string[];
                   }
-                  console.log(`[Nuru Targeted] Applying ${TARGETED_PASSES} targeted passes to ${flaggedSet.size} flagged sentences`);
+                  let overallAiScore = 50;
+                  let flaggedSentences: FlaggedSentence[] = [];
 
-                  for (let pass = 0; pass < TARGETED_PASSES; pass++) {
-                    for (const [idx, phrases] of flaggedSet) {
-                      if (isHeadingSentCheck(currentSentences[idx])) continue;
-                      if (phrases.length > 0) {
-                        // Use phrase-targeted Nuru that focuses on suspicious spans
-                        currentSentences[idx] = stealthHumanizeTargeted(currentSentences[idx], phrases, effectiveStrength ?? 'medium');
-                      } else {
-                        currentSentences[idx] = runNuruSinglePass(currentSentences[idx]);
-                      }
-                      sendSSE(controller, { type: 'sentence', index: idx, text: currentSentences[idx], stage: `${phaseLabel} (targeted)` });
+                  try {
+                    const fullText = currentSentences.filter(s => !isHeadingSentCheck(s)).join(' ');
+                    const sigObj = new TextSignals(fullText);
+                    const allSignals = sigObj.getAllSignals();
+                    overallAiScore = Math.round(allSignals.per_sentence_ai_ratio ?? 50);
+
+                    // Get per-sentence details for targeted passes
+                    // Build a TextSignals from the joined non-heading sentences, then map back
+                    const nonHeadingIndices: number[] = [];
+                    for (let i = 0; i < currentSentences.length; i++) {
+                      if (!isHeadingSentCheck(currentSentences[i])) nonHeadingIndices.push(i);
                     }
-                    await flushDelay(10);
+                    const perSentDetails = sigObj.perSentenceDetails();
+                    // Map internal sentence indices back to currentSentences indices
+                    flaggedSentences = perSentDetails.map(d => ({
+                      index: nonHeadingIndices[d.index] ?? d.index,
+                      ai_score: d.ai_score,
+                      flagged_phrases: d.flagged_phrases,
+                    })).filter(d => d.index >= 0 && d.index < currentSentences.length);
+
+                    console.log(`[Nuru Non-LLM Forensic] Overall AI score: ${overallAiScore}, flagged sentences: ${flaggedSentences.length}/${currentSentences.length}`);
+                  } catch (e: any) {
+                    console.warn(`[Nuru Non-LLM Forensic] Detection failed, using defaults: ${e.message}`);
+                  }
+
+                  // ── Phase 3: Score-based extra bulk Nuru passes (0-5 more) ──
+                  if (maxNuruPasses > MIN_NURU_PASSES) {
+                    const extraPasses = Math.round(
+                      Math.max(0, Math.min(maxNuruPasses - MIN_NURU_PASSES,
+                        ((overallAiScore - 30) / 50) * (maxNuruPasses - MIN_NURU_PASSES)))
+                    );
+                    console.log(`[Nuru Adaptive] AI score ${overallAiScore} → +${extraPasses} bulk passes (total ${MIN_NURU_PASSES + extraPasses}/${maxNuruPasses})`);
+
+                    for (let pass = 0; pass < extraPasses; pass++) {
+                      for (let i = 0; i < currentSentences.length; i++) {
+                        if (!isHeadingSentCheck(currentSentences[i])) {
+                          currentSentences[i] = runNuruSinglePass(currentSentences[i]);
+                        }
+                        sendSSE(controller, { type: 'sentence', index: i, text: currentSentences[i], stage: phaseLabel });
+                      }
+                      await flushDelay(10);
+                    }
+                  }
+
+                  // ── Phase 4: 5 targeted passes on FLAGGED sentences only ──
+                  if (flaggedSentences.length > 0 && !(deadlineReached || Date.now() - startTime > DEADLINE_MS - 8000)) {
+                    const TARGETED_PASSES = 5 + profileTargetedBonus;
+                    const flaggedSet = new Map<number, string[]>();
+                    for (const f of flaggedSentences) {
+                      flaggedSet.set(f.index, f.flagged_phrases);
+                    }
+                    console.log(`[Nuru Targeted] Applying ${TARGETED_PASSES} targeted passes to ${flaggedSet.size} flagged sentences`);
+
+                    for (let pass = 0; pass < TARGETED_PASSES; pass++) {
+                      for (const [idx, phrases] of flaggedSet) {
+                        if (isHeadingSentCheck(currentSentences[idx])) continue;
+                        if (phrases.length > 0) {
+                          // Use phrase-targeted Nuru that focuses on suspicious spans
+                          currentSentences[idx] = stealthHumanizeTargeted(currentSentences[idx], phrases, effectiveStrength ?? 'medium');
+                        } else {
+                          currentSentences[idx] = runNuruSinglePass(currentSentences[idx]);
+                        }
+                        sendSSE(controller, { type: 'sentence', index: idx, text: currentSentences[idx], stage: `${phaseLabel} (targeted)` });
+                      }
+                      await flushDelay(10);
+                    }
                   }
                 }
 
                 // ── Enforce 40% minimum change on any under-performing sentences ──
                 for (let i = 0; i < currentSentences.length; i++) {
                   if (isHeadingSentCheck(currentSentences[i])) continue;
+                  const sentenceMinChange = getRiskAdaptiveMinChange(i, BASE_MIN_CHANGE);
                   const original = phaseInputSentences[i];
                   let change = measureSentenceChange(original, currentSentences[i]);
                   let retry = 0;
                   const NURU_MIN_RETRIES = 3; // More retries for Nuru phases (cheap, non-LLM)
-                  while (change < MIN_CHANGE && retry < NURU_MIN_RETRIES) {
+                  while (change < sentenceMinChange && retry < NURU_MIN_RETRIES) {
                     currentSentences[i] = runNuruSinglePass(currentSentences[i]);
                     change = measureSentenceChange(original, currentSentences[i]);
                     sendSSE(controller, { type: 'sentence', index: i, text: currentSentences[i], stage: phaseLabel });
                     retry++;
                   }
                   // Final fallback: if still below threshold after retries, apply synonym replacement
-                  if (change < MIN_CHANGE) {
+                  if (change < sentenceMinChange) {
                     const usedFallback = new Set<string>();
                     currentSentences[i] = applyAIWordKill(currentSentences[i]);
                     currentSentences[i] = synonymReplace(currentSentences[i], 0.9, usedFallback);
@@ -1676,16 +1876,10 @@ export async function POST(req: Request) {
             sendSSE(controller, { type: 'stage', stage: 'AntiPangram Forensic Clean' });
             await flushDelay(10);
             const { antiPangramSimple } = await import('@/lib/engine/antipangram');
-            const apgToneC: 'academic' | 'professional' | 'casual' | 'neutral' =
-              tone === 'academic' || tone === 'academic_blog'
-                ? 'academic'
-                : tone === 'professional' || tone === 'casual'
-                  ? tone
-                  : 'neutral';
             humanized = antiPangramSimple(
               humanized,
               (strength ?? 'strong') as 'light' | 'medium' | 'strong',
-              apgToneC,
+              antiPangramToneNarrow,
             );
             latestHumanized = humanized;
             const { sentences: phantomSents } = splitIntoIndexedSentences(humanized);
@@ -1697,6 +1891,7 @@ export async function POST(req: Request) {
           // Detector + input analysis — needed for both post-processing and final detection
           const detector = getDetector();
           const inputAnalysis = detector.analyze(text);
+          let adaptivePostPlan: AdaptiveCleanupPlan | null = null;
 
           // ═══════════════════════════════════════════════════════════════
           // UNIVERSAL POST-PROCESSING — profile-driven
@@ -1713,158 +1908,217 @@ export async function POST(req: Request) {
           // ═══════════════════════════════════════════════════════════════
           if (eng !== 'ai_analysis' && !(deadlineReached || Date.now() - startTime > DEADLINE_MS - 12000)) {
             const nuruPostStart = Date.now();
-            const NURU_POST_DEADLINE_MS = 30_000; // 30s hard budget (up from 10s)
+            const NURU_POST_DEADLINE_MS = 30_000;
             const nuruPostTimeOk = () => Date.now() - nuruPostStart < NURU_POST_DEADLINE_MS && !(deadlineReached || Date.now() - startTime > DEADLINE_MS - 8000);
+            let currentAdaptiveScore = getDetectorAverage(detector.analyze(humanized));
+            adaptivePostPlan = buildAdaptiveCleanupPlan(normalizedText, currentAdaptiveScore, tone ?? 'neutral', postProcessingProfile);
 
-            // ── Quality Profile: AntiPangram 10 iterations → improve flow & quality ──
-            if (postProcessingProfile === 'quality' && nuruPostTimeOk()) {
-              sendSSE(controller, { type: 'stage', stage: 'AntiPangram Quality Post-Processing (10 iterations)' });
+            const collectPostFlagged = (sentences: string[]) => {
+              const postFullText = sentences.filter(s => !isHeadingSentCheck(s)).join(' ');
+              const postSigObj = new TextSignals(postFullText);
+              const postNonHeadingIndices: number[] = [];
+              for (let i = 0; i < sentences.length; i++) {
+                if (!isHeadingSentCheck(sentences[i])) postNonHeadingIndices.push(i);
+              }
+              const postDetails = postSigObj.perSentenceDetails();
+              return postDetails.map(d => ({
+                index: postNonHeadingIndices[d.index] ?? d.index,
+                ai_score: d.ai_score,
+                flagged_phrases: d.flagged_phrases,
+              })).filter(d => d.index >= 0 && d.index < sentences.length && d.ai_score >= Math.max(18, adaptivePostPlan?.targetScore ?? 5));
+            };
+
+            const runAdaptiveAntiPangram = async (stageLabel: string) => {
+              if (!nuruPostTimeOk() || !adaptivePostPlan) return;
+              sendSSE(controller, { type: 'stage', stage: `${stageLabel} (${adaptivePostPlan.antiPangramIterations} iterations)` });
               await flushDelay(10);
               const { antiPangramSimple } = await import('@/lib/engine/antipangram');
-              const apgToneD: 'academic' | 'professional' | 'casual' | 'neutral' =
-                tone === 'academic' || tone === 'academic_blog'
-                  ? 'academic'
-                  : tone === 'professional' || tone === 'casual'
-                    ? tone
-                    : 'neutral';
               humanized = antiPangramSimple(
                 humanized,
                 (strength ?? 'strong') as 'light' | 'medium' | 'strong',
-                apgToneD,
+                antiPangramToneNarrow,
+                {
+                  maxIterations: adaptivePostPlan.antiPangramIterations,
+                  targetAiScore: adaptivePostPlan.targetScore,
+                  detectorPressure: adaptivePostPlan.detectorPressure,
+                  preserveLeadSentence: true,
+                  humanVariance: adaptivePostPlan.antiPangramVariance,
+                  readabilityBias: adaptivePostPlan.readabilityBias,
+                },
               );
               latestHumanized = humanized;
-              console.log(`[Quality PostProc] AntiPangram complete: ${humanized.split(/\s+/).length} words`);
-            }
-
-            // ── Undetectability Profile: 10 dedicated Nuru iterations before loops ──
-            if (postProcessingProfile === 'undetectability' && nuruPostTimeOk()) {
-              sendSSE(controller, { type: 'stage', stage: 'Nuru Undetectability: 10 Deep Iterations' });
-              await flushDelay(10);
-              const { sentences: undetSents, paragraphBoundaries: undetBounds } = splitIntoIndexedSentences(humanized);
-              for (let nuruIter = 0; nuruIter < 10; nuruIter++) {
-                for (let i = 0; i < undetSents.length; i++) {
-                  if (!isHeadingSentCheck(undetSents[i])) {
-                    undetSents[i] = runNuruSinglePass(undetSents[i]);
-                  }
-                  sendSSE(controller, { type: 'sentence', index: i, text: undetSents[i], stage: `Nuru Stealth Iter ${nuruIter + 1}/10` });
-                }
-                await flushDelay(5);
-                if (!nuruPostTimeOk()) break;
-              }
-              // Deep clean after 10 iterations
-              for (let i = 0; i < undetSents.length; i++) {
-                if (!isHeadingSentCheck(undetSents[i])) {
-                  undetSents[i] = deepNonLLMClean(undetSents[i]);
-                  undetSents[i] = finalSmoothGrammar(undetSents[i]);
-                }
-              }
-              humanized = reassembleText(undetSents, undetBounds.length ? undetBounds : [0]);
-              latestHumanized = humanized;
-              console.log(`[Undetectability PostProc] 10 Nuru iterations + deep clean complete`);
-            }
-
-            const { sentences: postSentences, paragraphBoundaries: postParaBounds } = splitIntoIndexedSentences(humanized);
-            const postSents = [...postSentences];
-
-            // ── Nuru 2.0 Post-Processing: 5 loops × 3 passes (ALL profiles) ──
-            sendSSE(controller, { type: 'stage', stage: 'Nuru 2.0 Post-Processing' });
-            await flushDelay(10);
-
-            // Helper: extract critical numeric data from a sentence (decimal %, dollar amounts, citation years)
-            const extractCriticalData = (s: string): string[] => {
-              const stats = s.match(/\d+\.\d+%/g) ?? [];
-              const dollars = s.match(/\$[\d,.]+\s*(?:billion|million|trillion|thousand)/gi) ?? [];
-              const citations = s.match(/\([A-Za-z]+(?:\s+et\s+al\.?)?,\s*\d{4}\)/g) ?? [];
-              return [...stats, ...dollars, ...citations];
+              currentAdaptiveScore = getDetectorAverage(detector.analyze(humanized));
+              adaptivePostPlan = buildAdaptiveCleanupPlan(normalizedText, currentAdaptiveScore, tone ?? 'neutral', postProcessingProfile);
             };
 
-            if (nuruPostTimeOk()) {
-              for (let loop = 0; loop < UNIVERSAL_POST_LOOPS; loop++) {
-                for (let pass = 0; pass < UNIVERSAL_POST_PASSES_PER_LOOP; pass++) {
+            if ((postProcessingProfile === 'quality' || postProcessingProfile === 'balanced') && nuruPostTimeOk()) {
+              await runAdaptiveAntiPangram(postProcessingProfile === 'quality' ? 'AntiPangram Quality Post-Processing' : 'AntiPangram Balanced Post-Processing');
+            }
+
+            let adaptiveCycle = 0;
+            while (nuruPostTimeOk() && adaptivePostPlan && adaptiveCycle < adaptivePostPlan.maxAdaptiveCycles) {
+              const { sentences: postSentences, paragraphBoundaries: postParaBounds } = splitIntoIndexedSentences(humanized);
+              const postSents = [...postSentences];
+              const paragraphLeadSet = new Set(postParaBounds);
+
+              if (!skipUniversalNuruPost) {
+                sendSSE(controller, { type: 'stage', stage: `Nuru Adaptive Post-Processing ${adaptiveCycle + 1}/${adaptivePostPlan.maxAdaptiveCycles}` });
+                await flushDelay(10);
+                for (let nuruIter = 0; nuruIter < adaptivePostPlan.nuruIterations; nuruIter++) {
                   for (let i = 0; i < postSents.length; i++) {
                     if (!isHeadingSentCheck(postSents[i])) {
-                      const prevSent = postSents[i];
-                      const prevCritical = extractCriticalData(prevSent);
-                      postSents[i] = runNuruSinglePass(postSents[i]);
-                      postSents[i] = deepNonLLMClean(postSents[i]);
-                      // Guard: revert if critical data (stats, citations) was lost
-                      if (prevCritical.length > 0) {
-                        const newCritical = extractCriticalData(postSents[i]);
-                        const lost = prevCritical.filter(c => !newCritical.some(nc => nc.includes(c) || c.includes(nc)));
-                        if (lost.length > 0) {
-                          postSents[i] = prevSent; // Revert — critical data would be destroyed
-                        }
+                      const isParagraphLead = paragraphLeadSet.has(i);
+                      if (isParagraphLead && currentAdaptiveScore < adaptivePostPlan.leadRewriteThreshold) {
+                        postSents[i] = finalSmoothGrammar(deepNonLLMClean(postSents[i]));
+                      } else {
+                        postSents[i] = runNuruSinglePass(postSents[i], {
+                          detectorPressure: adaptivePostPlan.detectorPressure,
+                          preserveLeadSentences: isParagraphLead,
+                          humanVariance: 0.02 + adaptivePostPlan.detectorPressure * 0.04,
+                          readabilityBias: adaptivePostPlan.readabilityBias,
+                        });
+                        postSents[i] = deepNonLLMClean(postSents[i]);
+                        postSents[i] = finalSmoothGrammar(postSents[i]);
                       }
                     }
-                    sendSSE(controller, { type: 'sentence', index: i, text: postSents[i], stage: `Nuru Post Loop ${loop + 1}/5` });
+                    sendSSE(controller, { type: 'sentence', index: i, text: postSents[i], stage: `Nuru Stealth Iter ${nuruIter + 1}/${adaptivePostPlan.nuruIterations}` });
                   }
                   await flushDelay(5);
                   if (!nuruPostTimeOk()) break;
                 }
-                if (!nuruPostTimeOk()) break;
-              }
-              console.log(`[Nuru Post] ${UNIVERSAL_POST_LOOPS} loops x ${UNIVERSAL_POST_PASSES_PER_LOOP} passes done (${Date.now() - nuruPostStart}ms)`);
-            }
 
-            // ── Phase B: Non-LLM forensic detection ──
-            interface PostFlagged { index: number; ai_score: number; flagged_phrases: string[]; }
-            let postFlagged: PostFlagged[] = [];
-
-            if (nuruPostTimeOk()) {
-              try {
-                const postFullText = postSents.filter(s => !isHeadingSentCheck(s)).join(' ');
-                const postSigObj = new TextSignals(postFullText);
-                const postNonHeadingIndices: number[] = [];
-                for (let i = 0; i < postSents.length; i++) {
-                  if (!isHeadingSentCheck(postSents[i])) postNonHeadingIndices.push(i);
-                }
-                const postDetails = postSigObj.perSentenceDetails();
-                postFlagged = postDetails.map(d => ({
-                  index: postNonHeadingIndices[d.index] ?? d.index,
-                  ai_score: d.ai_score,
-                  flagged_phrases: d.flagged_phrases,
-                })).filter(d => d.index >= 0 && d.index < postSents.length);
-                console.log(`[Nuru Post Non-LLM] Flagged ${postFlagged.length}/${postSents.length} sentences (${Date.now() - nuruPostStart}ms)`);
-              } catch (e: any) {
-                console.warn(`[Nuru Post Non-LLM] Detection failed: ${e.message}`);
-              }
-            }
-
-            // ── Phase C: 3 targeted sweeps on flagged sentences only ──
-            if (postFlagged.length > 0 && nuruPostTimeOk()) {
-              const flagMap = new Map<number, string[]>();
-              for (const f of postFlagged) flagMap.set(f.index, f.flagged_phrases);
-              console.log(`[Nuru Post Targeted] Applying targeted passes to ${flagMap.size} flagged sentences`);
-
-              for (let pass = 0; pass < 3; pass++) {
-                for (const [idx, phrases] of flagMap) {
-                  if (isHeadingSentCheck(postSents[idx])) continue;
-                  if (phrases.length > 0) {
-                    postSents[idx] = stealthHumanizeTargeted(postSents[idx], phrases, effectiveStrength ?? 'medium');
-                  } else {
-                    postSents[idx] = runNuruSinglePass(postSents[idx]);
+                for (let loop = 0; loop < adaptivePostPlan.nuruLoops && nuruPostTimeOk(); loop++) {
+                  for (let i = 0; i < postSents.length; i++) {
+                    if (!isHeadingSentCheck(postSents[i])) {
+                      const isParagraphLead = paragraphLeadSet.has(i);
+                      if (!(isParagraphLead && currentAdaptiveScore < adaptivePostPlan.leadRewriteThreshold)) {
+                        postSents[i] = runNuruSinglePass(postSents[i], {
+                          detectorPressure: adaptivePostPlan.detectorPressure,
+                          preserveLeadSentences: isParagraphLead,
+                          humanVariance: 0.02 + adaptivePostPlan.detectorPressure * 0.04,
+                          readabilityBias: adaptivePostPlan.readabilityBias,
+                        });
+                      }
+                      postSents[i] = deepNonLLMClean(postSents[i]);
+                    }
+                    sendSSE(controller, { type: 'sentence', index: i, text: postSents[i], stage: `Nuru Post Loop ${loop + 1}/${adaptivePostPlan.nuruLoops}` });
                   }
-                  postSents[idx] = finalSmoothGrammar(postSents[idx]);
-                  sendSSE(controller, { type: 'sentence', index: idx, text: postSents[idx], stage: 'Nuru 2.0 (targeted)' });
+                  await flushDelay(5);
                 }
-                await flushDelay(5);
-                if (!nuruPostTimeOk()) break;
+
+                const postFlagged = collectPostFlagged(postSents);
+                if (postFlagged.length > 0 && nuruPostTimeOk()) {
+                  const flagMap = new Map<number, string[]>();
+                  for (const f of postFlagged) flagMap.set(f.index, f.flagged_phrases);
+                  for (let pass = 0; pass < adaptivePostPlan.targetedSweeps && nuruPostTimeOk(); pass++) {
+                    for (const [idx, phrases] of flagMap) {
+                      if (isHeadingSentCheck(postSents[idx])) continue;
+                      const isParagraphLead = paragraphLeadSet.has(idx);
+                      if (phrases.length > 0 && !(isParagraphLead && currentAdaptiveScore < adaptivePostPlan.leadRewriteThreshold)) {
+                        postSents[idx] = stealthHumanizeTargeted(postSents[idx], phrases, effectiveStrength ?? 'medium');
+                      } else if (!(isParagraphLead && currentAdaptiveScore < adaptivePostPlan.leadRewriteThreshold)) {
+                        postSents[idx] = runNuruSinglePass(postSents[idx], {
+                          detectorPressure: adaptivePostPlan.detectorPressure,
+                          preserveLeadSentences: isParagraphLead,
+                          humanVariance: 0.02,
+                          readabilityBias: adaptivePostPlan.readabilityBias,
+                        });
+                      }
+                      postSents[idx] = finalSmoothGrammar(postSents[idx]);
+                      sendSSE(controller, { type: 'sentence', index: idx, text: postSents[idx], stage: 'Nuru 2.0 (targeted)' });
+                    }
+                    await flushDelay(5);
+                  }
+                }
               }
-            }
 
-            humanized = reassembleText(postSents, postParaBounds.length ? postParaBounds : [0]);
-            latestHumanized = humanized;
-            console.log(`[Nuru Post] Complete in ${Date.now() - nuruPostStart}ms`);
+              humanized = reassembleText(postSents, postParaBounds.length ? postParaBounds : [0]);
+              latestHumanized = humanized;
+              currentAdaptiveScore = getDetectorAverage(detector.analyze(humanized));
+              adaptivePostPlan = buildAdaptiveCleanupPlan(normalizedText, currentAdaptiveScore, tone ?? 'neutral', postProcessingProfile);
 
-            // ── Complete Nuru Document Phases (sentence starters + flow calibration) ──
-            {
               const { sentences: nuruPostSents, paragraphBoundaries: sharedBounds } = splitIntoIndexedSentences(humanized);
               const { sentences: sharedSource } = splitIntoIndexedSentences(normalizedText);
               applySentenceStartersDistribution(nuruPostSents);
               applyNuruDocumentFlowCalibration(nuruPostSents, sharedBounds, sharedSource);
               humanized = reassembleText(nuruPostSents, sharedBounds.length ? sharedBounds : [0]);
               latestHumanized = humanized;
-              console.log(`[Nuru Doc Phases] Starter distribution + flow calibration applied`);
+              currentAdaptiveScore = getDetectorAverage(detector.analyze(humanized));
+              adaptivePostPlan = buildAdaptiveCleanupPlan(normalizedText, currentAdaptiveScore, tone ?? 'neutral', postProcessingProfile);
+
+              if (currentAdaptiveScore <= adaptivePostPlan.targetScore) break;
+              if ((postProcessingProfile === 'undetectability' || currentAdaptiveScore > 12) && nuruPostTimeOk()) {
+                await runAdaptiveAntiPangram('AntiPangram Detector Sweep');
+              }
+              adaptiveCycle++;
+            }
+
+            // ═══════════════════════════════════════════════════════════
+            // DETECTOR-SIGNAL-TARGETED POLISH
+            // Read the 20-signal vector and attack the worst offenders:
+            // sentence_uniformity, per_sentence_ai_ratio, starter_diversity,
+            // ngram_repetition, ai_pattern_score, function_word_freq.
+            // Provides the last ~5-10% of score reduction needed to hit
+            // <5% average across all 22 detectors consistently.
+            // ═══════════════════════════════════════════════════════════
+            if (nuruPostTimeOk() && currentAdaptiveScore > adaptivePostPlan.targetScore) {
+              try {
+                sendSSE(controller, { type: 'stage', stage: `Detector Polish (signal-targeted): ${Math.round(currentAdaptiveScore)}%` });
+                await flushDelay(8);
+                const polishBudget = Math.max(5_000, Math.min(18_000, NURU_POST_DEADLINE_MS - (Date.now() - nuruPostStart)));
+                const polish = await detectorTargetedPolish(humanized, {
+                  targetScore: adaptivePostPlan.targetScore,
+                  maxIterations: 4,
+                  timeBudgetMs: polishBudget,
+                  preserveLeadSentences: true,
+                  tone: tone ?? 'academic',
+                  strength: (strength ?? 'strong') as 'light' | 'medium' | 'strong',
+                  readabilityBias: adaptivePostPlan.readabilityBias,
+                  onStage: async (stage: string, score: number) => {
+                    sendSSE(controller, { type: 'stage', stage: `${stage} (~${Math.round(score)}%)` });
+                    await flushDelay(4);
+                  },
+                });
+                if (polish.text && polish.text.trim().length >= humanized.trim().length * 0.7) {
+                  humanized = polish.text;
+                  latestHumanized = humanized;
+                  currentAdaptiveScore = getDetectorAverage(detector.analyze(humanized));
+                  adaptivePostPlan = buildAdaptiveCleanupPlan(normalizedText, currentAdaptiveScore, tone ?? 'neutral', postProcessingProfile);
+                  sendSSE(controller, {
+                    type: 'stage',
+                    stage: `Detector polish complete: ${polish.signalsFixed.slice(0, 3).join(', ') || 'no gaps'} (~${Math.round(currentAdaptiveScore)}%)`,
+                  });
+                  await flushDelay(6);
+                }
+              } catch (polishErr) {
+                console.warn('[DetectorPolish] skipped:', polishErr);
+              }
+            }
+          }
+
+          if (!(deadlineReached || Date.now() - startTime > DEADLINE_MS - 6000)) {
+            const { sentences: cleanSentences, paragraphBoundaries: cleanBounds } = splitIntoIndexedSentences(humanized);
+            const finalPlan = adaptivePostPlan ?? buildAdaptiveCleanupPlan(normalizedText, getDetectorAverage(detector.analyze(humanized)), tone ?? 'neutral', postProcessingProfile);
+            const paragraphLeadSet = new Set(cleanBounds);
+            for (let pass = 0; pass < finalPlan.universalCleaningPasses; pass++) {
+              sendSSE(controller, { type: 'stage', stage: `Universal Cleaning ${pass + 1}/${finalPlan.universalCleaningPasses}` });
+              await flushDelay(8);
+              for (let i = 0; i < cleanSentences.length; i++) {
+                if (!isHeadingSentCheck(cleanSentences[i])) {
+                  const isParagraphLead = paragraphLeadSet.has(i);
+                  let cleaned = cleanSentences[i];
+                  if (!(isParagraphLead && pass < finalPlan.universalCleaningPasses - 1)) {
+                    cleaned = deduplicateRepeatedPhrases(cleaned);
+                  }
+                  cleaned = deepNonLLMClean(cleaned);
+                  cleaned = finalSmoothGrammar(cleaned);
+                  cleanSentences[i] = cleaned;
+                }
+                sendSSE(controller, { type: 'sentence', index: i, text: cleanSentences[i], stage: `Universal Cleaning ${pass + 1}/${finalPlan.universalCleaningPasses}` });
+              }
+              humanized = reassembleText(cleanSentences, cleanBounds.length ? cleanBounds : [0]);
+              latestHumanized = humanized;
+              if (getDetectorAverage(detector.analyze(humanized)) <= finalPlan.targetScore) break;
             }
           }
 
@@ -1908,7 +2162,6 @@ export async function POST(req: Request) {
             const { sentences: origSents } = splitIntoIndexedSentences(normalizedText);
             const { sentences: humanizedSents, paragraphBoundaries: humanParaBounds } = splitIntoIndexedSentences(humanized);
             const isHeadingSent = (s: string) => looksLikeHeadingLine(s.trim());
-            const WORD_CHANGE_MIN = 0.40; // Minimum 40% word change per sentence
             const usedWords = new Set<string>();
             let changed = false;
             for (let i = 0; i < humanizedSents.length; i++) {
@@ -1929,17 +2182,20 @@ export async function POST(req: Request) {
                 const r = measureSentenceChange(origSents[j], humanizedSents[i]);
                 if (r < bestScore) { bestScore = r; bestOrigIdx = j; }
               }
-              if (bestOrigIdx >= 0 && bestScore < WORD_CHANGE_MIN) {
-                let s = humanizedSents[i];
-                // Word-level only: AI word kill + synonym replacement (NOT restructuring)
-                s = applyAIWordKill(s);
-                s = synonymReplace(s, 0.85, usedWords);
-                // Re-check after synonym pass; apply more aggressive pass if still below
-                const recheck = measureSentenceChange(origSents[bestOrigIdx], s);
-                if (recheck < WORD_CHANGE_MIN) {
-                  s = synonymReplace(s, 1.0, usedWords);
+              if (bestOrigIdx >= 0) {
+                const sentenceWordChangeMin = getRiskAdaptiveMinChange(bestOrigIdx, 0.40);
+                if (bestScore < sentenceWordChangeMin) {
+                  let s = humanizedSents[i];
+                  // Word-level only: AI word kill + synonym replacement (NOT restructuring)
+                  s = applyAIWordKill(s);
+                  s = synonymReplace(s, 0.85, usedWords);
+                  // Re-check after synonym pass; apply more aggressive pass if still below
+                  const recheck = measureSentenceChange(origSents[bestOrigIdx], s);
+                  if (recheck < sentenceWordChangeMin) {
+                    s = synonymReplace(s, 1.0, usedWords);
+                  }
+                  if (s !== humanizedSents[i]) { humanizedSents[i] = s; changed = true; }
                 }
-                if (s !== humanizedSents[i]) { humanizedSents[i] = s; changed = true; }
               }
             }
             if (changed) {
@@ -2027,8 +2283,8 @@ export async function POST(req: Request) {
           if (!isDeepKill) humanized = preserveInputStructure(normalizedText, humanized);
 
           // 11. Contraction & em-dash enforcement
-          // Only expand contractions for academic/academic_blog tones; other tones keep them
-          if (isAcademicTone) humanized = expandContractions(humanized);
+          // Only expand contractions for strict academic tone; blog-academic keeps a more natural cadence
+          if (shouldExpandContractions) humanized = expandContractions(humanized);
           humanized = removeEmDashes(humanized);
 
           // 12. Grammar sanitizer
@@ -2418,6 +2674,162 @@ export async function POST(req: Request) {
             .replace(/[ \t]{2,}/g, ' ')
             .trim();
           humanized = restoreCitationAuthorCasing(text, humanized);
+
+          // ── BLOG FLOW EVALUATION + REPAIR ───────────────────────────
+          // academic_blog should read like a real pre-2010 blog or human essay:
+          // natural cadence, strong forward motion, no robotic transition stacking.
+          if (eng !== 'ai_analysis' && !isDeepKill && isAcademicBlogTone) {
+            try {
+              sendSSE(controller, { type: 'stage', stage: 'Blog Flow Evaluation' });
+              await flushDelay(12);
+
+              const coherenceReport = analyzeDocumentCoherence(text, humanized, {
+                contentType: 'blog',
+              });
+              console.log(
+                `[BlogFlow] overall=${coherenceReport.overallScore} cadence=${coherenceReport.paragraphCadence.score} transition=${coherenceReport.transitionFit.score} repetition=${coherenceReport.repetitionDecay.score} drift=${coherenceReport.readabilityDrift.score}`,
+              );
+
+              const needsCoherenceRepair =
+                coherenceReport.overallScore < 82 ||
+                coherenceReport.transitionFit.score < 74 ||
+                coherenceReport.repetitionDecay.score < 62 ||
+                coherenceReport.readabilityDrift.score < 48;
+
+              if (needsCoherenceRepair) {
+                const beforeRepair = humanized;
+                humanized = fixDocumentCoherence(text, humanized, coherenceReport);
+                if (humanized !== beforeRepair) {
+                  humanized = preserveInputStructure(normalizedText, humanized);
+                  latestHumanized = humanized;
+                  const { sentences: blogFlowSents } = splitIntoIndexedSentences(humanized);
+                  await emitSentencesStaggered(controller, blogFlowSents, 'Blog Flow Repair', 18);
+                }
+              }
+
+              const validationResult = validateAndRepairOutput(text, humanized, {
+                allowWordChangeBound: 0.72,
+                minSentenceWords: 3,
+                autoRepair: true,
+              });
+              if (validationResult.wasRepaired) {
+                humanized = preserveInputStructure(normalizedText, validationResult.text);
+                latestHumanized = humanized;
+                console.log(`[BlogFlow] Validation repairs: ${validationResult.repairs.join('; ')}`);
+                const { sentences: validatedSents } = splitIntoIndexedSentences(humanized);
+                await emitSentencesStaggered(controller, validatedSents, 'Sentence Review', 18);
+              }
+            } catch (blogFlowErr) {
+              console.warn('[BlogFlow] Non-fatal evaluation error:', blogFlowErr);
+            }
+          }
+
+          // ── RISK-ADAPTIVE REVIEW ───────────────────────────────────
+          // Use the original sentence risk map to push harder only where the
+          // input looked detector-hot, while preserving factual/citation lines.
+          if (eng !== 'ai_analysis' && !isDeepKill) {
+            try {
+              const needsRiskAdaptiveReview = inputRiskReport.sentences.some((sentence) =>
+                sentence.riskLevel !== 'low'
+                || sentence.reasons.includes('formal_transition')
+                || sentence.reasons.includes('detector_magnet')
+                || sentence.reasons.includes('aiish_phrase'),
+              );
+
+              if (needsRiskAdaptiveReview) {
+                sendSSE(controller, { type: 'stage', stage: 'Risk-Adaptive Review' });
+                await flushDelay(12);
+
+                const { sentences: riskAdaptiveSentences, paragraphBoundaries: riskAdaptiveBounds } = splitIntoIndexedSentences(humanized);
+                const reviewCount = Math.min(riskAdaptiveSentences.length, inputRiskReport.sentences.length);
+                let changedSentenceCount = 0;
+
+                for (let index = 0; index < reviewCount; index++) {
+                  if (isHeadingSentCheck(riskAdaptiveSentences[index])) continue;
+                  const sourceRisk = inputRiskByIndex.get(index);
+                  if (!sourceRisk) continue;
+
+                  const originalSentence = riskAdaptiveSentences[index];
+                  let reviewedSentence = originalSentence;
+
+                  if (sourceRisk.styleClass === 'fact' || sourceRisk.styleClass === 'citation') {
+                    reviewedSentence = fixPunctuation(reviewedSentence);
+                    reviewedSentence = fixMidSentenceCapitalization(reviewedSentence, text);
+                  } else if (sourceRisk.riskLevel === 'high') {
+                    reviewedSentence = deepNonLLMClean(reviewedSentence);
+                    reviewedSentence = smoothingPass(reviewedSentence);
+                    reviewedSentence = finalSmoothGrammar(reviewedSentence);
+                  } else if (sourceRisk.riskLevel === 'medium') {
+                    reviewedSentence = deepNonLLMClean(reviewedSentence);
+                    reviewedSentence = smoothingPass(reviewedSentence);
+                  } else if (
+                    sourceRisk.reasons.includes('formal_transition')
+                    || sourceRisk.reasons.includes('detector_magnet')
+                    || sourceRisk.reasons.includes('aiish_phrase')
+                  ) {
+                    reviewedSentence = deepNonLLMClean(reviewedSentence);
+                  }
+
+                  if (reviewedSentence !== originalSentence) {
+                    riskAdaptiveSentences[index] = reviewedSentence;
+                    changedSentenceCount++;
+                  }
+                }
+
+                if (changedSentenceCount > 0) {
+                  humanized = preserveInputStructure(
+                    normalizedText,
+                    reassembleText(riskAdaptiveSentences, riskAdaptiveBounds.length ? riskAdaptiveBounds : [0]),
+                  );
+                  latestHumanized = humanized;
+                  console.log(`[RiskAdaptive] reviewed ${changedSentenceCount} sentences using input risk tiers`);
+                  const { sentences: reviewedSentences } = splitIntoIndexedSentences(humanized);
+                  await emitSentencesStaggered(controller, reviewedSentences, 'Risk-Adaptive Review', 18);
+                }
+              }
+            } catch (riskAdaptiveErr) {
+              console.warn('[RiskAdaptive] Non-fatal review error:', riskAdaptiveErr);
+            }
+          }
+
+          // ── SENTENCE STABILITY REVIEW ───────────────────────────────
+          // A deterministic normalization pass that scores sentence-level
+          // risk and smooths out overly consistent AI-like document rhythm.
+          if (eng !== 'ai_analysis' && !isDeepKill) {
+            try {
+              const stabilityReport = analyzeStyleStability(humanized, {
+                sourceText: text,
+                tone: tone ?? 'neutral',
+                engine: eng,
+              });
+              console.log(
+                `[StyleStability] profile=${stabilityReport.profile} overall=${stabilityReport.overallScore} flatness=${stabilityReport.flatnessScore} opener=${stabilityReport.openerDiversityScore} highRisk=${stabilityReport.highRiskCount}/${stabilityReport.sentenceCount}`,
+              );
+
+              const highRiskLimit = Math.max(1, Math.floor(stabilityReport.sentenceCount * 0.18));
+              const needsStabilityRepair =
+                stabilityReport.overallScore < 80 ||
+                stabilityReport.flatnessScore < 52 ||
+                stabilityReport.highRiskCount > highRiskLimit;
+
+              if (needsStabilityRepair) {
+                sendSSE(controller, { type: 'stage', stage: 'Sentence Stability Review' });
+                await flushDelay(12);
+
+                const stabilityResult = normalizeStyleStability(humanized, stabilityReport);
+                if (stabilityResult.changedSentenceCount > 0) {
+                  humanized = preserveInputStructure(normalizedText, stabilityResult.text);
+                  latestHumanized = humanized;
+                  console.log(`[StyleStability] normalized ${stabilityResult.changedSentenceCount} sentences`);
+                  const { sentences: stabilitySentences } = splitIntoIndexedSentences(humanized);
+                  await emitSentencesStaggered(controller, stabilitySentences, 'Sentence Stability Review', 18);
+                }
+              }
+            } catch (styleStabilityErr) {
+              console.warn('[StyleStability] Non-fatal stability error:', styleStabilityErr);
+            }
+          }
+
           latestHumanized = humanized;
 
           // ── OUTPUT SIZE MONITORING ──────────────────────────────────
@@ -2447,7 +2859,7 @@ export async function POST(req: Request) {
             try {
               const supa = createServiceClient();
               const engineType = 'fast'; // unified — all engines deduct from one pool
-              const toneDb = ({ neutral: 'natural', academic: 'academic', professional: 'business', simple: 'direct' } as Record<string, string>)[tone ?? 'neutral'] ?? 'natural';
+              const toneDb = ({ neutral: 'natural', academic: 'academic', academic_blog: 'academic_blog', professional: 'business', simple: 'direct' } as Record<string, string>)[tone ?? 'neutral'] ?? 'natural';
 
               // Always save document for all users
               const docPromise = supa.from('documents').insert({

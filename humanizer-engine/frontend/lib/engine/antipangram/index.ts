@@ -46,7 +46,12 @@ const DEFAULT_CONFIG: AntiPangramConfig = {
   strength: 'strong',
   tone: 'academic',
   preserveMeaning: true,
-  maxIterations: 15,
+  maxIterations: 12,
+  targetAiScore: 3,
+  detectorPressure: 0,
+  preserveLeadSentence: true,
+  humanVariance: 0.06,
+  readabilityBias: 0.7,
 };
 
 // ═══════════════════════════════════════════════════════════════════
@@ -54,12 +59,13 @@ const DEFAULT_CONFIG: AntiPangramConfig = {
 // ═══════════════════════════════════════════════════════════════════
 
 const QUALITY_TARGETS = {
-  maxAiScore: 5,            // Overall forensic AI score must be below this (tuned for 0%)
+  maxAiScore: 3,            // Overall forensic AI score must be below this (tuned for 0%)
   minBurstinessCV: 0.45,   // Sentence length CV must exceed this (higher = more human-like variance)
   maxConnectorDensity: 0.08, // Connector density must be below this (humans use fewer transitions)
   maxParallelScore: 0.06,   // Parallel structure score must be below this (humans vary structure more)
   maxStarterRepetition: 0.15,// Starter repetition must be below this (humans rarely repeat starters)
-  minChangeRatio: 0.40,     // Minimum word-level change from original (40% floor)
+  minChangeRatio: 0.65,     // Minimum word-level change from original (65% floor)
+  minIterations: 5,         // Always run at least 5 iterations for meaningful transforms
 };
 
 function protectCriticalSpans(text: string): { text: string; map: Map<string, string> } {
@@ -212,6 +218,28 @@ function expandContractions(text: string): string {
   return result;
 }
 
+function clamp01(value: number): number {
+  return Math.max(0, Math.min(1, value));
+}
+
+function injectHumanVariance(text: string, intensity: number): string {
+  if (!text || intensity <= 0) return text;
+  const paragraphs = text.split(/\n\s*\n/);
+  return paragraphs.map((paragraph) => {
+    const sentences = splitToSentences(paragraph.trim());
+    if (sentences.length <= 1) return paragraph.trim();
+    return sentences.map((sentence, index) => {
+      if (index === 0 || Math.random() > intensity) return sentence;
+      let varied = sentence;
+      varied = varied.replace(/^(However|Moreover|Furthermore|Additionally),\s+/i, (_m, word) => word.charAt(0).toUpperCase() + word.slice(1) + ' ');
+      varied = varied.replace(/\s*,\s*/g, ', ');
+      varied = varied.replace(/\bthat\s+that\b/gi, 'that');
+      varied = varied.replace(/\bvery\s+/gi, '');
+      return varied;
+    }).join(' ');
+  }).join('\n\n');
+}
+
 // ═══════════════════════════════════════════════════════════════════
 // VOCABULARY PASS
 // Apply vocabulary naturalization across all paragraphs as a distinct pass.
@@ -222,6 +250,131 @@ function applyVocabularyPass(text: string, protectedTerms: Set<string>, intensit
   return paragraphs.map(para => {
     const sentences = splitToSentences(para.trim());
     return sentences.map(sent => naturalizeVocabulary(sent, protectedTerms, intensity)).join(' ');
+  }).join('\n\n');
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// DEEP WORD-SWAP BOOST
+// Brute-force synonym replacement for content words to hit 40% change.
+// Uses a large academic-grade synonym map for common academic words.
+// ═══════════════════════════════════════════════════════════════════
+
+const DEEP_SWAP_MAP: Record<string, string[]> = {
+  // ── Verbs ──
+  'presents': ['outlines', 'sets forth', 'puts forward'],
+  'argues': ['contends', 'asserts', 'claims'],
+  'suggests': ['proposes', 'puts forward', 'advances'],
+  'demonstrates': ['reveals', 'makes clear', 'brings to light'],
+  'indicates': ['points to', 'signals', 'reflects'],
+  'shows': ['reveals', 'makes evident', 'brings out'],
+  'provides': ['supplies', 'furnishes', 'delivers'],
+  'remains': ['stays', 'persists', 'endures'],
+  'requires': ['calls for', 'necessitates', 'demands'],
+  'involves': ['entails', 'includes', 'encompasses'],
+  'includes': ['covers', 'takes in', 'features'],
+  'highlights': ['draws attention to', 'brings out', 'spotlights'],
+  'emphasizes': ['stresses', 'accentuates', 'underlines'],
+  'maintains': ['upholds', 'sustains', 'asserts'],
+  'influences': ['shapes', 'affects', 'bears on'],
+  'contributes': ['adds', 'feeds into', 'lends'],
+  'promotes': ['advances', 'furthers', 'encourages'],
+  'focuses': ['centers', 'concentrates', 'zeroes in'],
+  'addresses': ['deals with', 'tackles', 'takes up'],
+  'considers': ['weighs', 'examines', 'looks at'],
+  'examines': ['scrutinizes', 'inspects', 'evaluates'],
+  'establishes': ['sets up', 'founds', 'institutes'],
+  'results': ['leads', 'culminates', 'ends up'],
+  'creates': ['produces', 'generates', 'forms'],
+  'represents': ['stands for', 'embodies', 'typifies'],
+  'leads': ['guides', 'steers', 'directs'],
+  'refers': ['points', 'alludes', 'relates'],
+  'supports': ['backs', 'bolsters', 'underpins'],
+  'reveals': ['exposes', 'uncovers', 'discloses'],
+  'determines': ['decides', 'settles', 'fixes'],
+  'offers': ['extends', 'puts forth', 'proposes'],
+  'proves': ['establishes', 'verifies', 'confirms'],
+  'believes': ['holds', 'thinks', 'is of the view'],
+  'based': ['grounded', 'rooted', 'founded'],
+  'associated': ['linked', 'connected', 'tied'],
+  'described': ['depicted', 'characterized', 'portrayed'],
+  'plays': ['serves', 'fills', 'occupies'],
+  // ── Adjectives ──
+  'significant': ['considerable', 'notable', 'marked'],
+  'important': ['central', 'vital', 'key'],
+  'critical': ['central', 'decisive', 'pivotal'],
+  'essential': ['indispensable', 'vital', 'needed'],
+  'effective': ['successful', 'productive', 'potent'],
+  'relevant': ['pertinent', 'applicable', 'germane'],
+  'specific': ['particular', 'precise', 'definite'],
+  'various': ['diverse', 'assorted', 'different'],
+  'particular': ['specific', 'distinct', 'individual'],
+  'common': ['frequent', 'prevalent', 'usual'],
+  'current': ['present', 'existing', 'ongoing'],
+  'modern': ['present-day', 'current', 'recent'],
+  'objective': ['impartial', 'unbiased', 'dispassionate'],
+  'strong': ['robust', 'powerful', 'compelling'],
+  'universal': ['general', 'all-encompassing', 'broad'],
+  'consistent': ['steady', 'uniform', 'coherent'],
+  // ── Nouns ──
+  'approach': ['method', 'strategy', 'technique'],
+  'aspect': ['facet', 'dimension', 'element'],
+  'concept': ['idea', 'notion', 'principle'],
+  'context': ['setting', 'framework', 'backdrop'],
+  'evidence': ['proof', 'data', 'testimony'],
+  'factor': ['element', 'component', 'variable'],
+  'framework': ['structure', 'model', 'scaffold'],
+  'issue': ['matter', 'concern', 'question'],
+  'process': ['procedure', 'course', 'mechanism'],
+  'role': ['function', 'part', 'capacity'],
+  'structure': ['framework', 'organization', 'arrangement'],
+  'system': ['arrangement', 'mechanism', 'setup'],
+  'theory': ['thesis', 'doctrine', 'hypothesis'],
+  'tradition': ['heritage', 'custom', 'legacy'],
+  'values': ['ideals', 'principles', 'standards'],
+  'environment': ['setting', 'context', 'climate'],
+  'principles': ['tenets', 'precepts', 'doctrines'],
+  'standards': ['norms', 'benchmarks', 'criteria'],
+  'alternative': ['option', 'substitute', 'replacement'],
+  'basis': ['foundation', 'ground', 'root'],
+  'perspective': ['viewpoint', 'standpoint', 'angle'],
+  // ── Adverbs / Transition ──
+  'however': ['yet', 'still', 'on the other hand'],
+  'therefore': ['thus', 'so', 'as a result'],
+  'particularly': ['especially', 'notably', 'chiefly'],
+  'especially': ['particularly', 'notably', 'above all'],
+  'specifically': ['in particular', 'precisely', 'exactly'],
+  'generally': ['broadly', 'on the whole', 'typically'],
+  'often': ['frequently', 'regularly', 'commonly'],
+  'also': ['too', 'as well', 'likewise'],
+  'while': ['whereas', 'though', 'even as'],
+  'although': ['though', 'even though', 'while'],
+  'despite': ['in spite of', 'notwithstanding', 'regardless of'],
+  'rather': ['instead', 'preferably', 'somewhat'],
+};
+
+function deepWordSwapBoost(text: string, protectedTerms: Set<string>): string {
+  const paragraphs = text.split(/\n\s*\n/).filter(p => p.trim());
+  return paragraphs.map(para => {
+    const sentences = splitToSentences(para.trim());
+    return sentences.map(sent => {
+      let result = sent;
+      for (const [word, replacements] of Object.entries(DEEP_SWAP_MAP)) {
+        if (protectedTerms.has(word.toLowerCase())) continue;
+        const re = new RegExp(`\\b${word}\\b`, 'gi');
+        if (re.test(result)) {
+          re.lastIndex = 0;
+          const replacement = replacements[result.length % replacements.length];
+          result = result.replace(re, (match) => {
+            // Preserve capitalization
+            if (match.charAt(0) === match.charAt(0).toUpperCase()) {
+              return replacement.charAt(0).toUpperCase() + replacement.slice(1);
+            }
+            return replacement;
+          });
+        }
+      }
+      return result;
+    }).join(' ');
   }).join('\n\n');
 }
 
@@ -343,46 +496,20 @@ function targetedRefinement(text: string, forensic: ForensicProfile): string {
       });
     }
 
-    // If burstiness is still low, force-split MULTIPLE long sentences
+    // If burstiness is still low, we must rely on within-sentence expansion/shortening 
+    // because the strict 1:1 rule forbids sentence splitting or merging.
     if (forensic.sentenceLengthVariance < QUALITY_TARGETS.minBurstinessCV) {
-      const lengths = sentences.map(s => s.split(/\s+/).length);
-      // Split up to 3 longest sentences for maximum burstiness
-      const longIndices = lengths
-        .map((len, idx) => ({ len, idx }))
-        .filter(item => item.len > 15)
-        .sort((a, b) => b.len - a.len)
-        .slice(0, 3)
-        .map(item => item.idx)
-        .sort((a, b) => b - a); // reverse so splice indices stay valid
-
-      for (const maxIdx of longIndices) {
-        const sent = sentences[maxIdx];
-        const mid = Math.floor(sent.length / 2);
-        const commaPositions: number[] = [];
-        for (let i = 0; i < sent.length; i++) {
-          if (sent[i] === ',') commaPositions.push(i);
-        }
-        if (commaPositions.length > 0) {
-          const splitPos = commaPositions.reduce((best, pos) =>
-            Math.abs(pos - mid) < Math.abs(best - mid) ? pos : best
-          );
-          const part1 = sent.slice(0, splitPos).trim() + '.';
-          const part2 = sent.slice(splitPos + 1).trim();
-          if (part2.length > 10) {
-            const part2Cap = part2.charAt(0).toUpperCase() + part2.slice(1);
-            sentences.splice(maxIdx, 1, part1, part2Cap);
-          }
-        }
-      }
+      // Defer to downstream internal clause expansion/shortening
     }
 
     // If starter repetition is high, apply aggressive diversification
     if (forensic.starterRepetition > QUALITY_TARGETS.maxStarterRepetition) {
+      // Academic-appropriate diverse starters (NO casual phrases)
       const DIVERSE_STARTERS = [
-        'Granted,', 'That said,', 'In practice,', 'Put differently,',
-        'On a related note,', 'Looking at this another way,',
-        'From this angle,', 'With this in mind,', 'To put it plainly,',
-        'At the same time,', 'Along these lines,', 'Seen this way,',
+        'In this regard,', 'On this point,', 'From this perspective,',
+        'Along these lines,', 'In a related vein,', 'Seen from this angle,',
+        'With this in mind,', 'On a related note,', 'At the same time,',
+        'Equally,', 'By extension,', 'In parallel,',
       ];
       let starterIdx = Math.floor(Math.random() * DIVERSE_STARTERS.length);
       const starterCounts = new Map<string, number>();
@@ -617,10 +744,41 @@ export function antiPangramHumanize(
   const cfg = { ...DEFAULT_CONFIG, ...config };
   const startTime = Date.now();
   const { text: protectedText, map: protectedMap } = protectCriticalSpans(text);
+  const detectorPressure = clamp01(cfg.detectorPressure ?? 0);
+  const targetAiScore = Math.max(1, cfg.targetAiScore ?? QUALITY_TARGETS.maxAiScore);
+  const effectiveMaxIterations = Math.max(10, Math.round(cfg.maxIterations + detectorPressure * 8));
+  const minimumIterations = Math.max(5, Math.min(effectiveMaxIterations - 1, QUALITY_TARGETS.minIterations + Math.round(detectorPressure * 4)));
+  const leadSentenceProtection = cfg.preserveLeadSentence !== false;
+
+  // ── Proper noun protection (extract before any transforms) ──
+  const properNouns = new Set<string>();
+  const citAuthorRe = /\b([A-Z][a-z]{2,})(?=\s*(?:\(|,)\s*\d{4})/g;
+  let pnm: RegExpExecArray | null;
+  while ((pnm = citAuthorRe.exec(text)) !== null) properNouns.add(pnm[1]);
+  const midSentCaps = /(?<=[a-z,;:]\s)([A-Z][a-z]{2,})\b/g;
+  const commonWords = new Set(['The', 'This', 'That', 'These', 'Those', 'Such', 'However', 'Also', 'Furthermore', 'Moreover', 'Additionally', 'Consequently', 'Nevertheless', 'Therefore', 'Thus', 'Hence', 'Indeed', 'One', 'His', 'Her', 'Its', 'Their', 'Our', 'Some', 'Many', 'Most', 'All', 'Each', 'Every', 'Both', 'Several', 'Various', 'Other']);
+  while ((pnm = midSentCaps.exec(text)) !== null) {
+    if (!commonWords.has(pnm[1])) properNouns.add(pnm[1]);
+  }
+  // Add multi-word proper terms
+  const mwRe = /\b(Natural Law|New Natural Law|Reformed)\b/g;
+  while ((pnm = mwRe.exec(text)) !== null) {
+    for (const w of pnm[1].split(/\s+/)) if (w.length >= 2) properNouns.add(w);
+  }
+
+  // ── Heading protection: detect numbered headings and keep them intact ──
+  const headingLines = new Set<string>();
+  const lines = text.split('\n');
+  for (const line of lines) {
+    const t = line.trim();
+    if (/^\d+\.\s/.test(t) && t.split(/\s+/).length <= 12) headingLines.add(t);
+    if (/^[IVXLCDM]+[.)]\s/i.test(t) && t.split(/\s+/).length <= 12) headingLines.add(t);
+    if (/^#{1,6}\s/.test(t)) headingLines.add(t);
+  }
 
   // ── Pass 1: Forensic Analysis ──
   const forensicBefore = buildForensicProfile(text);
-  const context = buildDocumentContext(text);
+  const context = buildDocumentContext(text, cfg.tone);
 
   const transformsApplied: string[] = [];
 
@@ -631,25 +789,45 @@ export function antiPangramHumanize(
 
   let humanized = protectedText;
   const intensityMap = { light: 0.4, medium: 0.65, strong: 0.85 };
-  const intensity = intensityMap[cfg.strength];
+  const intensity = Math.min(0.98, intensityMap[cfg.strength] + detectorPressure * 0.12);
 
   // ── Pass 2-5: Main transformation pipeline ──
-  for (let iteration = 0; iteration < cfg.maxIterations; iteration++) {
+  // CRITICAL: Always run at least minIterations to achieve meaningful change,
+  // even if the forensic score appears low (our profiler may under-score).
+  for (let iteration = 0; iteration < effectiveMaxIterations; iteration++) {
     const iterForensic = buildForensicProfile(restoreCriticalSpans(humanized, protectedMap));
 
-    // Check if we've already hit quality targets
+    // Only allow early exit AFTER minimum iterations AND when all targets met
     if (
-      iterForensic.overallAiScore <= QUALITY_TARGETS.maxAiScore &&
+      iteration >= minimumIterations &&
+      iterForensic.overallAiScore <= targetAiScore &&
       iterForensic.sentenceLengthVariance >= QUALITY_TARGETS.minBurstinessCV &&
       iterForensic.connectorDensity <= QUALITY_TARGETS.maxConnectorDensity
     ) {
-      console.log(`[AntiPangram] Quality targets met at iteration ${iteration}`);
-      break;
+      // Also check change ratio — don't exit if we haven't changed enough
+      const currentChangeRatio = computeChangeRatio(text, restoreCriticalSpans(humanized, protectedMap));
+      if (currentChangeRatio >= QUALITY_TARGETS.minChangeRatio) {
+        console.log(`[AntiPangram] Quality targets met at iteration ${iteration} (change: ${(currentChangeRatio * 100).toFixed(1)}%)`);
+        break;
+      }
     }
 
     // Pass 2: Document reflow (sentence transforms + burstiness + structure)
     const prevHumanized = humanized;
     humanized = reflowDocument(humanized, context, iterForensic, cfg.strength);
+    if (leadSentenceProtection) {
+      const prevParas = prevHumanized.split(/\n\s*\n/);
+      const nextParas = humanized.split(/\n\s*\n/);
+      humanized = nextParas.map((para, paraIndex) => {
+        const prevPara = prevParas[paraIndex] ?? '';
+        const prevSentences = splitToSentences(prevPara.trim());
+        const nextSentences = splitToSentences(para.trim());
+        if (prevSentences.length === 0 || nextSentences.length === 0) return para.trim();
+        if (iterForensic.overallAiScore > 25) return para.trim();
+        nextSentences[0] = prevSentences[0];
+        return nextSentences.join(' ');
+      }).join('\n\n');
+    }
     if (humanized !== prevHumanized) transformsApplied.push(`reflow-pass-${iteration}`);
 
     // Pass 3: Cross-paragraph deduplication
@@ -657,17 +835,30 @@ export function antiPangramHumanize(
     humanized = deduplicateCrossParagraph(humanized);
     if (humanized !== prevDedup) transformsApplied.push(`dedup-pass-${iteration}`);
 
-    // Pass 3b: Vocabulary naturalization (separate pass for higher change ratio)
+    // Pass 3b: Vocabulary naturalization (separate pass at FULL intensity)
     const prevVocab = humanized;
-    humanized = applyVocabularyPass(humanized, context.protectedTerms, intensity);
+    humanized = applyVocabularyPass(humanized, context.protectedTerms, Math.max(intensity, 0.85 - (cfg.readabilityBias ?? 0.7) * 0.08));
     if (humanized !== prevVocab) transformsApplied.push(`vocab-pass-${iteration}`);
+
+    // Pass 3c: AI phrase kill sweep (run EVERY iteration, not just at end)
+    const prevSweep = humanized;
+    humanized = finalAIPhraseSweep(humanized);
+    if (humanized !== prevSweep) transformsApplied.push(`ai-kill-pass-${iteration}`);
 
     // Pass 4: Targeted refinement for remaining signals
     const midForensic = buildForensicProfile(humanized);
-    if (midForensic.overallAiScore > QUALITY_TARGETS.maxAiScore) {
+    if (midForensic.overallAiScore > targetAiScore || iteration < minimumIterations) {
       const prevRefine = humanized;
       humanized = targetedRefinement(humanized, midForensic);
       if (humanized !== prevRefine) transformsApplied.push(`refine-pass-${iteration}`);
+    }
+
+    // Pass 4b: DEEP WORD-SWAP BOOST — when change ratio is below 40%,
+    // aggressively replace remaining content words with academic synonyms
+    const currentChange = computeChangeRatio(text, restoreCriticalSpans(humanized, protectedMap));
+    if (currentChange < QUALITY_TARGETS.minChangeRatio) {
+      humanized = deepWordSwapBoost(humanized, context.protectedTerms);
+      transformsApplied.push(`deep-swap-pass-${iteration}`);
     }
 
     // Pass 5: Meaning preservation gate
@@ -683,22 +874,132 @@ export function antiPangramHumanize(
   humanized = cleanGrammar(humanized);
 
   // ── Pass 6b: Final AI-phrase kill sweep ──
-  // Hard-coded removal of remaining AI phrases the vocabulary pass may have missed.
   humanized = finalAIPhraseSweep(humanized);
 
   // ── Pass 7: Contraction handling (ALWAYS expand — no contractions rule) ──
   humanized = expandContractions(humanized);
 
   // ── Pass 8: Rhetorical question removal ──
-  // Hard rule: output must never contain rhetorical questions.
-  // Convert any "?" sentences into declarative statements.
   humanized = removeRhetoricalQuestions(humanized);
 
   // ── Pass 9: First-person guard ──
-  // Hard rule: do not introduce first-person pronouns (I, we, my, our, me, us)
-  // unless the original input already contained them.
   humanized = guardFirstPerson(text, humanized);
+  humanized = injectHumanVariance(humanized, Math.min(0.18, (cfg.humanVariance ?? 0.06) + detectorPressure * 0.08));
   humanized = restoreCriticalSpans(humanized, protectedMap);
+
+  // ── Pass 10: Restore proper noun casing ──
+  for (const noun of properNouns) {
+    const lc = noun.toLowerCase();
+    if (lc === noun) continue;
+    humanized = humanized.replace(new RegExp(`\\b${lc}\\b`, 'g'), noun);
+  }
+
+  // ── Pass 11: Restore headings that may have been mangled ──
+  // Re-insert original heading lines at paragraph boundaries
+  if (headingLines.size > 0) {
+    const outParas = humanized.split(/\n\s*\n/);
+    const origParas = text.split(/\n\s*\n/);
+    // Match output paragraphs to original and restore heading paragraphs
+    const result: string[] = [];
+    let outIdx = 0;
+    for (const origPara of origParas) {
+      const tOrig = origPara.trim();
+      if (headingLines.has(tOrig)) {
+        result.push(tOrig);
+      } else if (outIdx < outParas.length) {
+        // Skip output paragraphs that are headings (they may have been duplicated)
+        const tOut = outParas[outIdx]?.trim() ?? '';
+        if (headingLines.has(tOut)) {
+          result.push(tOut);
+          outIdx++;
+          if (outIdx < outParas.length) {
+            result.push(outParas[outIdx].trim());
+            outIdx++;
+          }
+        } else {
+          result.push(outParas[outIdx].trim());
+          outIdx++;
+        }
+      }
+    }
+    // Append any remaining output paragraphs
+    while (outIdx < outParas.length) {
+      result.push(outParas[outIdx].trim());
+      outIdx++;
+    }
+    humanized = result.filter(p => p).join('\n\n');
+  }
+  // ── Pass 11b: FINAL SAFE-SWAP PASS ──
+  // Apply per-word synonym replacement to ensure 40% minimum change.
+  const FINAL_APG_SWAPS: Record<string, string> = {
+    'the': 'this', 'that': 'which', 'and': 'as well as', 'but': 'yet',
+    'because': 'since', 'although': 'though', 'while': 'whereas',
+    'however': 'nonetheless', 'therefore': 'thus', 'also': 'likewise',
+    'yet': 'still', 'despite': 'notwithstanding', 'rather': 'instead',
+    'with': 'alongside', 'about': 'concerning', 'regarding': 'concerning',
+    'through': 'via', 'among': 'amongst', 'which': 'that',
+    'such': 'this kind of', 'these': 'those', 'some': 'certain',
+    'other': 'additional', 'very': 'quite', 'often': 'frequently',
+    'particularly': 'notably', 'especially': 'chiefly', 'even': 'indeed',
+    'still': 'nevertheless', 'many': 'numerous', 'much': 'a great deal of',
+    'have': 'possess', 'has': 'possesses', 'make': 'construct',
+    'give': 'grant', 'take': 'adopt', 'keep': 'retain', 'need': 'require',
+    'help': 'assist', 'find': 'discover', 'think': 'consider',
+    'seem': 'appear', 'seems': 'appears', 'use': 'employ', 'used': 'employed',
+    'can': 'is able to', 'show': 'reveal', 'shows': 'reveals',
+    'demonstrates': 'reveals', 'indicates': 'signals', 'suggests': 'proposes',
+    'provides': 'delivers', 'requires': 'demands', 'involves': 'entails',
+    'includes': 'covers', 'highlights': 'spotlights', 'emphasizes': 'stresses',
+    'maintains': 'upholds', 'supports': 'bolsters', 'addresses': 'tackles',
+    'examines': 'evaluates', 'remains': 'persists', 'presents': 'outlines',
+    'offers': 'proposes', 'argues': 'contends', 'focuses': 'concentrates',
+    'significant': 'considerable', 'important': 'central', 'critical': 'pivotal',
+    'essential': 'vital', 'effective': 'productive', 'relevant': 'pertinent',
+    'various': 'diverse', 'particular': 'distinct', 'specific': 'precise',
+    'common': 'frequent', 'current': 'present', 'modern': 'contemporary',
+    'objective': 'impartial', 'strong': 'robust', 'universal': 'broad',
+    'moral': 'ethical', 'human': 'individual', 'practical': 'applied',
+    'rational': 'logical', 'natural': 'organic', 'intrinsic': 'inherent',
+    'abstract': 'theoretical', 'basic': 'foundational', 'social': 'societal',
+    'political': 'governmental', 'clear': 'evident', 'deep': 'profound',
+    'approach': 'method', 'concept': 'notion', 'evidence': 'proof',
+    'factor': 'element', 'framework': 'scaffold', 'issue': 'matter',
+    'process': 'mechanism', 'role': 'function', 'structure': 'arrangement',
+    'theory': 'thesis', 'tradition': 'heritage', 'values': 'ideals',
+    'principles': 'tenets', 'standards': 'benchmarks', 'alternative': 'option',
+    'basis': 'foundation', 'perspective': 'viewpoint', 'environment': 'climate',
+    'argument': 'contention', 'discussion': 'discourse', 'analysis': 'examination',
+    'point': 'aspect', 'work': 'research', 'truth': 'veracity',
+    'knowledge': 'understanding', 'model': 'paradigm', 'center': 'core',
+    'morality': 'ethics', 'integrity': 'soundness', 'freedom': 'liberty',
+    'justice': 'equity', 'based': 'grounded', 'associated': 'linked',
+    'related': 'connected', 'thought': 'reasoning', 'world': 'sphere',
+  };
+  {
+    const apgParas = humanized.split(/\n\s*\n/).filter(p => p.trim());
+    humanized = apgParas.map(para => {
+      const t = para.trim();
+      // Protect headings
+      if (headingLines.has(t)) return para;
+      if (/^\d+[.)]\s/.test(t) && t.split(/\s+/).length <= 12) return para;
+      const sentences = splitToSentences(t);
+      return sentences.map(sent => {
+        const words = sent.split(/\s+/);
+        return words.map(w => {
+          const clean = w.toLowerCase().replace(/[^a-z]/g, '');
+          if (clean.length <= 2) return w;
+          const swap = FINAL_APG_SWAPS[clean];
+          if (swap && swap !== clean) {
+            const punct = w.match(/[^a-zA-Z]+$/)?.[0] ?? '';
+            const isUpper = w.charAt(0) === w.charAt(0).toUpperCase() && w.charAt(0) !== w.charAt(0).toLowerCase();
+            const final = isUpper ? swap.charAt(0).toUpperCase() + swap.slice(1) : swap;
+            return final + punct;
+          }
+          return w;
+        }).join(' ');
+      }).join(' ');
+    }).join('\n\n');
+  }
 
   // ── Final forensic profile ──
   const forensicAfter = buildForensicProfile(humanized);
@@ -707,6 +1008,7 @@ export function antiPangramHumanize(
   console.log(`[AntiPangram] Final forensic score: ${forensicAfter.overallAiScore} (was ${forensicBefore.overallAiScore})`);
   console.log(`[AntiPangram] Final burstiness CV: ${forensicAfter.sentenceLengthVariance.toFixed(3)}`);
   console.log(`[AntiPangram] Change ratio: ${(changeRatio * 100).toFixed(1)}%`);
+  console.log(`[AntiPangram] Transforms applied: ${transformsApplied.length}`);
   console.log(`[AntiPangram] Completed in ${Date.now() - startTime}ms`);
 
   return {
@@ -727,8 +1029,9 @@ export function antiPangramHumanize(
 export function antiPangramSimple(
   text: string,
   strength: 'light' | 'medium' | 'strong' = 'strong',
-  tone: 'academic' | 'professional' | 'casual' | 'neutral' = 'academic'
+  tone: 'academic' | 'professional' | 'casual' | 'neutral' = 'academic',
+  config: Partial<AntiPangramConfig> = {}
 ): string {
-  const result = antiPangramHumanize(text, { strength, tone });
+  const result = antiPangramHumanize(text, { ...config, strength, tone, maxIterations: Math.max(10, config.maxIterations ?? DEFAULT_CONFIG.maxIterations) });
   return result.humanized;
 }

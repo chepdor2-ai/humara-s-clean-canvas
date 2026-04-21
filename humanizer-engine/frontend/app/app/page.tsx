@@ -204,7 +204,7 @@ const ENGINE_GUIDES: Record<string, string> = {
   // Advanced Engines
   ninja_3: 'Ninja 3 — Humara 2.0 (instant) → full 10× Nuru. Fast aggressive AI signal suppression under 20 seconds.',
   ninja_2: 'Beta — Easy → Humara 2.0 → full 10× Nuru. Multi-pass chain for deep cleaning.',
-  ninja_5: 'Omega — Easy → Humara 2.4 → full 10× Nuru. Maximum transformation depth.',
+  ninja_5: 'Omega — Humara 2.4 → Swift → full 10× Nuru. Maximum transformation depth.',
   ghost_trial_2: 'Specter — Humara 2.4 → Humara 2.0 → full 10× Nuru. Ghost-grade signal removal.',
   phantom: 'Phantom — Humara 2.4 → 10× Nuru → deep clean → AntiPangram forensic cleanup.',
   ai_analysis: 'AI Analysis — Smart auto-selector. Uses API-free offline passes (Oxygen + AntiPangram + Nuru ×10), then 5 loops × 3 sweeps until under 20% AI across all detectors. No essay-writing APIs.',
@@ -598,11 +598,10 @@ function EditorPageInner() {
 
   // Auto Model: when enabled, force engine to ai_analysis + advanced mode
   useEffect(() => {
-    if (autoModelEnabled) {
-      setMode('advanced_engines');
-      setEngine('ai_analysis');
+    if (autoModelEnabled && mode === 'advanced_engines') {
+      setMode('detection_control');
     }
-  }, [autoModelEnabled]);
+  }, [autoModelEnabled, mode]);
 
   // Auto Model: publish global state to <html> so all UI color targets stay synchronized
   useEffect(() => {
@@ -691,12 +690,59 @@ function EditorPageInner() {
     setHistory(prev => [entry, ...prev].slice(0, 20)); // keep max 20
   }, []);
 
-  /* ── Auto-detect input — DISABLED (coming soon) ─────────────────────── */
-  // Detection deactivated — will be re-enabled with improved accuracy
+  /* ── Auto-detect input ─────────────────────── */
   useEffect(() => {
-    setInputDetection(null);
-    setSentenceScores([]);
-    setAutoDetecting(false);
+    if (!text.trim()) {
+      setInputDetection(null);
+      setSentenceScores([]);
+      setAutoDetecting(false);
+      return;
+    }
+    
+    const words = text.trim().split(/\s+/).length;
+    if (words < 10) {
+      // Don't detect if text is too short
+      setInputDetection(null);
+      setSentenceScores([]);
+      setAutoDetecting(false);
+      return;
+    }
+
+    if (detectTimerRef.current) clearTimeout(detectTimerRef.current);
+    
+    setAutoDetecting(true);
+    detectTimerRef.current = setTimeout(async () => {
+      try {
+        const res = await fetch('/api/detect', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text: cleanInputText(text) })
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.success && data.summary) {
+            const detectionResult = {
+              overallAi: data.summary.aiProbability,
+              overallHuman: data.summary.humanProbability,
+              detectors: data.results.map((r: any) => ({
+                detector: r.detector,
+                ai_score: r.aiScore,
+                human_score: 100 - r.aiScore
+              }))
+            };
+            setInputDetection(detectionResult);
+          }
+        }
+      } catch (e) {
+        console.error('Auto-detect error:', e);
+      } finally {
+        setAutoDetecting(false);
+      }
+    }, 1500);
+
+    return () => {
+      if (detectTimerRef.current) clearTimeout(detectTimerRef.current);
+    };
   }, [text]);
 
   /* ── Handlers ───────────────────────────────────────────────────────── */
@@ -793,6 +839,7 @@ function EditorPageInner() {
     const requestBody: Record<string, unknown> = {
       text: cleanInputText(inputText),
       engine,
+      auto_model: autoModelEnabled,
       strength,
       tone,
       post_processing_profile: postProcessingProfile,
@@ -1092,12 +1139,10 @@ function EditorPageInner() {
           setOutputDetection(null);
         }
 
-        // Detection disabled — coming soon
-        // Detection results from API are ignored
-
         // Add to temporary history
-        // Detection disabled — scores set to 0
-        addToHistory(text, currentResult, (finalData.engine_used as string) || engine, 0, 0, (finalData.word_count as number) || outputWords);
+        const finalAiBefore = inputDetectorResults ? inputDetectorResults.overall : 0;
+        const finalAiAfter = outputDetectorResults ? outputDetectorResults.overall : 0;
+        addToHistory(text, currentResult, (finalData.engine_used as string) || engine, finalAiBefore, finalAiAfter, (finalData.word_count as number) || outputWords);
 
         // Update usage: if backend returned updated counts, use them; otherwise optimistic + refresh
         if (!isAdmin) {
@@ -1706,12 +1751,12 @@ function EditorPageInner() {
               <button ref={engineBtnRef} type="button" onClick={() => { if (!autoModelEnabled) setEngineDropdownOpen(!engineDropdownOpen); }}
                 disabled={autoModelEnabled}
                 className={`flex items-center gap-1.5 bg-slate-100 dark:bg-zinc-950/60 border border-slate-200 dark:border-cyan-900/40 rounded-md px-2 py-1 text-[11px] font-semibold text-slate-700 dark:text-zinc-300 outline-none hover:border-slate-300 dark:hover:border-cyan-700/60 transition-colors min-w-[118px] ${autoModelEnabled ? 'cursor-not-allowed' : ''}`}>
-                <span>{ENGINES.find(e => e.id === engine)?.label}</span>
+                <span>{autoModelEnabled ? 'Auto Pick' : ENGINES.find(e => e.id === engine)?.label}</span>
                 <svg className={`ml-auto w-3 h-3 text-slate-400 dark:text-zinc-500 transition-transform ${engineDropdownOpen ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
               </button>
               {ENGINE_GUIDES[engine] && !engineDropdownOpen && (
                 <div className="absolute left-0 top-full mt-2 z-30 w-[260px] bg-white dark:bg-[#0c0c14] border border-slate-200 dark:border-cyan-800/60 rounded-lg px-3 py-2 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none shadow-lg">
-                  <p className="text-[10px] text-slate-600 dark:text-zinc-400 leading-relaxed"><span className="font-bold text-cyan-600 dark:text-cyan-400">{ENGINES.find(e => e.id === engine)?.label}:</span> {ENGINE_GUIDES[engine]}</p>
+                  <p className="text-[10px] text-slate-600 dark:text-zinc-400 leading-relaxed"><span className="font-bold text-cyan-600 dark:text-cyan-400">{autoModelEnabled ? 'Auto Pick' : ENGINES.find(e => e.id === engine)?.label}:</span> {autoModelEnabled ? 'Auto chooses a core or detection-control engine from the paper tone, topic, and structure on each run.' : ENGINE_GUIDES[engine]}</p>
                 </div>
               )}
               {engineDropdownOpen && (
@@ -1814,7 +1859,7 @@ function EditorPageInner() {
           {/* Active config badges (left side) */}
           <div className="flex flex-wrap items-center gap-1.5">
             <span className="text-[9px] px-2 py-0.5 rounded-full border bg-cyan-50 dark:bg-cyan-950/50 border-cyan-200 dark:border-cyan-900/60 text-cyan-700 dark:text-cyan-200">{autoModelEnabled ? 'Auto Model' : MODE_LABELS[mode]}</span>
-            <span className="text-[9px] px-2 py-0.5 rounded-full border bg-slate-100 dark:bg-zinc-900/70 border-slate-200 dark:border-zinc-800 text-slate-700 dark:text-zinc-300">{ENGINES.find(e => e.id === engine)?.label}</span>
+            <span className="text-[9px] px-2 py-0.5 rounded-full border bg-slate-100 dark:bg-zinc-900/70 border-slate-200 dark:border-zinc-800 text-slate-700 dark:text-zinc-300">{autoModelEnabled ? 'Auto Pick' : ENGINES.find(e => e.id === engine)?.label}</span>
             <span className="text-[9px] px-2 py-0.5 rounded-full border bg-slate-100 dark:bg-zinc-900/70 border-slate-200 dark:border-zinc-800 text-slate-700 dark:text-zinc-300">{TONES.find(t => t.id === tone)?.label}</span>
             <span className="text-[9px] px-2 py-0.5 rounded-full border bg-slate-100 dark:bg-zinc-900/70 border-slate-200 dark:border-zinc-800 text-slate-700 dark:text-zinc-300">{POST_PROCESS_PROFILES.find(profile => profile.id === postProcessingProfile)?.label}</span>
             {grammarCorrection && (

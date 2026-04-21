@@ -12,6 +12,7 @@ const PROTECTION_PATTERNS: RegExp[] = [
   // ── Phase 1: Containers (brackets, parentheses) ──
   /\[[^\]]*\]/g,                                           // [bracketed content]
   /\([^)]*\)/g,                                            // (all parenthetical content)
+  /\{[^{}]*\}/g,                                           // {braced content}
 
   // ── Phase 2: Currency (must come before standalone decimals) ──
   /\$\d+(?:,\d{3})*(?:\.\d+)?/g,                          // currency: $100, $1, $2.50, $1,234.56
@@ -31,6 +32,9 @@ const PROTECTION_PATTERNS: RegExp[] = [
   /\b[nN]\s*=\s*\d+/g,                                    // sample sizes: N = 100, n = 50
   /\b(?:et\s+al\.|ibid\.|op\.\s*cit\.|loc\.\s*cit\.)/gi,  // academic references: et al., ibid.
   /\(\d{4}\)/g,                                            // year citations: (2023), (1999)
+  /\b\d+(?:\.\d+)?\s*(?:×|x|·)\s*10\^?-?\d+\b/gi,       // scientific notation: 3 × 10^8
+  /\b[A-Za-z][A-Za-z0-9_]*\([^()\n]{0,40}\)\s*=\s*[^;\n]+/g, // function-style formulas: f(x)=x^2+1
+  /\b(?:[A-Za-z][A-Za-z0-9_]*|\d+(?:\.\d+)?)(?:\s*(?:=|≤|≥|<|>|±|×|\/|\*|\+|\-|\^)\s*(?:[A-Za-z0-9_.()%]+|\([^()\n]*\))){2,}\b/g,
 
   // ── Phase 6: Dates ──
   /\b\d{1,2}[-/]\d{1,2}[-/]\d{2,4}\b/g,                   // dates: 12/25/2023

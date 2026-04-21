@@ -27,6 +27,18 @@ let _stealthStrategy: DomainStrategy | null = null;
 // Module-level tone settings populated per-call by stealthHumanize
 let _activeTone: ToneSettings | null = null;
 
+export interface StealthHumanizeOptions {
+  detectorPressure?: number;
+  targetAiScore?: number;
+  preserveLeadSentences?: boolean;
+  humanVariance?: number;
+  readabilityBias?: number;
+}
+
+function clamp01(value: number): number {
+  return Math.max(0, Math.min(1, value));
+}
+
 /* ── Tone Adjustment ─────────────────────────────────────────────── */
 
 /**
@@ -1208,6 +1220,7 @@ function scoreReadability(sentence: string, original: string): number {
 function compositeQualityScore(
   original: string,
   candidate: string,
+  readabilityBias = 0.45,
 ): number {
   const changeRatio = wordChangeRatio(original, candidate);
   const readability = scoreReadability(candidate, original);
@@ -1227,8 +1240,9 @@ function compositeQualityScore(
     ? (0.85 - wordCountRatio) * 1.5  // steep penalty for word loss
     : 0;
 
-  // Weights: balance change, readability, and word count preservation
-  return (changeScore * 0.45) + (readability * 0.45) + (0.10 * Math.min(1, wordCountRatio)) - wordCountPenalty;
+  const boundedReadabilityBias = Math.max(0.35, Math.min(0.65, readabilityBias));
+  const changeWeight = Math.max(0.25, 0.90 - boundedReadabilityBias);
+  return (changeScore * changeWeight) + (readability * boundedReadabilityBias) + (0.10 * Math.min(1, wordCountRatio)) - wordCountPenalty;
 }
 
 /* ── Sentence-Level Restructuring ─────────────────────────────────
@@ -1439,9 +1453,12 @@ function processSentence(
   totalSentences: number,
   usedStarters: Set<string>,
   strength: string,
+  isParagraphLead = false,
+  detectorPressure = 0,
 ): string {
   if (!sentence || sentence.trim().length < 8) return sentence;
   const original = sentence;
+  const pressure = clamp01(detectorPressure);
   // Normalize em-dashes and en-dashes to spaced hyphens so tokenizer handles them
   let text = sentence.replace(/\u2014/g, ' \u2014 ').replace(/\u2013/g, ' \u2013 ').replace(/  +/g, ' ');
 
@@ -1503,7 +1520,8 @@ function processSentence(
   // Pick a random restructuring strategy for variety across iterations.
   // Strategies: 0=none, 1=clause reorder, 2=voice toggle, 3=clause+parallel,
   //             4=voice toggle+connector disruption
-  const restructureStrategy = Math.floor(Math.random() * 5);
+  const restructurePool = isParagraphLead && pressure < 0.75 ? [0, 1] : [0, 1, 2, 3, 4];
+  const restructureStrategy = restructurePool[Math.floor(Math.random() * restructurePool.length)] ?? 0;
   text = applySentenceRestructuring(text, restructureStrategy);
 
   // ─── Step 1: AI phrase replacement ───────────────────────────
@@ -1536,11 +1554,12 @@ function processSentence(
   const resultTokens: string[] = [];
   let replaceCount = 0;
   const wordCount = text.split(/\s+/).length;
-  const baseReplacementRate = strength === 'strong' ? 0.80 : 0.70;
+  const baseReplacementRate = Math.min(0.92, (strength === 'strong' ? 0.80 : 0.70) + pressure * 0.10);
   // Domain strategy can INCREASE replacement rate but NEVER reduce below baseline
   // (reducing replacement lets AI patterns survive → higher detection scores)
   const domainRate = _stealthStrategy ? _stealthStrategy.synonymIntensity + 0.15 : baseReplacementRate;
-  const maxReplacements = Math.ceil(wordCount * Math.max(baseReplacementRate, domainRate));
+  const leadRateCap = isParagraphLead ? (0.72 + pressure * 0.12) : 1;
+  const maxReplacements = Math.ceil(wordCount * Math.max(baseReplacementRate, domainRate) * leadRateCap);
   const alreadyReplaced = new Set<string>(); // Track Step 2 output words
 
   for (let i = 0; i < tokens.length; i++) {
@@ -1701,7 +1720,7 @@ function processSentence(
   // Swap independent clauses around ", and ", ", but ", ", which " etc.
   // This adds structural change without changing any words.
   // Domain strategy can INCREASE structural rate but never reduce below 0.25 baseline
-  const clauseReorderRate = _stealthStrategy ? Math.max(0.25, _stealthStrategy.structuralRate) : 0.25;
+  const clauseReorderRate = (_stealthStrategy ? Math.max(0.25, _stealthStrategy.structuralRate) : 0.25) * (isParagraphLead ? 0.55 + pressure * 0.25 : 1);
   if (Math.random() < clauseReorderRate && text.length > 40) {
     // Try swapping clauses around ", and " or ", but "
     const clauseSwapRe = /^(.{15,}?),\s+(and|but|yet)\s+(.{15,})$/i;
@@ -1723,7 +1742,7 @@ function processSentence(
   // ─── Step 3c: Passive ↔ Active voice toggle ─────────────────
   // ~20% chance: convert "X is/was Yed by Z" → "Z Yed X" or vice versa
   // Domain strategy can INCREASE voice toggle rate but never reduce below 0.15 baseline
-  const voiceToggleRate = _stealthStrategy ? Math.max(0.15, _stealthStrategy.structuralRate * 0.6) : 0.15;
+  const voiceToggleRate = (_stealthStrategy ? Math.max(0.15, _stealthStrategy.structuralRate * 0.6) : 0.15) * (isParagraphLead ? 0.45 + pressure * 0.30 : 1);
   if (Math.random() < voiceToggleRate && text.length > 30) {
     // Passive → Active: "X is/was <verb>ed by Y" → "Y <verb>s X"
     const passiveRe = /\b(\w[\w\s]{2,30}?)\s+(is|are|was|were)\s+(\w+ed)\s+by\s+(\w[\w\s]{2,30}?)([.,;])/i;
@@ -1740,8 +1759,8 @@ function processSentence(
   const starterRoll = Math.random();
   const alreadyHasStarter = /^(However|Although|Though|Moreover|Furthermore|Thus|Therefore|Hence|Consequently|Because|Since|Yet|Meanwhile|Additionally|Instead|Despite|In spite|Driven by|As a|As the|Notably|Historically|Traditionally|In practice|In broad|From a|At its|On balance|By extension|In reality|Against|Under these|For instance|For example|To illustrate|In particular|More specifically)/i.test(text) || /^[A-Z][a-z]+,\s/.test(text);
   // Domain strategy can INCREASE starter rate but never reduce below 0.05 baseline
-  const starterRate = _stealthStrategy ? Math.max(0.05, _stealthStrategy.starterInjectionRate) : 0.05;
-  if (starterRoll < starterRate && !alreadyHasStarter && sentenceIndex > 0 && text.length > 30) {
+  const starterRate = (_stealthStrategy ? Math.max(0.05, _stealthStrategy.starterInjectionRate) : 0.05) * (isParagraphLead ? 0.15 : 1 + pressure * 0.15);
+  if (starterRoll < starterRate && !alreadyHasStarter && sentenceIndex > 0 && !isParagraphLead && text.length > 30) {
     // Merge domain-specific starters with academic starters
     const domainStarters = _stealthStrategy ? _stealthStrategy.domainStarters : [];
     const allStarters = [...new Set([...STARTERS_ACADEMIC, ...domainStarters])];
@@ -1838,8 +1857,13 @@ export function stealthHumanize(
   strength: string = 'medium',
   _tone: string = 'academic',
   maxIterations: number = 15,
+  options: StealthHumanizeOptions = {},
 ): string {
-  const enforcedMaxIterations = Math.max(10, maxIterations);
+  const detectorPressure = clamp01(options.detectorPressure ?? 0);
+  const humanVariance = clamp01(options.humanVariance ?? 0.04);
+  const preserveLeadSentences = options.preserveLeadSentences !== false;
+  const readabilityBias = clamp01(options.readabilityBias ?? (_tone === 'academic_blog' || _tone === 'casual' ? 0.9 : 0.7));
+  const enforcedMaxIterations = Math.max(10, Math.round(maxIterations + detectorPressure * 6));
   console.log('[NURU_V2] === NEW ENGINE ACTIVE === Input length:', text.length);
   if (!text || text.trim().length === 0) return text;
 
@@ -1876,13 +1900,14 @@ export function stealthHumanize(
 
     for (const sent of sentences) {
       const originalSent = sent;
+      const isParagraphLead = preserveLeadSentences && outputSentences.length === 0;
 
       // First pass uses real sentenceIndex (enables starter injection on non-first sentences)
       let best = processSentence(
         sent, hasFirstPerson, globalSentenceIdx, totalSentences,
-        usedStarters, strength,
+        usedStarters, strength, isParagraphLead, detectorPressure,
       );
-      let bestScore = compositeQualityScore(originalSent, best);
+      let bestScore = compositeQualityScore(originalSent, best, 0.35 + readabilityBias * 0.30);
 
       // Iterative refinement: each pass starts from ORIGINAL to prevent
       // compounding garble. We keep the best result (highest composite score
@@ -1893,9 +1918,9 @@ export function stealthHumanize(
           const iterStrength = iter > 5 ? 'strong' : strength;
           const next = processSentence(
             originalSent, hasFirstPerson, iter === 1 ? globalSentenceIdx : 0,
-            totalSentences, usedStarters, iterStrength as any
+            totalSentences, usedStarters, iterStrength as any, isParagraphLead, detectorPressure,
           );
-          const nextScore = compositeQualityScore(originalSent, next);
+          const nextScore = compositeQualityScore(originalSent, next, 0.35 + readabilityBias * 0.30);
           if (nextScore > bestScore) {
             best = next;
             bestScore = nextScore;
@@ -1919,14 +1944,14 @@ export function stealthHumanize(
       if (item.needsReprocess && item.text.trim().length >= 8) {
         // Run 3 iterations on the new sentence and pick the best
         let reprocessBest = processSentence(
-          item.text, hasFirstPerson, 0, totalSentences, usedStarters, strength,
+          item.text, hasFirstPerson, 0, totalSentences, usedStarters, strength, false, detectorPressure,
         );
-        let reprocessBestScore = compositeQualityScore(item.text, reprocessBest);
+        let reprocessBestScore = compositeQualityScore(item.text, reprocessBest, 0.35 + readabilityBias * 0.30);
         for (let ri = 0; ri < 3; ri++) {
           const candidate = processSentence(
-            item.text, hasFirstPerson, 0, totalSentences, usedStarters, strength,
+            item.text, hasFirstPerson, 0, totalSentences, usedStarters, strength, false, detectorPressure,
           );
-          const score = compositeQualityScore(item.text, candidate);
+          const score = compositeQualityScore(item.text, candidate, 0.35 + readabilityBias * 0.30);
           if (score > reprocessBestScore) {
             reprocessBest = candidate;
             reprocessBestScore = score;
@@ -1964,6 +1989,22 @@ export function stealthHumanize(
     result = applyToneAdjustment(result, _activeTone);
   }
 
+  if (humanVariance > 0) {
+    const paragraphsWithVariance = result.split(/\n\s*\n/).map((paragraph) => {
+      const sentences = splitSentences(paragraph.trim());
+      if (sentences.length <= 1) return paragraph.trim();
+      return sentences.map((sentence, index) => {
+        if (index === 0 || Math.random() > Math.min(0.20, humanVariance + detectorPressure * 0.08)) return sentence;
+        let varied = sentence;
+        varied = varied.replace(/^(However|Moreover|Furthermore|Additionally),\s+/i, (_m, word) => word.charAt(0).toUpperCase() + word.slice(1) + ' ');
+        varied = varied.replace(/\s*,\s*/g, ', ');
+        varied = varied.replace(/\bthat\s+that\b/gi, 'that');
+        return varied;
+      }).join(' ');
+    });
+    result = paragraphsWithVariance.join('\n\n');
+  }
+
   return result;
 }
 
@@ -1991,7 +2032,7 @@ export function stealthHumanizeTargeted(
 ): string {
   if (!sentence || sentence.trim().length < 8 || flaggedPhrases.length === 0) {
     // No phrases to target — fall back to standard single pass
-    return stealthHumanize(sentence, strength, 'academic', 1);
+    return stealthHumanize(sentence, strength, 'academic', 1, { detectorPressure: 0.85, preserveLeadSentences: false, humanVariance: 0.02, readabilityBias: 0.65 });
   }
 
   // Build a set of lower-cased words from all flagged phrases for fast lookup

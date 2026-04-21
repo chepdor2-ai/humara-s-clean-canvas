@@ -309,7 +309,7 @@ export function buildForensicProfile(text: string): ForensicProfile {
 // DOCUMENT CONTEXT BUILDER
 // ═══════════════════════════════════════════════════════════════════
 
-export function buildDocumentContext(text: string): DocumentContext {
+export function buildDocumentContext(text: string, tone: 'academic' | 'professional' | 'casual' | 'neutral' = 'academic'): DocumentContext {
   const paragraphs = text.split(/\n\s*\n/).filter(p => p.trim());
   const allSentences: SentenceProfile[] = [];
   const paragraphSentences: string[][] = [];
@@ -341,16 +341,36 @@ export function buildDocumentContext(text: string): DocumentContext {
     if (score > bestScore) { bestScore = score; bestTopic = topic; }
   }
 
-  // Protected terms (domain-specific words that must be preserved)
+  // Protected terms (domain-specific TECHNICAL words that must be preserved)
+  // IMPORTANT: Only protect truly domain-specific terminology, NOT common
+  // academic words. Previous thresholds (count≥3, len>4 OR count≥2, len≥7)
+  // were too aggressive and blocked ALL vocabulary replacement in academic text.
   const protectedTerms = new Set<string>();
   const wordFreq = new Map<string, number>();
   const words = lower.match(/[a-z']+/g) ?? [];
   for (const w of words) {
     wordFreq.set(w, (wordFreq.get(w) ?? 0) + 1);
   }
+  // Common academic words that should NEVER be protected (allow replacement)
+  const NEVER_PROTECT = new Set([
+    'significant', 'comprehensive', 'fundamental', 'crucial', 'essential',
+    'effective', 'structured', 'practical', 'applicable', 'productive',
+    'balanced', 'positive', 'negative', 'widespread', 'numerous', 'robust',
+    'notable', 'substantial', 'integral', 'inherent', 'innovative', 'dynamic',
+    'demonstrates', 'indicates', 'facilitates', 'enables', 'encompasses',
+    'contributes', 'influences', 'maintains', 'promotes', 'enhances',
+    'utilizes', 'employs', 'addresses', 'presents', 'provides', 'requires',
+    'examines', 'establishes', 'generates', 'highlights', 'emphasizes',
+    'morality', 'ethical', 'ethics', 'moral', 'rationality', 'objective',
+    'subjective', 'contemporary', 'alternative', 'principles', 'standards',
+    'individuals', 'institutions', 'tradition', 'reasoning', 'argument',
+    'philosophical', 'political', 'governance', 'analysis', 'perspectives',
+  ]);
   for (const [w, count] of wordFreq) {
-    if (count >= 3 && w.length > 4) protectedTerms.add(w);
-    if (count >= 2 && w.length >= 7) protectedTerms.add(w);
+    if (NEVER_PROTECT.has(w)) continue;
+    // Only protect words appearing 5+ times AND longer than 6 chars
+    // This catches true domain keywords while leaving common words replaceable
+    if (count >= 5 && w.length > 6) protectedTerms.add(w);
   }
 
   // Starter and connector counts
@@ -371,5 +391,6 @@ export function buildDocumentContext(text: string): DocumentContext {
     originalText: text,
     starterCounts,
     connectorCounts,
+    tone,
   };
 }

@@ -22,10 +22,14 @@ export interface WorkspaceSource {
   authors: string[]
   journal: string
   year: number
+  publicationDate?: string | null
   doi: string | null
   abstractPreview: string
   openAccess: boolean
   fullTextUrl: string | null
+  sourceUrl?: string | null
+  openAlexId?: string | null
+  provider?: 'seed' | 'openalex' | 'google'
   citationCount: number
   qualityScore: number
   savedAt: string

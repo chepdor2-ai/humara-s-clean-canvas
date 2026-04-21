@@ -1,5 +1,18 @@
-import { Packer, Paragraph, TextRun, HeadingLevel, Document } from 'docx'
+import {
+  AlignmentType,
+  Document,
+  Footer,
+  FootnoteReferenceRun,
+  Header,
+  HeadingLevel,
+  Packer,
+  PageNumber,
+  Paragraph,
+  TextRun,
+  convertInchesToTwip,
+} from 'docx'
 import { jsPDF } from 'jspdf'
+import PptxGenJS from 'pptxgenjs'
 import type {
   ScholarSearchFilters,
   WorkspaceDraft,
@@ -13,6 +26,17 @@ import type {
   WorkspaceSource,
   WorkspaceTaskStep,
 } from '@/lib/workspace/types'
+import {
+  buildDraftHtml,
+  buildDraftMarkdown,
+  buildReferenceEntriesFromSources,
+  createFormattingProfile,
+  ensureInlineCitations,
+  formatBibliographyEntry,
+  normalizeCitationStyle,
+  parseDocumentText,
+} from '@/lib/workspace/document-format'
+import { searchLiveScholarSources } from '@/lib/workspace/scholar'
 
 const WORKSPACE_TABLE = 'workspace_projects'
 const fallbackWorkspaceStore = new Map<string, WorkspaceProject[]>()
@@ -196,32 +220,12 @@ function buildInstructionProfile(instructions: string, rubric: string, title: st
   }
 }
 
-function createDraftMarkdown(content: WorkspaceDraftContent) {
-  return [
-    `# ${content.title}`,
-    '',
-    ...content.sections.flatMap((section) => [
-      `## ${section.title}`,
-      '',
-      section.body,
-      '',
-      ...(section.citations.length > 0 ? [`References used: ${section.citations.join(', ')}`, ''] : []),
-    ]),
-  ].join('\n')
+function createDraftMarkdown(content: WorkspaceDraftContent, sources: WorkspaceSource[], style: string) {
+  return buildDraftMarkdown(content, sources, style)
 }
 
-function createDraftHtml(content: WorkspaceDraftContent) {
-  return [
-    `<article class="workspace-document">`,
-    `<h1>${escapeHtml(content.title)}</h1>`,
-    ...content.sections.map((section) => `
-      <section>
-        <h2>${escapeHtml(section.title)}</h2>
-        <p>${escapeHtml(section.body)}</p>
-      </section>
-    `),
-    `</article>`,
-  ].join('')
+function createDraftHtml(content: WorkspaceDraftContent, sources: WorkspaceSource[], style: string) {
+  return buildDraftHtml(content, sources, style)
 }
 
 function createInitialDraft(title: string, instructionProfile: WorkspaceInstructionProfile, sources: WorkspaceSource[]): WorkspaceDraft {
@@ -234,28 +238,44 @@ function createInitialDraft(title: string, instructionProfile: WorkspaceInstruct
         id: makeId('section'),
         title: 'Introduction',
         goal: 'Frame the assignment and establish the thesis.',
-        body: `${title} is approached here as an academic problem that requires structured analysis, recent scholarship, and clear alignment with the stated instructions. This introduction establishes the central argument, clarifies scope, and previews how evidence will be used to support each section.`,
+        body: ensureInlineCitations(
+          `${title} is approached here as an academic problem that requires structured analysis, recent scholarship, and clear alignment with the stated instructions. This introduction establishes the central argument, clarifies scope, and previews how evidence will be used to support each section.`,
+          selected.slice(0, 1),
+          instructionProfile.citationStyle,
+        ),
         citations: selected.slice(0, 1).map((source) => source.id),
       },
       {
         id: makeId('section'),
         title: 'Critical Analysis',
         goal: 'Deliver the core reasoning and comparative discussion.',
-        body: `The core discussion prioritizes ${instructionProfile.analysisDepth} reasoning. It connects the assignment requirements to relevant scholarly perspectives, identifies tensions in the literature, and explains why a research-workbench approach can produce more reliable outputs than one-shot prompting.`,
+        body: ensureInlineCitations(
+          `The core discussion prioritizes ${instructionProfile.analysisDepth} reasoning. It connects the assignment requirements to relevant scholarly perspectives, identifies tensions in the literature, and explains why a research-workbench approach can produce more reliable outputs than one-shot prompting.`,
+          selected.slice(0, 2),
+          instructionProfile.citationStyle,
+        ),
         citations: selected.slice(0, 2).map((source) => source.id),
       },
       {
         id: makeId('section'),
         title: 'Evidence and Discussion',
         goal: 'Use source-backed evidence to support the claims.',
-        body: `Evidence is integrated as quotable, project-linked support rather than decorative citation. Each passage should directly advance the claim being made, strengthen interpretation, and make the reasoning auditable for the user before export.`,
+        body: ensureInlineCitations(
+          `Evidence is integrated as quotable, project-linked support rather than decorative citation. Each passage should directly advance the claim being made, strengthen interpretation, and make the reasoning auditable for the user before export.`,
+          selected,
+          instructionProfile.citationStyle,
+        ),
         citations: selected.map((source) => source.id),
       },
       {
         id: makeId('section'),
         title: 'Conclusion',
         goal: 'Synthesize the findings and state implications.',
-        body: `The conclusion reinforces the central finding: a premium academic workspace must coordinate instruction analysis, evidence retrieval, scoring, revision, and editable output as one continuous workflow. It closes by translating that principle into product and submission value for the user.`,
+        body: ensureInlineCitations(
+          `The conclusion reinforces the central finding: a premium academic workspace must coordinate instruction analysis, evidence retrieval, scoring, revision, and editable output as one continuous workflow. It closes by translating that principle into product and submission value for the user.`,
+          selected.slice(1, 3),
+          instructionProfile.citationStyle,
+        ),
         citations: selected.slice(1, 3).map((source) => source.id),
       },
     ],
@@ -268,8 +288,8 @@ function createInitialDraft(title: string, instructionProfile: WorkspaceInstruct
     versionNumber: 1,
     status: 'draft',
     contentJson,
-    contentMarkdown: createDraftMarkdown(contentJson),
-    contentHtml: createDraftHtml(contentJson),
+    contentMarkdown: createDraftMarkdown(contentJson, sources, instructionProfile.citationStyle),
+    contentHtml: createDraftHtml(contentJson, sources, instructionProfile.citationStyle),
     createdAt: timestamp,
     updatedAt: timestamp,
   }
@@ -383,8 +403,8 @@ export function reviseProjectToTarget(project: WorkspaceProject): {
       contentJson: revisedContent,
       createdAt: nowIso(),
       updatedAt: nowIso(),
-      contentMarkdown: createDraftMarkdown(revisedContent),
-      contentHtml: createDraftHtml(revisedContent),
+      contentMarkdown: createDraftMarkdown(revisedContent, currentProject.sourceLibrary, currentProject.citationStyle),
+      contentHtml: createDraftHtml(revisedContent, currentProject.sourceLibrary, currentProject.citationStyle),
     }
 
     currentProject.drafts.push(revisedDraft)
@@ -431,9 +451,10 @@ export function createInitialProject(input: {
   uploads?: string[]
   citationStyle?: string
   targetWordCount?: number
+  sources?: WorkspaceSource[]
 }): WorkspaceProject {
   const instructionProfile = buildInstructionProfile(input.instructions, input.rubric ?? '', input.title)
-  const selectedSources = scholarlyCatalog.slice(0, 3)
+  const selectedSources = (input.sources && input.sources.length > 0 ? input.sources : scholarlyCatalog).slice(0, 5)
   const evidenceChunks = selectedSources.flatMap((source, index) => [
     {
       id: makeId('evidence'),

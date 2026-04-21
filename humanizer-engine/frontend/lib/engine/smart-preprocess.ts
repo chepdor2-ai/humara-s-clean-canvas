@@ -29,6 +29,8 @@ import { robustSentenceSplit } from './content-protection';
 import { protectSpecialContent, restoreSpecialContent, type ProtectionMap } from './content-protection';
 import { restructureSentence } from './llm-humanizer';
 import { looksLikeHeadingLine } from './structure-preserver';
+import { profilePaper, type PaperProfile } from './paper-profiler';
+import { computeSentenceStrategy, type SentenceStrategy } from './adaptive-strategy-selector';
 
 // ═══════════════════════════════════════════════════════════════════════
 // Types
@@ -53,6 +55,8 @@ export interface SentenceAnalysis {
   wasRestructured: boolean;
   /** The preprocessed text (after LLM rephrasing if selected, else original) */
   preprocessed: string;
+  /** Adaptive strategy mapped from paper profiler */
+  strategy?: SentenceStrategy;
 }
 
 export interface PreprocessResult {
@@ -79,8 +83,8 @@ export interface PreprocessResult {
 /** Minimum percentage of content sentences that must go through LLM rephrasing */
 const MIN_REPHRASING_RATIO = 0.95;
 
-/** Minimum word change per sentence (60% — aggressive for 0% AI detection) */
-const MIN_CHANGE = 0.60;
+/** Minimum word change per sentence (65% — hard floor) */
+const MIN_CHANGE = 0.65;
 
 /** Maximum word change per sentence (95% — allow near-total rewrites) */
 const MAX_CHANGE = 0.95;
@@ -185,7 +189,8 @@ function analyzeSentences(
 
   if (contentSentences.length === 0) return analyses;
 
-  // Run forensic detection on joined content
+  // Since we now use PaperProfile globally in the main entry, we will only map it in the main flow.
+  // The per-sentence AI scores here still use the quick TextSignals locally to rank sentences.
   try {
     const joined = contentSentences.join(' ');
     const textSignals = new TextSignals(joined);
@@ -272,8 +277,8 @@ async function applyLLMRephrasing(
 ): Promise<void> {
   const selected = analyses.filter(a => a.selectedForRephrasing && !a.isHeading);
 
-  // Process in parallel batches of 5 to avoid overwhelming the LLM API
-  const BATCH_SIZE = 5;
+  // Process in parallel with high concurrency for speed max 20sec
+  const BATCH_SIZE = 25;
   for (let batch = 0; batch < selected.length; batch += BATCH_SIZE) {
     const batchItems = selected.slice(batch, batch + BATCH_SIZE);
 
@@ -282,8 +287,11 @@ async function applyLLMRephrasing(
         // Protect special content before LLM processing
         const { text: protectedText, map: protectionMap } = protectSpecialContent(analysis.original);
 
-        // Call LLM restructuring
-        let restructured = await restructureSentence(protectedText);
+        // Get target strategy min change
+        const targetMinChange = analysis.strategy ? analysis.strategy.minChangeTarget : MIN_CHANGE;
+
+        // Call LLM restructuring with strategy
+        let restructured = await restructureSentence(protectedText, analysis.strategy);
 
         // Restore protected content
         restructured = restoreSpecialContent(restructured, protectionMap);
@@ -307,17 +315,18 @@ async function applyLLMRephrasing(
         let change = measureWordChange(analysis.original, restructured);
 
         // Enforce min change — retry up to 3 times for deeper restructuring
-        if (change < MIN_CHANGE) {
+        if (change < targetMinChange) {
           for (let retryAttempt = 0; retryAttempt < 3; retryAttempt++) {
             const retryInput = retryAttempt === 0 ? restructured : analysis.original;
             const { text: rp, map: rm } = protectSpecialContent(retryInput);
-            let retry = await restructureSentence(rp);
+            let retry = await restructureSentence(rp, analysis.strategy);
             retry = restoreSpecialContent(retry, rm);
             const retryCount = countSentencesInText(retry);
             if (retryCount === 1) {
               const retryChange = measureWordChange(analysis.original, retry);
-              if (retryChange >= MIN_CHANGE) {
+              if (retryChange >= targetMinChange) {
                 restructured = retry;
+                change = retryChange;
                 break;
               }
               if (retryChange > change) {
@@ -392,21 +401,31 @@ function validatePreprocessing(analyses: SentenceAnalysis[]): void {
 // Main Entry Point
 // ═══════════════════════════════════════════════════════════════════════
 
-/**
- * Run the full smart preprocessing pipeline.
- * 
- * @param sentences - Array of sentences (from splitIntoIndexedSentences)
- * @param paragraphBoundaries - Paragraph boundary indices
- * @param onProgress - Optional callback for streaming progress updates
- * @returns PreprocessResult with all analysis, restructured sentences, and metadata
- */
 export async function smartPreprocess(
   sentences: string[],
   paragraphBoundaries: number[],
   onProgress?: (index: number, text: string, stage: string) => void,
 ): Promise<PreprocessResult> {
+  // Generate Profile
+  const fullText = sentences.join(' ');
+  const profile = profilePaper(fullText);
+
   // Phase 1: Analyze AI scores
   const analyses = analyzeSentences(sentences);
+
+  // Map Adaptive Strategy per-sentence based on paragraph classification
+  let globalSentIdx = 0;
+  for (let pIdx = 0; pIdx < paragraphBoundaries.length; pIdx++) {
+    const start = paragraphBoundaries[pIdx];
+    const end = pIdx < paragraphBoundaries.length - 1 ? paragraphBoundaries[pIdx + 1] : sentences.length;
+    // Find matching paragraph metric from profile relying on wordCount alignment
+    // (This is an approximation; ideally, boundaries match perfectly)
+    const metric = profile.paragraphMetrics[pIdx];
+    const strategy = computeSentenceStrategy(profile, metric);
+    for (let sIdx = start; sIdx < end; sIdx++) {
+      analyses[sIdx].strategy = strategy;
+    }
+  }
 
   // Compute initial overall AI score
   const contentSentences = analyses.filter(a => !a.isHeading);

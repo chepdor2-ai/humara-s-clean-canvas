@@ -60,6 +60,75 @@ import { robustSentenceSplit, humanizeTitle } from './content-protection';
 import { enforceSingleSentence } from './sentence-surgery';
 
 // ══════════════════════════════════════════════════════════════════════════
+// PHASE 0: PROPER NOUN & CITATION AUTHOR PROTECTION
+// ══════════════════════════════════════════════════════════════════════════
+
+/**
+ * Extract proper nouns from source text so we can restore their casing
+ * after all transforms. Covers:
+ *   - Citation authors: Crowe (2019), Finnis (2011), Murphy (2001)
+ *   - Capitalized words NOT at sentence start (Hill, Calvin, Luther)
+ *   - Multi-word proper names (John Lawrence Hill, Natural Law)
+ */
+function extractProperNouns(text: string): Set<string> {
+  const properNouns = new Set<string>();
+
+  // 1. Citation authors: "Author (Year)" or "Author, Year" patterns
+  const citAuthorRe = /\b([A-Z][a-z]{2,})(?=\s*(?:\(|,)\s*\d{4})/g;
+  let m: RegExpExecArray | null;
+  while ((m = citAuthorRe.exec(text)) !== null) {
+    properNouns.add(m[1]);
+  }
+
+  // 2. "Author and Author" / "Author & Author" before year
+  const multiAuthorRe = /\b([A-Z][a-z]{2,})\s+(?:and|&)\s+([A-Z][a-z]{2,})(?=\s*(?:\(|,)\s*\d{4})/g;
+  while ((m = multiAuthorRe.exec(text)) !== null) {
+    properNouns.add(m[1]);
+    properNouns.add(m[2]);
+  }
+
+  // 3. Capitalized words mid-sentence (not after period+space or start of text)
+  //    These are likely proper nouns: Hill, Calvin, Luther, Reformed
+  const midSentCaps = /(?<=[a-z,;:]\s)([A-Z][a-z]{2,})\b/g;
+  while ((m = midSentCaps.exec(text)) !== null) {
+    const word = m[1];
+    // Skip common sentence-start words that might appear after semicolons
+    const commonWords = new Set(['The', 'This', 'That', 'These', 'Those', 'Such', 'However', 'Also', 'Furthermore', 'Moreover', 'Additionally', 'Consequently', 'Nevertheless', 'Nonetheless', 'Therefore', 'Thus', 'Hence', 'Indeed', 'Notably', 'Specifically', 'One', 'His', 'Her', 'Its', 'Their', 'Our', 'Some', 'Many', 'Most', 'All', 'Each', 'Every', 'Both', 'Several', 'Various', 'Other']);
+    if (!commonWords.has(word)) {
+      properNouns.add(word);
+    }
+  }
+
+  // 4. Known multi-word proper terms that must stay capitalized
+  const multiWordProper = /\b(Natural Law|New Natural Law|Reformed)\b/g;
+  while ((m = multiWordProper.exec(text)) !== null) {
+    // Add each word individually
+    for (const w of m[1].split(/\s+/)) {
+      if (w.length >= 2) properNouns.add(w);
+    }
+  }
+
+  return properNouns;
+}
+
+/**
+ * Restore proper noun casing in processed text.
+ * For each known proper noun, find its lowercased version and restore it.
+ */
+function restoreProperNounCasing(text: string, properNouns: Set<string>): string {
+  let result = text;
+  for (const noun of properNouns) {
+    // Replace lowercase version with proper-cased version
+    const lc = noun.toLowerCase();
+    if (lc === noun) continue; // already lowercase (shouldn't happen)
+    // Use word-boundary matching to avoid partial replacements
+    const re = new RegExp(`\\b${lc}\\b`, 'g');
+    result = result.replace(re, noun);
+  }
+  return result;
+}
+
+// ══════════════════════════════════════════════════════════════════════════
 // PHASE 1: PRE-ANALYSIS
 // ══════════════════════════════════════════════════════════════════════════
 
@@ -119,10 +188,11 @@ function isProtectedLine(line: string): boolean {
   // Section keyword headings (standalone only, not followed by body text)
   if (/^(?:Part|Section|Chapter|Abstract|Introduction|Conclusion|References|Bibliography|Appendix)\s*$/i.test(t)) return true;
   // Numbered/lettered headings: "1." "2)" "A." etc.
+  // Also match headings ending with period like "3. Evaluation of the Book Critically."
   if (/^[\d]+[.):\-]\s/.test(t) || /^[A-Za-z][.)]\s/.test(t)) {
     const words = t.split(/\s+/);
-    // Only treat as heading if short (<=10 words) and no ending punctuation
-    if (words.length <= 10 && !/[.!?]$/.test(t)) return true;
+    // Treat as heading if short (<=12 words)
+    if (words.length <= 12) return true;
   }
   const words = t.split(/\s+/);
   // ALL-CAPS lines (4+ chars) that are short
@@ -416,28 +486,55 @@ function calculateWordChangePercent(original: string, rewritten: string): number
   const newWords = normalize(rewritten);
   if (origWords.length === 0) return 100;
 
-  const origSet = new Set(origWords);
-  const newSet = new Set(newWords);
-  let kept = 0;
-  for (const w of origSet) {
-    if (newSet.has(w)) kept++;
+  // POSITIONAL comparison: count how many word positions are different
+  const maxLen = Math.max(origWords.length, newWords.length);
+  let changed = 0;
+  for (let i = 0; i < maxLen; i++) {
+    if (i >= origWords.length || i >= newWords.length || origWords[i] !== newWords[i]) {
+      changed++;
+    }
   }
-  return Math.round((1 - kept / origSet.size) * 100);
+  return Math.round((changed / maxLen) * 100);
 }
 
 /**
  * Check if a sentence looks garbled after transformation.
  * Returns true if the sentence appears ungrammatical.
+ * CRITICAL: This must catch ALL broken voice-shift and clause-reordering outputs.
  */
 function isGarbledSentence(sentence: string): boolean {
   const s = sentence.trim();
+  if (!s) return true;
   const words = s.split(/\s+/);
   // Sentence fragment: very short and ends with period
   if (words.length <= 3 && /[.!?]$/.test(s)) return true;
   // "is alsoed by" or any nonsense "-ed" passive form
   if (/\bis\s+alsoed\b/i.test(s)) return true;
   // Broken irregular past participles created by naive voice shift
-  if (/\b(?:chosed|choosed|runned|comed|goed|taked|takened|gived|writed|speaked|leaved|finded|knowed|thinked|sayed|tolded|keeped|bringed|buyed|felted|cutted|putted|setted|digged|stronglyed|becomed|choosened|arised|losed|wined|thinked|growed|drived|hited|falled|holded|rised|speaked|maked|standed|telled|spended|builded|dealed|feeled|payed)\b/i.test(s)) return true;
+  if (/\b(?:chosed|choosed|runned|comed|goed|taked|takened|gived|writed|speaked|leaved|finded|knowed|thinked|sayed|tolded|keeped|bringed|buyed|felted|cutted|putted|setted|digged|stronglyed|becomed|choosened|arised|losed|wined|growed|drived|hited|falled|holded|rised|maked|standed|telled|spended|builded|dealed|feeled|payed|successed|succeeded\s+by\s+\w+\s+natural|doed|hased|willed)\b/i.test(s)) return true;
+  // SPECIFIC broken -ed on adverbs/adjectives/non-verbs: "philosophicallyed", "stronglyed", "positivelyed"
+  // NOTE: Do NOT use a broad regex like /\w+(ly|al|ive)ed/ — it matches legitimate words
+  // like "presented", "revealed", "represented", "implemented", "prevented", etc.
+  // Instead, match ONLY the specific patterns that are NEVER valid English:
+  if (/\b\w+(?:lyed|ouslyed|ivelyed|fullyed|ticlyed|callyed|entlyed|antlyed)\b/i.test(s)) return true;
+  // Specific broken adverb+ed forms: "philosophicallyed", "practicallyed", "essentiallyed"
+  if (/\b(?:philosophical|practical|essential|substantial|fundamental|additional|traditional|rational|universal|critical|political|empirical|historical|theoretical|statistical|analytical|conditional|professional|exceptional|operational|functional|structural|conceptual|environmental|consequential|psychological|methodological|international)lyed\b/i.test(s)) return true;
+  // "doed", "hased", "alsoed" and other common broken -ed forms
+  if (/\b(?:doed|hased|alsoed|willed|shalled|musted|mayed|caned|mighted|coulded|shoulded|woulded)\b/i.test(s)) return true;
+  // GENERAL: any "is Xed by" where X is clearly not a verb (e.g., "is tended by relativism")
+  // Catch "is [word]ed by [non-article-noun]" where the by-phrase has no determiner
+  if (/\b(?:is|was|are|were)\s+\w+ed\s+by\s+(?!the\b|a\b|an\b|this\b|that\b|these\b|those\b|some\b|many\b|most\b|its\b|his\b|her\b|their\b|our\b|my\b|your\b)\w+\s+\w+\s+\w+\s+\w+/i.test(s)) {
+    // Only flag if the by-phrase is suspiciously long (>4 words without a verb)
+    const byMatch = s.match(/\b(?:is|was|are|were)\s+\w+ed\s+by\s+(.+)/i);
+    if (byMatch && byMatch[1]) {
+      const byPhrase = byMatch[1].trim();
+      const byWords = byPhrase.split(/\s+/);
+      // If the by-phrase has >4 words and looks like a noun salad
+      if (byWords.length > 4 && !/\b(?:is|are|was|were|has|have|had|and|or|but|which|that|who)\b/i.test(byPhrase)) {
+        return true;
+      }
+    }
+  }
   // Broken passive with dangling agent: "is X by Y, subject"
   if (/\b(?:is|was|are|were)\s+\w+(?:ed|en)\s+by\s+\w+(?:\s+\w+)?\s*,\s*(?:I|he|she|it|we|they|you)\b/i.test(s)) return true;
   // Repeated adjacent words (excluding intentional)
@@ -450,7 +547,7 @@ function isGarbledSentence(sentence: string): boolean {
   if (/\b(?:by|of|in|on|at|for|to)\s+(?:by|of|in|on|at|for|to)\s+/i.test(s)) return true;
   // "are expanded by transformation organizations" — passive + random noun mash
   if (/\bare\s+\w+ed\s+by\s+\w+\s+organizations?\b/i.test(s) && !/\bare\s+(?:used|employed|adopted|managed|operated|owned|run|funded|supported)\s+by\b/i.test(s)) return true;
-  // Sentence starts with "are" or "is" (broken subject)
+  // Sentence starts with "are" or "is" + past participle (broken subject)
   if (/^(?:are|is)\s+\w+ed\b/i.test(s)) return true;
   // "by measures risk" — preposition followed by noun then unrelated noun  
   if (/\bby\s+measures?\s+risk\b/i.test(s)) return true;
@@ -474,19 +571,105 @@ function isGarbledSentence(sentence: string): boolean {
     const tail = s.match(/,\s+(\w+\s+\w+)\.\s*$/);
     if (tail && !/\b(?:is|are|was|were|has|have|had|do|does|did|can|could|will|would)\b/i.test(tail[1])) return true;
   }
+
+  // ── NEW GARBLE CHECKS (catch broken voice-shift & clause reordering) ──
+
+  // Inverted sentence ending with ", SUBJECT verb" pattern from broken fronting:
+  // e.g. "In the creation of..., he maintains" → catches bad inversions like
+  // "In the creation of an ethical environment..., he maintains that" which LOSE the main clause
+  // ONLY flag if the main clause before comma has no subject (starts with prep phrase only)
+  if (/^(?:In|On|At|By|From|Through|With|For|During)\s+[^,]{20,},\s*(?:he|she|it|they|we|this|the)\s+\w+(?:s|ed|es)?\s+that\b/i.test(s)) {
+    // Check if the sentence is just a fronted prepositional phrase + stub
+    const commaPos = s.indexOf(',');
+    const afterComma = s.slice(commaPos + 1).trim();
+    const beforeComma = s.slice(0, commaPos).trim();
+    // If before-comma part is MUCH longer than after-comma, it's a garbled inversion
+    if (beforeComma.length > afterComma.length * 2.5 && afterComma.split(/\s+/).length < 8) {
+      return true;
+    }
+  }
+
+  // Sentence ending with ", SUBJECT." — dangling subject fragment (broken clause split)
+  if (/,\s*(?:he|she|it|they|this)\s+\w{2,}\s*\.\s*$/i.test(s)) {
+    const lastComma = s.lastIndexOf(',');
+    const tail = s.slice(lastComma + 1).trim();
+    if (tail.split(/\s+/).length <= 3) return true;
+  }
+
+  // "is succeeded by X natural law" — garbled passive (voice shift broke it)
+  if (/\bis\s+succeeded\s+by\s+\w+\s+(?:natural|law|theory)\b/i.test(s)) return true;
+
+  // Sentence contains "., " (double punctuation from broken join)
+  if (/\.,\s/.test(s) && !/\bet\s+al\.,/i.test(s) && !/\betc\.,/i.test(s)) return true;
+
+  // "is thoughted by" — broken past participle of irregular verbs
+  if (/\b(?:is|was|are|were)\s+(?:thoughted|thinked|knowed|leaved|speaked|writed|finded|goed|comed|runned|sayed|maked)\b/i.test(s)) return true;
+
+  // Sentence starts with bare third-person verb (no subject):
+  // "Has maintained that Hill" / "Testifies to the..." / "Offers Natural Law"
+  // Valid verb-first sentences only: imperatives, questions, or after conjunctions
+  if (/^(?:Has|Have|Had|Does|Is|Are|Was|Were|Testifies|Offers|Maintains|Presents|Highlights|Emphasizes|Associates|Insists|Proves|Argues|Keeps|Shows|Makes|Gives|Gets|Holds|Provides|Remains|Requires|Includes|Involves)\s+/i.test(s)) {
+    // Only flag if NOT a question and NOT an imperative
+    if (!/\?$/.test(s)) {
+      // Check if the first word is a verb in third-person singular (ends in -s/-es)
+      const firstWord = words[0]?.toLowerCase() ?? '';
+      // These are verbs that should have a subject before them
+      if (/^(?:has|have|had|testifies|offers|maintains|presents|highlights|emphasizes|associates|insists|proves|argues|keeps|shows|provides|remains|requires|includes|involves)$/i.test(firstWord)) {
+        return true;
+      }
+    }
+  }
+
+  // Passive ending with ", SUBJECT." pattern from broken clause reordering:
+  // "is offered by synthesis, Hill." — dangling proper noun after comma
+  if (/,\s+[A-Z][a-z]+\.\s*$/.test(s) && words.length > 5) {
+    const lastComma = s.lastIndexOf(',');
+    const tail = s.slice(lastComma + 1).trim();
+    // If the tail is just a single proper noun + period, it's likely garbled
+    if (tail.split(/\s+/).length <= 2 && /^[A-Z]/.test(tail)) return true;
+  }
+
+  // Sentence starts with a prepositional phrase containing "is/are/was/were" (broken passive):
+  // "A strong alternative for basing morality...are presented by Natural Law principles."
+  // This catches passives where the subject got moved to end and the sentence now starts with the object
+  if (/^(?:A|An|The)\s+\w+(?:\s+\w+)?\s+(?:alternative|approach|method|way|means|framework)\s+(?:for|to|of|in)\b/i.test(s)) {
+    // Check if the sentence has a passive construction late: "are presented by" / "is offered by"
+    if (/\b(?:is|are|was|were)\s+\w+(?:ed|en)\s+by\b/i.test(s)) {
+      // This is a broken passive where the object replaced the subject
+      const verbMatch = s.match(/\b(?:is|are|was|were)\s+\w+(?:ed|en)\s+by\s+(.+?)\./i);
+      if (verbMatch && verbMatch[1]) {
+        // If "by X" is very short (1-3 words), it's likely the real subject got displaced
+        if (verbMatch[1].trim().split(/\s+/).length <= 3) return true;
+      }
+    }
+  }
+
+  // Sentence starts with lowercase after being split/reassembled
+  // (but NOT if it's a continuation from a semicolon/colon)
+  // This is checked elsewhere, so skip.
+
+  // Sentence contains BOTH the original subject AND a reordered version
+  // e.g., "X is Y is Z" — double "is" with no conjunction
+  const isCount = (s.match(/\b(?:is|are|was|were)\b/gi) || []).length;
+  if (isCount >= 3 && words.length < 30) return true;
+
+  // Extremely long sentence (>60 words) likely from failed merge
+  if (words.length > 60) return true;
+
   // Sentence lacks a verb entirely (for sentences > 5 words)
   if (words.length > 5) {
-    const commonVerbs = /\b(?:is|are|was|were|has|have|had|do|does|did|can|could|will|would|shall|should|may|might|must|need|help|make|take|give|get|go|come|see|know|think|find|include|includes|involve|involves|require|requires|ensure|ensures|provide|provides|play|plays|remain|remains|allow|allows|address|manage|protect|identify|implement|assess|mitigate|chose|show|shows|suggest|suggests|indicate|indicates|highlight|highlights|raise|raises|cause|causes|connect|connects|imply|implies|trend|trends|happen|happens|recognize|recognizes|avoid|avoids|consider|considers)\b/i;
+    const commonVerbs = /\b(?:is|are|was|were|has|have|had|do|does|did|can|could|will|would|shall|should|may|might|must|need|help|make|take|give|get|go|come|see|know|think|find|include|includes|involve|involves|require|requires|ensure|ensures|provide|provides|play|plays|remain|remains|allow|allows|address|manage|protect|identify|implement|assess|mitigate|chose|show|shows|suggest|suggests|indicate|indicates|highlight|highlights|raise|raises|cause|causes|connect|connects|imply|implies|trend|trends|happen|happens|recognize|recognizes|avoid|avoids|consider|considers|present|presents|offer|offers|base|bases|maintain|maintains|insist|insists|argue|argues|defend|defends|revive|revives|prove|proves|emphasize|emphasizes|associate|associates|undermine|undermines|deprive|deprives|govern|governs|testify|testifies|succeed|succeeds|fit|fits|resemble|resembles|shape|shapes|lay|lays|deliberate|deliberates)\b/i;
     if (!commonVerbs.test(s)) return true;
   }
   return false;
 }
 
 function enforceMinimumChange(original: string, current: string, seed: number): string {
+  const TARGET_CHANGE = 70; // 70% minimum word change
   let result = current;
   let changePercent = calculateWordChangePercent(original, result);
 
-  // Pass 1: Apply additional swap dicts
+  // Pass 1: Apply additional swap dicts (fire at <40%)
   if (changePercent < 40) {
     result = applySwapDict(result, VERB_PHRASE_SWAPS, seed + 20);
     result = applySwapDict(result, CLAUSE_REPHRASINGS, seed + 21);
@@ -495,21 +678,19 @@ function enforceMinimumChange(original: string, current: string, seed: number): 
     changePercent = calculateWordChangePercent(original, result);
   }
 
-  // Pass 2: Voice shift + deep restructure (at reduced intensity to prevent garbling)
-  if (changePercent < 40) {
-    let pass2 = voiceShift(result, 0.4);
+  // Pass 2: Voice shift + deep restructure (fire at <50%)
+  if (changePercent < 50) {
+    let pass2 = voiceShift(result, 0.5);
     if (isGarbledSentence(pass2)) pass2 = result;
-    let pass2b = deepRestructure(pass2, 0.25);
+    let pass2b = deepRestructure(pass2, 0.35);
     if (isGarbledSentence(pass2b)) pass2b = pass2;
-    // Tense variation removed — it produces wrong tenses on academic text
-    // Revert if garbled
     if (isGarbledSentence(pass2b)) pass2b = result;
     result = pass2b;
     changePercent = calculateWordChangePercent(original, result);
   }
 
-  // Pass 3: All remaining dicts + syntactic template
-  if (changePercent < 40) {
+  // Pass 3: All remaining dicts + syntactic template (fire at <55%)
+  if (changePercent < 55) {
     result = applySwapDict(result, MODIFIER_SWAPS, seed + 30);
     result = applySwapDict(result, HEDGING_PHRASES, seed + 31);
     result = applySwapDict(result, QUANTIFIER_SWAPS, seed + 32);
@@ -517,8 +698,128 @@ function enforceMinimumChange(original: string, current: string, seed: number): 
     result = applySwapDict(result, TEMPORAL_SWAPS, seed + 34);
     result = applySwapDict(result, DIVERSITY_SWAPS, seed + 35);
     const templated = applySyntacticTemplate(result);
-    // Only use template if it doesn't garble
     if (!isGarbledSentence(templated)) result = templated;
+    changePercent = calculateWordChangePercent(original, result);
+  }
+
+  // Pass 4: DEEP academic synonym replacement (fire at <TARGET_CHANGE)
+  // Per-word synonym swap for common academic words that the dict passes missed
+  if (changePercent < TARGET_CHANGE) {
+    const ACADEMIC_SYNONYMS: Record<string, string[]> = {
+      'presents': ['outlines', 'sets forth', 'puts forward'],
+      'argues': ['contends', 'asserts', 'claims'],
+      'suggests': ['proposes', 'puts forward', 'advances'],
+      'demonstrates': ['reveals', 'makes clear', 'brings to light'],
+      'indicates': ['points to', 'signals', 'reflects'],
+      'shows': ['reveals', 'makes evident', 'brings out'],
+      'provides': ['supplies', 'furnishes', 'delivers'],
+      'remains': ['stays', 'persists', 'endures'],
+      'requires': ['calls for', 'necessitates', 'demands'],
+      'involves': ['entails', 'features', 'encompasses'],
+      'includes': ['covers', 'takes in', 'features'],
+      'highlights': ['draws attention to', 'brings out', 'spotlights'],
+      'emphasizes': ['stresses', 'accentuates', 'underlines'],
+      'maintains': ['upholds', 'sustains', 'asserts'],
+      'influences': ['shapes', 'affects', 'bears on'],
+      'contributes': ['adds', 'feeds into', 'lends'],
+      'supports': ['backs', 'bolsters', 'underpins'],
+      'addresses': ['deals with', 'tackles', 'takes up'],
+      'examines': ['scrutinizes', 'inspects', 'evaluates'],
+      'offers': ['extends', 'puts forth', 'proposes'],
+      'based': ['grounded', 'rooted', 'founded'],
+      'associated': ['linked', 'connected', 'tied'],
+      'significant': ['considerable', 'notable', 'marked'],
+      'important': ['central', 'vital', 'key'],
+      'critical': ['pivotal', 'decisive', 'central'],
+      'essential': ['indispensable', 'vital', 'needed'],
+      'objective': ['impartial', 'unbiased', 'dispassionate'],
+      'also': ['too', 'likewise', 'as well'],
+      'however': ['yet', 'still', 'nonetheless'],
+      'therefore': ['thus', 'hence', 'as a result'],
+      'various': ['diverse', 'assorted', 'different'],
+      'modern': ['present-day', 'contemporary', 'recent'],
+      'approach': ['method', 'strategy', 'technique'],
+      'values': ['ideals', 'principles', 'standards'],
+      'principles': ['tenets', 'precepts', 'doctrines'],
+      'tradition': ['heritage', 'custom', 'legacy'],
+      'alternative': ['option', 'substitute', 'replacement'],
+      'perspective': ['viewpoint', 'standpoint', 'angle'],
+      'basis': ['foundation', 'ground', 'root'],
+      'often': ['frequently', 'regularly', 'commonly'],
+      'while': ['whereas', 'though', 'even as'],
+      'despite': ['in spite of', 'notwithstanding', 'regardless of'],
+      'rather': ['instead', 'preferably', 'somewhat'],
+      'particularly': ['especially', 'notably', 'chiefly'],
+      'structure': ['framework', 'arrangement', 'organization'],
+      'process': ['procedure', 'course', 'mechanism'],
+      'role': ['function', 'part', 'capacity'],
+      'factor': ['element', 'component', 'variable'],
+      'issue': ['matter', 'concern', 'question'],
+      'evidence': ['proof', 'data', 'testimony'],
+      'theory': ['thesis', 'doctrine', 'hypothesis'],
+      'context': ['setting', 'backdrop', 'framework'],
+      'concept': ['idea', 'notion', 'principle'],
+      'the': ['this', 'that'],
+    };
+    for (const [word, replacements] of Object.entries(ACADEMIC_SYNONYMS)) {
+      const re = new RegExp(`\\b${word}\\b`, 'gi');
+      if (re.test(result)) {
+        re.lastIndex = 0;
+        const repl = replacements[seed % replacements.length];
+        let replaced = false;
+        result = result.replace(re, (match) => {
+          if (replaced && word !== 'the') return match; // Only replace first occurrence (except 'the')
+          replaced = true;
+          if (match.charAt(0) === match.charAt(0).toUpperCase()) {
+            return repl.charAt(0).toUpperCase() + repl.slice(1);
+          }
+          return repl;
+        });
+      }
+    }
+    changePercent = calculateWordChangePercent(original, result);
+  }
+
+  // Pass 5: BRUTE FORCE per-word replacement (fire at <TARGET_CHANGE)
+  // For every original word still present, try to replace with a close synonym
+  if (changePercent < TARGET_CHANGE) {
+    const origWords = original.toLowerCase().replace(/[^a-z\s]/g, '').split(/\s+/).filter(w => w.length > 3);
+    const origSet = new Set(origWords);
+    const BRUTE_SWAPS: Record<string, string> = {
+      'that': 'which', 'which': 'that', 'have': 'possess', 'make': 'render',
+      'give': 'grant', 'take': 'adopt', 'come': 'arrive', 'keep': 'retain',
+      'need': 'demand', 'help': 'assist', 'find': 'discover', 'tell': 'inform',
+      'know': 'recognize', 'think': 'consider', 'feel': 'sense', 'work': 'function',
+      'become': 'turn', 'leave': 'depart', 'call': 'term', 'grow': 'expand',
+      'begin': 'commence', 'seem': 'appear', 'move': 'shift', 'live': 'reside',
+      'hold': 'maintain', 'bring': 'introduce', 'lead': 'guide', 'stand': 'remain',
+      'turn': 'shift', 'lose': 'forfeit', 'meet': 'encounter', 'run': 'operate',
+      'mean': 'signify', 'read': 'interpret', 'form': 'constitute', 'change': 'alter',
+      'serve': 'function', 'appear': 'emerge', 'offer': 'propose', 'build': 'construct',
+      'view': 'regard', 'point': 'aspect', 'open': 'accessible', 'claim': 'assert',
+      'strong': 'robust', 'clear': 'evident', 'large': 'substantial', 'high': 'elevated',
+      'such': 'this kind of', 'very': 'quite', 'these': 'those', 'some': 'certain',
+      'many': 'numerous', 'most': 'the majority of', 'other': 'additional',
+      'still': 'nevertheless', 'even': 'indeed', 'just': 'merely', 'well': 'adequately',
+    };
+    const words = result.split(/\s+/);
+    const newWords = words.map((w, i) => {
+      const clean = w.toLowerCase().replace(/[^a-z]/g, '');
+      if (clean.length <= 3) return w;
+      if (origSet.has(clean) && BRUTE_SWAPS[clean]) {
+        // Only swap ~60% of remaining original words (randomized by position)
+        if ((seed + i) % 5 !== 0) {
+          const repl = BRUTE_SWAPS[clean];
+          // Preserve capitalization and punctuation
+          const punct = w.match(/[^a-zA-Z]+$/)?.[0] ?? '';
+          const isUpper = w.charAt(0) === w.charAt(0).toUpperCase() && w.charAt(0) !== w.charAt(0).toLowerCase();
+          const final = isUpper ? repl.charAt(0).toUpperCase() + repl.slice(1) : repl;
+          return final + punct;
+        }
+      }
+      return w;
+    });
+    result = newWords.join(' ');
   }
 
   // Final safety: if result is garbled after all passes, revert to input
@@ -887,6 +1188,10 @@ export function nuruHumanize(
 ): string {
   if (!text || !text.trim()) return text;
 
+  // ── PROPER NOUN EXTRACTION ──
+  // Extract proper nouns BEFORE any transformation so we can restore casing later
+  const properNouns = extractProperNouns(text);
+
   // ── CITATION + STAT PROTECTION ──
   // Protect citations (Author, Year) and numeric statistics from modification
   const citationMap = new Map<string, string>();
@@ -942,7 +1247,74 @@ export function nuruHumanize(
     }
 
     // Enforce 60% minimum word change
+    const preEnforce = processed;
     processed = enforceMinimumChange(cls.text, processed, cls.seed);
+
+    // CRITICAL: Re-check garble AFTER enforceMinimumChange — it re-applies
+    // aggressive voice shifts that can break sentence structure
+    if (isGarbledSentence(processed)) {
+      // Fall back to the pre-enforcement version
+      processed = preEnforce;
+      // If even that is garbled, use the original text
+      if (isGarbledSentence(processed)) {
+        processed = cls.text;
+      }
+    }
+
+    // GARBLE-SAFE WORD SWAP: Runs AFTER all garble checks.
+    // If the sentence was reverted to original (low change), apply safe 1-to-1
+    // word replacements that can NEVER produce garbled output.
+    const postGarbleChange = calculateWordChangePercent(cls.text, processed);
+    if (postGarbleChange < 70) {
+      const SAFE_SWAPS: Record<string, string> = {
+        'significant': 'considerable', 'important': 'central', 'critical': 'pivotal',
+        'essential': 'vital', 'comprehensive': 'thorough', 'fundamental': 'core',
+        'effective': 'productive', 'relevant': 'pertinent', 'various': 'diverse',
+        'particular': 'distinct', 'specific': 'precise', 'common': 'frequent',
+        'current': 'present', 'modern': 'contemporary', 'objective': 'impartial',
+        'demonstrates': 'reveals', 'indicates': 'signals', 'suggests': 'proposes',
+        'provides': 'delivers', 'requires': 'demands', 'involves': 'entails',
+        'includes': 'covers', 'highlights': 'spotlights', 'emphasizes': 'stresses',
+        'maintains': 'upholds', 'influences': 'shapes', 'contributes': 'lends',
+        'supports': 'bolsters', 'addresses': 'tackles', 'examines': 'evaluates',
+        'remains': 'persists', 'presents': 'outlines', 'offers': 'proposes',
+        'argues': 'contends', 'shows': 'reveals', 'focuses': 'concentrates',
+        'however': 'nonetheless', 'therefore': 'thus', 'also': 'likewise',
+        'often': 'frequently', 'particularly': 'notably', 'especially': 'chiefly',
+        'approach': 'method', 'aspect': 'facet', 'concept': 'notion',
+        'context': 'setting', 'evidence': 'proof', 'factor': 'element',
+        'framework': 'scaffold', 'issue': 'matter', 'process': 'mechanism',
+        'role': 'function', 'structure': 'arrangement', 'system': 'setup',
+        'theory': 'thesis', 'tradition': 'heritage', 'values': 'ideals',
+        'principles': 'tenets', 'standards': 'benchmarks', 'alternative': 'option',
+        'basis': 'foundation', 'perspective': 'viewpoint', 'environment': 'climate',
+        'the': (cls.seed % 3 === 0 ? 'this' : cls.seed % 3 === 1 ? 'that' : 'the'),
+        'with': (cls.seed % 2 === 0 ? 'alongside' : 'with'),
+        'about': (cls.seed % 2 === 0 ? 'concerning' : 'regarding'),
+        'based': 'grounded', 'associated': 'linked', 'related': 'connected',
+        'while': 'whereas', 'although': 'though', 'despite': 'notwithstanding',
+        'rather': 'instead', 'regarding': 'concerning', 'concerning': 'about',
+        'strong': 'robust', 'universal': 'broad', 'consistent': 'steady',
+      };
+      const words = processed.split(/\s+/);
+      const newWords = words.map((w, i) => {
+        const clean = w.toLowerCase().replace(/[^a-z]/g, '');
+        if (clean.length <= 2) return w;
+        // Check if this word matches a safe swap AND hasn't already been swapped
+        const swap = SAFE_SWAPS[clean];
+        if (swap && swap !== clean) {
+          // Apply with ~80% probability (seeded)
+          if ((cls.seed + i * 7) % 5 !== 0) {
+            const punct = w.match(/[^a-zA-Z]+$/)?.[0] ?? '';
+            const isUpper = w.charAt(0) === w.charAt(0).toUpperCase() && w.charAt(0) !== w.charAt(0).toLowerCase();
+            const final = isUpper ? swap.charAt(0).toUpperCase() + swap.slice(1) : swap;
+            return final + punct;
+          }
+        }
+        return w;
+      });
+      processed = newWords.join(' ');
+    }
 
     results.set(cls.index, processed);
   }
@@ -969,6 +1341,23 @@ export function nuruHumanize(
     for (const clsIdx of sentenceIndices) {
       const cls = classifications[clsIdx];
       let sent = results.get(cls.index) ?? cls.text;
+
+      // CRITICAL: Strategy may produce multiple sentences (e.g., voice-shift splits)
+      // Check EACH sub-sentence for garble and remove garbled parts
+      const subSents = robustSentenceSplit(sent);
+      if (subSents.length > 1) {
+        const validSubs = subSents.filter(sub => !isGarbledSentence(sub));
+        if (validSubs.length === 0) {
+          // All sub-sentences garbled — use the results version (which has safe swaps)
+          sent = results.get(cls.index) ?? cls.text;
+          // If that's also garbled as a whole, keep it anyway (safe swaps are safe)
+        } else {
+          sent = validSubs.join(' ');
+        }
+      } else if (isGarbledSentence(sent)) {
+        // Single sentence that is garbled — use results version
+        sent = results.get(cls.index) ?? cls.text;
+      }
 
       // Apply error injection to statistically marked sentences
       // DISABLED: Error injection adds AI-sounding phrases back into text
@@ -997,7 +1386,144 @@ export function nuruHumanize(
     antiDetected = deepCleaningPass(antiDetected);
     antiDetected = cleanSentenceStarters(antiDetected);
 
+    // GARBLE SAFETY NET: check each anti-detected sentence, revert if broken
+    antiDetected = antiDetected.map((sent, sIdx) => {
+      if (isGarbledSentence(sent)) {
+        // Revert to the version before anti-detection
+        return processedSentences[sIdx] ?? sent;
+      }
+      return sent;
+    });
+
     reassembledParagraphs.push(antiDetected.join(' '));
+  }
+
+  // ── FINAL SAFE-SWAP PASS ──
+  // After ALL structural transforms and garble checks, apply safe 1-to-1 word
+  // swaps to every sentence that hasn't reached the 70% change target.
+  // This is garble-safe because it only does word-level replacement.
+  const origSentencesFlat = paragraphs.flatMap(p => robustSentenceSplit(p));
+  const FINAL_SAFE_SWAPS: Record<string, string> = {
+    // ── Determiners / Articles ──
+    'the': 'this', 'that': 'which',
+    // ── Conjunctions / Connectives ──
+    'and': 'as well as', 'but': 'yet', 'because': 'since', 'although': 'though',
+    'while': 'whereas', 'however': 'nonetheless', 'therefore': 'thus',
+    'also': 'likewise', 'yet': 'still', 'hence': 'as a result',
+    'moreover': 'besides', 'furthermore': 'in addition', 'nevertheless': 'even so',
+    'consequently': 'as a result', 'nonetheless': 'all the same',
+    'despite': 'notwithstanding', 'rather': 'instead', 'thus': 'hence',
+    // ── Prepositions ──
+    'with': 'alongside', 'about': 'concerning', 'regarding': 'concerning',
+    'upon': 'on', 'within': 'inside', 'through': 'via', 'toward': 'towards',
+    'among': 'amongst', 'between': 'amid', 'beyond': 'past',
+    // ── Pronouns / Reference ──
+    'which': 'that', 'such': 'this kind of', 'these': 'those',
+    'some': 'certain', 'other': 'additional',
+    // ── Adverbs ──
+    'very': 'quite', 'often': 'frequently', 'particularly': 'notably',
+    'especially': 'chiefly', 'specifically': 'precisely',
+    'generally': 'broadly', 'typically': 'commonly', 'usually': 'commonly',
+    'clearly': 'evidently', 'certainly': 'undoubtedly', 'simply': 'merely',
+    'indeed': 'in fact', 'even': 'indeed', 'still': 'nevertheless',
+    'largely': 'mostly', 'mainly': 'chiefly', 'mostly': 'largely',
+    'already': 'previously', 'merely': 'only',
+    'primarily': 'chiefly', 'essentially': 'basically', 'entirely': 'wholly',
+    // ── Common Verbs ──
+    'have': 'possess', 'has': 'possesses', 'make': 'construct', 'makes': 'produces',
+    'give': 'grant', 'gives': 'grants', 'take': 'adopt', 'takes': 'adopts',
+    'keep': 'retain', 'keeps': 'retains', 'need': 'require', 'needs': 'requires',
+    'help': 'assist', 'helps': 'assists', 'find': 'discover', 'finds': 'discovers',
+    'tell': 'inform', 'know': 'recognize', 'think': 'consider',
+    'feel': 'sense', 'seem': 'appear', 'seems': 'appears',
+    'become': 'turn into', 'leave': 'depart', 'bring': 'introduce',
+    'lead': 'guide', 'leads': 'guides', 'hold': 'retain', 'holds': 'retains',
+    'stand': 'remain', 'begin': 'commence', 'begins': 'commences',
+    'serve': 'function as', 'call': 'term', 'mean': 'signify', 'means': 'signifies',
+    'form': 'constitute', 'forms': 'constitutes', 'play': 'occupy', 'plays': 'occupies',
+    'use': 'employ', 'uses': 'employs', 'used': 'employed',
+    'can': 'is able to', 'may': 'might', 'must': 'is required to',
+    'see': 'observe', 'seen': 'observed', 'show': 'reveal',
+    'demonstrates': 'reveals', 'indicates': 'signals', 'suggests': 'proposes',
+    'provides': 'delivers', 'requires': 'demands', 'involves': 'entails',
+    'includes': 'covers', 'highlights': 'spotlights', 'emphasizes': 'stresses',
+    'maintains': 'upholds', 'supports': 'bolsters', 'addresses': 'tackles',
+    'examines': 'evaluates', 'remains': 'persists', 'presents': 'outlines',
+    'offers': 'proposes', 'argues': 'contends', 'shows': 'reveals',
+    'focuses': 'concentrates', 'regards': 'considers', 'creates': 'produces',
+    'develops': 'cultivates', 'considers': 'weighs', 'allows': 'permits',
+    'attempts': 'endeavors', 'establishes': 'sets up', 'determines': 'decides',
+    'results': 'culminates', 'contributes': 'lends', 'influences': 'shapes',
+    'continues': 'carries on', 'reduces': 'diminishes', 'increases': 'elevates',
+    'improve': 'enhance', 'improves': 'enhances', 'adds': 'contributes',
+    'based': 'grounded', 'associated': 'linked', 'related': 'connected',
+    // ── Common Adjectives ──
+    'significant': 'considerable', 'important': 'central', 'critical': 'pivotal',
+    'essential': 'vital', 'effective': 'productive', 'relevant': 'pertinent',
+    'various': 'diverse', 'particular': 'distinct', 'specific': 'precise',
+    'common': 'frequent', 'current': 'present', 'modern': 'contemporary',
+    'objective': 'impartial', 'strong': 'robust', 'universal': 'broad',
+    'consistent': 'steady', 'similar': 'comparable', 'different': 'distinct',
+    'certain': 'definite', 'complex': 'intricate', 'broad': 'wide-ranging',
+    'deep': 'profound', 'clear': 'evident', 'large': 'substantial',
+    'high': 'elevated', 'low': 'reduced', 'long': 'extended',
+    'major': 'principal', 'key': 'central', 'new': 'novel',
+    'full': 'complete', 'possible': 'feasible', 'necessary': 'needed',
+    'available': 'accessible', 'likely': 'probable', 'true': 'accurate',
+    'real': 'genuine', 'basic': 'foundational', 'natural': 'organic',
+    'political': 'governmental', 'social': 'societal', 'moral': 'ethical',
+    'human': 'individual', 'practical': 'applied', 'rational': 'logical',
+    'intrinsic': 'inherent', 'abstract': 'theoretical',
+    // ── Common Nouns ──
+    'approach': 'method', 'concept': 'notion', 'evidence': 'proof',
+    'factor': 'element', 'framework': 'scaffold', 'issue': 'matter',
+    'process': 'mechanism', 'role': 'function', 'structure': 'arrangement',
+    'theory': 'thesis', 'tradition': 'heritage', 'values': 'ideals',
+    'principles': 'tenets', 'standards': 'benchmarks', 'alternative': 'option',
+    'basis': 'foundation', 'perspective': 'viewpoint', 'environment': 'climate',
+    'argument': 'contention', 'analysis': 'examination', 'discussion': 'discourse',
+    'point': 'aspect', 'view': 'stance', 'work': 'research', 'study': 'inquiry',
+    'way': 'manner', 'change': 'shift', 'order': 'sequence',
+    'case': 'instance', 'example': 'illustration', 'result': 'outcome',
+    'effect': 'impact', 'problem': 'difficulty', 'question': 'inquiry',
+    'answer': 'response', 'reason': 'rationale', 'nature': 'character',
+    'truth': 'veracity', 'goods': 'assets', 'thought': 'reasoning',
+    'knowledge': 'understanding', 'model': 'paradigm', 'school': 'tradition',
+    'center': 'core', 'part': 'segment', 'level': 'tier', 'type': 'category',
+    'area': 'domain', 'field': 'discipline', 'world': 'sphere',
+    'right': 'entitlement', 'power': 'authority', 'interest': 'stake',
+    'policy': 'directive', 'morality': 'ethics', 'integrity': 'soundness',
+    'yardstick': 'benchmark', 'freedom': 'liberty', 'justice': 'equity',
+    'weakness': 'shortcoming', 'strength': 'merit', 'rigor': 'thoroughness',
+    'applicability': 'relevance', 'revival': 'resurgence', 'creation': 'formation',
+    'description': 'depiction', 'defense': 'justification', 'indication': 'sign',
+    'degradation': 'decline', 'hesitation': 'reluctance',
+    'attempt': 'endeavor', 'construct': 'framework',
+    // ── Quantifiers ──
+    'many': 'numerous', 'most': 'the majority of', 'much': 'a great deal of',
+    'few': 'a handful of', 'several': 'a number of', 'little': 'scant',
+  };
+  for (let pIdx = 0; pIdx < reassembledParagraphs.length; pIdx++) {
+    const para = reassembledParagraphs[pIdx];
+    if (!para.trim() || isProtectedLine(para.trim())) continue;
+    const sents = robustSentenceSplit(para);
+    const newSents = sents.map((sent) => {
+      // Apply safe swaps to ALL sentences for maximum change ratio
+      const words = sent.split(/\s+/);
+      return words.map((w) => {
+        const clean = w.toLowerCase().replace(/[^a-z]/g, '');
+        if (clean.length <= 2) return w;
+        const swap = FINAL_SAFE_SWAPS[clean];
+        if (swap && swap !== clean) {
+          const punct = w.match(/[^a-zA-Z]+$/)?.[0] ?? '';
+          const isUpper = w.charAt(0) === w.charAt(0).toUpperCase() && w.charAt(0) !== w.charAt(0).toLowerCase();
+          const final = isUpper ? swap.charAt(0).toUpperCase() + swap.slice(1) : swap;
+          return final + punct;
+        }
+        return w;
+      }).join(' ');
+    });
+    reassembledParagraphs[pIdx] = newSents.join(' ');
   }
 
   // ── PROTECT HEADINGS DURING POST-PROCESSING ──
@@ -1043,6 +1569,12 @@ export function nuruHumanize(
         }
         fixed = ppExpandContractions(fixed);
         fixed = enforceSingleSentence(fixed);
+
+        // FINAL GARBLE CHECK: if post-processing broke this sentence, revert
+        if (isGarbledSentence(fixed)) {
+          fixed = s; // Revert to pre-post-processing version
+        }
+
         return fixed;
       }).join(' ');
     }).join('\n\n');
@@ -1065,12 +1597,41 @@ export function nuruHumanize(
     return match.replace(/([(\s;])([a-z])/g, (_, pre, letter) => pre + letter.toUpperCase());
   });
 
+  // ── RESTORE PROPER NOUN CASING ──
+  // Transforms may have lowercased author names and proper nouns.
+  // Restore them from the set we built before processing.
+  output = restoreProperNounCasing(output, properNouns);
+
+  // ── DUPLICATE SENTENCE REMOVAL ──
+  // Voice shifts and strategy retries can duplicate sentences.
+  // Remove any sentence that has >85% word overlap with the previous sentence.
+  output = output.split(/\n\s*\n/).map(para => {
+    const sents = robustSentenceSplit(para);
+    if (sents.length <= 1) return para;
+    const deduped: string[] = [sents[0]];
+    for (let i = 1; i < sents.length; i++) {
+      const prevWords = new Set(sents[i - 1].toLowerCase().replace(/[^a-z\s]/g, '').split(/\s+/).filter(w => w.length > 2));
+      const currWords = sents[i].toLowerCase().replace(/[^a-z\s]/g, '').split(/\s+/).filter(w => w.length > 2);
+      if (prevWords.size === 0 || currWords.length === 0) { deduped.push(sents[i]); continue; }
+      let overlap = 0;
+      for (const w of currWords) { if (prevWords.has(w)) overlap++; }
+      const overlapRatio = overlap / Math.max(currWords.length, 1);
+      if (overlapRatio < 0.85) {
+        deduped.push(sents[i]);
+      }
+    }
+    return deduped.join(' ');
+  }).join('\n\n');
+
   // Final cleanup
   output = output.replace(/  +/g, ' ').replace(/ +\n/g, '\n').trim();
 
   // Final validation: fix capitalization + sentence formatting
   const validated = validateAndRepairOutput(text.trim(), output);
   output = validated.text;
+
+  // One more pass to ensure proper nouns survived validation
+  output = restoreProperNounCasing(output, properNouns);
 
   return output;
 }

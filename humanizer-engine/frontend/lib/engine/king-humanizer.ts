@@ -30,6 +30,17 @@ import {
 } from "./shared-dictionaries";
 import { semanticSimilaritySync } from "./semantic-guard";
 import { getGroqClient, resolveGroqChatModel } from "./groq-client";
+import OpenAI from "openai";
+
+let _openaiClient: OpenAI | null = null;
+function getOpenAIDirectClient(): OpenAI | null {
+  const key = process.env.OPENAI_API_KEY?.trim();
+  if (!key) return null;
+  if (!_openaiClient) {
+    _openaiClient = new OpenAI({ apiKey: key });
+  }
+  return _openaiClient;
+}
 
 // ── Config ──────────────────────────────────────────────────────────
 
@@ -45,7 +56,7 @@ function withTimeout<T>(promise: Promise<T>, ms: number, fallback: T): Promise<T
   ]);
 }
 
-async function llmCall(
+async function groqCall(
   system: string,
   user: string,
   temperature: number,
@@ -62,8 +73,36 @@ async function llmCall(
       temperature,
       max_tokens: maxTokens,
     })
-    .then((r) => r.choices[0]?.message?.content?.trim() ?? "");
+    .then((r: any) => r.choices[0]?.message?.content?.trim() ?? "");
   return withTimeout(p, LLM_TIMEOUT_MS, "");
+}
+
+async function llmCall(
+  system: string,
+  user: string,
+  temperature: number,
+  maxTokens = 1024,
+): Promise<string> {
+  const openai = getOpenAIDirectClient();
+  if (openai) {
+    try {
+      const callPromise = openai.chat.completions.create({
+        model: "gpt-4o-mini",
+        messages: [
+          { role: "system", content: system },
+          { role: "user", content: user },
+        ],
+        temperature,
+        max_tokens: maxTokens,
+      }).then((r: any) => r.choices[0]?.message?.content?.trim() ?? "");
+      
+      const content = await withTimeout(callPromise, LLM_TIMEOUT_MS, "");
+      if (content) return content;
+    } catch (err) {
+      console.warn("[King LLM] GPT-4o mini failed:", err instanceof Error ? err.message : err);
+    }
+  }
+  return groqCall(system, user, temperature, maxTokens);
 }
 
 // ── Utilities ───────────────────────────────────────────────────────

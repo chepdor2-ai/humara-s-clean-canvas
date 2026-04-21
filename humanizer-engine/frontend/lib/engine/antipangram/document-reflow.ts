@@ -179,28 +179,69 @@ function restructureToNewStarter(sent: string): string {
     const [, main, pp] = ppEndMatch;
     const mainClean = main.trim().replace(/[,.]$/, '');
     const ppCap = pp.charAt(0).toUpperCase() + pp.slice(1);
-    return `${ppCap}, ${mainClean.charAt(0).toLowerCase() + mainClean.slice(1)}.`;
+    const candidate = `${ppCap}, ${mainClean.charAt(0).toLowerCase() + mainClean.slice(1)}.`;
+    // GARBLE CHECK: reject if the inversion produces broken grammar
+    if (!isGarbledRestructure(candidate, sent)) return candidate;
   }
 
   // Try to flip a sentence starting with "The X is" or "The X are"
   const theXIsMatch = sent.match(/^The\s+(\w+(?:\s+\w+)?)\s+(is|are|was|were|has been)\s+(.+)\.?$/i);
   if (theXIsMatch) {
     const [, subject, verb, predicate] = theXIsMatch;
-    // Turn "The X is Y" into "Y is what the X achieves" or "As for the X, it is Y"
     const pred = predicate.replace(/[.]$/, '').trim();
-    return `As for the ${subject.trim()}, it ${verb.trim()} ${pred}.`;
+    const candidate = `As for the ${subject.trim()}, it ${verb.trim()} ${pred}.`;
+    if (!isGarbledRestructure(candidate, sent)) return candidate;
   }
 
   // Try extracting a trailing "which/that" clause
   const whichMatch = sent.match(/^(.{20,}?),\s*(which|who)\s+(.+)\.?$/);
   if (whichMatch) {
-    const [, main, rel, clause] = whichMatch;
+    const [, main, , clause] = whichMatch;
     const clauseCap = clause.charAt(0).toUpperCase() + clause.replace(/[.]$/, '').slice(1);
-    return `${clauseCap}. ${main.trim()}.`;
+    const candidate = `${clauseCap}. ${main.trim()}.`;
+    if (!isGarbledRestructure(candidate, sent)) return candidate;
   }
 
   // Fallback: return unchanged
   return sent;
+}
+
+/**
+ * Check if a restructured sentence is garbled.
+ * Catches broken inversions, dangling phrases, and subject-verb mismatches.
+ */
+function isGarbledRestructure(candidate: string, original: string): boolean {
+  const words = candidate.split(/\s+/);
+  // Too short or too long relative to original = likely broken
+  if (words.length < 4) return true;
+  if (words.length > original.split(/\s+/).length * 1.5) return true;
+
+  // Starts with preposition + long phrase + comma + very short stub
+  const commaPos = candidate.indexOf(',');
+  if (commaPos > 0) {
+    const before = candidate.slice(0, commaPos).trim();
+    const after = candidate.slice(commaPos + 1).trim();
+    // If before-comma is >3x longer than after-comma, it's a dangling inversion
+    if (before.length > after.length * 3 && after.split(/\s+/).length < 5) return true;
+  }
+
+  // Broken passive: "is X by Y, he Z"
+  if (/\b(?:is|are|was|were)\s+\w+ed\s+by\s+\w+\s*,\s*(?:he|she|it|they)\b/i.test(candidate)) return true;
+
+  // Double periods
+  if (/\.\./.test(candidate)) return true;
+
+  // Sentence ending with ", SUBJECT." (dangling fragment)
+  if (/,\s*(?:he|she|it|they|this)\s+\w{2,}\s*\.\s*$/.test(candidate)) {
+    const lastComma = candidate.lastIndexOf(',');
+    const tail = candidate.slice(lastComma + 1).trim();
+    if (tail.split(/\s+/).length <= 3) return true;
+  }
+
+  // Contains "., " (double punctuation from broken join)
+  if (/\.,\s/.test(candidate) && !/\bet\s+al\.,/i.test(candidate)) return true;
+
+  return false;
 }
 
 function diversifyStarters(sentences: string[]): string[] {
@@ -310,23 +351,33 @@ export function reflowDocument(
         transformed = simplifyCompoundSentence(transformed);
       }
 
-      // 1f. Vocabulary naturalization — always apply
-      transformed = naturalizeVocabulary(transformed, context.protectedTerms, intensity);
+      // 1f. Vocabulary naturalization — ALWAYS apply at FULL intensity for maximum change
+    transformed = naturalizeVocabulary(transformed, context.protectedTerms, Math.max(intensity, 0.85));
 
-      // 1g. Register micro-shifts (deterministic, alternating by index)
+    // 1g. Register micro-shifts (deterministic, alternating by index)
+    // ACADEMIC TONE: Never apply casual shifts — only formal/scholarly variations
+    // Casual shifts inject phrases like "deal with", "boost" which break academic register.
+    if (context.tone === 'casual') {
+      // Only apply casual shifts for explicitly casual tone
       if (sIdx % 4 === 0) {
         transformed = applyRegisterShift(transformed, 'casual');
       } else if (sIdx % 4 === 2) {
         transformed = applyRegisterShift(transformed, 'formal');
       }
-
-      // Ensure sentence starts with uppercase
-      if (transformed.length > 0 && /^[a-z]/.test(transformed)) {
-        transformed = transformed.charAt(0).toUpperCase() + transformed.slice(1);
+    } else {
+      // Academic/professional/neutral: ONLY formal shifts
+      if (sIdx % 3 === 0) {
+        transformed = applyRegisterShift(transformed, 'formal');
       }
+    }
 
-      return transformed;
-    });
+    // Ensure sentence starts with uppercase
+    if (transformed.length > 0 && /^[a-z]/.test(transformed)) {
+      transformed = transformed.charAt(0).toUpperCase() + transformed.slice(1);
+    }
+
+    return transformed;
+  });
 
     // ── Phase 2: Paragraph-level transforms ──
 

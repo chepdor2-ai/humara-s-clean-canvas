@@ -10,6 +10,11 @@ export interface AntiPangramConfig {
   tone: 'academic' | 'professional' | 'casual' | 'neutral';
   preserveMeaning: boolean;
   maxIterations: number;
+  targetAiScore?: number;
+  detectorPressure?: number;
+  preserveLeadSentence?: boolean;
+  humanVariance?: number;
+  readabilityBias?: number;
 }
 
 export interface ForensicProfile {
@@ -70,4 +75,5 @@ export interface DocumentContext {
   originalText: string;
   starterCounts: Map<string, number>;
   connectorCounts: Map<string, number>;
+  tone: 'academic' | 'professional' | 'casual' | 'neutral';
 }

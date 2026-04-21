@@ -81,8 +81,8 @@ function getOpenAIDirectClient(): OpenAI | null {
   return _openaiClient;
 }
 
-// ── Primary LLM call: Groq (base model) ──
-function llmCall(system: string, user: string, temperature: number, maxTokens = 4096): Promise<string> {
+// ── Primary LLM call: Groq (fallback model) ──
+function groqCall(system: string, user: string, temperature: number, maxTokens = 4096): Promise<string> {
   const client = getGroqClient();
   return client.chat.completions.create({
     model: LLM_MODEL,
@@ -96,7 +96,7 @@ function llmCall(system: string, user: string, temperature: number, maxTokens = 
 }
 
 // ── GPT-4o mini first, Groq fallback ──
-async function llmCallWithFallback(
+async function llmCall(
   system: string,
   user: string,
   temperature: number,
@@ -120,7 +120,7 @@ async function llmCallWithFallback(
       console.warn("[LLM] GPT-4o mini failed, falling back to Groq:", err instanceof Error ? err.message : err);
     }
   }
-  return llmCall(system, user, temperature, maxTokens);
+  return groqCall(system, user, temperature, maxTokens);
 }
 
 // ── Input Feature Detection ──
@@ -737,7 +737,7 @@ export async function deepAICleanOneSentence(sentence: string): Promise<string> 
   const maxTokens = Math.max(200, Math.ceil(trimmed.split(/\s+/).length * 2.5));
 
   try {
-    let cleaned = await llmCallWithFallback(DEEP_AI_CLEAN_SYSTEM, userPrompt, temp, maxTokens);
+    let cleaned = await llmCall(DEEP_AI_CLEAN_SYSTEM, userPrompt, temp, maxTokens);
     if (!cleaned || cleaned.trim().length < trimmed.length * 0.3) return trimmed;
     cleaned = cleaned.replace(/^\[CLEAN THIS\]:\s*/i, "").trim();
     cleaned = enforceSingleSentence(cleaned);
@@ -767,8 +767,8 @@ RESTRUCTURING TECHNIQUES (apply TWO or more):
 9. PERSPECTIVE SHIFT — Change the framing angle (cause→effect to effect→cause, general→specific to specific→general)
 
 STRICT RULES:
-- Output EXACTLY one sentence (no splitting into multiple sentences)
-- The output MUST be substantially different from the input — at least 60% of words must change
+- Output EXACTLY one sentence (no splitting into multiple sentences, no merging).
+- The output MUST be substantially different from the input — structure it to expand or shorten internally where necessary.
 - Preserve ALL citations [1], [2], (Author, Year), etc. — copy verbatim
 - Preserve ALL technical terms, proper nouns, measurements, and formulas
 - Preserve ALL placeholder tokens like [[PROT_0]], [[TRM_0]], etc. — copy exactly
@@ -777,8 +777,13 @@ STRICT RULES:
 - Do NOT use AI-typical words: utilize, facilitate, leverage, comprehensive, multifaceted, paradigm, trajectory, discourse, robust, nuanced, pivotal, delve, foster, harness, underscore, bolster, streamline, furthermore, moreover, additionally, consequently, subsequently, nevertheless, embark, tapestry, cornerstone, navigate, landscape, realm, intricate, transformative, innovative
 - Return ONLY the restructured sentence, nothing else`;
 
-function buildRestructurePrompt(sentence: string): string {
-  return `Deeply restructure this sentence by changing its clause order, voice, word choices, and presentation. Apply at least TWO restructuring techniques. Aim for 60%+ word change. Keep all facts, citations, and technical terms. Output only the restructured sentence.
+function buildRestructurePrompt(sentence: string, strategy?: import('./adaptive-strategy-selector').SentenceStrategy): string {
+  const targetPct = strategy ? Math.round(strategy.minChangeTarget * 100) : 65;
+  const noContractions = (!strategy || !strategy.allowContractions) ? "\n- ABSOLUTELY NO CONTRACTIONS (e.g. don't, can't)." : "";
+  const noRhetorical = (!strategy || !strategy.allowRhetoricalQuestions) ? "\n- ABSOLUTELY NO RHETORICAL QUESTIONS." : "";
+  const noFirstPerson = (!strategy || !strategy.allowFirstPerson) ? "\n- ABSOLUTELY NO FIRST PERSON PRONOUNS (I, we, our, us) unless exactly in original." : "";
+
+  return `Deeply restructure this sentence by changing its clause order, voice, word choices, and presentation. Apply at least TWO restructuring techniques. Aim for ${targetPct}%+ word change. Keep all facts, citations, and technical terms. Expand or shorten clauses internally where necessary to vary rhythm, but strictly NO SPLITTING OR MERGING of the sentence. Output exactly one sentence.${noContractions}${noRhetorical}${noFirstPerson}
 
 SENTENCE:
 ${sentence}`;
@@ -789,19 +794,19 @@ ${sentence}`;
  * falls back to Groq. Changes clause order, voice, and syntactic frame
  * while preserving meaning, citations, and technical terms.
  */
-export async function restructureSentence(sentence: string): Promise<string> {
+export async function restructureSentence(sentence: string, strategy?: import('./adaptive-strategy-selector').SentenceStrategy): Promise<string> {
   const trimmed = sentence.trim();
   if (!trimmed || trimmed.split(/\s+/).length < 5) return trimmed;
   if (isTitleOrHeading(trimmed)) return trimmed;
 
   // Convert ⟦PROTn⟧ placeholders → [[PROT_n]] so LLMs preserve them correctly
   const llmInput = placeholdersToLLMFormat(trimmed);
-  const userPrompt = buildRestructurePrompt(llmInput);
+  const userPrompt = buildRestructurePrompt(llmInput, strategy);
   const temp = 0.82 + (Math.random() * 0.16);
   const maxTokens = Math.max(250, Math.ceil(trimmed.split(/\s+/).length * 3.5));
 
   try {
-    let result = await llmCallWithFallback(RESTRUCTURE_SYSTEM, userPrompt, temp, maxTokens);
+    let result = await llmCall(RESTRUCTURE_SYSTEM, userPrompt, temp, maxTokens);
     if (!result || result.trim().length < llmInput.length * 0.3) return trimmed;
     result = result.replace(/^["']|["']$/g, '').trim();
     // Convert [[PROT_n]] back to ⟦PROTn⟧ so the outer restoreSpecialContent can resolve them

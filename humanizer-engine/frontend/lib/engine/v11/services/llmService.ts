@@ -7,6 +7,7 @@
  */
 
 import OpenAI from 'openai';
+import { getGroqClient } from '../../groq-client';
 
 const LLM_MODEL = process.env.LLM_MODEL ?? 'gpt-4o-mini';
 const LLM_FALLBACK_MODEL = 'gpt-4.1-nano';
@@ -31,13 +32,31 @@ export function isLLMAvailable(): boolean {
 /**
  * Call the LLM with a system + user prompt.
  */
+async function groqCall(system: string, user: string, temperature: number, maxTokens?: number): Promise<string> {
+  const client = getGroqClient();
+  try {
+    const response = await client.chat.completions.create({
+      model: "llama-3.3-70b-versatile",
+      messages: [
+        { role: 'system', content: system },
+        { role: 'user', content: user },
+      ],
+      temperature,
+      max_tokens: maxTokens ?? 2048,
+    });
+    return response.choices[0]?.message?.content?.trim() ?? '';
+  } catch (err: unknown) {
+    console.warn(`[V11 LLM] Groq fallback failed: ${err instanceof Error ? err.message : String(err)}`);
+    throw err;
+  }
+}
+
 async function llmCall(system: string, user: string, temperature: number, maxTokens?: number): Promise<string> {
   const client = getOpenAIClient();
-  if (!client) throw new Error('OPENAI_API_KEY not set');
-  for (const model of [LLM_MODEL, LLM_FALLBACK_MODEL]) {
+  if (client) {
     try {
       const response = await client.chat.completions.create({
-        model,
+        model: 'gpt-4o-mini',
         messages: [
           { role: 'system', content: system },
           { role: 'user', content: user },
@@ -45,13 +64,13 @@ async function llmCall(system: string, user: string, temperature: number, maxTok
         temperature,
         max_tokens: maxTokens ?? 2048,
       });
-      const content = response.choices[0]?.message?.content?.trim() ?? '';
+      const content = response.choices[0]?.message?.content?.trim();
       if (content) return content;
     } catch (err: unknown) {
-      console.warn(`[V11 LLM] ${model} failed: ${err instanceof Error ? err.message : String(err)}`);
+      console.warn(`[V11 LLM] gpt-4o-mini failed: ${err instanceof Error ? err.message : String(err)}. Falling back to Groq.`);
     }
   }
-  throw new Error('All OpenAI models failed — AntiPangram fallback will apply.');
+  return groqCall(system, user, temperature, maxTokens);
 }
 
 const SYSTEM_PROMPT = `You are a real human writer — a university student, academic researcher, or high school essayist who writes naturally by hand. You are NOT an AI. You do NOT simulate human writing. You ARE a human, and this is how you naturally write. Rewrite the given text chunk as you would write it yourself.

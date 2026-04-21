@@ -65,6 +65,36 @@ function cosineSim(a: number[], b: number[]): number {
   return na > 0 && nb > 0 ? dot / (Math.sqrt(na) * Math.sqrt(nb)) : 0;
 }
 
+function countSyllables(word: string): number {
+  word = word.toLowerCase().replace(/[^a-z]/g, "");
+  if (word.length <= 3) return 1;
+  word = word.replace(/(?:[^laeiouy]es|ed|[^laeiouy]e)$/, "");
+  word = word.replace(/^y/, "");
+  const match = word.match(/[aeiouy]{1,2}/g);
+  return match ? match.length : 1;
+}
+
+function lzwCompressionRatio(text: string): number {
+  if (!text || text.length === 0) return 1.0;
+  const dict = new Map<string, number>();
+  for (let i = 0; i < 256; i++) dict.set(String.fromCharCode(i), i);
+  let w = "";
+  let resultSize = 0;
+  let dictSize = 256;
+  for (const c of text) {
+    const wc = w + c;
+    if (dict.has(wc)) {
+      w = wc;
+    } else {
+      resultSize += 2; // Roughly 2 bytes per code
+      dict.set(wc, dictSize++);
+      w = c;
+    }
+  }
+  if (w !== "") resultSize += 2;
+  return resultSize / text.length;
+}
+
 // ── AI marker data ──
 
 const AI_MARKER_WORDS = new Set([
@@ -159,6 +189,13 @@ const FUNCTION_WORDS = new Set([
   "under", "more", "most", "other", "some", "any", "only", "very",
   "too", "just", "own", "same", "up", "down", "out", "off", "over",
   "there", "here", "now", "then", "still",
+]);
+
+const HEDGING_WORDS = new Set([
+  "may", "might", "could", "would", "should", "likely", "probably",
+  "perhaps", "often", "typically", "generally", "usually", "sometimes",
+  "tends to", "appears to", "seems to", "suggests", "implies", "indicates",
+  "potentially", "possibly", "presumably", "arguably", "somewhat", "relatively"
 ]);
 
 const AI_FUNCTION_PROFILE: Record<string, number> = {
@@ -336,28 +373,32 @@ export class TextSignals {
   burstiness(): number {
     if (this.sentenceCount < 4) return 40.0;
 
-    const sent_lengths = this.sentWords.filter((ws) => ws.length > 0).map((ws) => ws.length);
-    const sent_avg_wl = this.sentWords.filter((ws) => ws.length > 0).map((ws) => {
-      return ws.reduce((sum, w) => sum + w.length, 0) / ws.length;
-    });
+    const sentLengths = this.sentWords.filter((ws) => ws.length > 0).map((ws) => ws.length);
+    if (sentLengths.length === 0) return 40.0;
+
+    const sigma = std(sentLengths);
+    // Burstiness= σ(sentence length)
+    // AI burst = 1 - (σ_human_max / σ)
+    // Sigma for human tends to exceed 8-12. Sigma for AI is 2-4.
+    const sigmaHumanMax = 9.0;
+    let burstAiScore = 0;
+    if (sigma > 0) {
+      // Placed into a logistic curve bounded [0, 100]
+      const raw = Math.max(0, 1 - (sigma / sigmaHumanMax));
+      burstAiScore = raw * 100;
+    } else {
+      burstAiScore = 100.0; // Zero variance = absolute AI
+    }
+    
+    // Supplement with function word variance
     const sent_fw_ratio = this.sentWords.filter((ws) => ws.length > 0).map((ws) => {
       const fw_count = ws.filter((w) => FUNCTION_WORDS.has(w)).length;
       return fw_count / Math.max(ws.length, 1);
     });
-
-    if (sent_lengths.length === 0) return 40.0;
-
-    const cv_len = cv(sent_lengths);
-    const cv_wl = sent_avg_wl.length > 0 ? cv(sent_avg_wl) : 0.0;
     const cv_fw = sent_fw_ratio.length > 0 ? cv(sent_fw_ratio) : 0.0;
-
-    // Combine CVs — sentence length CV is most important
-    // AI CV_len: 0.12-0.30, Human: 0.30-0.80, center: 0.28
-    const len_score = sigNorm(cv_len, 0.28, 5.0);
-    const wl_score = sigNorm(cv_wl, 0.12, 8.0);
     const fw_score = sigNorm(cv_fw, 0.10, 8.0);
 
-    return clamp(len_score * 0.55 + wl_score * 0.25 + fw_score * 0.20);
+    return clamp(burstAiScore * 0.70 + fw_score * 0.30);
   }
 
   vocabularyRichness(): number {
@@ -546,16 +587,33 @@ export class TextSignals {
   }
 
   readabilityConsistency(): number {
-    // Fallback: use average sentence length variance as proxy (no textstat in TS)
     if (this.sentenceCount < 4) return 45.0;
     
-    const lengths = this.sentWords.filter((ws) => ws.length > 0).map((ws) => ws.length);
-    if (lengths.length === 0) return 45.0;
+    // True Flesch-Kincaid Readability Variance
+    const paraScores: number[] = [];
+    const paras = this.text.split(/\n\s*\n/).filter(p => p.trim());
+    if (paras.length < 2) return 45.0;
+
+    for (const p of paras) {
+      const words = p.toLowerCase().match(/[a-z']+/g) ?? [];
+      const sentences = robustSentenceSplit(p);
+      if (words.length === 0 || sentences.length === 0) continue;
+      
+      let syllables = 0;
+      for (const w of words) syllables += countSyllables(w);
+      
+      const wordsPerSent = words.length / sentences.length;
+      const syllablesPerWord = syllables / words.length;
+      const flesch = 206.835 - (1.015 * wordsPerSent) - (84.6 * syllablesPerWord);
+      paraScores.push(flesch);
+    }
+
+    if (paraScores.length < 2) return 45.0;
+    const freVar = variance(paraScores);
     
-    const cvL = cv(lengths);
-    
-    // AI: CV ≈ 0.03-0.12, Human: CV ≈ 0.10-0.40, center: 0.10
-    return clamp(sigNorm(cvL, 0.10, 8.0));
+    // AI usually has very low FRE variance (consistent complexity). Human drifts heavily.
+    // High variance = low AI. Low variance = high AI.
+    return clamp(100 - (freVar * 2.5));
   }
 
   stylometricScore(): number {
@@ -608,14 +666,81 @@ export class TextSignals {
 
   ngramRepetition(): number {
     if (this.wordCount < 30) return 50;
-    const trigrams = new Map<string, number>();
+    const ngrams3 = new Map<string, number>();
+    const ngrams4 = new Map<string, number>();
+    
     for (let i = 0; i < this.words.length - 2; i++) {
       const tri = this.words[i] + " " + this.words[i + 1] + " " + this.words[i + 2];
-      trigrams.set(tri, (trigrams.get(tri) ?? 0) + 1);
+      ngrams3.set(tri, (ngrams3.get(tri) ?? 0) + 1);
     }
-    const repeated = [...trigrams.values()].filter((c) => c >= 2).reduce((s, c) => s + c - 1, 0);
-    const density = repeated / Math.max(this.wordCount - 2, 1);
-    return clamp(sigNorm(density, 0.02, 150));
+    for (let i = 0; i < this.words.length - 3; i++) {
+      const quad = this.words[i] + " " + this.words[i + 1] + " " + this.words[i + 2] + " " + this.words[i + 3];
+      ngrams4.set(quad, (ngrams4.get(quad) ?? 0) + 1);
+    }
+    
+    const rep3 = [...ngrams3.values()].filter(c => c > 1).reduce((s, c) => s + c, 0);
+    const rep4 = [...ngrams4.values()].filter(c => c > 1).reduce((s, c) => s + c, 0);
+    
+    const total3 = Math.max(this.wordCount - 2, 1);
+    const total4 = Math.max(this.wordCount - 3, 1);
+    
+    // RI = Total Repeated / Total ngrams
+    const ri3 = rep3 / total3;
+    const ri4 = rep4 / total4;
+    
+    // RI = 0.6(3gram) + 0.4(4gram)
+    const ri = (ri3 * 0.6) + (ri4 * 0.4);
+    
+    // AI repeatedly uses the same 3-grams and 4-grams
+    return clamp(sigNorm(ri, 0.03, 80));
+  }
+
+  compressionRatio(): number {
+    const ratio = lzwCompressionRatio(this.text);
+    // AI text compresses heavily due to pattern repetitiveness.
+    // Human: ~0.50 - 0.70. AI: < 0.45.
+    // Lower ratio = more AI
+    return clamp(100 - (ratio * 150));
+  }
+
+  hedgingScore(): number {
+    if (this.wordCount < 30) return 50;
+    let hedgeCount = 0;
+    // Count exact hedges
+    for (const w of this.words) if (HEDGING_WORDS.has(w)) hedgeCount++;
+    // Count multi-word hedges
+    const lower = this.text.toLowerCase();
+    for (const ph of HEDGING_WORDS) if (ph.includes(" ") && lower.includes(ph)) hedgeCount++;
+    
+    // Hedges / 1000 words
+    const density = (hedgeCount / this.wordCount) * 1000;
+    
+    // Normal AI uses safely hedged language ~15-25 times per 1000 words.
+    // Humans use it 0-8.
+    return clamp(sigNorm(density, 12, 0.5));
+  }
+
+  sentimentFlatness(): number {
+    if (this.sentenceCount < 4) return 50;
+    // Naive dictionary-based sentiment proxy to trace variance
+    const posDict = new Set(["excellent", "good", "great", "positive", "beneficial", "crucial", "effective", "successful", "important"]);
+    const negDict = new Set(["bad", "poor", "negative", "detrimental", "fail", "failed", "lack", "issue", "problem", "difficult", "severe"]);
+    
+    const sentsPos: number[] = [];
+    for (const ws of this.sentWords) {
+      if (ws.length < 3) continue;
+      let posScore = 0;
+      for (const w of ws) {
+        if (posDict.has(w)) posScore += 1;
+        if (negDict.has(w)) posScore -= 1;
+      }
+      sentsPos.push(posScore);
+    }
+    
+    const sentVar = variance(sentsPos);
+    // Humans have high sentiment variance. AI has flat 0 mean sentiment (flatness).
+    // Low variance = AI
+    return clamp(100 - (sentVar * 25));
   }
 
   starterDiversity(): number {
@@ -943,6 +1068,9 @@ export class TextSignals {
       lexical_density_var: this.lexicalDensityVar(),
       function_word_freq: this.functionWordFreq(),
       dependency_depth: this.dependencyDepth(),
+      compression_ratio: this.compressionRatio(),
+      hedging_score: this.hedgingScore(),
+      sentiment_flatness: this.sentimentFlatness(),
     };
   }
 
@@ -1264,7 +1392,7 @@ class DetectorProfile {
     const strategicProb = this.strategy ? strategicScore(signals, this.strategy) : legacyProb;
     const blend = this.strategy?.blend ?? 0;
     let aiProb = this.strategy
-      ? legacyProb + (strategicProb - 50) * blend
+      ? legacyProb * (1 - blend) + strategicProb * blend
       : legacyProb;
 
     // Hard floors when strongest AI signatures co-occur.
@@ -1276,6 +1404,12 @@ class DetectorProfile {
 
     if (strategicProb >= 84 && (signals.per_sentence_ai_ratio ?? 0) >= 52) {
       aiProb = Math.max(aiProb, 80);
+    }
+
+    if (strategicProb >= 78 && legacyProb >= 60) {
+      aiProb = Math.max(aiProb, strategicProb);
+    } else if (strategicProb >= 70 && legacyProb >= 52) {
+      aiProb = Math.max(aiProb, legacyProb * 0.35 + strategicProb * 0.65);
     }
 
     // Confidence threshold: scores below 3% are within noise margin
@@ -2267,7 +2401,12 @@ export function summarizeDetectorResults(
   }
 
   const p = weightedAvg / 100;
-  weightedAvg = sigmoid((p - 0.46) * 7.6) * 100;
+  // Platt Scaling logic: calibrated_probability = 1 / (1 + exp(a * p + b))
+  // a and b fit to match human-written thresholds. 
+  // For standard scaling, a = -7.6, b = 3.5 creates an s-curve roughly centered.
+  const plattA = -7.6;
+  const plattB = 3.5;
+  weightedAvg = 1.0 / (1.0 + Math.exp(plattA * p + plattB)) * 100;
   weightedAvg = clamp(weightedAvg);
 
   const aiCount = detectorResults.filter((d) => ["AI-Generated", "Likely AI"].includes(d.verdict)).length;
@@ -2320,7 +2459,31 @@ export class MultiDetector {
       p.score(signals, this.calibration) as DetectorResult,
     );
 
-    // Length reliability: damp short text toward the signal-driven center instead of a fixed AI anchor.
+    // ── Turnitin-style Segment Aggregation (Layer 4) ──
+    const CHUNK_SIZE = 150; // words
+    let segmentScoreVariancePenalty = 0;
+    
+    if (sigObj.wordCount > 250) {
+      // Chunk detection for long documents
+      const words = sigObj.words;
+      const segmentScores: number[] = [];
+      const numSegments = Math.ceil(words.length / CHUNK_SIZE);
+      for (let i = 0; i < numSegments; i++) {
+        const chunkWords = words.slice(i * CHUNK_SIZE, (i + 1) * CHUNK_SIZE);
+        if (chunkWords.length < 50) continue;
+        const chunkText = chunkWords.join(" ");
+        const chunkSig = new TextSignals(chunkText).getAllSignals();
+        const chunkResults = this.profiles.map((p) => p.score(chunkSig, this.calibration) as DetectorResult);
+        const chunkSummary = summarizeDetectorResults(chunkSig, chunkResults, chunkWords.length, chunkWords.length / 15);
+        segmentScores.push(chunkSummary.overall_ai_score);
+      }
+      if (segmentScores.length > 1) {
+        const segVar = variance(segmentScores);
+        // Lambda variance penalty (adds base AI heat if there are sporadic AI zones)
+        segmentScoreVariancePenalty = Math.min(segVar * 0.15, 12);
+      }
+    }
+
     const lengthFactor = Math.max(0.15, Math.min(1.0, (sigObj.wordCount - 12) / 70.0));
     const strictDocHeat = documentStrictHeat(signals);
     const humanProfile = documentHumanStrength(signals);
@@ -2335,6 +2498,14 @@ export class MultiDetector {
       }
     }
     const summary = summarizeDetectorResults(signals, detectorResults, sigObj.wordCount, sigObj.sentenceCount);
+    
+    // Apply Variance Penalty from Layer 4
+    if (segmentScoreVariancePenalty > 0) {
+      summary.overall_ai_score = clamp(summary.overall_ai_score + segmentScoreVariancePenalty);
+      summary.overall_human_score = 100 - summary.overall_ai_score;
+      const classif = classifyAiScore(summary.overall_ai_score);
+      summary.overall_verdict = classif.verdict;
+    }
 
     return {
       signals: Object.fromEntries(Object.entries(signals).map(([k, v]) => [k, Math.round(v * 10) / 10])),
