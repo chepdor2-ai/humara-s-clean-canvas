@@ -21,6 +21,7 @@ import { detectorTargetedPolish } from '@/lib/engine/detector-targeted-polish';
 import { profilePaper, summarizeProfile, type PaperProfile } from '@/lib/engine/paper-profiler';
 import { deriveHumanizationPlan, summarizePlan, type HumanizationPlan } from '@/lib/engine/paper-strategy-selector';
 import { sentenceFlowPolish } from '@/lib/engine/sentence-flow-polish';
+import { injectHumanImperfections } from '@/lib/engine/human-imperfections';
 import { applySentenceStartersDistribution, applyNuruDocumentFlowCalibration } from '@/lib/engine/stealth/nuru-document-phases';
 import { omegaHumanize } from '@/lib/engine/omega-humanizer';
 import { easyHumanize } from '@/lib/engine/easy-humanizer';
@@ -174,6 +175,45 @@ interface AdaptiveCleanupPlan {
   universalCleaningPasses: number;
   leadRewriteThreshold: number;
   maxAdaptiveCycles: number;
+}
+
+/**
+ * Pick the subset of paragraph-lead sentence indices that should be
+ * PRESERVED (light cleanup only), leaving the complement to be fully
+ * rewritten. Deterministic per input hash so every phase in the
+ * pipeline makes the same decision for the same paragraph.
+ *
+ * User mandate: "limit restructuring the first sentences of the
+ * paragraphs, make it probabilistic but more like 40% chance" →
+ * 60% preserve, 40% rewrite. Implemented by adding only ~60% of
+ * the paragraph leads to the preservation set; the remaining ~40%
+ * fall through the normal rewrite path in every downstream loop.
+ */
+function pickLeadsToPreserve(paragraphBoundaries: number[], seed: number, preserveProbability = 0.60): Set<number> {
+  let state = seed || 1;
+  const rng = () => {
+    state ^= state << 13;
+    state ^= state >>> 17;
+    state ^= state << 5;
+    return ((state >>> 0) & 0xFFFFFFFF) / 0x100000000;
+  };
+  const preserved = new Set<number>();
+  for (const idx of paragraphBoundaries) {
+    if (rng() < preserveProbability) preserved.add(idx);
+  }
+  // Always preserve the very first paragraph lead — it anchors the whole
+  // document. Rewriting the opening line is visually disorienting.
+  if (paragraphBoundaries.length > 0) preserved.add(paragraphBoundaries[0]);
+  return preserved;
+}
+
+/** Simple deterministic string hash for seeding. */
+function hashTextForSeed(text: string): number {
+  let h = 5381;
+  for (let i = 0; i < text.length; i++) {
+    h = ((h << 5) + h + text.charCodeAt(i)) | 0;
+  }
+  return Math.abs(h);
 }
 
 function buildAdaptiveCleanupPlan(
@@ -2038,10 +2078,17 @@ export async function POST(req: Request) {
             }
 
             let adaptiveCycle = 0;
+            // Deterministic seed for lead-preservation decisions across the
+            // whole post-processing cycle — same paragraph gets the same
+            // preserve/rewrite verdict in every phase.
+            const leadSeed = hashTextForSeed(normalizedText);
             while (nuruPostTimeOk() && adaptivePostPlan && adaptiveCycle < adaptivePostPlan.maxAdaptiveCycles) {
               const { sentences: postSentences, paragraphBoundaries: postParaBounds } = splitIntoIndexedSentences(humanized);
               const postSents = [...postSentences];
-              const paragraphLeadSet = new Set(postParaBounds);
+              // 60% preserve / 40% rewrite (user mandate) — only the ~60%
+              // selected here are in the "preserve" set; the other ~40%
+              // fall through to full Nuru rewrite downstream.
+              const paragraphLeadSet = pickLeadsToPreserve(postParaBounds, leadSeed, 0.60);
 
               if (!skipUniversalNuruPost) {
                 sendSSE(controller, { type: 'stage', stage: `Nuru Adaptive Post-Processing ${adaptiveCycle + 1}/${adaptivePostPlan.maxAdaptiveCycles}` });
@@ -2227,7 +2274,11 @@ export async function POST(req: Request) {
           if (!(deadlineReached || Date.now() - startTime > DEADLINE_MS - 6000)) {
             const { sentences: cleanSentences, paragraphBoundaries: cleanBounds } = splitIntoIndexedSentences(humanized);
             const finalPlan = adaptivePostPlan ?? buildAdaptiveCleanupPlan(normalizedText, getDetectorAverage(detector.analyze(humanized)), tone ?? 'neutral', postProcessingProfile, humanizationPlan ?? undefined);
-            const paragraphLeadSet = new Set(cleanBounds);
+            // Same probabilistic lead preservation (60/40) applied to
+            // final universal cleaning. Uses the same seed as the Nuru
+            // post-processing block so verdicts are consistent.
+            const universalSeed = hashTextForSeed(normalizedText);
+            const paragraphLeadSet = pickLeadsToPreserve(cleanBounds, universalSeed, 0.60);
             for (let pass = 0; pass < finalPlan.universalCleaningPasses; pass++) {
               sendSSE(controller, { type: 'stage', stage: `Universal Cleaning ${pass + 1}/${finalPlan.universalCleaningPasses}` });
               await flushDelay(8);
@@ -2247,6 +2298,50 @@ export async function POST(req: Request) {
               humanized = reassembleText(cleanSentences, cleanBounds.length ? cleanBounds : [0]);
               latestHumanized = humanized;
               if (getDetectorAverage(detector.analyze(humanized)) <= finalPlan.targetScore) break;
+            }
+          }
+
+          // ═══════════════════════════════════════════════════════════════
+          // HUMAN IMPERFECTION INJECTION (final transformation phase)
+          //
+          // Runs AFTER universal cleaning so the imperfections survive. All
+          // earlier phases (Nuru, AntiPangram, detector-polish, flow-polish,
+          // universal cleaning) target an "over-polished" state; this phase
+          // restores the minimal, realistic quirks that make well-edited
+          // human prose look human to detectors:
+          //   • Short comma-aside → em-dash aside (e.g. "debate, often
+          //     heated, about" → "debate — often heated — about")
+          //   • Occasional oxford-comma drop
+          //   • Occasional compound-hyphen removal ("well-known" → "well
+          //     known") in predicative position
+          //   • "In order to" → "to" collapse (human style variance)
+          //   • Front-loaded "Additionally," → mid-clause "also"
+          //   • Inline domain-aware aside insertion (rare)
+          //
+          // Deterministic per input. Budgeted to 1–2 imperfections per
+          // paragraph (1 for medical/legal). Never introduces misspellings
+          // or broken grammar. Runs for EVERY engine including ai_analysis.
+          // ═══════════════════════════════════════════════════════════════
+          if (!(deadlineReached || Date.now() - startTime > DEADLINE_MS - 3000)) {
+            try {
+              sendSSE(controller, { type: 'stage', stage: 'Human Imperfections' });
+              await flushDelay(6);
+              const impResult = injectHumanImperfections(humanized, {
+                profile: paperProfile ?? undefined,
+                plan: humanizationPlan ?? undefined,
+                enableLexical: true,
+              });
+              if (impResult.text && impResult.text.trim().length >= humanized.trim().length * 0.80) {
+                humanized = impResult.text;
+                latestHumanized = humanized;
+                sendSSE(controller, {
+                  type: 'stage',
+                  stage: `Human imperfections: +${impResult.injectedCount} across ${impResult.perParagraphCounts.length} paragraphs`,
+                });
+                await flushDelay(6);
+              }
+            } catch (impErr) {
+              console.warn('[HumanImperfections] skipped:', impErr);
             }
           }
 

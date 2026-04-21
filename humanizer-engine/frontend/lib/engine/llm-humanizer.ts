@@ -777,6 +777,42 @@ STRICT RULES:
 - Do NOT use AI-typical words: utilize, facilitate, leverage, comprehensive, multifaceted, paradigm, trajectory, discourse, robust, nuanced, pivotal, delve, foster, harness, underscore, bolster, streamline, furthermore, moreover, additionally, consequently, subsequently, nevertheless, embark, tapestry, cornerstone, navigate, landscape, realm, intricate, transformative, innovative
 - Return ONLY the restructured sentence, nothing else`;
 
+/**
+ * Few-shot examples showing the target output style: natural, flowing,
+ * human-edited academic prose — the kind of well-written reference-book
+ * passage that reads as unmistakably human to detectors. Modeled on the
+ * user's "Population health…" reference passage.
+ *
+ * Each example demonstrates:
+ *   • Clause reordering or voice change
+ *   • Varied rhythm (short + long sentence cadence within a clause)
+ *   • Inline parenthetical asides set off with em-dashes
+ *   • Natural word choices over AI-typical vocabulary
+ *   • Citations preserved verbatim
+ *   • Strictly one sentence per rewrite
+ */
+const RESTRUCTURE_FEWSHOT_ACADEMIC = `EXAMPLES — how to restructure well. Each example keeps the meaning and every citation intact, varies clause order, and reads like a published author.
+
+EXAMPLE 1 (clause reordering + voice change)
+INPUT: "Population health is a relatively new term that does not yet have an agreed-upon definition."
+OUTPUT: "As a relatively new term, population health still lacks an agreed-upon definition."
+
+EXAMPLE 2 (adverbial fronting + inline aside)
+INPUT: "There is debate about whether population health and public health are identical or different."
+OUTPUT: "Whether population health and public health are identical or different remains — often heatedly — debated."
+
+EXAMPLE 3 (nominalization swap + rhythm change with citation preserved)
+INPUT: "Researchers often develop a hypothesis to predict relationships between variables (Babbie, 2021)."
+OUTPUT: "A hypothesis predicting the relationships between variables is typically the researcher's starting point (Babbie, 2021)."
+
+EXAMPLE 4 (perspective shift + sentence-type change)
+INPUT: "The terms inequality, inequity, and disparity are sometimes used interchangeably."
+OUTPUT: "Writers sometimes treat inequality, inequity, and disparity as interchangeable terms, although each carries its own distinct weight."
+
+EXAMPLE 5 (relative-clause transformation)
+INPUT: "Discussions of population health use many terms, such as outcomes, disparities, determinants, and risk factors."
+OUTPUT: "Outcomes, disparities, determinants, and risk factors — all terms that recur in discussions of population health — are used with varying precision."`;
+
 function buildRestructurePrompt(sentence: string, strategy?: import('./adaptive-strategy-selector').SentenceStrategy): string {
   const targetPct = strategy ? Math.round(strategy.minChangeTarget * 100) : 65;
   const noContractions = (!strategy || !strategy.allowContractions) ? "\n- ABSOLUTELY NO CONTRACTIONS (e.g. don't, can't)." : "";
@@ -784,6 +820,10 @@ function buildRestructurePrompt(sentence: string, strategy?: import('./adaptive-
   const noFirstPerson = (!strategy || !strategy.allowFirstPerson) ? "\n- ABSOLUTELY NO FIRST PERSON PRONOUNS (I, we, our, us) unless exactly in original." : "";
 
   return `Deeply restructure this sentence by changing its clause order, voice, word choices, and presentation. Apply at least TWO restructuring techniques. Aim for ${targetPct}%+ word change. Keep all facts, citations, and technical terms. Expand or shorten clauses internally where necessary to vary rhythm, but strictly NO SPLITTING OR MERGING of the sentence. Output exactly one sentence.${noContractions}${noRhetorical}${noFirstPerson}
+
+${RESTRUCTURE_FEWSHOT_ACADEMIC}
+
+NOW RESTRUCTURE THIS SENTENCE USING THE SAME STYLE AS THE EXAMPLES ABOVE.
 
 SENTENCE:
 ${sentence}`;

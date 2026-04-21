@@ -258,6 +258,12 @@ function detectRegister(text: string, ctx: TextContext, domain: DomainResult): R
     return "blog";
   }
 
+  // Rule: academic-essay = some citations and third-person (no I/we) — even
+  // when the overall tone heuristic is only "neutral".
+  if (citationDensity >= 1 && firstPersonDensity < 2 && contractionDensity < 1) {
+    return "academic-essay";
+  }
+
   // Rule: academic-essay = moderate formality, some citations, few headings
   if (ctx.tone === "formal" && citationDensity >= 1 && citationDensity < 5) {
     return "academic-essay";
@@ -270,6 +276,15 @@ function detectRegister(text: string, ctx: TextContext, domain: DomainResult): R
 
   // Rule: academic-essay when formal-ish without many citations
   if (ctx.tone === "formal") return "academic-essay";
+
+  // Rule: academic-essay when the text is clearly third-person scholarly
+  // prose (no first-person, no contractions) with an academic domain.
+  if (
+    (domain.primary === "academic" || domain.primary === "humanities" || domain.primary === "stem") &&
+    firstPersonDensity < 1 && contractionDensity < 1
+  ) {
+    return "academic-essay";
+  }
 
   return "general";
 }

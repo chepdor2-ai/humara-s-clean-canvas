@@ -218,6 +218,16 @@ function anchorAmbiguousPronouns(sentences: string[]): string[] {
 
 // ── Technique 4: paragraph-lead diversification ───────────────────────
 
+/**
+ * Paragraph-lead diversification.
+ *
+ * User requirement: limit restructuring of paragraph-lead sentences —
+ * fire only ~40% of the time even when a repeat pattern is detected.
+ * This preserves the author's intended opening for most paragraphs
+ * while still breaking up truly monotonous patterns.
+ */
+const LEAD_REWRITE_PROBABILITY = 0.40;
+
 function diversifyParagraphLeads(
   paragraphs: string[],
   rng: () => number,
@@ -231,9 +241,11 @@ function diversifyParagraphLeads(
 
     let lead = sents[0];
     const leadPattern = classifyLeadPattern(lead);
+    const repeatingPattern = usedLeadPatterns.includes(leadPattern) && leadPattern !== "unknown";
 
-    if (usedLeadPatterns.includes(leadPattern) && leadPattern !== "unknown") {
-      // Try to transform lead onto a different pattern.
+    // Only transform on repeating patterns, and even then only ~40% of the
+    // time. The author's original lead is preserved in the majority of cases.
+    if (repeatingPattern && rng() < LEAD_REWRITE_PROBABILITY) {
       lead = transformLeadPattern(lead, leadPattern, rng);
     }
     usedLeadPatterns.push(classifyLeadPattern(lead));
@@ -281,6 +293,9 @@ function transformLeadPattern(sentence: string, pattern: string, rng: () => numb
 
 // ── Technique 5: abrupt transition smoothing ─────────────────────────
 
+// Sentences that already flow naturally — never prepend a bridge to them.
+const NATURAL_TRANSITION_OPENER_RE = /^(Instead|Meanwhile|Likewise|Similarly|Conversely|Rather|Whereas|Although|Though|While|Yet|But|And|Or|Still|Even so|However|In contrast|By contrast|On the other hand|On balance|In addition|At the same time|In practice|For example|For instance|As a result|In turn|Then|Now|First|Second|Third|Finally|Here|There)\b/i;
+
 function smoothAbruptTransitions(sentences: string[], rng: () => number): string[] {
   if (sentences.length < 2) return sentences;
 
@@ -291,12 +306,15 @@ function smoothAbruptTransitions(sentences: string[], rng: () => number): string
     const prevLen = prev.split(/\s+/).length;
     const curLen = cur.split(/\s+/).length;
 
-    // Trigger: two short declaratives in a row with no connector, and the
-    // second starts with a bare subject. Add a light bridging word 30% of
-    // the time to soften the abrupt cadence (natural human pattern).
-    if (prevLen <= 14 && curLen <= 18 && !FORMAL_CONNECTOR_RE.test(cur) && /^[A-Z][a-z]+/.test(cur)) {
-      if (rng() < 0.30) {
-        const bridges = ["Still,", "Yet,", "And", "Even so,", "Then again,"];
+    // Never add a bridge if the current sentence already starts with a
+    // natural transitional word. Only trigger on truly short declaratives.
+    const alreadyTransitional = NATURAL_TRANSITION_OPENER_RE.test(cur);
+    const shortPair = prevLen <= 12 && curLen <= 14;
+    const bareSubjectStart = /^[A-Z][a-z]+\s+[a-z]/.test(cur);
+
+    if (shortPair && !alreadyTransitional && !FORMAL_CONNECTOR_RE.test(cur) && bareSubjectStart) {
+      if (rng() < 0.18) {
+        const bridges = ["Still,", "Yet,", "Even so,", "That said,"];
         const bridge = pickAlt(bridges, rng);
         result.push(`${bridge} ${lowercaseFirst(cur)}`);
         continue;

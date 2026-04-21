@@ -279,11 +279,11 @@ function deriveParagraphIntensity(
 function buildProtectedTerms(profile: PaperProfile): Set<string> {
   const terms = new Set<string>();
   // Always include named entities
-  for (const e of profile.context.namedEntities) terms.add(e);
+  profile.context.namedEntities.forEach((e) => terms.add(e));
   // Include multi-word domain bigrams
-  for (const b of profile.context.domainBigrams) terms.add(b);
+  profile.context.domainBigrams.forEach((b) => terms.add(b));
   // High-frequency long words from the input (≥3 occurrences)
-  for (const t of profile.context.protectedTerms) terms.add(t);
+  profile.context.protectedTerms.forEach((t) => terms.add(t));
   return terms;
 }
 
