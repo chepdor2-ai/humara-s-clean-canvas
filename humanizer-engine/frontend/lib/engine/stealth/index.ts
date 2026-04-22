@@ -703,9 +703,9 @@ const EXTRA_REPLACEMENTS: Record<string, string[]> = {
   participation: ['engagement', 'involvement', 'contribution', 'inclusion'],
   response: ['reaction', 'reply', 'answer', 'feedback'],
   // ── High-frequency academic verbs ──
-  leverage: ['harness', 'employ', 'utilize', 'capitalize'],
-  utilize: ['employ', 'apply', 'use', 'harness'],
-  implement: ['execute', 'carry', 'deploy', 'enact'],
+  leverage: ['harness', 'use', 'capitalize'],
+  utilize: ['apply', 'use', 'harness'],
+  implement: ['execute', 'carry out', 'deploy', 'enact'],
   streamline: ['simplify', 'optimize', 'refine', 'improve'],
   personalize: ['tailor', 'customize', 'adapt', 'individualize'],
   enable: ['allow', 'empower', 'facilitate', 'permit'],

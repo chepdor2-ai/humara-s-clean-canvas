@@ -2545,11 +2545,11 @@ adaptivePostPlan = buildAdaptiveCleanupPlan(normalizedText, currentAdaptiveScore
             // undetectability → no pre-cycle pass (Nuru runs in adaptive cycle below)
             // balanced        → seeded 50/50 random: Nuru-first or AntiPangram-first
             const initPostSeed = hashTextForSeed(normalizedText) % 100;
-            const useAntiPangramInitial = postProcessingProfile === 'quality'
+            const useAntiPangramInitial = eng === 'nuru_v2' ? false : (postProcessingProfile === 'quality'
               ? true
               : postProcessingProfile === 'undetectability'
                 ? false
-                : initPostSeed < 50;
+                : initPostSeed < 50);
             if (nuruPostTimeOk() && adaptivePostPlan) {
               if (useAntiPangramInitial) {
                 await runAdaptiveAntiPangram(
@@ -2557,7 +2557,7 @@ adaptivePostPlan = buildAdaptiveCleanupPlan(normalizedText, currentAdaptiveScore
                     ? 'AntiPangram Quality Post-Processing'
                     : 'AntiPangram Balanced Post-Processing',
                 );
-              } else if (postProcessingProfile === 'balanced') {
+              } else if (postProcessingProfile === 'balanced' && eng !== 'nuru_v2') {
                 await runAdaptiveNuruInitialPass('Nuru Balanced Initial Post-Processing');
               }
             }
@@ -2623,9 +2623,13 @@ adaptivePostPlan = buildAdaptiveCleanupPlan(normalizedText, currentAdaptiveScore
 
                 const postFlagged = collectPostFlagged(postSents);
                 if (postFlagged.length > 0 && nuruPostTimeOk()) {
-                  const flagMap = new Map<number, string[]>();
-                  for (const f of postFlagged) flagMap.set(f.index, f.flagged_phrases);
                   for (let pass = 0; pass < adaptivePostPlan.targetedSweeps && nuruPostTimeOk(); pass++) {
+                    const currentFlagged = collectPostFlagged(postSents);
+                    if (currentFlagged.length === 0) break;
+                    
+                    const flagMap = new Map<number, string[]>();
+                    for (const f of currentFlagged) flagMap.set(f.index, f.flagged_phrases);
+                    
                     for (const [idx, phrases] of flagMap) {
                       if (isHeadingSentCheck(postSents[idx])) continue;
                       const isParagraphLead = paragraphLeadSet.has(idx);
@@ -2690,7 +2694,7 @@ adaptivePostPlan = buildAdaptiveCleanupPlan(normalizedText, currentAdaptiveScore
             // Provides the last ~5-10% of score reduction needed to hit
             // <5% average across all 22 detectors consistently.
             // ═══════════════════════════════════════════════════════════
-            if (nuruPostTimeOk() && !activeQualityGate.shouldStop && currentAdaptiveScore > adaptivePostPlan.targetScore) {
+            if (eng !== 'nuru_v2' && nuruPostTimeOk() && !activeQualityGate.shouldStop && currentAdaptiveScore > adaptivePostPlan.targetScore) {
               try {
                 sendSSE(controller, { type: 'stage', stage: `Detector Polish (signal-targeted): ${Math.round(currentAdaptiveScore)}%` });
                 await flushDelay(8);
