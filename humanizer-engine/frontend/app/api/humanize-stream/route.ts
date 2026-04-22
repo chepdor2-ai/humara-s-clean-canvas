@@ -2232,22 +2232,54 @@ aiAdaptivePlan = buildAdaptiveCleanupPlan(reassembleText(workingSentences, worki
                     console.warn(`[Nuru Non-LLM Forensic] Detection failed, using defaults: ${message}`);
                   }
 
-                  // ── Phase 4: Score-based extra bulk Nuru passes (0–5 more) ──
-                  if (maxNuruPasses > adjustedBaseline) {
-                    const extraPasses = Math.round(
-                      Math.max(0, Math.min(maxNuruPasses - adjustedBaseline,
-                        ((overallAiScore - 30) / 50) * (maxNuruPasses - adjustedBaseline)))
-                    );
-                    console.log(`[Nuru Adaptive] AI score ${overallAiScore} → +${extraPasses} bulk passes (total ${adjustedBaseline + extraPasses}/${maxNuruPasses})`);
+                  // ── Phase 4: AGGRESSIVE 5-LOOP REHUMANIZATION ──
+                  // Scale aggressiveness based on INPUT AI score:
+                  // - Score 0–20: 0 loops (clean already)
+                  // - Score 20–40: 1 loop
+                  // - Score 40–60: 2 loops
+                  // - Score 60–80: 3 loops
+                  // - Score 80–100: 5 loops (maximum aggressiveness)
+                  // Each loop: 3 iterations with 40% per-iteration minimum enforcement.
+                  const aggressiveLoopCount = Math.min(5, Math.max(0, Math.ceil((overallAiScore - 20) / 20)));
+                  if (aggressiveLoopCount > 0 && !(deadlineReached || Date.now() - startTime > DEADLINE_MS - 8000)) {
+                    console.log(`[Nuru Aggressive] AI score ${overallAiScore} → ${aggressiveLoopCount} aggressive loop cycles (3 iterations each)`);
+                    const AGGRESSIVE_PASS_MIN = 0.40; // 40% minimum per iteration
+                    const usedAggressiveWords = new Set<string>();
 
-                    for (let pass = 0; pass < extraPasses; pass++) {
-                      for (let i = 0; i < currentSentences.length; i++) {
-                        if (!isHeadingSentCheck(currentSentences[i])) {
-                          currentSentences[i] = runNuruSinglePass(currentSentences[i]);
+                    for (let loop = 0; loop < aggressiveLoopCount; loop++) {
+                      for (let iteration = 0; iteration < 3; iteration++) {
+                        for (let i = 0; i < currentSentences.length; i++) {
+                          if (isHeadingSentCheck(currentSentences[i])) continue;
+
+                          const preIteration = currentSentences[i];
+                          let next = runNuruSinglePass(preIteration);
+
+                          // Enforce 40% minimum per iteration
+                          if (measureSentenceChange(preIteration, next) < AGGRESSIVE_PASS_MIN) {
+                            // Try one more pass for deeper change
+                            const deeper = runNuruSinglePass(next);
+                            if (measureSentenceChange(preIteration, deeper) >= AGGRESSIVE_PASS_MIN) {
+                              next = deeper;
+                            } else {
+                              // Fallback: aggressive synonym replacement + AI word kill
+                              let fb = applyAIWordKill(preIteration);
+                              fb = synonymReplace(fb, 0.9, usedAggressiveWords);
+                              if (measureSentenceChange(preIteration, fb) > measureSentenceChange(preIteration, next)) {
+                                next = fb;
+                              }
+                            }
+                          }
+
+                          currentSentences[i] = next;
+                          sendSSE(controller, {
+                            type: 'sentence',
+                            index: i,
+                            text: currentSentences[i],
+                            stage: `${phaseLabel} aggressive loop ${loop + 1}/${aggressiveLoopCount} iter ${iteration + 1}/3`,
+                          });
                         }
-                        sendSSE(controller, { type: 'sentence', index: i, text: currentSentences[i], stage: `${phaseLabel} extra pass ${pass + 1}/${extraPasses}` });
+                        await flushDelay(8);
                       }
-                      await flushDelay(10);
                     }
                   }
 
