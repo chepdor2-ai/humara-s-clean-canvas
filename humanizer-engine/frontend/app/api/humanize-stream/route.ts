@@ -1026,6 +1026,15 @@ export async function POST(req: Request) {
           const isAcademicBlogTone = tone === 'academic_blog';
           const shouldExpandContractions = true;
           const enforceNoContractions = (value: string): string => expandAllContractions(expandContractions(value));
+          const removeFillerParentheticals = (value: string): string => value
+            .replace(/\s*\((?:worth noting|in most cases|to varying degrees|though this varies|at least in this context|at least actually|at least in reality)\)/gi, '')
+            .replace(/[\s,;:]*[\u2013\u2014-]\s*(?:at least actually|at least in reality|at least in this context)\s*[\u2013\u2014-][\s,;:]*/gi, ' ')
+            .replace(/\s+,/g, ',')
+            .replace(/,\s*,+/g, ',')
+            .replace(/\s+([.;:!?])/g, '$1')
+            .replace(/[ \t]{2,}/g, ' ')
+            .replace(/\s+\n/g, '\n')
+            .trim();
           const antiPangramToneNarrow: 'academic' | 'professional' | 'casual' | 'neutral' =
             isAcademicTone
               ? 'academic'
@@ -2507,7 +2516,7 @@ adaptivePostPlan = buildAdaptiveCleanupPlan(normalizedText, currentAdaptiveScore
               const usedMandatoryWords = new Set<string>();
 
               const finalizeMandatoryCandidate = (value: string): string =>
-                enforceNoContractions(finalSmoothGrammar(deepNonLLMClean(value)));
+                removeFillerParentheticals(enforceNoContractions(finalSmoothGrammar(deepNonLLMClean(value))));
 
               const forceNaturalRephrase = (value: string, seed: number): string => {
                 const trimmed = value.trim();
@@ -2619,7 +2628,7 @@ adaptivePostPlan = buildAdaptiveCleanupPlan(normalizedText, currentAdaptiveScore
                 }
               }
 
-              humanized = enforceNoContractions(reassembleText(postSents, postBounds.length ? postBounds : [0]));
+              humanized = removeFillerParentheticals(enforceNoContractions(reassembleText(postSents, postBounds.length ? postBounds : [0])));
               latestHumanized = humanized;
               currentAdaptiveScore = getDetectorAverage(detector.analyze(humanized));
               activeQualityGate = rememberQualityCandidate(humanized, 'mandatory Nuru post');
@@ -3844,7 +3853,7 @@ const finalPlan = adaptivePostPlan ?? buildAdaptiveCleanupPlan(normalizedText, g
             }
           }
 
-          humanized = enforceNoContractions(humanized);
+          humanized = removeFillerParentheticals(enforceNoContractions(humanized));
           latestHumanized = humanized;
 
           if (!usePhasePipeline) {
