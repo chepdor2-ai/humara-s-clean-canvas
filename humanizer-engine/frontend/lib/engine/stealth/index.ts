@@ -307,8 +307,8 @@ const PROTECTED = new Set([
   'patient', 'patients', 'clinical', 'bias', 'privacy', 'algorithm', 'algorithms',
   'dataset', 'datasets', 'observer', 'observers', 'machine', 'adoption',
   'barrier', 'barriers', 'decision', 'decisions', 'pattern', 'patterns',
-  'however', 'moreover', 'furthermore', 'nevertheless', 'consequently',
-  'apparent', 'essential', 'widespread', 'unprecedented',
+  // NOTE: 'however','moreover','furthermore','nevertheless','consequently' intentionally
+  // removed — these are top AI detector signals and MUST be replaceable by Nuru.
   // Number words — never replace
   'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten',
   'eleven', 'twelve', 'thirteen', 'fourteen', 'fifteen', 'sixteen', 'twenty',
@@ -319,9 +319,9 @@ const PROTECTED = new Set([
   'suburbanization', 'reinvestment', 'redevelopment', 'industrialization',
   'post', 'industrial', 'socioeconomic', 'socio',
   'concentrated',
-  // Structural/transition words that must stay
-  'while', 'although', 'despite', 'such', 'both', 'particularly',
-  'increasingly', 'especially', 'specifically', 'once', 'past',
+  // Structural/transition words that must stay (AI-signal connectors removed — they must be replaceable)
+  'while', 'although', 'despite', 'such', 'both', 'once', 'past',
+  // NOTE: 'particularly','increasingly','especially','specifically' removed — AI signals
   // ASD / sensory integration / therapy domain terms
   'sensory', 'integration', 'autism', 'asd', 'spectrum', 'disorder',
   'occupational', 'therapy', 'therapist', 'therapists', 'intervention',
@@ -337,25 +337,28 @@ const PROTECTED = new Set([
   // Key academic terms that garble when replaced
   'processing', 'performance', 'relationships', 'environments',
   'development', 'populations', 'settings', 'evidence', 'outcomes',
-  'community', 'practices', 'assessment', 'emerging', 'ensuring',
+  'community', 'practices', 'assessment', 'ensuring',
   'remaining', 'including', 'culturally', 'responsive', 'work',
   'tools', 'measures', 'profiles', 'frameworks', 'presents',
   'early', 'remains', 'academic',
+  // NOTE: 'emerging' removed — AI signal
   // Clinical/research vocab that morphology destroys
   'limited', 'validated', 'systems', 'establishing', 'developing',
   'improvements', 'examining', 'prioritize', 'methodologies',
   'personalize', 'outcome', 'methodology',
   // Terms whose replacements lose precision in academic context
-  'research', 'profile', 'practice', 'current', 'existing',
-  'ethical', 'insights', 'insight', 'validation', 'address',
-  'educators', 'technologies', 'comprehensive', 'programs', 'areas',
+  'research', 'profile', 'practice',
+  'ethical', 'validation', 'address',
+  'educators', 'technologies', 'programs', 'areas',
+  // NOTE: 'current','existing','insights','insight','comprehensive' removed — AI signals
   // Confusable word pairs — morphology can swap affect/effect
   'affect', 'affected', 'affecting', 'affects',
   'effect', 'effected', 'effecting', 'effects',
   // Medical/nursing domain terms
-  'vital', 'monitoring', 'clinical', 'intervention', 'patient',
+  'monitoring', 'clinical', 'intervention', 'patient',
   'medication', 'chronic', 'diagnosis', 'therapeutic',
-  'impacted', 'interaction', 'delivery',
+  'interaction', 'delivery',
+  // NOTE: 'vital','impacted' removed — AI signals
   // Common words that garble when replaced across iterations
   'collection', 'collections', 'approach', 'approaches',
   'process', 'processes', 'level', 'levels',
@@ -377,7 +380,7 @@ const PROTECTED = new Set([
   'optimization', 'keyword', 'keywords', 'visibility',
   'marketing', 'advertisers', 'advertising', 'expenditure',
   'credibility', 'personalization', 'leads', 'qualified',
-  'sustainable', 'actionable',
+  // NOTE: 'sustainable','actionable' removed — strong AI signals
 ]);
 
 /* ── Helper: check if a token is a proper noun (capitalized, non-sentence-start) ── */

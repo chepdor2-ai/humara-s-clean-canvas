@@ -923,6 +923,113 @@ export async function nuruReadabilityPolish(sentence: string): Promise<string> {
 }
 
 // ══════════════════════════════════════════════════════════════════════════
+// BATCH RESTRUCTURE — ONE single LLM call for all sentences in a document.
+// Cost-effective: N sentences = 1 API call instead of N calls.
+// Sentence-by-sentence processing continues in non-LLM phases afterward.
+// ══════════════════════════════════════════════════════════════════════════
+
+const BATCH_RESTRUCTURE_SYSTEM = `You are an expert academic editor rewriting AI-written text sentence by sentence to make it sound like natural human writing. You receive a numbered list of sentences. For each one, output one transformed sentence with its original number.
+
+CRITICAL RULES:
+1. Output EXACTLY one sentence per input sentence — numbered with the SAME number (##1:, ##2:, etc.).
+2. Do NOT merge two input sentences into one. Do NOT split one input into two.
+3. Preserve ALL citations [1], (Author, Year), page numbers, etc. — copy them verbatim.
+4. Preserve ALL technical terms, proper nouns, numbers, measurements, and formulas.
+5. Preserve placeholder tokens [[PROT_0]], [[TRM_0]], ⟦PROT0⟧ — copy exactly.
+6. Do NOT add new information, opinions, or content of any kind.
+7. Headings/titles (short lines without a sentence-ending period): output them unchanged.
+8. Transform each content sentence to sound like natural human writing:
+   — Change clause order, voice (active ↔ passive), and syntactic frame
+   — Replace AI-typical vocabulary: furthermore, moreover, additionally, utilize, leverage, comprehensive, multifaceted, paradigm, trajectory, robust, nuanced, pivotal, intricate, transformative, innovative, streamline, optimize, bolster, harness, underscore, foster, delve, embark, cornerstone, navigate, landscape
+   — Vary rhythm — mix shorter and longer clauses naturally
+   — Aim for 60-75% word change per sentence
+9. Output ONLY the numbered sentences, one per line. No preamble, no commentary.`;
+
+function buildBatchRestructurePrompt(sentences: string[], targetPct = 65): string {
+  const numbered = sentences.map((s, i) => `##${i + 1}: ${s}`).join('\n');
+  return `Rewrite each sentence to sound like natural human writing. Aim for ~${targetPct}% word change. Output one line per number.\n\n${numbered}`;
+}
+
+/**
+ * Batch LLM restructure — processes ALL sentences in ONE API call.
+ * Returns an array the same length as input. Headings pass through unchanged.
+ * Falls back to the original sentence for any that fail to parse.
+ * Enforces sentence-count tolerance: output count must stay within
+ * ±max(3, floor(totalWords/100)) of the input count.
+ */
+export async function batchRestructureSentences(
+  sentences: string[],
+  strategy?: import('./adaptive-strategy-selector').SentenceStrategy,
+  wordCount?: number,
+): Promise<string[]> {
+  if (sentences.length === 0) return [];
+
+  // Identify content sentences (non-heading, ≥5 words)
+  const contentItems: Array<{ idx: number; text: string }> = [];
+  for (let i = 0; i < sentences.length; i++) {
+    const t = sentences[i].trim();
+    if (!isTitleOrHeading(t) && t.split(/\s+/).length >= 5) {
+      contentItems.push({ idx: i, text: t });
+    }
+  }
+  if (contentItems.length === 0) return sentences;
+
+  // Convert placeholders so LLM preserves them
+  const llmItems = contentItems.map(c => ({ ...c, text: placeholdersToLLMFormat(c.text) }));
+  const targetPct = strategy ? Math.round((strategy.minChangeTarget ?? 0.65) * 100) : 65;
+  const userPrompt = buildBatchRestructurePrompt(llmItems.map(c => c.text), targetPct);
+
+  // Budget tokens generously: ~3.5× source words
+  const totalSourceWords = llmItems.reduce((a, c) => a + c.text.split(/\s+/).length, 0);
+  const maxTokens = Math.max(1024, Math.ceil(totalSourceWords * 3.8));
+  const temp = 0.78 + (Math.random() * 0.12);
+
+  try {
+    const raw = await llmCall(BATCH_RESTRUCTURE_SYSTEM, userPrompt, temp, maxTokens);
+    if (!raw) return sentences;
+
+    // Parse numbered lines: ##N: text
+    const parsed = new Map<number, string>();
+    for (const line of raw.split('\n')) {
+      const m = line.match(/^##(\d+):\s*(.+)/);
+      if (m) {
+        const num = parseInt(m[1], 10);
+        if (num >= 1 && num <= contentItems.length) {
+          parsed.set(num, m[2].trim());
+        }
+      }
+    }
+
+    // Sentence-count tolerance: ±max(3, floor(wordCount / 100)) sentences
+    const wc = wordCount ?? sentences.reduce((a, s) => a + s.split(/\s+/).length, 0);
+    const tolerance = Math.max(3, Math.floor(wc / 100));
+    if (Math.abs(parsed.size - contentItems.length) > tolerance) {
+      // Too many sentences missing — LLM went off-script; fall back
+      console.warn(`[BatchRestructure] Output sentence count mismatch: got ${parsed.size}/${contentItems.length}. Falling back.`);
+      return sentences;
+    }
+
+    // Apply parsed results
+    const output = [...sentences];
+    for (let ci = 0; ci < contentItems.length; ci++) {
+      const num = ci + 1;
+      const transformed = parsed.get(num);
+      if (transformed) {
+        let t = llmFormatToPlaceholders(transformed);
+        t = enforceSingleSentence(t);
+        t = enforceCapitalization(contentItems[ci].text, t);
+        output[contentItems[ci].idx] = t;
+      }
+      // If not found in parse, keep original sentence (already in output)
+    }
+    return output;
+  } catch (err) {
+    console.warn('[BatchRestructure] Failed, keeping originals:', err instanceof Error ? err.message : err);
+    return sentences;
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════
 // LAYER 2: RULE-BASED / DETERMINISTIC PROCESSING
 // ══════════════════════════════════════════════════════════════════════════
 

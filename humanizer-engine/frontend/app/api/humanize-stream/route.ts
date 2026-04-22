@@ -11,7 +11,7 @@ import { removeEmDashes, fixOutOfContextSynonyms, validateCollocations, replaceC
 import { humanize } from '@/lib/engine/humanizer';
 import { ghostProHumanize } from '@/lib/engine/ghost-pro';
 import { kingHumanize } from '@/lib/engine/king-humanizer';
-import { llmHumanize, deepAICleanOneSentence, restructureSentence, nuruReadabilityPolish } from '@/lib/engine/llm-humanizer';
+import { llmHumanize, deepAICleanOneSentence, restructureSentence, nuruReadabilityPolish, batchRestructureSentences } from '@/lib/engine/llm-humanizer';
 import { premiumHumanize } from '@/lib/engine/premium-humanizer';
 import { humanizeV11 } from '@/lib/engine/v11';
 import { humaraHumanize } from '@/lib/humara';
@@ -956,36 +956,39 @@ export async function POST(req: Request) {
           // university-level papers targeting excellent marks.
           // ══════════════════════════════════════════════════════════════
 
-          // Academic connector variation map — replaces AI-repetitive connectors
-          // with equally academic but varied alternatives. No casual speech.
+          // Academic connector variation map — replaces AI-repetitive connectors with
+          // natural, varied alternatives that do NOT appear in AI-detector dictionaries.
+          // CRITICAL: every replacement must itself be non-AI-flagged. Do NOT swap one
+          // AI connector for another AI connector (e.g. "Furthermore" → "In addition"
+          // swaps one detector keyword for another — this was the old bug).
           const ACADEMIC_CONNECTOR_MAP: Record<string, string[]> = {
-            'Furthermore, ': ['In addition, ', 'Beyond this, ', 'Building on this, ', 'Alongside this, '],
-            'Moreover, ': ['In addition, ', 'Beyond this, ', 'Equally important, ', 'What is more, '],
-            'Additionally, ': ['In addition, ', 'Alongside this, ', 'On a related note, ', 'Equally, '],
-            'Consequently, ': ['As a consequence, ', 'It follows that ', 'The result is that ', 'This means that '],
-            'Nevertheless, ': ['Even so, ', 'That said, ', 'In spite of this, ', 'Regardless, '],
-            'Nonetheless, ': ['Even so, ', 'That said, ', 'Despite this, ', 'Regardless, '],
-            'In contrast, ': ['By comparison, ', 'Conversely, ', 'On the other hand, ', 'Whereas '],
-            'Subsequently, ': ['Following this, ', 'After this, ', 'In the period that followed, '],
-            'In conclusion, ': ['To conclude, ', 'In summary, ', 'Taken together, ', 'On balance, '],
-            'Therefore, ': ['For this reason, ', 'It follows that ', 'This indicates that ', 'Accordingly, '],
-            'However, ': ['That said, ', 'On the other hand, ', 'At the same time, ', 'Yet '],
-            'Thus, ': ['In this way, ', 'Through this, ', 'As a result, ', 'Accordingly, '],
-            'Hence, ': ['For this reason, ', 'It follows that ', 'This is why '],
-            'Indeed, ': ['In fact, ', 'As expected, ', 'Certainly, ', 'To be sure, '],
-            'Accordingly, ': ['In response, ', 'For this reason, ', 'Correspondingly, '],
-            'Notably, ': ['It is worth noting that ', 'Significantly, ', 'Of particular note, '],
-            'Specifically, ': ['In particular, ', 'More precisely, ', 'To be specific, '],
-            'As a result, ': ['Owing to this, ', 'The outcome is that ', 'This led to '],
-            'For example, ': ['To illustrate, ', 'As an illustration, ', 'Consider, for instance, '],
-            'For instance, ': ['As one example, ', 'To illustrate, ', 'Consider the case where '],
-            'On the other hand, ': ['Conversely, ', 'By contrast, ', 'From another perspective, '],
-            'In other words, ': ['Put differently, ', 'That is to say, ', 'To rephrase, '],
-            'In particular, ': ['Especially, ', 'More specifically, ', 'Of particular interest, '],
-            'As such, ': ['Given this, ', 'On that basis, ', 'With this in mind, '],
-            'To that end, ': ['With this aim, ', 'Toward this goal, ', 'For this purpose, '],
-            'By contrast, ': ['Conversely, ', 'In comparison, ', 'On the contrary, '],
-            'In essence, ': ['At its core, ', 'Fundamentally, ', 'In its simplest form, '],
+            'Furthermore, ': ['Also, ', 'Plus, ', 'On top of this, ', 'And, '],
+            'Moreover, ': ['Also, ', 'Beyond that, ', 'Plus, ', 'And, '],
+            'Additionally, ': ['Also, ', 'Plus, ', 'And, ', 'On top of this, '],
+            'Consequently, ': ['So, ', 'Because of this, ', 'As a result, ', 'This led to '],
+            'Nevertheless, ': ['Still, ', 'Even so, ', 'Yet, ', 'That said, '],
+            'Nonetheless, ': ['Still, ', 'Even so, ', 'Yet, ', 'That said, '],
+            'In contrast, ': ['But, ', 'By comparison, ', 'Differently, ', 'On the flip side, '],
+            'Subsequently, ': ['After that, ', 'Then, ', 'Later, ', 'After this, '],
+            'In conclusion, ': ['Overall, ', 'To wrap up, ', 'In the end, ', 'All in all, '],
+            'Therefore, ': ['So, ', 'For this reason, ', 'This is why ', 'Because of this, '],
+            'However, ': ['But, ', 'Still, ', 'Yet, ', 'That said, '],
+            'Thus, ': ['So, ', 'This way, ', 'Because of this, ', 'For this reason, '],
+            'Hence, ': ['So, ', 'This is why ', 'For this reason, '],
+            'Indeed, ': ['In fact, ', 'Actually, ', 'Clearly, '],
+            'Accordingly, ': ['So, ', 'For this reason, ', 'Because of this, '],
+            'Notably, ': ['Worth noting, ', 'Interestingly, ', 'Of note, '],
+            'Specifically, ': ['In particular, ', 'To be precise, ', 'Namely, '],
+            'As a result, ': ['So, ', 'Because of this, ', 'This led to '],
+            'For example, ': ['For instance, ', 'As an example, ', 'Take '],
+            'For instance, ': ['For example, ', 'As one example, ', 'Consider '],
+            'On the other hand, ': ['But, ', 'By contrast, ', 'Differently, '],
+            'In other words, ': ['Put differently, ', 'That is, ', 'Simply put, '],
+            'In particular, ': ['Especially, ', 'Specifically, ', 'Above all, '],
+            'As such, ': ['Given this, ', 'Because of this, ', 'With that, '],
+            'To that end, ': ['For this, ', 'With this aim, ', 'To achieve this, '],
+            'By contrast, ': ['But, ', 'By comparison, ', 'Differently, '],
+            'In essence, ': ['At its core, ', 'Simply put, ', 'Basically, '],
           };
 
           const academicConnectorVariation = (text: string): string => {
@@ -1789,13 +1792,19 @@ aiAdaptivePlan = buildAdaptiveCleanupPlan(reassembleText(workingSentences, worki
               | { name: string; type: 'emit' }
               | { name: string; type: 'sync'; fn: (s: string) => string }
               | { name: string; type: 'async'; fn: (s: string) => Promise<string> }
-              | { name: string; type: 'nuru'; passes: number };
+              | { name: string; type: 'nuru'; passes: number }
+              // 'batch' = ONE LLM call for ALL sentences (cost-effective restructuring).
+              // Paragraphs and titles are protected. Sentence ratio tolerance: ±3 per 300 words.
+              | { name: string; type: 'batch'; fn: (sentences: string[], wordCount?: number) => Promise<string[]> };
 
             let phases: PhaseSpec[];
             switch (eng) {
               case 'ghost_pro_wiki':
                 phases = [
-                  { name: 'Restructuring', type: 'async', fn: (s) => restructureSentence(s) },
+                  // Single-call LLM batch restructure — ONE API call for all sentences.
+                  // Paragraphs/titles protected. Sentence ratio: ±3 per 300 words.
+                  // All subsequent phases are non-LLM sentence-by-sentence (cost-effective).
+                  { name: 'Restructuring', type: 'batch', fn: (sents, wc) => batchRestructureSentences(sents, undefined, wc) },
                   { name: 'Deep Non-LLM Clean', type: 'sync', fn: (s) => deepNonLLMClean(s) },
                   { name: 'Nuru 2.0', type: 'nuru', passes: 10 },
                   { name: 'Readability Polish', type: 'async', fn: (s) => nuruReadabilityPolish(s) },
@@ -1804,19 +1813,21 @@ aiAdaptivePlan = buildAdaptiveCleanupPlan(reassembleText(workingSentences, worki
                 break;
               case 'ninja_1':
                 phases = [
-                  { name: 'Restructuring', type: 'async', fn: (s) => restructureSentence(s) },     // Phase 1: LLM deep sentence restructuring
-                  { name: 'Deep AI Clean', type: 'async', fn: (s) => deepAICleanOneSentence(s) }, // Phase 2: LLM residual AI signal strip
-                  { name: 'Deep Non-LLM Clean', type: 'sync', fn: (s) => deepNonLLMClean(s) },    // Phase 3: Rule-based AI vocabulary/phrase kill
-                  { name: 'Humara 2.0 (Full)', type: 'async', fn: (s) => runHumara20Full(s) },    // Phase 4: Full Humara 2.0 pipeline
-                  { name: 'Smoothing', type: 'sync', fn: (s) => smoothingPass(s) },               // Phase 5: Grammar + flow repair
-                  { name: 'Nuru 2.0', type: 'nuru', passes: CHAIN_TS },                           // Phase 6: 10-pass stealth humanization
-                  { name: 'Readability Polish', type: 'async', fn: (s) => nuruReadabilityPolish(s) }, // Phase 7: LLM natural flow smoothing
-                  { name: 'Final Smooth & Grammar', type: 'sync', fn: (s) => finalSmoothGrammar(s) }, // Phase 8: Final polish
+                  // Phase 1: Single-call LLM batch restructure — ONE API call for all sentences.
+                  // LLM is only used here; all later phases are non-LLM sentence-by-sentence.
+                  { name: 'Restructuring', type: 'batch', fn: (sents, wc) => batchRestructureSentences(sents, undefined, wc) }, // Phase 1: batch LLM structural rewrite
+                  { name: 'Deep Non-LLM Clean', type: 'sync', fn: (s) => deepNonLLMClean(s) },    // Phase 2: Rule-based AI vocabulary/phrase kill
+                  { name: 'Humara 2.0 (Full)', type: 'async', fn: (s) => runHumara20Full(s) },    // Phase 3: Full Humara 2.0 pipeline
+                  { name: 'Smoothing', type: 'sync', fn: (s) => smoothingPass(s) },               // Phase 4: Grammar + flow repair
+                  { name: 'Nuru 2.0', type: 'nuru', passes: CHAIN_TS },                           // Phase 5: 10-pass stealth humanization (non-LLM)
+                  { name: 'Readability Polish', type: 'async', fn: (s) => nuruReadabilityPolish(s) }, // Phase 6: LLM sentence-level flow smoothing
+                  { name: 'Final Smooth & Grammar', type: 'sync', fn: (s) => finalSmoothGrammar(s) }, // Phase 7: Final polish
                 ];
                 break;
               case 'oxygen':
                 phases = [
-                  { name: 'Restructuring', type: 'async', fn: (s) => restructureSentence(s) },
+                  // Single batch LLM call for structural rewrite. Non-LLM phases follow.
+                  { name: 'Restructuring', type: 'batch', fn: (sents, wc) => batchRestructureSentences(sents, undefined, wc) },
                   { name: 'Nuru 2.0', type: 'nuru', passes: 10 },
                   { name: 'Deep Non-LLM Clean', type: 'sync', fn: (s) => deepNonLLMClean(s) },
                   { name: 'Readability Polish', type: 'async', fn: (s) => nuruReadabilityPolish(s) },
@@ -1824,7 +1835,11 @@ aiAdaptivePlan = buildAdaptiveCleanupPlan(reassembleText(workingSentences, worki
                 ];
                 break;
               case 'nuru_v2':
+                // Nuru 2.0: pure non-LLM pipeline — no LLM calls at all (most cost-effective).
+                // runEngineOnSentence already called runNuruSinglePass for the engine phase.
+                // Phase pipeline adds: Nuru ×10 → Deep Clean → Readability Polish → Final Smooth.
                 phases = [
+                  { name: 'Nuru 2.0', type: 'nuru', passes: CHAIN_TS },
                   { name: 'Deep Non-LLM Clean', type: 'sync', fn: (s) => deepNonLLMClean(s) },
                   { name: 'Readability Polish', type: 'async', fn: (s) => nuruReadabilityPolish(s) },
                   { name: 'Final Smooth & Grammar', type: 'sync', fn: (s) => finalSmoothGrammar(s) },
@@ -1930,6 +1945,9 @@ aiAdaptivePlan = buildAdaptiveCleanupPlan(reassembleText(workingSentences, worki
 
             const totalPhases = phases.length;
 
+            // Total word count for sentence-ratio tolerance in batch phases
+            const pipelineWordCount = currentSentences.reduce((a, s) => a + s.split(/\s+/).length, 0);
+
             for (let pi = 0; pi < phases.length; pi++) {
               const phase = phases[pi];
               const phaseLabel = `Phase ${pi + 1}/${totalPhases} – ${phase.name}`;
@@ -1946,7 +1964,44 @@ aiAdaptivePlan = buildAdaptiveCleanupPlan(reassembleText(workingSentences, worki
               const MAX_RETRIES = 2; // Retries for sync/async phases when change is below threshold
               const phaseInputSentences = [...currentSentences]; // snapshot before this phase
 
-              if (phase.type === 'emit') {
+              if (phase.type === 'batch') {
+                // ── BATCH LLM phase — single API call for ALL sentences ──
+                // Paragraphs/titles pass through unchanged.
+                // Sentence ratio tolerance: ±max(3, floor(totalWords/100)).
+                // After this, all remaining phases are non-LLM sentence-by-sentence.
+                sendSSE(controller, { type: 'stage', stage: `${phaseLabel} (single-call batch)` });
+                await flushDelay(8);
+                try {
+                  const batchResult = await phase.fn(currentSentences, pipelineWordCount);
+                  // Validate sentence count matches within tolerance
+                  const tolerance = Math.max(3, Math.floor(pipelineWordCount / 100));
+                  const contentIn = currentSentences.filter(s => !isHeadingSentCheck(s)).length;
+                  const contentOut = batchResult.filter(s => !isHeadingSentCheck(s)).length;
+                  if (batchResult.length === currentSentences.length && Math.abs(contentOut - contentIn) <= tolerance) {
+                    for (let i = 0; i < batchResult.length; i++) {
+                      if (!isHeadingSentCheck(batchResult[i])) {
+                        // Enforce no extra sentences were inserted (split guard)
+                        const splitCheck = robustSentenceSplit(batchResult[i]);
+                        if (splitCheck.length > 1) {
+                          batchResult[i] = collapseToSingleSentence(currentSentences[i], batchResult[i]);
+                        }
+                      }
+                      currentSentences[i] = batchResult[i];
+                      sendSSE(controller, { type: 'sentence', index: i, text: currentSentences[i], stage: phaseLabel });
+                    }
+                  } else {
+                    console.warn(`[Batch] Sentence count mismatch (in=${currentSentences.length} out=${batchResult.length}), keeping originals`);
+                    for (let i = 0; i < currentSentences.length; i++) {
+                      sendSSE(controller, { type: 'sentence', index: i, text: currentSentences[i], stage: phaseLabel });
+                    }
+                  }
+                } catch (batchErr) {
+                  console.warn(`[Batch] ${phase.name} failed:`, batchErr instanceof Error ? batchErr.message : batchErr);
+                  for (let i = 0; i < currentSentences.length; i++) {
+                    sendSSE(controller, { type: 'sentence', index: i, text: currentSentences[i], stage: phaseLabel });
+                  }
+                }
+              } else if (phase.type === 'emit') {
                 // ── EMIT phases now apply mandatory deepNonLLMClean + synonymReplace ──
                 // Previously emit phases just re-sent text unchanged. Now they apply
                 // real transformations so every phase actually modifies the text.
