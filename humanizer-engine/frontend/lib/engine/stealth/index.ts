@@ -215,6 +215,10 @@ const PHRASE_REPLACEMENTS: Array<{ pattern: RegExp; replacements: string[] }> = 
   { pattern: /\bpave the way for\b/gi, replacements: ['enable', 'allow'] },
   { pattern: /\bover the course of\b/gi, replacements: ['during', 'throughout'] },
   { pattern: /\bat this point in time\b/gi, replacements: ['now', 'currently'] },
+  // ── Extra Conversational Markers ──
+  { pattern: /^(In this light|Stepping back|Likewise|Meanwhile|Yet|Conversely|Moreover|Furthermore|Additionally),\s*/gi, replacements: ['', '', ''] },
+  { pattern: /^[A-Z][a-z]+-century views on equality reveal (?:some |many )?(?:fascinating |interesting |profound )?similarities/gi, replacements: ['Modern equality ideals reflect these historical perspectives'] },
+  { pattern: /^(?:This |Such )?(?:shift|evolution|discrepancy) (?:from |in )?(?:a |the )?(?:narrow view of |limited social condition )?(?:to a broader |more inclusive )?(?:points out|shows|reveals|reflects) the (?:lasting |ongoing )?influence (?:of |on )?/gi, replacements: ['This demonstrates the impact of '] },
   // ── Extended AI-tell patterns (borrowed from AntiPangram forensics) ──
   { pattern: /\bwhich contributes? to (?:better |improved |enhanced |greater |stronger |more effective )?/gi, replacements: [', improving', '. This supports'] },
   { pattern: /\bResearch has shown that\b/gi, replacements: ['Studies show', 'Evidence shows', 'Research shows'] },
@@ -238,6 +242,14 @@ const EVALUATIVE_SURGERIES: Array<{ pattern: RegExp; replaceFn: (match: string, 
     // "One of the major/key strengths/advantages of X is"
     pattern: /\b[Oo]ne of the (?:major|key|most important|primary|greatest|significant) (?:strengths|advantages|benefits|features) of (.+?) is (?:its |that it |the fact that it )?/gi,
     replaceFn: (_m, subject) => `${subject.trim()} `,
+  },
+  {
+    // Evaluative meta-commentary: "This discrepancy shows an important tension"
+    pattern: /^[Tt]his (?:discrepancy|shift|evolution) (?:shows|reveals|points out|reflects) (?:an?|some) (?:important|fascinating|profound|significant) (?:tension|similarit(?:y|ies)|difference) (?:between|in) /gi,
+    replaceFn: () => {
+      const alts = ['This underscores the gap between ', 'This marks a divide in ', 'This reflects shifting ideas about '];
+      return alts[Math.floor(Math.random() * alts.length)];
+    },
   },
   {
     // "It is widely used in the treatment of" → "It treats"

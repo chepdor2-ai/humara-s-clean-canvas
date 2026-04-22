@@ -54,11 +54,13 @@ const HIGH_WEIGHT_AI_PHRASES: RegExp[] = [
   /\bin (?:conclusion|summary|summation)\b/i,
   /\bto (?:summarize|conclude|recap)\b/i,
   /\boverall,?\s/i,
-  /\bin light of (?:the above|this|these)\b/i,
-  /\bthis (?:paper|study|article|essay|research) (?:aims|seeks|endeavors|attempts)\b/i,
+  /\b(?:in this light|in light of|stepping back|looking closely|delving deeper),?\s/i,
+  /\bthis (?:paper|study|article|essay|research|discrepancy|shift|evolution) (?:aims|seeks|endeavors|attempts|shows|reveals|reflects|points out)\b/i,
   /\bthe (?:purpose|objective|aim) of this\b/i,
   /\bfurther research (?:is needed|is required|should)\b/i,
-  /\bthe (?:findings|results|evidence) (?:suggest|indicate|demonstrate|show) that\b/i,
+  /\bthe (?:findings|results|evidence|views|insights|similarities|differences) (?:suggest|indicate|demonstrate|show|reveal|reflect|highlight)\b/i,
+  /\b(?:moreover|furthermore|additionally|meanwhile|likewise|conversely),?\s+although\b/i,
+  /\ba (?:fascinating|profound|unique|significant|crucial|vital|pivotal) (?:combination|blend|mix|tension|similarity|divergence)\b/i,
 ];
 
 /** Moderate AI-associated phrases (+1 each) */
