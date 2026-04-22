@@ -51,8 +51,13 @@ import {
 
 // ── OpenAI fallback config ──
 const OPENAI_FALLBACK_MODEL = 'gpt-4o-mini';
+const OLLAMA_WIKI_MODEL =
+  process.env.OLLAMA_WIKI_MODEL?.trim() ||
+  process.env.OLLAMA_MODEL?.trim() ||
+  'llama3.1:8b';
 
 let _openaiClient: OpenAI | null = null;
+let _ollamaClient: OpenAI | null = null;
 
 function getOpenAIClient(): OpenAI {
   if (_openaiClient) return _openaiClient;
@@ -60,6 +65,55 @@ function getOpenAIClient(): OpenAI {
   if (!apiKey) throw new Error("OPENAI_API_KEY not set.");
   _openaiClient = new OpenAI({ apiKey });
   return _openaiClient;
+}
+
+function normalizeOpenAIBaseUrl(rawUrl: string): string {
+  const trimmed = rawUrl.trim().replace(/\/+$/, "");
+  return /\/v1$/i.test(trimmed) ? trimmed : `${trimmed}/v1`;
+}
+
+function getOllamaClient(): OpenAI {
+  if (_ollamaClient) return _ollamaClient;
+
+  const apiKey = process.env.OLLAMA_API_KEY?.trim() || "ollama";
+  const baseURL = normalizeOpenAIBaseUrl(
+    process.env.OLLAMA_API_URL?.trim() ||
+    process.env.OLLAMA_BASE_URL?.trim() ||
+    "http://127.0.0.1:11434",
+  );
+
+  _ollamaClient = new OpenAI({
+    apiKey,
+    baseURL,
+  });
+
+  return _ollamaClient;
+}
+
+async function ollamaWikipediaCall(system: string, user: string, temperature: number, maxTokens?: number): Promise<string> {
+  const client = getOllamaClient();
+  const response = await client.chat.completions.create({
+    model: OLLAMA_WIKI_MODEL,
+    messages: [
+      { role: "system", content: system },
+      { role: "user", content: user },
+    ],
+    temperature,
+    max_tokens: maxTokens ?? 4096,
+  });
+
+  return response.choices[0]?.message?.content?.trim() ?? "";
+}
+
+async function wikiRewriteCall(system: string, user: string, temperature: number, maxTokens?: number): Promise<string> {
+  try {
+    const content = await ollamaWikipediaCall(system, user, temperature, maxTokens);
+    if (content) return content;
+  } catch (err) {
+    console.warn(`  [GhostPro] Ollama wiki rewrite failed, falling back to default LLM path: ${err instanceof Error ? err.message : String(err)}`);
+  }
+
+  return llmCall(system, user, temperature, maxTokens);
 }
 
 // ── Groq config (OpenAI-compatible, Llama models) — kept as last-resort ──
@@ -2119,12 +2173,12 @@ async function processChunk(
   if (isWikiRewrite) {
     // ── WIKIPEDIA: Dual-LLM paragraph rewriting + sentence mixing ──
     // STRATEGY: Two different LLM architectures in sequence.
-    // Pass 1A: Groq paragraph rewrite (high quality, smooth output)
-    // Pass 1B: Optional second Groq rewrite with a different model profile
+    // Pass 1A: Ollama paragraph rewrite (high quality, smooth output)
+    // Pass 1B: Optional second Ollama rewrite with a different model profile
     // This breaks the single-model token probability signature that neural
     // detectors (GPTZero, Originality, Pangram) are trained to catch.
     // Then mixes in ~35% of original sentences for perplexity burstiness.
-    console.log("  [GhostPro]   Pass 1A: Groq paragraph rewrite (wiki mode)...");
+    console.log("  [GhostPro]   Pass 1A: Ollama paragraph rewrite (wiki mode)...");
 
     const paragraphSystemPrompt = getWikiParagraphSystemPrompt();
 
@@ -2163,7 +2217,7 @@ async function processChunk(
 
       try {
         let rewrittenPara = llmFormatToPlaceholders(
-          await llmCall(paragraphSystemPrompt, userPrompt, clampedTemp, maxTokens) ?? ''
+          await wikiRewriteCall(paragraphSystemPrompt, userPrompt, clampedTemp, maxTokens) ?? ''
         );
         if (!rewrittenPara || rewrittenPara.trim().length < trimmedPara.length * 0.2) {
           return trimmedPara;
@@ -2213,23 +2267,23 @@ async function processChunk(
     }));
 
     result = rewrittenParagraphs.join("\n\n");
-    console.log(`  [GhostPro]   Pass 1A done: ${result.split(/\s+/).length} words (Groq, ${totalSentencesProcessed} sentences processed)`);
+    console.log(`  [GhostPro]   Pass 1A done: ${result.split(/\s+/).length} words (Ollama, ${totalSentencesProcessed} sentences processed)`);
 
     if (options.turbo) {
       console.log("  [GhostPro]   Pass 1B: SKIPPED (turbo mode — single LLM wiki rewrite)");
     } else {
 
     // ═══════════════════════════════════════════
-    // PASS 1B: Groq/Llama sentence-list envelope re-rewrite (second LLM)
-    // Sends each paragraph as a numbered sentence list to Groq.
+    // PASS 1B: Ollama sentence-list envelope re-rewrite (second LLM)
+    // Sends each paragraph as a numbered sentence list to Ollama.
     // Full paragraph context → better pattern disruption than per-sentence.
     // Numbered format → prevents sentence merging/loss.
     // Original (human) sentences marked KEEP → preserves human perplexity.
-    // Sequential processing to respect Groq rate limits (12K TPM).
+    // Sequential processing keeps the local or hosted Ollama endpoint stable.
     // ═══════════════════════════════════════════
 
     const pass1BParagraphs = result.split(/\n\s*\n/).filter(p => p.trim());
-    console.log(`  [GhostPro]   Pass 1B: Groq/Llama sentence-list envelope... (P: ${pass1BParagraphs.length})`);
+    console.log(`  [GhostPro]   Pass 1B: Ollama sentence-list envelope... (P: ${pass1BParagraphs.length})`);
 
     const groqEnvelopeSystem = `You are a Wikipedia editor. You will receive a numbered list of sentences from a paragraph. For each sentence marked [REWRITE], produce a completely rewritten version using different vocabulary and sentence structure. For sentences marked [KEEP], output them UNCHANGED.
 
@@ -2278,14 +2332,14 @@ CRITICAL RULES:
         sentenceLines.push(`${si + 1}. ${label} (${words} words): ${placeholdersToLLMFormat(sent)}`);
       }
 
-      // If all sentences are originals, skip Groq entirely
+      // If all sentences are originals, skip the second rewrite entirely
       if (sentenceLabels.every(l => l === 'keep')) {
-        console.log(`  [Groq] Para ${pi}: All keep, skipping.`);
+        console.log(`  [WikiRewrite] Para ${pi}: All keep, skipping.`);
         groqResults.push(gptPara);
         continue;
       }
       
-      console.log(`  [Groq] Para ${pi}: ReWrite count = ${sentenceLabels.filter(l => l === 'rewrite').length}`);
+      console.log(`  [WikiRewrite] Para ${pi}: Rewrite count = ${sentenceLabels.filter(l => l === 'rewrite').length}`);
 
       const paraWords = gptPara.split(/\s+/).length;
       const paraTemp = Math.max(0.7, Math.min(1.05, options.temperature + 0.05));
@@ -2294,8 +2348,8 @@ CRITICAL RULES:
       const groqUserPrompt = `Rewrite this paragraph's ${sentences.length} sentences:\n\n${sentenceLines.join('\n')}`;
 
       try {
-    const rawOutput = await groqCall(groqEnvelopeSystem, groqUserPrompt, paraTemp, maxTokens) ?? '';
-        console.log(`  [Groq] Paragraph ${pi} raw output lengths: ${rawOutput.length} chars`);
+    const rawOutput = await wikiRewriteCall(groqEnvelopeSystem, groqUserPrompt, paraTemp, maxTokens) ?? '';
+        console.log(`  [WikiRewrite] Paragraph ${pi} raw output lengths: ${rawOutput.length} chars`);
         
         // Parse numbered output lines
         const outputLines = rawOutput.split('\n')
@@ -2304,8 +2358,8 @@ CRITICAL RULES:
           .map(l => l.replace(/^\d+[\.\)]\s*/, '').trim());
 
         if (outputLines.length < sentences.length - 1) {
-          // Groq didn't return enough lines — keep GPT version
-          console.warn(`  [Groq] Para ${pi}: expected ${sentences.length} lines, got ${outputLines.length} — keeping Pass 1A`);
+          // Second rewrite didn't return enough lines — keep Pass 1A
+          console.warn(`  [WikiRewrite] Para ${pi}: expected ${sentences.length} lines, got ${outputLines.length} — keeping Pass 1A`);
           groqResults.push(gptPara);
           continue;
         }
@@ -2343,11 +2397,11 @@ CRITICAL RULES:
     }
 
     result = groqResults.join("\n\n");
-    console.log(`  [GhostPro]   Pass 1B done: ${result.split(/\s+/).length} words (Groq/Llama, dual-LLM rewrite complete)`);
+    console.log(`  [GhostPro]   Pass 1B done: ${result.split(/\s+/).length} words (Ollama, dual-LLM rewrite complete)`);
 
     // ═══════════════════════════════════════════
     // PASS 1C: 5x ITERATIVE RE-HUMANIZATION LOOP
-    // Each iteration feeds the previous output back through Groq for aggressive rewriting.
+    // Each iteration feeds the previous output back through Ollama for aggressive rewriting.
     // The pass1A output is the baseline. After each iteration, we measure
     // per-sentence word change % vs. the baseline. We run exactly 5 iterations, but can
     // stop early if ALL sentences have ≥50% word change from the baseline.
@@ -2442,7 +2496,7 @@ CRITICAL RULES:
         const groqUserPrompt = `Rewrite this paragraph's ${sentences.length} sentences:\n\n${sentenceLines.join('\n')}`;
 
         try {
-          const rawOutput = await groqCall(rehumanizeSystem, groqUserPrompt, paraTemp, maxTokens) ?? '';
+          const rawOutput = await wikiRewriteCall(rehumanizeSystem, groqUserPrompt, paraTemp, maxTokens) ?? '';
 
           const outputLines = rawOutput.split('\n')
             .map(l => l.trim())
