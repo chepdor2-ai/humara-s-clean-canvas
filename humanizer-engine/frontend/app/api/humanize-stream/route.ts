@@ -390,106 +390,99 @@ function pickDeterministic<T>(options: Array<{ value: T; weight: number }>, seed
   return options[options.length - 1].value;
 }
 
+import { createVariationRNG, weightedPick } from '@/lib/engine/intelligence/variation-rng';
+import { profileSentenceSignals, scoreDocumentSignals, planAttack } from '@/lib/engine/intelligence/detector-signature';
+import { guardSingleSentence } from '@/lib/engine/intelligence/split-merge-guard';
+
 function resolveAutoEngine(
   text: string,
   requestedTone?: string,
   initialAiScore?: number,
 ): { mode: 'core_engines' | 'detection_control'; engine: string } {
-  // Override: if the text is already fairly clean, prefer lightweight Nuru
-  if (typeof initialAiScore === 'number' && initialAiScore < 25) {
-    return { mode: 'detection_control', engine: 'nuru_v2' };
-  }
-
+  // Use RNG to ensure non-deterministic sampling
+  const rng = createVariationRNG(text, requestedTone || '');
+  
+  // ── Primary domain/tone profiles ──
   const domain = detectDomain(text);
   const ctx = analyzeContext(text);
   const toneId = requestedTone ?? 'neutral';
-  const seed = hashText(text);
   const words = ctx.totalWords;
 
-  // ── Primary domain-based routing ──────────────────────────────────
-  switch (domain.primary) {
-    case 'medical':
-      // Medical: heavy restructure to preserve clinical precision
-      return {
-        mode: 'detection_control',
-        engine: words < 200 ? 'king' : 'humara_v3_3',
-      };
+  // ── Multi-dimensional detector signature profile ──
+  const sentences = robustSentenceSplit(text).filter(s => s.trim().length > 0);
+  const sigProfiles = sentences.map((s, i) => profileSentenceSignals(s, i, initialAiScore ?? 50));
+  const docSignals = scoreDocumentSignals(sigProfiles);
+  
+  const pangramHigh = docSignals.parallelism > 0.4 || docSignals.connectorDensity > 0.3;
+  const nuruHigh = docSignals.aiTellsDensity > 0.3 || docSignals.evaluativeDensity > 0.3;
 
-    case 'legal':
-      // Legal: encyclopedic prose, precise term-preservation
-      return { mode: 'detection_control', engine: 'ghost_pro_wiki' };
+  const isHighRisk = (initialAiScore ?? 100) >= 60 || pangramHigh || nuruHigh || docSignals.highRiskRatio > 0.4;
+  const isLowRisk = (initialAiScore ?? 100) < 25 && !pangramHigh && !nuruHigh && docSignals.highRiskRatio < 0.1;
 
-    case 'stem':
-    case 'technical':
-      // STEM/Technical: domain-protected adaptive chain keeps equations intact
-      return { mode: 'detection_control', engine: 'oxygen' };
-
-    case 'business':
-      // Business: LLM for longer texts, Humarin for medium
-      return {
-        mode: 'detection_control',
-        engine: words > 400 ? 'king' : 'humara_v3_3',
-      };
-
-    case 'humanities':
-      // Humanities: LLM excels at philosophical/cultural register
-      return { mode: 'detection_control', engine: 'king' };
-
-    case 'creative':
-      // Creative: persona-shifting LLM + stealth chain
-      return { mode: 'core_engines', engine: 'ninja_1' };
-
-    case 'academic': {
-      // Academic (generic): size-adaptive choice
-      const engine = words < 300 ? 'nuru_v2' : 'humara_v3_3';
-      return { mode: 'detection_control', engine };
-    }
-
-    case 'general':
-    default: {
-      // General: deterministic weighted picker (tone + length signals)
-      const academicish = toneId === 'academic' || toneId === 'academic_blog' || ctx.tone === 'formal';
-      const conversational = toneId === 'casual' || toneId === 'simple' || ctx.tone === 'casual';
-
-      // Decide mode
-      let coreW = 3;
-      let detectW = 3;
-      if (academicish) detectW += 4;
-      if (conversational) coreW += 4;
-      if (words < 220) coreW += 2;
-      if (words > 700) detectW += 2;
-
-      const mode = pickDeterministic(
-        [{ value: 'core_engines' as const, weight: coreW }, { value: 'detection_control' as const, weight: detectW }],
-        seed,
-      );
-
-      if (mode === 'core_engines') {
-        // Swift (easy) excluded from auto model — only deep-cleaning engines
-        const engine = pickDeterministic(
-          [
-            { value: 'nuru_v2', weight: conversational ? 7 : academicish ? 4 : 6 },
-            { value: 'ninja_1', weight: academicish ? 5 : 3 },
-            { value: 'oxygen', weight: words > 500 ? 3 : 2 },
-          ],
-          seed + 1,
-        );
-        return { mode, engine };
-      }
-
-      const engine = pickDeterministic(
-        [
-          { value: 'humara_v3_3', weight: academicish ? 5 : 3 },
-          { value: 'oxygen', weight: toneId === 'academic_blog' ? 4 : 3 },
-          { value: 'king', weight: toneId === 'academic_blog' ? 5 : academicish ? 4 : 2 },
-          { value: 'nuru_v2', weight: words < 300 ? 3 : 2 },
-          { value: 'ghost_pro_wiki', weight: academicish ? 6 : 2 },
-        ],
-        seed + 2,
-      );
-      return { mode, engine };
-    }
+  // ── Adaptive detector-signature-driven routing ──
+  if (isLowRisk) {
+    // If it's already mostly human-like but we still run 'auto', 
+    // pick one of the highly fluid stealth models. No hard structures needed.
+    const engine = weightedPick(rng, [
+      { value: 'nuru_v2', weight: 6 },
+      { value: 'humara_v3_3', weight: 4 },
+      { value: 'ninja_1', weight: 2 },
+    ]);
+    return { mode: 'detection_control', engine: engine as string };
   }
+
+  // Determine mode probabilities
+  const academicish = toneId === 'academic' || toneId === 'academic_blog' || ctx.tone === 'formal' || domain.primary === 'medical' || domain.primary === 'stem';
+  const conversational = toneId === 'casual' || toneId === 'simple' || ctx.tone === 'casual' || domain.primary === 'creative';
+
+  let detectW = 4;
+  let coreW = 2;
+  
+  if (isHighRisk) detectW += 5; // Heavy AI signals demand strict detection control limits
+  if (sentences.length > 50) detectW += 3; // Huge texts need detection rigor
+  if (conversational) coreW += 4;
+  if (sentences.length < 15) coreW += 2;
+
+  const modeRaw = weightedPick(rng, [
+    { value: 'detection_control' as const, weight: detectW },
+    { value: 'core_engines' as const, weight: coreW },
+  ]);
+  const mode = modeRaw as 'detection_control' | 'core_engines';
+
+  // Detector-signature routing logic
+  // If the text violates Pangram checks heavily (repetitive sentence lengths, bad connectors), use antipangram
+  if (isHighRisk && pangramHigh && rng.next() < 0.6) {
+    return { mode: 'detection_control', engine: 'antipangram' };
+  }
+  // If it's full of heavy AI verbs/adjectives (Nuru flags), route to Nuru or Oxygen
+  if (isHighRisk && nuruHigh && rng.next() < 0.5) {
+    return { mode: 'detection_control', engine: 'nuru_v2' };
+  }
+
+  // Fallback dimension-driven routing
+  if (mode === 'core_engines') {
+    const engine = weightedPick(rng, [
+      { value: 'nuru_v2', weight: conversational ? 8 : academicish ? 3 : 5 },
+      { value: 'ninja_1', weight: academicish ? 5 : 4 },
+      { value: 'oxygen', weight: sentences.length > 30 ? 5 : 2 },
+    ]);
+    return { mode, engine: engine as string };
+  }
+
+  // Mode = detection_control
+  // Factor in domain precision requirements
+  const precisionNeeded = domain.primary === 'medical' || domain.primary === 'legal' || domain.primary === 'stem';
+  
+  const engine = weightedPick(rng, [
+    { value: 'humara_v3_3', weight: academicish ? 5 : 3 },
+    { value: 'oxygen', weight: precisionNeeded ? 7 : (toneId === 'academic_blog' ? 4 : 3) },
+    { value: 'king', weight: domain.primary === 'humanities' ? 6 : (academicish ? 4 : 2) },
+    { value: 'nuru_v2', weight: sentences.length < 15 ? 4 : 2 },
+    { value: 'ghost_pro_wiki', weight: domain.primary === 'legal' ? 8 : (academicish ? 5 : 1) },
+    { value: 'antipangram', weight: pangramHigh ? 6 : 1 },
+  ]);
+
+  return { mode, engine: engine as string };
 }
 
 export async function POST(req: Request) {
@@ -945,7 +938,8 @@ export async function POST(req: Request) {
           const applyProtectedSentenceTransform = (sentence: string, transform: (value: string) => string): string => {
             const { text: protectedSentence, map } = protectSpecialContent(sentence);
             const transformed = transform(protectedSentence);
-            return restoreCitationAuthorCasing(sentence, restoreSpecialContent(transformed, map));
+            const restored = restoreCitationAuthorCasing(sentence, restoreSpecialContent(transformed, map));
+            return guardSingleSentence(sentence, restored);
           };
 
           // ══════════════════════════════════════════════════════════════
@@ -1084,26 +1078,27 @@ export async function POST(req: Request) {
           const runHumara20Full = async (input: string): Promise<string> => {
             let s = runHumara20(input);
             s = deepNonLLMClean(s);
-            return s;
+            return guardSingleSentence(input, s);
           };
 
           /** Humara 2.4 Full: humarin → adaptiveChain → deepClean (lightweight, no nested Nuru/LLM) */
           const runHumara24Full = async (input: string): Promise<string> => {
             let s = await runHumara24(input);
             s = deepNonLLMClean(s);
-            return s;
+            return guardSingleSentence(input, s);
           };
 
           /** Nuru 2.0 Full: restructure → nuru × 9 → deepClean → smooth */
           const runNuru20Full = async (input: string): Promise<string> => {
             let s = await restructureSentence(input);
+            s = guardSingleSentence(input, s);
             for (let i = 0; i < CHAIN_TS; i++) {
               const n = stealthHumanize(s, effectiveStrength ?? 'medium', tone ?? 'academic', 1);
-              if (n && n.trim().length > 0) s = n;
+              if (n && n.trim().length > 0) s = guardSingleSentence(s, n);
             }
             s = deepNonLLMClean(s);
             s = finalSmoothGrammar(s);
-            return s;
+            return guardSingleSentence(input, s);
           };
 
           // Deep Kill engine set — used to skip destructive post-processors
@@ -1453,10 +1448,7 @@ let aiAdaptivePlan = buildAdaptiveCleanupPlan(normalizedText, initialAiScore, to
                     if (!isHeadingSentCheck(nuruSents[i]) && restructuredInPhase4 < maxRestructPhase4) {
                       const before = nuruSents[i];
                       nuruSents[i] = await runNuru20Full(nuruSents[i]);
-                      const splitCheck = robustSentenceSplit(nuruSents[i]);
-                      if (splitCheck.length > 1) {
-                        nuruSents[i] = collapseToSingleSentence(before, nuruSents[i]);
-                      }
+                      nuruSents[i] = guardSingleSentence(before, nuruSents[i]);
                       if (nuruSents[i] !== before) restructuredInPhase4++;
                     }
                     sendSSE(controller, { type: 'sentence', index: i, text: nuruSents[i], stage: 'Nuru 2.0 Full' });
@@ -1498,10 +1490,7 @@ let aiAdaptivePlan = buildAdaptiveCleanupPlan(normalizedText, initialAiScore, to
                       if (!isHeadingSentCheck(nuruSents2[i]) && restructuredInPhase4b < maxRestructPhase4b) {
                         const before2 = nuruSents2[i];
                         nuruSents2[i] = await runNuru20Full(nuruSents2[i]);
-                        const splitCheck2 = robustSentenceSplit(nuruSents2[i]);
-                        if (splitCheck2.length > 1) {
-                          nuruSents2[i] = collapseToSingleSentence(before2, nuruSents2[i]);
-                        }
+                        nuruSents2[i] = guardSingleSentence(before2, nuruSents2[i]);
                         if (nuruSents2[i] !== before2) restructuredInPhase4b++;
                       }
                       sendSSE(controller, { type: 'sentence', index: i, text: nuruSents2[i], stage: 'Nuru 2.0 Full (2nd)' });
@@ -1557,10 +1546,7 @@ aiAdaptivePlan = buildAdaptiveCleanupPlan(reassembleText(workingSentences, worki
                       sent = await runNuru20Full(sent);
                       sent = finalSmoothGrammar(sent);
 
-                      const splitCheck = robustSentenceSplit(sent);
-                      if (splitCheck.length > 1) {
-                        sent = collapseToSingleSentence(before, sent);
-                      }
+                      sent = guardSingleSentence(before, sent);
 
                       if (sent !== before) restructuredThisIter++;
                     } else {
@@ -1569,10 +1555,7 @@ aiAdaptivePlan = buildAdaptiveCleanupPlan(reassembleText(workingSentences, worki
 
                     if (flagged.flaggedPhrases.length > 0) {
                       sent = stealthHumanizeTargeted(sent, flagged.flaggedPhrases, strength ?? 'medium');
-                      const stealthSplitCheck = robustSentenceSplit(sent);
-                      if (stealthSplitCheck.length > 1) {
-                        sent = collapseToSingleSentence(before, sent);
-                      }
+                      sent = guardSingleSentence(before, sent);
                     }
 
                     workingSentences[flagged.index] = sent;
@@ -1692,22 +1675,14 @@ aiAdaptivePlan = buildAdaptiveCleanupPlan(reassembleText(workingSentences, worki
                     const result = await runEngineOnSentence(sentence);
                     let final = result && result.trim().length > 0 ? result : sentence;
                     // No-split/no-merge enforcement
-                    const splitCheck = robustSentenceSplit(final);
-                    if (splitCheck.length > 1) {
-                      final = collapseToSingleSentence(sentence, final);
-                    }
+                    final = guardSingleSentence(sentence, final);
                     // LLM engines: bounded retries; stronger depths earn more persistence.
                     let change = measureSentenceChange(sentence, final);
                     let retry = 0;
                     while (change < phaseMinChangeThreshold && retry < Math.min(2, changeTargets.maxEngineRetries)) {
                       const retried = await runEngineOnSentence(final);
                       if (retried && retried.trim().length > 0) {
-                        const retrySplitCheck = robustSentenceSplit(retried);
-                        if (retrySplitCheck.length > 1) {
-                          final = collapseToSingleSentence(sentence, retried);
-                        } else {
-                          final = retried;
-                        }
+                        final = guardSingleSentence(sentence, retried);
                       }
                       change = measureSentenceChange(sentence, final);
                       retry++;
@@ -1739,10 +1714,7 @@ aiAdaptivePlan = buildAdaptiveCleanupPlan(reassembleText(workingSentences, worki
                   const result = await runEngineOnSentence(sentence);
                   let final = result && result.trim().length > 0 ? result : sentence;
                   // No-split/no-merge enforcement
-                  let splitCheck = robustSentenceSplit(final);
-                  if (splitCheck.length > 1) {
-                    final = collapseToSingleSentence(sentence, final);
-                  }
+                  final = guardSingleSentence(sentence, final);
                   let change = measureSentenceChange(sentence, final);
                   let retry = 0;
                   const maxRetries = changeTargets.maxEngineRetries;
@@ -1750,12 +1722,7 @@ aiAdaptivePlan = buildAdaptiveCleanupPlan(reassembleText(workingSentences, worki
                     const retried = await runEngineOnSentence(final);
                     if (retried && retried.trim().length > 0) {
                       // No-split/no-merge enforcement on retry
-                      splitCheck = robustSentenceSplit(retried);
-                      if (splitCheck.length > 1) {
-                        final = collapseToSingleSentence(sentence, retried);
-                      } else {
-                        final = retried;
-                      }
+                      final = guardSingleSentence(sentence, retried);
                     }
                     change = measureSentenceChange(sentence, final);
                     retry++;
@@ -1981,10 +1948,7 @@ aiAdaptivePlan = buildAdaptiveCleanupPlan(reassembleText(workingSentences, worki
                     for (let i = 0; i < batchResult.length; i++) {
                       if (!isHeadingSentCheck(batchResult[i])) {
                         // Enforce no extra sentences were inserted (split guard)
-                        const splitCheck = robustSentenceSplit(batchResult[i]);
-                        if (splitCheck.length > 1) {
-                          batchResult[i] = collapseToSingleSentence(currentSentences[i], batchResult[i]);
-                        }
+                        batchResult[i] = guardSingleSentence(currentSentences[i], batchResult[i]);
                       }
                       currentSentences[i] = batchResult[i];
                       sendSSE(controller, { type: 'sentence', index: i, text: currentSentences[i], stage: phaseLabel });
@@ -2015,11 +1979,7 @@ aiAdaptivePlan = buildAdaptiveCleanupPlan(reassembleText(workingSentences, worki
                     result = synonymReplace(result, 0.6, usedEmitWords);
                     result = restoreSpecialContent(result, sentMap);
                     // Enforce no split/merge
-                    const emitSentCount = robustSentenceSplit(result).length;
-                    if (emitSentCount > 1) {
-                      const firstSent = robustSentenceSplit(result)[0];
-                      result = firstSent && firstSent.trim().length > 0 ? firstSent : currentSentences[i];
-                    }
+                    result = guardSingleSentence(currentSentences[i], result);
                     // If still below threshold, apply AI word kill as fallback
                     const change = measureSentenceChange(original, result);
                     if (change < sentenceMinChange) {
@@ -2045,12 +2005,7 @@ aiAdaptivePlan = buildAdaptiveCleanupPlan(reassembleText(workingSentences, worki
                     result = restoreSpecialContent(result, sentMap);
 
                     // ENFORCE: No sentence splitting or merging by non-LLM engines
-                    const resultSentCount = robustSentenceSplit(result).length;
-                    if (resultSentCount > 1) {
-                      // Non-LLM engine tried to split — take only first sentence
-                      const firstSent = robustSentenceSplit(result)[0];
-                      result = firstSent && firstSent.trim().length > 0 ? firstSent : currentSentences[i];
-                    }
+                    result = guardSingleSentence(currentSentences[i], result);
 
                     let change = measureSentenceChange(original, result);
                     let retry = 0;
@@ -2059,11 +2014,7 @@ aiAdaptivePlan = buildAdaptiveCleanupPlan(reassembleText(workingSentences, worki
                       result = phase.fn(rp);
                       result = restoreSpecialContent(result, rm);
                       // Re-enforce no split/merge after retry
-                      const retrySentCount = robustSentenceSplit(result).length;
-                      if (retrySentCount > 1) {
-                        const retryFirst = robustSentenceSplit(result)[0];
-                        result = retryFirst && retryFirst.trim().length > 0 ? retryFirst : currentSentences[i];
-                      }
+                      result = guardSingleSentence(currentSentences[i], result);
                       change = measureSentenceChange(original, result);
                       retry++;
                     }
@@ -2114,11 +2065,7 @@ aiAdaptivePlan = buildAdaptiveCleanupPlan(reassembleText(workingSentences, worki
                       result = restoreSpecialContent(result, sentMap);
 
                       // ENFORCE: No sentence splitting or merging
-                      const resultSentCount = robustSentenceSplit(result).length;
-                      if (resultSentCount > 1) {
-                        const firstSent = robustSentenceSplit(result)[0];
-                        result = firstSent && firstSent.trim().length > 0 ? firstSent : sent;
-                      }
+                      result = guardSingleSentence(sent, result);
 
                       let change = measureSentenceChange(original, result);
                       let retry = 0;
@@ -2127,11 +2074,7 @@ aiAdaptivePlan = buildAdaptiveCleanupPlan(reassembleText(workingSentences, worki
                         result = await phase.fn(rp);
                         result = restoreSpecialContent(result, rm);
                         // Re-enforce no split/merge after retry
-                        const retrySentCount = robustSentenceSplit(result).length;
-                        if (retrySentCount > 1) {
-                          const firstRetry = robustSentenceSplit(result)[0];
-                          result = firstRetry && firstRetry.trim().length > 0 ? firstRetry : sent;
-                        }
+                        result = guardSingleSentence(sent, result);
                         change = measureSentenceChange(original, result);
                         retry++;
                       }

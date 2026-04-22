@@ -1,14 +1,28 @@
 /**
  * AntiPangram — Document Reflow Engine
  * ======================================
- * Paragraph-level and document-level transformations that break
- * the structural uniformity that Pangram detects.
+ * Paragraph-level transformations that break the structural uniformity
+ * Pangram-family detectors look for.
  *
- * Targets:
- *   - Paragraph structure uniformity (topic-support-conclusion)
- *   - Cross-paragraph connector patterns
- *   - Sentence length burstiness across the whole document
- *   - Starter word distribution across paragraphs
+ * STRICT NO-SPLIT / NO-MERGE INVARIANT
+ * ─────────────────────────────────────
+ * After the first LLM rewrite, the document must stay at a fixed
+ * sentence count. This module used to inject burstiness by splitting
+ * long sentences and merging short ones (`injectBurstiness`) and to
+ * reorder sentences across paragraphs (`disruptParagraphStructure`).
+ * Both violate the post-LLM invariant and are now disabled.
+ *
+ * Burstiness is achieved instead by in-sentence clause reordering,
+ * voice toggling, and LLM rewrite variance — all of which keep the
+ * sentence count at 1:1.
+ *
+ * Targets (still active, all per-sentence):
+ *   - Connector disruption
+ *   - Evaluative phrase surgery
+ *   - Parallel structure breaking
+ *   - Nominalization unpacking
+ *   - Vocabulary naturalization
+ *   - Starter diversification (via in-sentence restructuring only)
  */
 
 import type { DocumentContext, SentenceProfile, ForensicProfile } from './types';
@@ -18,12 +32,11 @@ import {
   surgicalEvaluativeRewrite,
   breakParallelStructure,
   unpackNominalizations,
-  splitLongSentence,
-  mergeShortSentences,
   simplifyCompoundSentence,
   applyRegisterShift,
 } from './sentence-surgeon';
 import { naturalizeVocabulary } from './vocabulary-naturalizer';
+import { guardSingleSentence } from '../intelligence';
 
 // ═══════════════════════════════════════════════════════════════════
 // BURSTINESS ENGINE
@@ -73,90 +86,15 @@ function splitParagraphPreservingLists(paragraph: string): string[] {
   return sentences;
 }
 
-function injectBurstiness(sentences: string[], targetCV: number = 0.45): string[] {
-  const result = [...sentences];
-  let iterations = 0;
-  const maxIterations = Math.min(sentences.length * 2, 30); // Cap at 30 to prevent slow processing on large texts
-  const triedIndices = new Set<number>();
-
-  while (computeLengthCV(result) < targetCV && iterations < maxIterations) {
-    iterations++;
-    const lengths = result.map(s => s.split(/\s+/).filter(Boolean).length);
-    const avg = lengths.reduce((a, b) => a + b, 0) / lengths.length;
-
-    // Find the sentence closest to average length — it's the most "uniform"
-    let bestIdx = -1;
-    let bestDist = Infinity;
-    for (let i = 0; i < lengths.length; i++) {
-      if (triedIndices.has(i)) continue;
-      const dist = Math.abs(lengths[i] - avg);
-      if (dist < bestDist && lengths[i] >= 15) {
-        bestDist = dist;
-        bestIdx = i;
-      }
-    }
-
-    if (bestIdx === -1) break;
-    triedIndices.add(bestIdx);
-
-    // Strategy A: Try standard split
-    const parts = splitLongSentence(result[bestIdx]);
-    if (parts.length > 1) {
-      result.splice(bestIdx, 1, ...parts);
-      triedIndices.clear(); // Reset since indices shifted
-      continue;
-    }
-
-    // Strategy B: Force-split at comma nearest to middle
-    // But NOT if the second part starts with a participle (-ing word) or is a dependent clause
-    const sent = result[bestIdx];
-    const mid = Math.floor(sent.length / 2);
-    const commaPositions: number[] = [];
-    for (let i = 10; i < sent.length - 10; i++) {
-      if (sent[i] === ',') commaPositions.push(i);
-    }
-    if (commaPositions.length > 0) {
-      // Filter out commas that lead to fragments (participles, prepositions, relative pronouns)
-      const fragmentStart = /^\s*(?:creating|making|leading|causing|driving|resulting|including|involving|allowing|enabling|providing|ensuring|which|that|where|who|whose|whom|driven|based|followed|given)\b/i;
-      const validCommas = commaPositions.filter(pos => !fragmentStart.test(sent.slice(pos + 1)));
-
-      if (validCommas.length > 0) {
-        const splitPos = validCommas.reduce((best, pos) =>
-          Math.abs(pos - mid) < Math.abs(best - mid) ? pos : best
-        );
-        const part1 = sent.slice(0, splitPos).trim() + '.';
-        const part2 = sent.slice(splitPos + 1).trim();
-        const p1Words = part1.split(/\s+/).length;
-        const p2Words = part2.split(/\s+/).length;
-        // Only force-split if both halves are substantial
-        if (p1Words >= 6 && p2Words >= 6) {
-          const part2Cap = part2.charAt(0).toUpperCase() + part2.slice(1);
-          result.splice(bestIdx, 1, part1, part2Cap);
-          triedIndices.clear();
-          continue;
-        }
-      }
-    }
-
-    // Strategy C: Try merging two adjacent short sentences
-    let merged = false;
-    for (let i = 0; i < result.length - 1; i++) {
-      const l1 = result[i].split(/\s+/).length;
-      const l2 = result[i + 1].split(/\s+/).length;
-      if (l1 <= 10 && l2 <= 10) {
-        const m = mergeShortSentences(result[i], result[i + 1]);
-        if (m) {
-          result.splice(i, 2, m);
-          merged = true;
-          break;
-        }
-      }
-    }
-    // If nothing worked for this sentence, continue trying others
-    if (!merged) continue;
-  }
-
-  return result;
+/**
+ * Strict no-split/no-merge pass-through. The original implementation
+ * used splits and merges to drive sentence-length variance (CV) up,
+ * but that violates the post-LLM sentence-count invariant. Burstiness
+ * is now handled by LLM rewrite variance + in-sentence clause
+ * reordering (see `simplifyCompoundSentence`, `breakParallelStructure`).
+ */
+function injectBurstiness(sentences: string[], _targetCV: number = 0.45): string[] {
+  return [...sentences];
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -254,11 +192,12 @@ function diversifyStarters(sentences: string[]): string[] {
     const count = (starterCounts.get(starter) ?? 0) + 1;
     starterCounts.set(starter, count);
 
-    // If this starter appears more than twice, restructure
+    // If this starter appears more than twice, restructure — then
+    // collapse to a single sentence so we preserve the input count.
     if (count > 2 && words.length >= 7) {
-      const restructured = restructureToNewStarter(result[i]);
+      const raw = restructureToNewStarter(result[i]);
+      const restructured = guardSingleSentence(result[i], raw);
       if (restructured !== result[i]) {
-        // Update starter count for new first word
         const newStarter = restructured.split(/\s+/)[0]?.replace(/[^a-zA-Z]/g, '').toLowerCase() ?? '';
         result[i] = restructured;
         starterCounts.set(newStarter, (starterCounts.get(newStarter) ?? 0) + 1);
@@ -277,25 +216,14 @@ function diversifyStarters(sentences: string[]): string[] {
 // with a question, sometimes jump into evidence first.
 // ═══════════════════════════════════════════════════════════════════
 
+/**
+ * STRICT NO-REORDER: sentence order within a paragraph must stay
+ * identical to the input order after the first LLM rewrite. We keep
+ * the function shape for back-compat but always return the input
+ * unchanged. AntiPangram relies on in-sentence restructuring for
+ * structural variance now.
+ */
 function disruptParagraphStructure(sentences: string[]): string[] {
-  if (sentences.length < 3) return sentences;
-
-  // Detect if first sentence is a topic sentence (definitional pattern)
-  const first = sentences[0];
-  const isTopicSentence = /^[A-Z][\w\s]+ (?:is|are|was|were|refers? to|can be defined as|is defined as|is a|is an)\b/i.test(first);
-
-  if (!isTopicSentence) return sentences;
-
-  // Strategy: Move the second or third sentence to the front occasionally
-  if (sentences.length >= 4 && Math.random() < 0.4) {
-    // Move a supporting detail to the front
-    const result = [...sentences];
-    const moveIdx = Math.random() < 0.5 ? 1 : 2;
-    const moved = result.splice(moveIdx, 1)[0];
-    result.unshift(moved);
-    return result;
-  }
-
   return sentences;
 }
 
@@ -347,8 +275,13 @@ export function reflowDocument(
       }
 
       // 1e. Compound sentence simplification
+      //     `simplifyCompoundSentence` can emit multiple sentences when
+      //     breaking long compounds — we collapse back to one to preserve
+      //     the post-LLM sentence-count invariant.
       if (profile.wordCount > 22 && profile.complexity === 'complex') {
-        transformed = simplifyCompoundSentence(transformed);
+        const before = transformed;
+        const after = simplifyCompoundSentence(transformed);
+        transformed = guardSingleSentence(before, after);
       }
 
       // 1f. Vocabulary naturalization — ALWAYS apply at FULL intensity for maximum change

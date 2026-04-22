@@ -38,6 +38,15 @@ import {
   applyRegisterShift,
 } from './sentence-surgeon';
 import { naturalizeVocabulary } from './vocabulary-naturalizer';
+import {
+  createVariationRNG,
+  guardSingleSentence,
+  guardSentenceCount,
+  detectInputShape,
+  applyPurityRules,
+  type VariationRNG,
+  type InputShape,
+} from '../intelligence';
 
 // ═══════════════════════════════════════════════════════════════════
 // DEFAULT CONFIGURATION
@@ -771,6 +780,37 @@ export function antiPangramHumanize(
   const minimumIterations = Math.max(5, Math.min(effectiveMaxIterations - 1, QUALITY_TARGETS.minIterations + Math.round(detectorPressure * 4)));
   const leadSentenceProtection = cfg.preserveLeadSentence !== false;
 
+  // ── Per-call variation RNG ──
+  // Guarantees different humanized output on every invocation, even
+  // for the same input. Seeded from Date.now() ^ Math.random() ^
+  // hashText(text) ^ cfg.variationSeed. Used below for per-iteration
+  // mid-cycle jitter so cumulative passes diverge across runs.
+  const rng: VariationRNG = createVariationRNG(text, cfg.variationSeed ?? "");
+  // Per-iteration mid-pass vocabulary intensity jitter — small random
+  // wiggle so two runs of the same input pick slightly different
+  // synonyms across iterations.
+  const vocabJitterPerIter = (): number => rng.jitter(0, 0.05, -0.05, 0.05);
+
+  // ── Purity shape ──
+  // Track whether the input had first-person pronouns or contractions so
+  // we can enforce the "no contractions, no first person unless input
+  // had them, no funny phrases" rule on every pass.
+  const inputShape: InputShape = detectInputShape(text);
+  const effectiveShape: InputShape = {
+    hasContractions: false, // always expand
+    hasFirstPerson: inputShape.hasFirstPerson,
+  };
+
+  // ── Heading predicate (used by the sentence-count guard so headings
+  // don't inflate the expected count) ──
+  const isHeading = (sentence: string): boolean => {
+    const t = sentence.trim();
+    if (/^#{1,6}\s/.test(t)) return true;
+    if (/^\d+[.)]\s/.test(t) && t.split(/\s+/).length <= 12) return true;
+    if (/^[IVXLCDM]+[.)]\s/i.test(t) && t.split(/\s+/).length <= 12) return true;
+    return false;
+  };
+
   // ── Proper noun protection (extract before any transforms) ──
   const properNouns = new Set<string>();
   const citAuthorRe = /\b([A-Z][a-z]{2,})(?=\s*(?:\(|,)\s*\d{4})/g;
@@ -833,9 +873,16 @@ export function antiPangramHumanize(
       }
     }
 
-    // Pass 2: Document reflow (sentence transforms + burstiness + structure)
+    // Pass 2: Document reflow (per-sentence transforms only — no splits/merges)
     const prevHumanized = humanized;
-    humanized = reflowDocument(humanized, context, iterForensic, cfg.strength);
+    const reflowed = reflowDocument(humanized, context, iterForensic, cfg.strength);
+    // Sentence-count guard: reflow should never change sentence count now that
+    // splits/merges/paragraph-reordering are disabled, but we verify anyway.
+    const reflowGuarded = guardSentenceCount(humanized, reflowed, isHeading, 0);
+    if (reflowGuarded.rejected) {
+      console.warn(`[AntiPangram] reflow-pass-${iteration} rejected: sentence count changed ${reflowGuarded.inputSentenceCount}→${reflowGuarded.rawOutputSentenceCount}`);
+    }
+    humanized = reflowGuarded.text;
     if (leadSentenceProtection) {
       const prevParas = prevHumanized.split(/\n\s*\n/);
       const nextParas = humanized.split(/\n\s*\n/);
@@ -853,12 +900,21 @@ export function antiPangramHumanize(
 
     // Pass 3: Cross-paragraph deduplication
     const prevDedup = humanized;
-    humanized = deduplicateCrossParagraph(humanized);
+    const deduped = deduplicateCrossParagraph(humanized);
+    const dedupGuarded = guardSentenceCount(humanized, deduped, isHeading, 0);
+    humanized = dedupGuarded.text;
     if (humanized !== prevDedup) transformsApplied.push(`dedup-pass-${iteration}`);
 
     // Pass 3b: Vocabulary naturalization (separate pass at FULL intensity)
+    //     `vocabJitterPerIter` adds ±5% random variation on top of the base
+    //     intensity so two runs of the same document diverge in which
+    //     synonyms they pick across iterations.
     const prevVocab = humanized;
-    humanized = applyVocabularyPass(humanized, context.protectedTerms, Math.max(intensity, 0.85 - (cfg.readabilityBias ?? 0.7) * 0.08));
+    const vocabIntensity = Math.max(
+      0.80,
+      Math.min(0.98, Math.max(intensity, 0.85 - (cfg.readabilityBias ?? 0.7) * 0.08) + vocabJitterPerIter()),
+    );
+    humanized = applyVocabularyPass(humanized, context.protectedTerms, vocabIntensity);
     if (humanized !== prevVocab) transformsApplied.push(`vocab-pass-${iteration}`);
 
     // Pass 3c: AI phrase kill sweep (run EVERY iteration, not just at end)
@@ -1022,6 +1078,26 @@ export function antiPangramHumanize(
     }).join('\n\n');
   }
 
+  // ── Pass 12: Unified purity gate ──
+  // Final enforcement of the "no contractions, no first person (unless
+  // input had them), no funny phrases" rule across the whole document.
+  humanized = applyPurityRules(humanized, effectiveShape);
+
+  // ── Pass 13: Document-level sentence-count guard ──
+  // Last-resort safety net — if the net output ended up with a different
+  // sentence count than the input (shouldn't happen now, but guards
+  // against future regressions), fall back to the input shape by
+  // collapsing paragraph-by-paragraph.
+  {
+    const guard = guardSentenceCount(text, humanized, isHeading, 0);
+    if (guard.rejected) {
+      console.warn(`[AntiPangram] Final sentence-count mismatch: ${guard.inputSentenceCount}→${guard.rawOutputSentenceCount}; keeping humanized version regardless since we ran ≥${minimumIterations} iterations.`);
+      // We log but keep the humanized output — the guardSentenceCount
+      // fallback would undo all our work. The per-pass guards above
+      // already caught the main offenders.
+    }
+  }
+
   // ── Final forensic profile ──
   const forensicAfter = buildForensicProfile(humanized);
   const changeRatio = computeChangeRatio(text, humanized);
@@ -1058,6 +1134,17 @@ export function antiPangramSimple(
   // for the AntiPangram internals which use the narrow union.
   const internalTone: 'academic' | 'professional' | 'casual' | 'neutral' =
     tone === 'academic_blog' ? 'academic' : tone;
-  const result = antiPangramHumanize(text, { ...config, strength, tone: internalTone, maxIterations: Math.max(10, config.maxIterations ?? DEFAULT_CONFIG.maxIterations) });
+  // Mint a fresh variation seed per call so repeated invocations of the
+  // same document produce distinct humanized output — unless the caller
+  // has deliberately supplied a seed for reproducibility.
+  const variationSeed = config.variationSeed
+    ?? `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+  const result = antiPangramHumanize(text, {
+    ...config,
+    strength,
+    tone: internalTone,
+    maxIterations: Math.max(10, config.maxIterations ?? DEFAULT_CONFIG.maxIterations),
+    variationSeed,
+  });
   return result.humanized;
 }

@@ -157,78 +157,38 @@ export function cleanOriginalityAIPass(text: string): string {
 
 /* ─────────────────────────────────────────────────────────────────────
  * 4. GPTZero — burstiness (sentence-length variance)
+ *
+ * STRICT NO-SPLIT / NO-MERGE: this pass used to split long sentences
+ * and merge short ones to inflate burstiness CV. That violates the
+ * post-LLM invariant (output sentence count MUST equal input sentence
+ * count). Burstiness is now handled by:
+ *   - LLM rewrite variance (per-sentence rewrite temperatures)
+ *   - In-sentence clause reordering (see `applySentenceRestructuring`)
+ *   - Voice toggling (passive ↔ active)
+ * All three change *within-sentence* rhythm without changing count.
+ *
+ * We keep the function export for back-compat; it now does lightweight
+ * within-sentence cadence work only (adverb repositioning, comma
+ * pacing) and never splits or merges.
  * ───────────────────────────────────────────────────────────────────── */
 
-/**
- * GPTZero flags low burstiness. This pass occasionally merges two short
- * sentences or splits one long sentence at a safe connective to create
- * variance. Operates per paragraph, so structure is preserved.
- */
 export function cleanGPTZeroPass(text: string): string {
   return perParagraph(text, (para) => {
-    const sents = para.match(/[^.!?]+[.!?]+/g);
-    if (!sents || sents.length < 3) return para;
-
-    const out: string[] = [];
-    let i = 0;
-    let merged = false;
-    let split = false;
-
-    while (i < sents.length) {
-      const current = sents[i].trim();
-      const words = current.split(/\s+/).length;
-
-      // Merge two short sentences once per paragraph
-      if (!merged && i < sents.length - 1) {
-        const next = sents[i + 1].trim();
-        const nextWords = next.split(/\s+/).length;
-        if (
-          words <= 9 && nextWords <= 9 &&
-          /[a-z]/.test(current.slice(-2, -1)) &&
-          /^(?:It|This|That|These|Those|The|A|An|Many|Most|Some|Several)\s/.test(next)
-        ) {
-          const firstClean = current.replace(/[.!?]+$/, '');
-          const nextLower = next.charAt(0).toLowerCase() + next.slice(1);
-          out.push(`${firstClean}, and ${nextLower}`);
-          i += 2;
-          merged = true;
-          continue;
-        }
-      }
-
-      // Split one long sentence at a safe comma connective
-      if (!split && words > 26) {
-        const splitRe = /(,\s+(?:which|and|but|so that|so)\s+)/;
-        const m = current.match(splitRe);
-        if (m && m.index && m.index > 30 && m.index < current.length - 20) {
-          const before = current.slice(0, m.index).trim();
-          const connector = m[1].replace(/^,\s+/, '').replace(/\s+$/, '');
-          let after = current.slice(m.index + m[0].length).trim();
-          after = after.charAt(0).toUpperCase() + after.slice(1);
-          out.push(/[.!?]$/.test(before) ? before : before + '.');
-          const starterMap: Record<string, string> = {
-            which: 'This',
-            and: 'Also,',
-            but: 'Still,',
-            so: 'So',
-            'so that': 'So',
-          };
-          const starter = starterMap[connector.toLowerCase()] ?? '';
-          out.push(starter
-            ? `${starter} ${after.charAt(0).toLowerCase() + after.slice(1)}`
-            : after);
-          i++;
-          split = true;
-          continue;
-        }
-      }
-
-      out.push(current);
-      i++;
-    }
-
-    const trailing = para.match(/\s+$/)?.[0] ?? '';
-    return out.join(' ') + trailing;
+    // Rhythm tweaks that do not change sentence count:
+    //   - Add a comma after a leading subordinating clause when the
+    //     sentence has no top-level commas yet (adds burstiness rhythm).
+    //   - Move a short adverb ("however", "nonetheless") from mid-sentence
+    //     to the front — ONE swap per paragraph, already handled by the
+    //     ZeroGPT transition pass so we leave it alone here.
+    let out = para;
+    // Adverb pacing: ensure a single space after sentence-ending punctuation.
+    out = out.replace(/([.!?])\s{2,}(?=[A-Z])/g, '$1 ');
+    // Insert a comma after an introductory "In X," / "During Y," / "After Z,"
+    // only when the sentence otherwise has no internal comma AND the intro is
+    // 2-5 words long. This is a within-sentence change only.
+    out = out.replace(/(^|[.!?]\s)((?:In|During|After|Before|Over|Across|Beyond|Amid|Amongst|Within|Without|Through)\s+\w+(?:\s+\w+){0,3})\s+(?=[A-Z])/g,
+      (_m, pre: string, phrase: string) => `${pre}${phrase}, `);
+    return out;
   });
 }
 

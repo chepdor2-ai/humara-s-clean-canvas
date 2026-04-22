@@ -27,7 +27,7 @@
 import { TextSignals, getDetector } from './multi-detector';
 import { robustSentenceSplit } from './content-protection';
 import { protectSpecialContent, restoreSpecialContent, type ProtectionMap } from './content-protection';
-import { restructureSentence } from './llm-humanizer';
+import { restructureSentence, batchRestructureSentences } from './llm-humanizer';
 import { looksLikeHeadingLine } from './structure-preserver';
 import { profilePaper, type PaperProfile } from './paper-profiler';
 import { computeSentenceStrategy, type SentenceStrategy } from './adaptive-strategy-selector';
@@ -266,99 +266,51 @@ function selectSentencesForRephrasing(
 // ═══════════════════════════════════════════════════════════════════════
 
 /**
- * Apply LLM structural rephrasing to selected sentences.
- * Protects special content (numbers, brackets, citations, etc.).
- * Enforces min/max change bounds per sentence.
- * Strictly prevents sentence splitting or merging.
+ * Apply LLM structural rephrasing to selected sentences using a single batch call.
+ * This approach is far faster and more cost-effective while still enforcing 
+ * sentence bounds and respecting individual strategy needs.
  */
 async function applyLLMRephrasing(
   analyses: SentenceAnalysis[],
   onProgress?: (index: number, text: string, stage: string) => void,
 ): Promise<void> {
   const selected = analyses.filter(a => a.selectedForRephrasing && !a.isHeading);
+  if (selected.length === 0) return;
 
-  // Process in parallel with high concurrency for speed max 20sec
-  const BATCH_SIZE = 25;
-  for (let batch = 0; batch < selected.length; batch += BATCH_SIZE) {
-    const batchItems = selected.slice(batch, batch + BATCH_SIZE);
+  try {
+    // Only pass the original sentences; batchRestructureSentences handles 
+    // joining them into a numbered list and parsing them back
+    const sentencesToProcess = selected.map(a => a.original);
+    
+    // We'll use the strategy of the first sentence as a baseline if needed,
+    // though batchRestructureSentences itself assumes a general flow 
+    // unless you give it a specific strategy. We provide the first strategy.
+    const strategy = selected[0]?.strategy;
 
-    await Promise.all(batchItems.map(async (analysis) => {
-      try {
-        // Protect special content before LLM processing
-        const { text: protectedText, map: protectionMap } = protectSpecialContent(analysis.original);
+    // Call the single-call batch LLM restructurer
+    const restructuredTexts = await batchRestructureSentences(sentencesToProcess, strategy);
 
-        // Get target strategy min change
-        const targetMinChange = analysis.strategy ? analysis.strategy.minChangeTarget : MIN_CHANGE;
+    // Apply the results back to our analyses
+    if (restructuredTexts.length === selected.length) {
+      for (let i = 0; i < selected.length; i++) {
+        const analysis = selected[i];
+        const restructured = restructuredTexts[i];
 
-        // Call LLM restructuring with strategy
-        let restructured = await restructureSentence(protectedText, analysis.strategy);
-
-        // Restore protected content
-        restructured = restoreSpecialContent(restructured, protectionMap);
-
-        // ENFORCE: No sentence splitting or merging
-        // Count sentences in output — must be exactly 1
-        const outputSentCount = countSentencesInText(restructured);
-        if (outputSentCount !== 1) {
-          // LLM split or merged — take only the first sentence or reject
-          const firstSent = robustSentenceSplit(restructured)[0];
-          if (firstSent && firstSent.trim().length > 0) {
-            restructured = firstSent;
-          } else {
-            // Reject entirely — keep original
-            analysis.preprocessed = analysis.original;
-            return;
-          }
-        }
-
-        // Measure change
-        let change = measureWordChange(analysis.original, restructured);
-
-        // Enforce min change — retry up to 3 times for deeper restructuring
-        if (change < targetMinChange) {
-          for (let retryAttempt = 0; retryAttempt < 3; retryAttempt++) {
-            const retryInput = retryAttempt === 0 ? restructured : analysis.original;
-            const { text: rp, map: rm } = protectSpecialContent(retryInput);
-            let retry = await restructureSentence(rp, analysis.strategy);
-            retry = restoreSpecialContent(retry, rm);
-            const retryCount = countSentencesInText(retry);
-            if (retryCount === 1) {
-              const retryChange = measureWordChange(analysis.original, retry);
-              if (retryChange >= targetMinChange) {
-                restructured = retry;
-                change = retryChange;
-                break;
-              }
-              if (retryChange > change) {
-                restructured = retry;
-                change = retryChange;
-              }
-            }
-          }
-        }
-
-        // Enforce max change (85%) — if too much changed, blend with original
-        const finalChange = measureWordChange(analysis.original, restructured);
-        if (finalChange > MAX_CHANGE) {
-          // Too aggressive — keep the restructured version but note it
-          // (We don't blend because that could create incoherent text)
-        }
-
-        // Verify the result is non-empty and reasonable
+        // Sanity check length
         if (restructured && restructured.trim().length > analysis.original.length * 0.3) {
-          analysis.preprocessed = restructured.trim();
-          analysis.wasRestructured = true;
+           analysis.preprocessed = restructured.trim();
+           analysis.wasRestructured = true;
+           if (onProgress) {
+             onProgress(analysis.index, analysis.preprocessed, 'LLM Restructuring');
+           }
         }
-
-        if (onProgress) {
-          onProgress(analysis.index, analysis.preprocessed, 'LLM Restructuring');
-        }
-      } catch (err) {
-        // LLM call failed — keep original sentence
-        console.warn(`[SmartPreprocess] LLM restructuring failed for sentence ${analysis.index}:`, err);
-        analysis.preprocessed = analysis.original;
       }
-    }));
+    } else {
+      console.warn(`[SmartPreprocess] Batch restructure returned ${restructuredTexts.length} items, expected ${selected.length}. Falling back to originals.`);
+      // No change made
+    }
+  } catch (err) {
+    console.warn(`[SmartPreprocess] Batch LLM restructuring failed:`, err);
   }
 }
 

@@ -15,6 +15,13 @@ export interface AntiPangramConfig {
   preserveLeadSentence?: boolean;
   humanVariance?: number;
   readabilityBias?: number;
+  /**
+   * Optional per-call variation seed. When supplied (or when omitted
+   * and the engine mints a fresh one), the engine produces different
+   * humanized output for the same input across runs. The seed blends
+   * Date.now() + Math.random() + hash(text) internally.
+   */
+  variationSeed?: string;
 }
 
 export interface ForensicProfile {

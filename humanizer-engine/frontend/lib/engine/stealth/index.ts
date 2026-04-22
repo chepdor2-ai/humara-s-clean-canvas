@@ -1,18 +1,23 @@
 /**
- * Stealth Humanizer — Sentence-by-Sentence Non-LLM Engine
+ * Nuru — Sentence-by-Sentence Intelligent Humanizer
  * =========================================================
  *
- * Single-pass, sentence-level processing. Each sentence is independently:
- *   1. Phrase-replaced (AI phrases → natural alternatives)
- *   2. Word-replaced (AI buzzwords → casual synonyms)
- *   3. Contextual synonym swapped (~20-35% of remaining content words)
- *   4. Probabilistically given a sentence starter injection
- *   5. Validated for ≥40% word-level change, meaning preservation, grammar
- *   6. Cleaned: zero contractions, zero first person (unless input had it)
+ * Post-LLM-rewrite non-LLM engine. Per sentence:
+ *   1. Detector-signature attack plan (which attacks this sentence needs)
+ *   2. Evaluative phrase surgery (only if the plan says so)
+ *   3. Connector-opener rotation (if this sentence has an AI opener)
+ *   4. Per-sentence word swaps via curated dictionaries (intensity from plan)
+ *   5. Safe clause reorder / voice toggle (NO sentence splits, NO merges)
+ *   6. Opener diversification (at most once per run, never on paragraph leads)
+ *   7. Purity gate: zero contractions, zero first person, zero funny phrases
+ *      (unless input already had them)
+ *   8. Iterative best-of-N: every iteration seeds its RNG differently so
+ *      repeated runs of the same input produce different humanized output.
  *
- * Quality is the top priority. Every sentence must read naturally.
- *
- * NO contractions. NO first person (unless input). NO rhetorical questions.
+ * STRICT NO-SPLIT / NO-MERGE: `manageBurstiness` is disabled. Sentences
+ * that entered this engine leave this engine with identical count. Any
+ * transform that accidentally splits a sentence is collapsed back to one
+ * via the shared split-merge-guard.
  */
 
 import { AI_WORD_REPLACEMENTS } from '../shared-dictionaries';
@@ -23,6 +28,15 @@ import { scoreSentenceRisk } from '../sentence-risk-scorer';
 import { resolveStrategy, type DomainStrategy } from '../domain-strategies';
 import { resolveTone, type ToneSettings } from '../ai-signal-dictionary';
 import { isSafeSwap, pickBestReplacement, contextFor } from '../synonym-safety';
+import {
+  createVariationRNG,
+  guardSingleSentence,
+  detectInputShape,
+  applyPurityRules,
+  violatesPurity,
+  type VariationRNG,
+  type InputShape,
+} from '../intelligence';
 
 // NOTE: _stealthStrategy and _activeTone were formerly module-level globals.
 // They are now per-call locals inside stealthHumanize, passed as parameters
@@ -38,6 +52,12 @@ export interface StealthHumanizeOptions {
   domain?: Domain;
   /** Allow first-person pronouns to remain (default: inherit from input). */
   firstPersonAllowed?: boolean;
+  /**
+   * Optional per-call variation seed. If omitted we mint one. Two calls
+   * with the same text will still diverge because we blend Date.now()
+   * into the seed.
+   */
+  variationSeed?: string;
 }
 
 function clamp01(value: number): number {
@@ -1373,86 +1393,18 @@ function isIndependentClause(fragment: string): boolean {
   return startsWithSubject;
 }
 
+/**
+ * STRICT NO-SPLIT / NO-MERGE: this function used to split long
+ * sentences at safe clause boundaries and merge short adjacent
+ * ones for GPTZero burstiness. That violates the post-LLM
+ * invariant (output sentence count MUST equal input sentence
+ * count). We keep the function signature for back-compat with
+ * the downstream re-processing loop but it now always returns a
+ * 1:1 pass-through. Burstiness is instead handled by in-sentence
+ * clause reordering and per-sentence LLM rewrite variance.
+ */
 function manageBurstiness(sentences: string[]): BurstResult[] {
-  const result: BurstResult[] = sentences.map(s => ({ text: s, needsReprocess: false }));
-
-  // Pass 1: Smart-split sentences >30 words ONLY at verified clause boundaries
-  for (let i = result.length - 1; i >= 0; i--) {
-    const words = result[i].text.split(/\s+/);
-    if (words.length <= 30) continue;
-
-    let didSplit = false;
-
-    // Strategy A: Split at ", which/where/who" (non-restrictive clause → "This ...")
-    const relMatch = result[i].text.match(/^(.{30,}?),\s+(which|where|who)\s+(.+)$/i);
-    if (relMatch) {
-      const main = relMatch[1].trim().replace(/,$/, '').trim();
-      const relWord = relMatch[2].toLowerCase();
-      const rest = relMatch[3].trim();
-
-      // Build the standalone second sentence
-      const bridge = relWord === 'which' ? 'This' : relWord === 'where' ? 'There,' : 'They';
-      let secondSent = bridge + ' ' + rest.charAt(0).toLowerCase() + rest.slice(1);
-      if (!/[.!?]$/.test(secondSent)) secondSent += '.';
-      const mainSent = /[.!?]$/.test(main) ? main : main + '.';
-
-      // Validate BOTH halves are real sentences
-      if (isIndependentClause(mainSent) && secondSent.split(/\s+/).length >= 5) {
-        result.splice(i, 1,
-          { text: mainSent, needsReprocess: false },
-          { text: secondSent, needsReprocess: true }, // new sentence needs full cleanup
-        );
-        didSplit = true;
-      }
-    }
-
-    if (didSplit) continue;
-
-    // Strategy B: Split at ", and/but/so/yet" ONLY if BOTH sides are independent clauses
-    const conjMatch = result[i].text.match(/^(.{25,}?),\s+(and|but|so|yet)\s+(.{15,})$/i);
-    if (conjMatch) {
-      const part1 = conjMatch[1].trim().replace(/,$/, '').trim();
-      const part2 = conjMatch[3].trim();
-
-      const sent1 = /[.!?]$/.test(part1) ? part1 : part1 + '.';
-      let sent2 = part2.charAt(0).toUpperCase() + part2.slice(1);
-      if (!/[.!?]$/.test(sent2)) sent2 += '.';
-
-      // BOTH must be real independent clauses
-      if (isIndependentClause(sent1) && isIndependentClause(sent2)) {
-        result.splice(i, 1,
-          { text: sent1, needsReprocess: false },
-          { text: sent2, needsReprocess: true },
-        );
-        didSplit = true;
-      }
-    }
-
-    // NO force-split fallback — if we can't find a clean clause boundary,
-    // leave the long sentence intact. A long readable sentence is better
-    // than two broken fragments.
-  }
-
-  // Pass 2: Merge adjacent very short sentences (<6 words each, combined ≤18)
-  // ONLY merge if they share a topic (second sentence refers back to first)
-  for (let i = 0; i < result.length - 1; i++) {
-    const w1 = result[i].text.split(/\s+/).length;
-    const w2 = result[i + 1].text.split(/\s+/).length;
-    if (w1 > 6 || w2 > 6 || w1 + w2 > 18) continue;
-
-    // Check if sentences are related (share at least one content word ≥4 chars)
-    const words1 = new Set(result[i].text.toLowerCase().replace(/[^a-z\s]/g, '').split(/\s+/).filter(w => w.length >= 4));
-    const words2 = result[i + 1].text.toLowerCase().replace(/[^a-z\s]/g, '').split(/\s+/).filter(w => w.length >= 4);
-    const shared = words2.some(w => words1.has(w));
-    if (!shared) continue; // unrelated short sentences — leave separate
-
-    const s1 = result[i].text.replace(/[.!?]$/, '').trim();
-    const s2Lower = result[i + 1].text.charAt(0).toLowerCase() + result[i + 1].text.slice(1);
-    const merged = s1 + ', and ' + s2Lower;
-    result.splice(i, 2, { text: merged, needsReprocess: true });
-  }
-
-  return result;
+  return sentences.map((s) => ({ text: s, needsReprocess: false }));
 }
 
 /* ── Core: process one sentence ──────────────────────────────────── */
@@ -1889,21 +1841,35 @@ export function stealthHumanize(
   const preserveLeadSentences = options.preserveLeadSentences !== false;
   const readabilityBias = clamp01(options.readabilityBias ?? (_tone === 'academic_blog' || _tone === 'casual' ? 0.9 : 0.7));
   const enforcedMaxIterations = Math.max(10, Math.round(maxIterations + detectorPressure * 6));
-  console.log('[NURU_V2] === NEW ENGINE ACTIVE === Input length:', text.length);
+  console.log('[Nuru] === Intelligent Engine === Input length:', text.length);
   if (!text || text.trim().length === 0) return text;
+
+  // ── Per-call variation RNG ──
+  // Guarantees different humanized output on every invocation, even for
+  // identical input. Seeded from Date.now() ^ performance.now() ^
+  // Math.random() ^ hashText(text) ^ options.variationSeed.
+  const rng = createVariationRNG(text, options.variationSeed ?? "");
+
+  // ── Input shape (drives purity gate) ──
+  const inputShape = detectInputShape(text);
+  const firstPersonAllowed = options.firstPersonAllowed ?? inputShape.hasFirstPerson;
+  const effectiveShape: InputShape = {
+    hasFirstPerson: firstPersonAllowed,
+    hasContractions: false, // always expand contractions for academic output
+  };
 
   // Resolve tone — determines contraction policy, openers, max length, etc.
   const activeTone = resolveTone(_tone);
-  console.log(`[NURU_V2] Tone: ${activeTone.id} (${activeTone.label})`);
+  console.log(`[Nuru] Tone: ${activeTone.id} (${activeTone.label})`);
 
   // Detect domain and merge domain-specific protected terms into the static set
   const domainResult = detectDomain(text);
   const domainProtected = getProtectedTermsForDomain(domainResult);
   for (const term of domainProtected) PROTECTED.add(term.toLowerCase());
   const stealthStrategy = resolveStrategy(domainResult);
-  console.log(`[NURU_V2] Domain: ${domainResult.primary} (${(domainResult.confidence * 100).toFixed(0)}%) — added ${domainProtected.size} protected terms, synInt=${stealthStrategy.synonymIntensity.toFixed(2)}, structRate=${stealthStrategy.structuralRate.toFixed(2)}`);
+  console.log(`[Nuru] Domain: ${domainResult.primary} (${(domainResult.confidence * 100).toFixed(0)}%) — added ${domainProtected.size} protected terms, synInt=${stealthStrategy.synonymIntensity.toFixed(2)}, structRate=${stealthStrategy.structuralRate.toFixed(2)}`);
 
-  const hasFirstPerson = /\b(I|we|my|our|me|us|myself|ourselves)\b/.test(text);
+  const hasFirstPerson = firstPersonAllowed;
   const paragraphs = text.split(/\n\s*\n/).filter(p => p.trim());
   const usedStarters = new Set<string>();
 
@@ -1943,31 +1909,50 @@ export function stealthHumanize(
           : enforcedMaxIterations;
 
       // First pass uses real sentenceIndex (enables starter injection on non-first sentences)
-      let best = processSentence(
+      const rawFirst = processSentence(
         sent, hasFirstPerson, globalSentenceIdx, totalSentences,
         usedStarters, strength, isParagraphLead, detectorPressure, stealthStrategy,
       );
+      // Strict 1:1 guard — if the transform accidentally split, collapse back.
+      let best = guardSingleSentence(originalSent, rawFirst);
+      // Purity: reject candidates that introduce banned patterns.
+      if (violatesPurity(best, effectiveShape)) best = originalSent;
       let bestScore = compositeQualityScore(originalSent, best, 0.35 + readabilityBias * 0.30);
 
       // Iterative refinement: each pass starts from ORIGINAL to prevent
       // compounding garble. We keep the best result (highest composite score
       // balancing change ratio, readability, and AI signal absence).
-      // Subsequent passes use sentenceIndex=0 to prevent duplicate starter injection.
+      // Subsequent passes use sentenceIndex=0 to prevent duplicate starter
+      // injection, and borrow entropy from the per-call RNG so repeated
+      // invocations of the same document produce different humanized text.
       let iter = 1;
-        while (iter <= sentMaxIter) {
-          const iterStrength = iter > 5 ? 'strong' : strength;
-          const next = processSentence(
-            originalSent, hasFirstPerson, iter === 1 ? globalSentenceIdx : 0,
-            totalSentences, usedStarters, iterStrength as any, isParagraphLead, detectorPressure, stealthStrategy,
-          );
-          const nextScore = compositeQualityScore(originalSent, next, 0.35 + readabilityBias * 0.30);
-          if (nextScore > bestScore) {
-            best = next;
-            bestScore = nextScore;
-          }
-          if (iter >= 10 && wordChangeRatio(originalSent, best) >= 0.80) break;
+      while (iter <= sentMaxIter) {
+        // Mild strength escalation biased by the per-call RNG so every run
+        // takes a slightly different iteration path.
+        const escalate = iter > 5 || rng.next() < detectorPressure * 0.25;
+        const iterStrength = escalate ? 'strong' : strength;
+        const rawNext = processSentence(
+          originalSent, hasFirstPerson, iter === 1 ? globalSentenceIdx : 0,
+          totalSentences, usedStarters, iterStrength as any, isParagraphLead, detectorPressure, stealthStrategy,
+        );
+        const next = guardSingleSentence(originalSent, rawNext);
+        if (violatesPurity(next, effectiveShape)) {
           iter++;
+          continue;
         }
+        const nextScore = compositeQualityScore(originalSent, next, 0.35 + readabilityBias * 0.30);
+        if (nextScore > bestScore) {
+          best = next;
+          bestScore = nextScore;
+        }
+        if (iter >= 10 && wordChangeRatio(originalSent, best) >= 0.80) break;
+        iter++;
+      }
+
+      // Final per-sentence purity polish — expand any residual contractions,
+      // scrub any residual first-person / funny-phrase artifacts.
+      best = applyPurityRules(best, effectiveShape);
+      best = guardSingleSentence(originalSent, best);
 
       outputSentences.push(best);
       globalSentenceIdx++;
@@ -2020,7 +2005,7 @@ export function stealthHumanize(
   // Fix spacing issues — use [ \t] to preserve \n\n paragraph breaks
   result = result.replace(/[ \t]{2,}/g, ' ');
   result = result.replace(/[ \t]+([.,;:!?])/g, '$1');
-  
+
   // Independent detector specific deep cleaning phases
   result = runFullDetectorForensicsCleanup(result);
 
@@ -2029,12 +2014,16 @@ export function stealthHumanize(
     result = applyToneAdjustment(result, activeTone);
   }
 
+  // Document-level purity polish — one last pass to guarantee no
+  // contractions, no first person (unless input had it), no funny phrases.
+  result = applyPurityRules(result, effectiveShape);
+
   if (humanVariance > 0) {
     const paragraphsWithVariance = result.split(/\n\s*\n/).map((paragraph) => {
       const sentences = splitSentences(paragraph.trim());
       if (sentences.length <= 1) return paragraph.trim();
       return sentences.map((sentence, index) => {
-        if (index === 0 || Math.random() > Math.min(0.20, humanVariance + detectorPressure * 0.08)) return sentence;
+        if (index === 0 || rng.next() > Math.min(0.20, humanVariance + detectorPressure * 0.08)) return sentence;
         let varied = sentence;
         varied = varied.replace(/^(However|Moreover|Furthermore|Additionally),\s+/i, (_m, word) => word.charAt(0).toUpperCase() + word.slice(1) + ' ');
         varied = varied.replace(/\s*,\s*/g, ', ');
