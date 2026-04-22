@@ -61,6 +61,12 @@ const HIGH_WEIGHT_AI_PHRASES: RegExp[] = [
   /\bthe (?:findings|results|evidence|views|insights|similarities|differences) (?:suggest|indicate|demonstrate|show|reveal|reflect|highlight)\b/i,
   /\b(?:moreover|furthermore|additionally|meanwhile|likewise|conversely),?\s+although\b/i,
   /\ba (?:fascinating|profound|unique|significant|crucial|vital|pivotal) (?:combination|blend|mix|tension|similarity|divergence)\b/i,
+  // Sentence-initial formal connectors are a VERY strong AI signal (+2 each)
+  /^(?:furthermore|moreover|additionally|consequently|nevertheless|notwithstanding|subsequently|accordingly|likewise|conversely)[,;]\s/i,
+  // "X-century views reveal fascinating" type academic AI prose
+  /\b(?:eighteenth|nineteenth|twentieth|seventeenth|sixteenth)-century (?:views|ideas|beliefs|values|notions|perspectives) (?:on|of|about|regarding) .{5,50} (?:reveal|show|highlight|demonstrate|reflect|indicate)/i,
+  // "This reflects an ongoing tension between" evaluative meta-commentary
+  /\bthis (?:reflects|reveals|shows|demonstrates|highlights) (?:a|an|the) (?:ongoing|lasting|broader|important|fascinating|significant|deep) (?:tension|similarity|difference|pattern|shift|influence|debate)/i,
 ];
 
 /** Moderate AI-associated phrases (+1 each) */
@@ -164,15 +170,14 @@ export function scoreSentenceRisk(
   const finalScore = score + domainAdj;
 
   // ── 4. Tier resolution ────────────────────────────────────────────────────
+  // Thresholds deliberately lowered so more sentences receive aggressive treatment.
   let tier: RiskTier;
-  if (finalScore >= 5) {
+  if (finalScore >= 4) {
     tier = 'critical';
-  } else if (finalScore >= 3) {
+  } else if (finalScore >= 2.5) {
     tier = 'high';
-  } else if (finalScore >= 1.5) {
+  } else if (finalScore >= 1) {
     tier = 'medium';
-  } else if (finalScore >= 0.5) {
-    tier = 'low';
   } else {
     tier = 'low'; // even clean sentences get a small change target
   }

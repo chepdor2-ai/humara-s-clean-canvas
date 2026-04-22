@@ -972,6 +972,60 @@ const EXTRA_REPLACEMENTS: Record<string, string[]> = {
   intensity: ['strength', 'degree', 'force', 'magnitude'],
   duration: ['length', 'span', 'extent', 'period'],
   generalization: ['transfer', 'extension', 'application', 'spread'],
+  // ── AI-evaluative vocabulary that slips through (Surfer / Pangram flags) ──
+  reveal: ['show', 'uncover', 'expose', 'make clear'],
+  reveals: ['shows', 'uncovers', 'exposes', 'makes clear'],
+  fascinating: ['interesting', 'striking', 'notable', 'curious'],
+  tension: ['conflict', 'gap', 'clash', 'divide'],
+  similarity: ['resemblance', 'parallel', 'likeness', 'overlap'],
+  similarities: ['resemblances', 'parallels', 'commonalities', 'overlaps'],
+  difference: ['distinction', 'contrast', 'gap', 'variation'],
+  differences: ['distinctions', 'contrasts', 'gaps', 'variations'],
+  divergence: ['split', 'separation', 'gap', 'divide'],
+  intersection: ['overlap', 'crossover', 'meeting point', 'juncture'],
+  interplay: ['interplay', 'dynamic', 'relationship', 'connection'],
+  complexity: ['difficulty', 'depth', 'intricacy', 'complication'],
+  nuance: ['detail', 'subtlety', 'shade', 'distinction'],
+  nuances: ['details', 'subtleties', 'shades', 'distinctions'],
+  compelling: ['strong', 'convincing', 'solid', 'persuasive'],
+  articulate: ['express', 'state', 'convey', 'put into words'],
+  narrative: ['story', 'account', 'version', 'description'],
+  discourse: ['discussion', 'debate', 'conversation', 'dialogue'],
+  landscape: ['scene', 'field', 'picture', 'setting'],
+  dimension: ['aspect', 'side', 'element', 'layer'],
+  dimensions: ['aspects', 'sides', 'elements', 'layers'],
+  facet: ['side', 'aspect', 'angle', 'element'],
+  facets: ['sides', 'aspects', 'angles', 'elements'],
+  hallmark: ['trait', 'marker', 'sign', 'feature'],
+  hallmarks: ['traits', 'markers', 'signs', 'features'],
+  cornerstone: ['foundation', 'pillar', 'basis', 'core'],
+  bedrock: ['foundation', 'base', 'core', 'root'],
+  linchpin: ['key part', 'anchor', 'pivot', 'core element'],
+  catalyst: ['trigger', 'driver', 'spark', 'cause'],
+  nexus: ['link', 'connection', 'meeting point', 'hub'],
+  tapestry: ['mix', 'blend', 'combination', 'weave'],
+  mosaic: ['mix', 'blend', 'variety', 'combination'],
+  spectrum: ['range', 'scale', 'breadth', 'spread'],
+  myriad: ['many', 'countless', 'numerous', 'a host of'],
+  plethora: ['abundance', 'wealth', 'many', 'host'],
+  multitude: ['many', 'large number', 'host', 'crowd'],
+  influx: ['surge', 'rise', 'wave', 'increase'],
+  hallmark: ['sign', 'feature', 'trait', 'marker'],
+  unprecedented: ['unmatched', 'novel', 'new', 'uncommon'],
+  unparalleled: ['unique', 'matchless', 'unmatched', 'unequalled'],
+  paramount: ['key', 'foremost', 'central', 'top'],
+  groundbreaking: ['new', 'pioneering', 'first', 'original'],
+  transformative: ['major', 'sweeping', 'lasting', 'significant'],
+  pivotal: ['key', 'central', 'turning', 'decisive'],
+  holistic: ['whole', 'broad', 'integrated', 'full'],
+  salient: ['key', 'notable', 'main', 'prominent'],
+  robust: ['solid', 'strong', 'firm', 'reliable'],
+  intricate: ['complex', 'detailed', 'involved', 'layered'],
+  profound: ['deep', 'strong', 'great', 'marked'],
+  inherent: ['built-in', 'natural', 'core', 'basic'],
+  overarching: ['main', 'broad', 'overall', 'wider'],
+  substantive: ['real', 'meaningful', 'genuine', 'solid'],
+  meticulous: ['careful', 'precise', 'thorough', 'exacting'],
 };
 
 /* ── Morphology Helpers ───────────────────────────────────────────── */
@@ -1268,25 +1322,24 @@ function compositeQualityScore(
   const changeRatio = wordChangeRatio(original, candidate);
   const readability = scoreReadability(candidate, original);
 
-  // AI Signal Penalty: penalize candidate if it has high AI risk
-  // We use scoreSentenceRisk with a null domain to just check the sentence in isolation
+  // AI Signal Penalty: penalize candidate if it still carries AI-risk signals.
+  // Weights are intentionally high — AI evasion is the primary goal of Nuru.
   const candRisk = scoreSentenceRisk(candidate, null);
   let aiPenalty = 0;
-  if (candRisk.tier === 'critical') aiPenalty = 0.35;
-  else if (candRisk.tier === 'high') aiPenalty = 0.20;
-  else if (candRisk.tier === 'medium') aiPenalty = 0.05;
+  if (candRisk.tier === 'critical') aiPenalty = 0.60;  // near-total disqualifier
+  else if (candRisk.tier === 'high') aiPenalty = 0.42;  // strong disqualifier
+  else if (candRisk.tier === 'medium') aiPenalty = 0.20; // meaningful nudge away
 
-  // Compare original AI risk to candidate AI risk
+  // Directional delta: compare original AI risk tier to candidate tier.
   const origRisk = scoreSentenceRisk(original, null);
-  // If we made it worse, penalize heavily. If we made it better, boost it.
   if (origRisk.tier !== candRisk.tier) {
     const tierMap = { protected: 0, low: 1, medium: 2, high: 3, critical: 4 };
     const origLvl = tierMap[origRisk.tier as keyof typeof tierMap] || 0;
     const candLvl = tierMap[candRisk.tier as keyof typeof tierMap] || 0;
     if (candLvl > origLvl) {
-      aiPenalty += 0.25; // made it more AI-like
+      aiPenalty += 0.40; // regressed — penalise hard
     } else if (candLvl < origLvl) {
-      aiPenalty -= 0.15; // made it less AI-like (bonus)
+      aiPenalty -= 0.25; // improved — bonus (can go negative, effectively a boost)
     }
   }
 
@@ -1318,13 +1371,23 @@ function compositeQualityScore(
 function applySentenceRestructuring(sentence: string, strategy: number): string {
   let text = sentence;
 
-  // Strategy 0: No restructuring (word swap only)
-  if (strategy === 0) return text;
-
-  // All strategies: Apply evaluative phrase surgery
+  // ── ALWAYS: Apply evaluative phrase surgery first, regardless of strategy.
+  // This strips meta-commentary patterns ("This discrepancy shows...",
+  // "Eighteenth-century views reveal fascinating...", etc.) that detectors
+  // catch immediately. Must run even when strategy = 0 (word-swap only).
   for (const { pattern, replaceFn } of EVALUATIVE_SURGERIES) {
     pattern.lastIndex = 0;
     text = text.replace(pattern, replaceFn);
+  }
+
+  // Strategy 0: No structural restructuring beyond surgery above
+  if (strategy === 0) {
+    text = text.trim();
+    if (text.length > 0 && !/[.!?]$/.test(text)) text += '.';
+    if (text.length > 0 && text[0] !== text[0].toUpperCase()) {
+      text = text.charAt(0).toUpperCase() + text.slice(1);
+    }
+    return text;
   }
 
   // Strategy 1: Clause reorder (move prepositional phrase to front)
@@ -1460,7 +1523,52 @@ function processSentence(
   // Normalize em-dashes and en-dashes to spaced hyphens so tokenizer handles them
   let text = sentence.replace(/\u2014/g, ' \u2014 ').replace(/\u2013/g, ' \u2013 ').replace(/  +/g, ' ');
 
-  // ─── Protection: shield numbers, brackets, abbreviations from mangling ───
+  // ─── Step 0: Nuclear connector strip ─────────────────────────────────────
+  // Unconditionally remove sentence-opening AI connectors BEFORE any protection
+  // or strategy logic. These are the single biggest signal Surfer / Pangram catch.
+  // Replace with an empty string then re-capitalise the next word.
+  const NUCLEAR_STARTERS: Array<[RegExp, string[]]> = [
+    [/^Furthermore[,;]\s*/i, ['Beyond that, ', 'On top of this, ', 'Also, ', '']],
+    [/^Moreover[,;]\s*/i, ['Also, ', 'Besides, ', 'On top of that, ', '']],
+    [/^Additionally[,;]\s*/i, ['Also, ', 'Plus, ', 'On top of that, ', '']],
+    [/^Consequently[,;]\s*/i, ['So, ', 'Because of this, ', '']],
+    [/^Subsequently[,;]\s*/i, ['Then, ', 'After that, ', 'Later, ']],
+    [/^Nevertheless[,;]\s*/i, ['Still, ', 'Even so, ', 'Yet, ']],
+    [/^Notwithstanding[,;]\s*/i, ['Even so, ', 'Still, ', 'Despite this, ']],
+    [/^Accordingly[,;]\s*/i, ['So, ', 'For that reason, ']],
+    [/^Likewise[,;]\s*/i, ['Similarly, ', 'In the same way, ', '']],
+    [/^Conversely[,;]\s*/i, ['On the other side, ', 'By contrast, ', '']],
+    [/^Meanwhile[,;]\s*/i, ['At the same time, ', 'At this point, ', '']],
+    [/^In this light[,;]\s*/i, ['Given this, ', 'With that in mind, ', '']],
+    [/^Stepping back[,;]\s*/i, ['Looking at this more broadly, ', '']],
+    [/^Notably[,;]\s*/i, ['Worth noting, ', 'Of note, ', '']],
+    [/^Interestingly[,;]\s*/i, ['Oddly enough, ', 'Of note, ', '']],
+    [/^Ultimately[,;]\s*/i, ['In the end, ', 'All told, ', '']],
+    [/^Evidently[,;]\s*/i, ['Clearly, ', 'It seems, ', '']],
+    [/^Undoubtedly[,;]\s*/i, ['Clearly, ', 'No doubt, ', '']],
+    [/^Undeniably[,;]\s*/i, ['Clearly, ', 'Plainly, ', '']],
+    [/^Fundamentally[,;]\s*/i, ['At its core, ', 'Basically, ', '']],
+    [/^Essentially[,;]\s*/i, ['In short, ', 'Basically, ', 'At heart, ']],
+    [/^Importantly[,;]\s*/i, ['Worth noting, ', 'For the record, ', '']],
+    [/^Significantly[,;]\s*/i, ['Worth noting, ', 'Of note, ', '']],
+    [/^Crucially[,;]\s*/i, ['Key here is that ', 'What matters is ']],
+    [/^In conclusion[,;]\s*/i, ['To wrap up, ', 'All told, ', '']],
+    [/^In summary[,;]\s*/i, ['In short, ', 'To sum up, ', '']],
+    [/^To summarize[,;]\s*/i, ['In short, ', 'Briefly, ', '']],
+    [/^To conclude[,;]\s*/i, ['To wrap up, ', '']],
+    [/^Overall[,;]\s*/i, ['All told, ', 'On the whole, ', '']],
+  ];
+  for (const [re, alts] of NUCLEAR_STARTERS) {
+    if (re.test(text)) {
+      const replacement = alts[Math.floor(Math.random() * alts.length)];
+      text = text.replace(re, replacement);
+      // Re-capitalise first character if replacement is empty or lowercase
+      if (text.length > 0) {
+        text = text.charAt(0).toUpperCase() + text.slice(1);
+      }
+      break; // only strip one connector per sentence
+    }
+  }
   const protectionMap: Record<string, string> = {};
   let protIdx = 0;
 
@@ -1515,10 +1623,10 @@ function processSentence(
   });
 
   // ─── Step 0.5: Sentence-level restructuring ─────────────────
-  // Pick a random restructuring strategy for variety across iterations.
-  // Strategies: 0=none, 1=clause reorder, 2=voice toggle, 3=clause+parallel,
-  //             4=voice toggle+connector disruption
-  const restructurePool = isParagraphLead && pressure < 0.75 ? [0, 1] : [0, 1, 2, 3, 4];
+  // Always use full strategy pool — paragraph-lead protection was
+  // preventing evaluative surgery & connector disruption from firing,
+  // allowing AI meta-commentary to survive into the final output.
+  const restructurePool = [0, 1, 2, 3, 4];
   const restructureStrategy = restructurePool[Math.floor(Math.random() * restructurePool.length)] ?? 0;
   text = applySentenceRestructuring(text, restructureStrategy);
 
@@ -1980,7 +2088,14 @@ export function stealthHumanize(
           best = next;
           bestScore = nextScore;
         }
-        if (iter >= 10 && wordChangeRatio(originalSent, best) >= 0.80) break;
+        // Only exit early when BOTH conditions hold:
+        //   1. We have changed at least 80% of words (strong surface rewrite)
+        //   2. The current best has dropped to LOW risk tier (AI signals gone)
+        // Never break early for high/critical sentences — keep grinding.
+        if (iter >= 10 && wordChangeRatio(originalSent, best) >= 0.80) {
+          const bestRisk = scoreSentenceRisk(best, domainResult);
+          if (bestRisk.tier === 'low' || bestRisk.tier === 'protected') break;
+        }
         iter++;
       }
 
