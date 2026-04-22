@@ -182,6 +182,9 @@ function cleanGrammar(text: string): string {
   // Fix double periods
   result = result.replace(/\.{2,}/g, '.');
 
+  // Fix awkward verb+gerund pairs introduced by role/impact rewrites.
+  result = result.replace(/\b(?:affects|shapes|influences)\s+improving\s+/gi, 'improves ');
+
   // Fix lowercase after period
   result = result.replace(/\.\s+([a-z])/g, (_, c) => '. ' + c.toUpperCase());
 
@@ -508,7 +511,7 @@ function guardFirstPerson(originalText: string, humanized: string): string {
 // ═══════════════════════════════════════════════════════════════════
 
 function targetedRefinement(text: string, forensic: ForensicProfile): string {
-  let result = text;
+  const result = text;
   const paragraphs = result.split(/\n\s*\n/).filter(p => p.trim());
   const refinedParagraphs: string[] = [];
 
@@ -839,7 +842,6 @@ export function antiPangramHumanize(
 
   // ── Pass 1: Forensic Analysis ──
   const forensicBefore = buildForensicProfile(text);
-  const context = buildDocumentContext(text, cfg.tone);
 
   const transformsApplied: string[] = [];
 
@@ -856,7 +858,9 @@ export function antiPangramHumanize(
   // CRITICAL: Always run at least minIterations to achieve meaningful change,
   // even if the forensic score appears low (our profiler may under-score).
   for (let iteration = 0; iteration < effectiveMaxIterations; iteration++) {
-    const iterForensic = buildForensicProfile(restoreCriticalSpans(humanized, protectedMap));
+    const currentVisibleText = restoreCriticalSpans(humanized, protectedMap);
+    const iterForensic = buildForensicProfile(currentVisibleText);
+    const iterContext = buildDocumentContext(currentVisibleText, cfg.tone);
 
     // Only allow early exit AFTER minimum iterations AND when all targets met
     if (
@@ -875,7 +879,7 @@ export function antiPangramHumanize(
 
     // Pass 2: Document reflow (per-sentence transforms only — no splits/merges)
     const prevHumanized = humanized;
-    const reflowed = reflowDocument(humanized, context, iterForensic, cfg.strength);
+    const reflowed = reflowDocument(humanized, iterContext, iterForensic, cfg.strength);
     // Sentence-count guard: reflow should never change sentence count now that
     // splits/merges/paragraph-reordering are disabled, but we verify anyway.
     const reflowGuarded = guardSentenceCount(humanized, reflowed, isHeading, 0);
@@ -914,7 +918,7 @@ export function antiPangramHumanize(
       0.80,
       Math.min(0.98, Math.max(intensity, 0.85 - (cfg.readabilityBias ?? 0.7) * 0.08) + vocabJitterPerIter()),
     );
-    humanized = applyVocabularyPass(humanized, context.protectedTerms, vocabIntensity);
+    humanized = applyVocabularyPass(humanized, iterContext.protectedTerms, vocabIntensity);
     if (humanized !== prevVocab) transformsApplied.push(`vocab-pass-${iteration}`);
 
     // Pass 3c: AI phrase kill sweep (run EVERY iteration, not just at end)
@@ -934,7 +938,7 @@ export function antiPangramHumanize(
     // aggressively replace remaining content words with academic synonyms
     const currentChange = computeChangeRatio(text, restoreCriticalSpans(humanized, protectedMap));
     if (currentChange < QUALITY_TARGETS.minChangeRatio) {
-      humanized = deepWordSwapBoost(humanized, context.protectedTerms);
+      humanized = deepWordSwapBoost(humanized, iterContext.protectedTerms);
       transformsApplied.push(`deep-swap-pass-${iteration}`);
     }
 
@@ -1019,11 +1023,11 @@ export function antiPangramHumanize(
     'other': 'additional', 'very': 'quite', 'often': 'frequently',
     'particularly': 'notably', 'especially': 'chiefly', 'even': 'indeed',
     'still': 'nevertheless', 'many': 'numerous', 'much': 'a great deal of',
-    'have': 'possess', 'has': 'possesses', 'make': 'construct',
+    'make': 'build',
     'give': 'grant', 'take': 'adopt', 'keep': 'retain', 'need': 'require',
     'help': 'assist', 'find': 'discover', 'think': 'consider',
-    'seem': 'appear', 'seems': 'appears', 'use': 'employ', 'used': 'employed',
-    'can': 'is able to', 'show': 'reveal', 'shows': 'reveals',
+    'seem': 'appear', 'seems': 'appears',
+    'show': 'reveal', 'shows': 'reveals',
     'demonstrates': 'reveals', 'indicates': 'signals', 'suggests': 'proposes',
     'provides': 'delivers', 'requires': 'demands', 'involves': 'entails',
     'includes': 'covers', 'highlights': 'spotlights', 'emphasizes': 'stresses',

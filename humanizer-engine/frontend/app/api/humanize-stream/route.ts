@@ -46,6 +46,7 @@ import { mapSentenceChangeRatios, measureLexicalChangeRatio, resolveChangeTarget
 import { createServiceClient } from '@/lib/supabase';
 import { getUsageStatsCompat, incrementUsageCompat } from '@/lib/server/usage-tracking';
 import { smartPreprocess, getMaxRestructureCount, selectForDownstreamRestructure, reassemblePreprocessed, measureWordChange, type SentenceAnalysis, type PreprocessResult, MAX_RESTRUCTURE_ITERATION } from '@/lib/engine/smart-preprocess';
+import type { AntiPangramConfig } from '@/lib/engine/antipangram/types';
 
 export const maxDuration = 300;
 
@@ -888,15 +889,30 @@ export async function POST(req: Request) {
             return output && output.trim().length > 0 ? output : input;
           };
 
-          // Single-pass Nuru for the outer iteration loop.
-          // Since stealthHumanize now does internal iterations and picks the best (lowest AI score),
-          // we pass maxIterations = 10 and do NOT need to chain it 10 times externally.
+          // One chained Nuru step. Any caller that needs x10 must feed this
+          // output into the next step, never restart from the original input.
           const runNuruSinglePass = (input: string, options: StealthHumanizeOptions = {}): string => {
             // Protect special content (numbers, stats, citations) from Nuru transforms
             const { text: protectedInput, map: protMap } = protectSpecialContent(input);
             const raw = stealthHumanize(protectedInput, effectiveStrength ?? 'medium', tone ?? 'academic', 10, options);
             const output = raw && raw.trim().length > 0 ? raw : protectedInput;
             return restoreSpecialContent(output, protMap);
+          };
+
+          const runChainedNuruPasses = (
+            input: string,
+            passes: number,
+            options: StealthHumanizeOptions = {},
+            enforceSingleSentence = false,
+          ): string => {
+            let output = input;
+            const totalPasses = Math.max(0, Math.round(passes));
+            for (let pass = 0; pass < totalPasses; pass++) {
+              const next = runNuruSinglePass(output, options);
+              const candidate = next && next.trim().length > 0 ? next : output;
+              output = enforceSingleSentence ? guardSingleSentence(output, candidate) : candidate;
+            }
+            return output;
           };
 
           // Nuru 2.0 post-processing depth applied at the tail of every pipeline.
@@ -1024,6 +1040,24 @@ export async function POST(req: Request) {
                   ? tone
                   : 'neutral';
 
+          const runChainedAntiPangram = async (
+            input: string,
+            maxIterations: number,
+            config: Partial<AntiPangramConfig> = {},
+          ): Promise<string> => {
+            const { antiPangramSimple } = await import('@/lib/engine/antipangram');
+            const output = antiPangramSimple(
+              input,
+              (strength ?? 'strong') as 'light' | 'medium' | 'strong',
+              antiPangramToneNarrow,
+              {
+                ...config,
+                maxIterations: Math.max(1, Math.round(maxIterations)),
+              },
+            );
+            return output && output.trim().length > 0 ? output : input;
+          };
+
           // ── Deep non-LLM cleaning (per-sentence): AI signal removal ──
           const deepNonLLMClean = (sentence: string): string => {
             return applyProtectedSentenceTransform(sentence, (protectedSentence) => {
@@ -1099,10 +1133,7 @@ export async function POST(req: Request) {
           const runNuru20Full = async (input: string): Promise<string> => {
             let s = await restructureSentence(input);
             s = guardSingleSentence(input, s);
-            for (let i = 0; i < CHAIN_TS; i++) {
-              const n = stealthHumanize(s, effectiveStrength ?? 'medium', tone ?? 'academic', 1);
-              if (n && n.trim().length > 0) s = guardSingleSentence(s, n);
-            }
+            s = runChainedNuruPasses(s, CHAIN_TS, {}, true);
             s = deepNonLLMClean(s);
             s = finalSmoothGrammar(s);
             return guardSingleSentence(input, s);
@@ -1293,11 +1324,9 @@ export async function POST(req: Request) {
               fullResult = await runWikipedia(normalizedText);
             } else if (eng === 'antipangram') {
               // Standalone AntiPangram engine: forensic signal destruction on full text + Nuru post-processing
-              const { antiPangramSimple } = await import('@/lib/engine/antipangram');
-              fullResult = antiPangramSimple(
+              fullResult = await runChainedAntiPangram(
                 normalizedText,
-                (strength ?? 'strong') as 'light' | 'medium' | 'strong',
-                antiPangramToneNarrow,
+                10,
               );
             } else if (eng === 'ninja_3') {
               // Alpha (stealth loop optimized): Wiki → Nuru → Phantom until score < 20
@@ -1377,13 +1406,10 @@ let aiAdaptivePlan = buildAdaptiveCleanupPlan(normalizedText, initialAiScore, to
               sendSSE(controller, { type: 'stage', stage: 'AI Analysis: Agent 2 — AntiPangram Forensic' });
               await flushDelay(12);
               if (timeOk()) {
-                const { antiPangramSimple } = await import('@/lib/engine/antipangram');
-                working = antiPangramSimple(
+                working = await runChainedAntiPangram(
                   working,
-                  (strength ?? 'strong') as 'light' | 'medium' | 'strong',
-                  antiPangramToneNarrow,
+                  aiAdaptivePlan.antiPangramIterations,
                   {
-                    maxIterations: aiAdaptivePlan.antiPangramIterations,
                     targetAiScore: aiAdaptivePlan.targetScore,
                     detectorPressure: aiAdaptivePlan.detectorPressure,
                     preserveLeadSentence: true,
@@ -1427,13 +1453,10 @@ let aiAdaptivePlan = buildAdaptiveCleanupPlan(normalizedText, initialAiScore, to
                 if (useAntiPangram) {
                   sendSSE(controller, { type: 'stage', stage: 'AI Analysis: Pangram Forensic Clean' });
                   await flushDelay(10);
-                  const { antiPangramSimple } = await import('@/lib/engine/antipangram');
-                  working = antiPangramSimple(
+                  working = await runChainedAntiPangram(
                     working,
-                    (strength ?? 'strong') as 'light' | 'medium' | 'strong',
-                    antiPangramToneNarrow,
+                    aiAdaptivePlan.antiPangramIterations,
                     {
-                      maxIterations: aiAdaptivePlan.antiPangramIterations,
                       targetAiScore: aiAdaptivePlan.targetScore,
                       detectorPressure: aiAdaptivePlan.detectorPressure,
                       preserveLeadSentence: true,
@@ -1468,13 +1491,10 @@ let aiAdaptivePlan = buildAdaptiveCleanupPlan(normalizedText, initialAiScore, to
                     // AntiPangram second (when Nuru ran first)
                     sendSSE(controller, { type: 'stage', stage: 'AI Analysis: Pangram Forensic Clean (2nd)' });
                     await flushDelay(10);
-                    const { antiPangramSimple: antiPangramSimple2 } = await import('@/lib/engine/antipangram');
-                    working = antiPangramSimple2(
+                    working = await runChainedAntiPangram(
                       working,
-                      (strength ?? 'strong') as 'light' | 'medium' | 'strong',
-                      antiPangramToneNarrow,
+                      aiAdaptivePlan.antiPangramIterations,
                       {
-                        maxIterations: aiAdaptivePlan.antiPangramIterations,
                         targetAiScore: aiAdaptivePlan.targetScore,
                         detectorPressure: aiAdaptivePlan.detectorPressure,
                         preserveLeadSentence: true,
@@ -2137,7 +2157,7 @@ aiAdaptivePlan = buildAdaptiveCleanupPlan(reassembleText(workingSentences, worki
                   // input, we force one additional pass or synonym/word-kill fallback to ensure
                   // no pass is wasted on micro-edits.
                   const NURU_PASS_MIN = 0.25;
-                  for (let pass = 0; pass < adjustedBaseline; pass++) {
+                  for (let pass = 0; pass < maxNuruPasses; pass++) {
                     for (let i = 0; i < currentSentences.length; i++) {
                       if (!isHeadingSentCheck(currentSentences[i])) {
                         const prePass = currentSentences[i];
@@ -2157,7 +2177,7 @@ aiAdaptivePlan = buildAdaptiveCleanupPlan(reassembleText(workingSentences, worki
                         }
                         currentSentences[i] = next;
                       }
-                      sendSSE(controller, { type: 'sentence', index: i, text: currentSentences[i], stage: `${phaseLabel} pass ${pass + 1}/${adjustedBaseline}` });
+                      sendSSE(controller, { type: 'sentence', index: i, text: currentSentences[i], stage: `${phaseLabel} pass ${pass + 1}/${maxNuruPasses}` });
                     }
                     await flushDelay(10);
                   }
@@ -2356,11 +2376,9 @@ aiAdaptivePlan = buildAdaptiveCleanupPlan(reassembleText(workingSentences, worki
           if (eng === 'phantom') {
             sendSSE(controller, { type: 'stage', stage: 'AntiPangram Forensic Clean' });
             await flushDelay(10);
-            const { antiPangramSimple } = await import('@/lib/engine/antipangram');
-            humanized = antiPangramSimple(
+            humanized = await runChainedAntiPangram(
               humanized,
-              (strength ?? 'strong') as 'light' | 'medium' | 'strong',
-              antiPangramToneNarrow,
+              10,
             );
             latestHumanized = humanized;
             const { sentences: phantomSents } = splitIntoIndexedSentences(humanized);
@@ -2481,13 +2499,10 @@ adaptivePostPlan = buildAdaptiveCleanupPlan(normalizedText, currentAdaptiveScore
               if (!nuruPostTimeOk() || !adaptivePostPlan) return;
               sendSSE(controller, { type: 'stage', stage: `${stageLabel} (${adaptivePostPlan.antiPangramIterations} iterations)` });
               await flushDelay(10);
-              const { antiPangramSimple } = await import('@/lib/engine/antipangram');
-              humanized = antiPangramSimple(
+              humanized = await runChainedAntiPangram(
                 humanized,
-                (strength ?? 'strong') as 'light' | 'medium' | 'strong',
-                antiPangramToneNarrow,
+                adaptivePostPlan.antiPangramIterations,
                 {
-                  maxIterations: adaptivePostPlan.antiPangramIterations,
                   targetAiScore: adaptivePostPlan.targetScore,
                   detectorPressure: adaptivePostPlan.detectorPressure,
                   preserveLeadSentence: true,
