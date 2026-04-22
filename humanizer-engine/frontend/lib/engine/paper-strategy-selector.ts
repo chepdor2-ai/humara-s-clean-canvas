@@ -352,7 +352,7 @@ export function deriveHumanizationPlan(
 
   // Domain-specific iteration boost: high-AI-density domains need more passes
   const domainBoost = (domain === 'medical' || domain === 'stem' || domain === 'legal') ? 4
-    : (domain === 'humanities' || domain === 'social-sciences') ? 2 : 0;
+    : (domain === 'humanities' || domain === 'academic') ? 2 : 0;
   reasoning.push(`domainBoost=${domainBoost} (domain=${domain})`);
 
   // Nuru iterations — adaptive base on top of MIN_ITER.
