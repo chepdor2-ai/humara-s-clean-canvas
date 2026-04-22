@@ -294,3 +294,124 @@ export function preserveInputStructure(original: string, rewritten: string): str
     .replace(/\n[ \t]+/g, '\n')
     .replace(/[ \t]{2,}/g, ' ');
 }
+
+function stripSentenceEnd(text: string): string {
+  return text.trim().replace(/[.!?]+["')\]]*$/g, '').trim();
+}
+
+function sentenceEndFor(sourceSentence: string, fallbackSentence: string): string {
+  const fallback = fallbackSentence.trim().match(/[.!?]["')\]]*$/)?.[0];
+  const source = sourceSentence.trim().match(/[.!?]["')\]]*$/)?.[0];
+  return fallback ?? source ?? '.';
+}
+
+function lowercaseContinuation(text: string): string {
+  const trimmed = text.trim();
+  if (!trimmed) return trimmed;
+  return trimmed[0].toLowerCase() + trimmed.slice(1);
+}
+
+function joinCandidateGroup(group: string[], sourceSentence: string): string {
+  if (group.length === 0) return sourceSentence.trim();
+  if (group.length === 1) {
+    const single = group[0].trim();
+    return /[.!?]["')\]]*$/.test(single)
+      ? single
+      : `${single}${sentenceEndFor(sourceSentence, single)}`;
+  }
+
+  const body = group
+    .map((sentence, index) => {
+      const cleaned = stripSentenceEnd(sentence);
+      return index === 0 ? cleaned : lowercaseContinuation(cleaned);
+    })
+    .filter(Boolean)
+    .join('; ');
+
+  return body ? `${body}${sentenceEndFor(sourceSentence, group[group.length - 1])}` : sourceSentence.trim();
+}
+
+function alignSentenceCount(sourceSentences: string[], candidateSentences: string[]): string[] {
+  if (sourceSentences.length === 0) return candidateSentences;
+  if (candidateSentences.length === 0) return sourceSentences;
+  if (sourceSentences.length === candidateSentences.length) {
+    return candidateSentences.map((sentence, index) => joinCandidateGroup([sentence], sourceSentences[index]));
+  }
+
+  if (candidateSentences.length < sourceSentences.length) {
+    return sourceSentences.map((sourceSentence, index) =>
+      candidateSentences[index]
+        ? joinCandidateGroup([candidateSentences[index]], sourceSentence)
+        : sourceSentence.trim(),
+    );
+  }
+
+  const sourceWeights = sourceSentences.map((sentence) => Math.max(1, countWords(sentence)));
+  const remainingSourceWeightFrom = (index: number) =>
+    sourceWeights.slice(index).reduce((sum, weight) => sum + weight, 0);
+  const aligned: string[] = [];
+  let cursor = 0;
+
+  for (let index = 0; index < sourceSentences.length; index++) {
+    const remainingSlots = sourceSentences.length - index;
+    const remainingCandidates = candidateSentences.length - cursor;
+    if (remainingSlots <= 1) {
+      aligned.push(joinCandidateGroup(candidateSentences.slice(cursor), sourceSentences[index]));
+      break;
+    }
+
+    const weightShare = sourceWeights[index] / Math.max(1, remainingSourceWeightFrom(index));
+    const suggested = Math.round(remainingCandidates * weightShare);
+    const takeCount = Math.max(1, Math.min(suggested || 1, remainingCandidates - (remainingSlots - 1)));
+    aligned.push(joinCandidateGroup(candidateSentences.slice(cursor, cursor + takeCount), sourceSentences[index]));
+    cursor += takeCount;
+  }
+
+  return aligned;
+}
+
+/**
+ * Keep the rewritten text on the same paragraph and sentence frame as the
+ * source. This repairs engine outputs that split or merge sentences without
+ * throwing away the rewritten wording.
+ */
+export function conformToSourceSentenceShape(original: string, rewritten: string): string {
+  if (!original || !rewritten?.trim()) return rewritten;
+
+  const structured = preserveInputStructure(original, rewritten);
+  const blocks = parseStructuredBlocks(original);
+  const originalParagraphs = blocks.filter(isParagraphBlock);
+  if (originalParagraphs.length === 0) return structured;
+
+  const headingKeys = new Set(
+    blocks
+      .filter((block) => block.type === 'heading')
+      .map((block) => normalizeHeadingKey(block.rawLines.join(' ')))
+      .filter(Boolean),
+  );
+
+  let rewrittenParagraphs = extractFlatParagraphs(structured, headingKeys);
+  if (rewrittenParagraphs.length !== originalParagraphs.length) {
+    rewrittenParagraphs = redistributeParagraphsBySentenceCount(structured, originalParagraphs, headingKeys);
+  }
+
+  let paragraphIndex = 0;
+  const rebuilt = blocks.map((block) => {
+    if (block.type === 'blank') return block.rawLines.join('\n');
+    if (block.type === 'heading') return humanizeTitle(block.rawLines.join('\n'));
+
+    const sourceParagraph = normalizeParagraphText(block.rawLines.join('\n'));
+    const candidateParagraph = rewrittenParagraphs[paragraphIndex] ?? sourceParagraph;
+    paragraphIndex += 1;
+
+    const sourceSentences = splitIntoSentences(sourceParagraph);
+    const candidateSentences = splitIntoSentences(candidateParagraph);
+    const aligned = alignSentenceCount(sourceSentences, candidateSentences).join(' ');
+    return reflowParagraphToOriginalLines(block.rawLines, aligned);
+  }).join('\n');
+
+  return rebuilt
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/\n[ \t]+/g, '\n')
+    .replace(/[ \t]{2,}/g, ' ');
+}

@@ -3,7 +3,7 @@ import { getDetector, TextSignals } from '@/lib/engine/multi-detector';
 import { isMeaningPreserved, isMeaningPreservedSync } from '@/lib/engine/semantic-guard';
 import { fixCapitalization, applyPhrasePatterns, fixPunctuation, expandAllContractions, setHumanizationVariationSeed } from '@/lib/engine/shared-dictionaries';
 import { deduplicateRepeatedPhrases, expandWordCount } from '@/lib/engine/premium-deep-clean';
-import { preserveInputStructure, looksLikeHeadingLine } from '@/lib/engine/structure-preserver';
+import { preserveInputStructure, looksLikeHeadingLine, conformToSourceSentenceShape } from '@/lib/engine/structure-preserver';
 import { structuralPostProcess } from '@/lib/engine/structural-post-processor';
 import { unifiedSentenceProcess } from '@/lib/sentence-processor';
 import { expandContractions } from '@/lib/humanize-transforms';
@@ -1226,8 +1226,8 @@ export async function POST(req: Request) {
                 const kingResult = await kingHumanize(normalizedText);
                 fullResult = kingResult.humanized;
               } catch (kingErr) {
-                console.warn('[King] kingHumanize failed — falling back to Nuru phase pipeline:', kingErr instanceof Error ? kingErr.message : kingErr);
-                fullResult = normalizedText; // phase pipeline (Nuru 2.0 × 10 + Deep Clean + Final Smooth) will still run
+                console.warn('[King] kingHumanize failed - falling back to local Oxygen rewrite:', kingErr instanceof Error ? kingErr.message : kingErr);
+                fullResult = runHumara20(normalizedText);
               }
             } else if (eng === 'ghost_pro_wiki') {
               fullResult = await runWikipedia(normalizedText);
@@ -1526,7 +1526,7 @@ export async function POST(req: Request) {
               // Default fallback: use offline engine instead of LLM API
               fullResult = runHumara20(normalizedText);
             }
-            if (!fullResult || fullResult.trim().length === 0) fullResult = normalizedText;
+            if (!fullResult || fullResult.trim().length === 0) fullResult = runHumara20(normalizedText) || normalizedText;
 
             // Output profile: apply tonal post-processing to match the intended writing style
             {
@@ -1541,10 +1541,11 @@ export async function POST(req: Request) {
             const inputWC = normalizedText.split(/\s+/).filter(Boolean).length;
             const outputWC = fullResult.split(/\s+/).filter(Boolean).length;
             if (outputWC > inputWC * 1.6) {
-              console.warn(`[FullText] Engine '${eng}' produced ${outputWC} words from ${inputWC} input words (${(outputWC / inputWC).toFixed(1)}x expansion) — falling back to input`);
-              fullResult = normalizedText;
+              console.warn(`[FullText] Engine '${eng}' produced ${outputWC} words from ${inputWC} input words (${(outputWC / inputWC).toFixed(1)}x expansion) - repairing sentence shape instead of returning input`);
+              fullResult = conformToSourceSentenceShape(normalizedText, fullResult);
             }
 
+            fullResult = conformToSourceSentenceShape(normalizedText, fullResult);
             const { sentences: resultSents, paragraphBoundaries: resultBounds } = splitIntoIndexedSentences(fullResult);
             sentenceResults = resultSents;
             // Full-text engines produce their own paragraph structure — use resultBounds
@@ -2168,11 +2169,14 @@ export async function POST(req: Request) {
           }
 
           // Detector + input analysis — needed for both post-processing and final detection
+          humanized = conformToSourceSentenceShape(normalizedText, humanized);
+          latestHumanized = humanized;
+
           const detector = getDetector();
           const inputAnalysis = detector.analyze(text);
           let adaptivePostPlan: AdaptiveCleanupPlan | null = null;
           const engineQualityProfile = resolveEngineQualityProfile(eng, effectiveStrength, postProcessingProfile);
-          let bestSafeHumanized = normalizedText;
+          let bestSafeHumanized = humanized;
           let bestSafeGate: QualityGateResult | null = null as QualityGateResult | null;
           const assessCandidateQuality = (candidate: string): QualityGateResult => {
             const outputScore = getDetectorAverage(detector.analyze(candidate));
@@ -2185,16 +2189,18 @@ export async function POST(req: Request) {
               outputAiScore: outputScore,
             });
           };
-          bestSafeGate = assessCandidateQuality(bestSafeHumanized);
           const rememberQualityCandidate = (candidate: string, label: string): QualityGateResult => {
-            const gate = assessCandidateQuality(candidate);
-            if (gate.safe) {
+            const shapedCandidate = conformToSourceSentenceShape(normalizedText, candidate);
+            const gate = assessCandidateQuality(shapedCandidate);
+            const usefulRewrite = gate.wordChangeRatio >= 0.04 || shapedCandidate.trim() !== normalizedText.trim();
+            if (gate.safe && usefulRewrite) {
               const beatsBest =
                 !bestSafeGate ||
                 gate.outputAiScore < bestSafeGate.outputAiScore - 1 ||
+                (gate.wordChangeRatio > bestSafeGate.wordChangeRatio + 0.03 && gate.outputAiScore <= bestSafeGate.outputAiScore + 5) ||
                 (gate.outputAiScore <= gate.targetScore + 2 && gate.semanticSimilarity > bestSafeGate.semanticSimilarity);
               if (beatsBest) {
-                bestSafeHumanized = candidate;
+                bestSafeHumanized = shapedCandidate;
                 bestSafeGate = gate;
               }
             } else {
@@ -3329,6 +3335,7 @@ export async function POST(req: Request) {
             }
           }
 
+          humanized = conformToSourceSentenceShape(normalizedText, humanized);
           const finalQualityGate = rememberQualityCandidate(humanized, 'final output');
           if (!finalQualityGate.safe && bestSafeGate) {
             humanized = bestSafeHumanized;

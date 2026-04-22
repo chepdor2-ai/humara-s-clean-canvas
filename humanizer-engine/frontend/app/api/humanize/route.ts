@@ -10,7 +10,7 @@ import { isMeaningPreserved, semanticSimilaritySync } from '@/lib/engine/semanti
 import { fixCapitalization, setHumanizationVariationSeed } from '@/lib/engine/shared-dictionaries';
 import { fixMidSentenceCapitalization } from '@/lib/engine/validation-post-process';
 import { deduplicateRepeatedPhrases } from '@/lib/engine/premium-deep-clean';
-import { preserveInputStructure, looksLikeHeadingLine } from '@/lib/engine/structure-preserver';
+import { preserveInputStructure, looksLikeHeadingLine, conformToSourceSentenceShape } from '@/lib/engine/structure-preserver';
 import { structuralPostProcess } from '@/lib/engine/structural-post-processor';
 import { generateCandidates, type ScoredCandidate } from '@/lib/candidate-generator';
 import { unifiedSentenceProcess } from '@/lib/sentence-processor';
@@ -1271,7 +1271,7 @@ export async function POST(req: Request) {
     // Skip for nuru_v2: it preserves paragraph structure internally.
     // Skip for Deep Kill: Nuru V2 already preserves structure and this causes duplication.
     if (!isDeepKill && !ozoneKeywordRestoreOnly) {
-      humanized = preserveInputStructure(normalizedText, humanized);
+      humanized = conformToSourceSentenceShape(normalizedText, humanized);
     }
 
     if (!ozoneKeywordRestoreOnly) {
@@ -1719,6 +1719,8 @@ export async function POST(req: Request) {
     if (finalWordCount < inputWordCount * 0.85) {
       console.warn(`[WordCountGuard] Final output has ${finalWordCount} words vs ${inputWordCount} input words (${((finalWordCount / inputWordCount) * 100).toFixed(1)}%). Some content may have been lost.`);
     }
+
+    humanized = conformToSourceSentenceShape(normalizedText, humanized);
 
     // Generate per-sentence alternatives (3 candidates each, best already picked by engines)
     const FIRST_PERSON_RE = /\b(I|me|my|mine|myself|we|us|our|ours|ourselves)\b/i;

@@ -273,8 +273,9 @@ export function assessQualityGate(
   const alreadyLowRisk = inputAiScore <= targetScore + 3;
   const enoughImprovement = improvement >= Math.max(4, inputAiScore * 0.18);
   const nearTarget = outputAiScore <= targetScore + 2;
-  const shouldStop = safe && (alreadyLowRisk || nearTarget || enoughImprovement);
-  const shouldContinue = safe && !shouldStop && outputAiScore > targetScore;
+  const meaningfulChange = wordChangeRatio >= Math.max(0.04, Math.min(profile.minWordChange, 0.14));
+  const shouldStop = safe && meaningfulChange && (alreadyLowRisk || nearTarget || enoughImprovement);
+  const shouldContinue = safe && !shouldStop && (outputAiScore > targetScore || !meaningfulChange);
 
   if (!safe) reasons.push('quality_gate_block');
   if (safe && shouldStop) reasons.push('quality_target_met');
