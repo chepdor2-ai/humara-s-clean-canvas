@@ -1024,7 +1024,8 @@ export async function POST(req: Request) {
           // - academic_blog: cleaner blog cadence with lighter formality
           const isAcademicTone = tone === 'academic';
           const isAcademicBlogTone = tone === 'academic_blog';
-          const shouldExpandContractions = isAcademicTone;
+          const shouldExpandContractions = true;
+          const enforceNoContractions = (value: string): string => expandAllContractions(expandContractions(value));
           const antiPangramToneNarrow: 'academic' | 'professional' | 'casual' | 'neutral' =
             isAcademicTone
               ? 'academic'
@@ -2439,7 +2440,7 @@ aiAdaptivePlan = buildAdaptiveCleanupPlan(reassembleText(workingSentences, worki
               inputAiScore: inputAnalysis.summary.overall_ai_score,
               targetScore: activeQualityGate.targetScore,
               intensity: Math.max(0.22, activeQualityGate.detectorPressure),
-              preserveContractions: no_contractions !== true,
+              preserveContractions: false,
               allowSentenceSurgery: false,
             });
             if (deterministicPolish !== humanized) {
@@ -2458,7 +2459,6 @@ aiAdaptivePlan = buildAdaptiveCleanupPlan(reassembleText(workingSentences, worki
               }
             }
           }
-          const qualityGateStopsHeavyPost = activeQualityGate.shouldStop || activeQualityGate.overProcessed || !activeQualityGate.safe;
 
           // ═══════════════════════════════════════════════════════════════
           // UNIVERSAL POST-PROCESSING — profile-driven
@@ -2471,11 +2471,11 @@ aiAdaptivePlan = buildAdaptiveCleanupPlan(reassembleText(workingSentences, worki
           // Every engine gets at least 2 processing phases (engine + this
           // post-processing) before the final cleanup. Each iteration
           // enforces ≥40% word change per sentence.
-          // Hard time budget: 30 seconds max for post-processing.
+          // Hard time budget: under 15 seconds for Nuru post-processing.
           // ═══════════════════════════════════════════════════════════════
-          if (eng !== 'ai_analysis' && !qualityGateStopsHeavyPost && !(deadlineReached || Date.now() - startTime > DEADLINE_MS - 12000)) {
+          if (eng !== 'ai_analysis' && !(deadlineReached || Date.now() - startTime > DEADLINE_MS - 12000)) {
             const nuruPostStart = Date.now();
-            const NURU_POST_DEADLINE_MS = 60_000;
+            const NURU_POST_DEADLINE_MS = 14_500;
             const nuruPostTimeOk = () => Date.now() - nuruPostStart < NURU_POST_DEADLINE_MS && !(deadlineReached || Date.now() - startTime > DEADLINE_MS - 8000);
             let currentAdaptiveScore = getDetectorAverage(detector.analyze(humanized));
 adaptivePostPlan = buildAdaptiveCleanupPlan(normalizedText, currentAdaptiveScore, tone ?? 'neutral', postProcessingProfile, humanizationPlan ?? undefined, effectiveStrength, hRate);
@@ -2493,6 +2493,61 @@ adaptivePostPlan = buildAdaptiveCleanupPlan(normalizedText, currentAdaptiveScore
                 ai_score: d.ai_score,
                 flagged_phrases: d.flagged_phrases,
               })).filter(d => d.index >= 0 && d.index < sentences.length && d.ai_score >= Math.max(18, adaptivePostPlan?.targetScore ?? 5));
+            };
+
+            let mandatoryNuruPostDone = false;
+            const runMandatoryNuruPost = async () => {
+              if (!nuruPostTimeOk() || !adaptivePostPlan) return;
+              const reruns = 10;
+              const postLoops = Math.min(5, Math.max(1, adaptivePostPlan.nuruLoops));
+              const postLoopPasses = 3;
+              const aggressivePressure = Math.max(0.9, adaptivePostPlan.detectorPressure);
+              const { sentences: postSents, paragraphBoundaries: postBounds } = splitIntoIndexedSentences(humanized);
+
+              sendSSE(controller, { type: 'stage', stage: `Nuru Post x${reruns} + Loop ${postLoops}x${postLoopPasses}` });
+              await flushDelay(2);
+
+              for (let pass = 0; pass < reruns && nuruPostTimeOk(); pass++) {
+                for (let i = 0; i < postSents.length && nuruPostTimeOk(); i++) {
+                  if (!isHeadingSentCheck(postSents[i])) {
+                    postSents[i] = runNuruSinglePass(postSents[i], {
+                      detectorPressure: aggressivePressure,
+                      humanVariance: 0.02 + aggressivePressure * 0.04,
+                      readabilityBias: adaptivePostPlan.readabilityBias,
+                    });
+                    postSents[i] = finalSmoothGrammar(deepNonLLMClean(postSents[i]));
+                  }
+                  sendSSE(controller, { type: 'sentence', index: i, text: postSents[i], stage: `Nuru Post x10 ${pass + 1}/${reruns}` });
+                }
+              }
+
+              for (let loop = 0; loop < postLoops && nuruPostTimeOk(); loop++) {
+                for (let pass = 0; pass < postLoopPasses && nuruPostTimeOk(); pass++) {
+                  for (let i = 0; i < postSents.length && nuruPostTimeOk(); i++) {
+                    if (!isHeadingSentCheck(postSents[i])) {
+                      postSents[i] = runNuruSinglePass(postSents[i], {
+                        detectorPressure: aggressivePressure,
+                        humanVariance: 0.04 + aggressivePressure * 0.05,
+                        readabilityBias: adaptivePostPlan.readabilityBias,
+                      });
+                      postSents[i] = finalSmoothGrammar(deepNonLLMClean(postSents[i]));
+                    }
+                    sendSSE(controller, { type: 'sentence', index: i, text: postSents[i], stage: `Nuru Post Loop ${loop + 1}/${postLoops}.${pass + 1}/${postLoopPasses}` });
+                  }
+                }
+              }
+
+              humanized = enforceNoContractions(reassembleText(postSents, postBounds.length ? postBounds : [0]));
+              latestHumanized = humanized;
+              currentAdaptiveScore = getDetectorAverage(detector.analyze(humanized));
+              activeQualityGate = rememberQualityCandidate(humanized, 'mandatory Nuru post');
+              if (!activeQualityGate.safe && bestSafeGate) {
+                humanized = bestSafeHumanized;
+                latestHumanized = humanized;
+                currentAdaptiveScore = bestSafeGate.outputAiScore;
+              }
+              adaptivePostPlan = buildAdaptiveCleanupPlan(normalizedText, currentAdaptiveScore, tone ?? 'neutral', postProcessingProfile, humanizationPlan ?? undefined, effectiveStrength, hRate);
+              mandatoryNuruPostDone = true;
             };
 
             const runAdaptiveAntiPangram = async (stageLabel: string) => {
@@ -2555,6 +2610,8 @@ adaptivePostPlan = buildAdaptiveCleanupPlan(normalizedText, currentAdaptiveScore
               adaptivePostPlan = buildAdaptiveCleanupPlan(normalizedText, currentAdaptiveScore, tone ?? 'neutral', postProcessingProfile, humanizationPlan ?? undefined, effectiveStrength, hRate);
             };
 
+            await runMandatoryNuruPost();
+
             // Adaptive initial post-processor: seeded coin-flip per document for deterministic variety
             // quality         → AntiPangram first (precision vocabulary forensics)
             // undetectability → no pre-cycle pass (Nuru runs in adaptive cycle below)
@@ -2565,7 +2622,7 @@ adaptivePostPlan = buildAdaptiveCleanupPlan(normalizedText, currentAdaptiveScore
               : postProcessingProfile === 'undetectability'
                 ? false
                 : initPostSeed < 50);
-            if (nuruPostTimeOk() && adaptivePostPlan) {
+            if (!mandatoryNuruPostDone && nuruPostTimeOk() && adaptivePostPlan) {
               if (useAntiPangramInitial) {
                 await runAdaptiveAntiPangram(
                   postProcessingProfile === 'quality'
@@ -2582,7 +2639,7 @@ adaptivePostPlan = buildAdaptiveCleanupPlan(normalizedText, currentAdaptiveScore
             // whole post-processing cycle — same paragraph gets the same
             // preserve/rewrite verdict in every phase.
             const leadSeed = hashTextForSeed(normalizedText);
-            while (nuruPostTimeOk() && adaptivePostPlan && !activeQualityGate.shouldStop && adaptiveCycle < adaptivePostPlan.maxAdaptiveCycles) {
+            while (!mandatoryNuruPostDone && nuruPostTimeOk() && adaptivePostPlan && !activeQualityGate.shouldStop && adaptiveCycle < adaptivePostPlan.maxAdaptiveCycles) {
               const { sentences: postSentences, paragraphBoundaries: postParaBounds } = splitIntoIndexedSentences(humanized);
               const postSents = [...postSentences];
               // 60% preserve / 40% rewrite (user mandate) — only the ~60%
@@ -2713,33 +2770,36 @@ adaptivePostPlan = buildAdaptiveCleanupPlan(normalizedText, currentAdaptiveScore
               try {
                 sendSSE(controller, { type: 'stage', stage: `Detector Polish (signal-targeted): ${Math.round(currentAdaptiveScore)}%` });
                 await flushDelay(8);
-                const polishBudget = Math.max(5_000, Math.min(18_000, NURU_POST_DEADLINE_MS - (Date.now() - nuruPostStart)));
-                const polish = await detectorTargetedPolish(humanized, {
-                  targetScore: adaptivePostPlan.targetScore,
-                  maxIterations: 4,
-                  timeBudgetMs: polishBudget,
-                  preserveLeadSentences: true,
-                  tone: tone ?? 'academic',
-                  strength: (strength ?? 'strong') as 'light' | 'medium' | 'strong',
-                  readabilityBias: adaptivePostPlan.readabilityBias,
-                  onStage: async (stage: string, score: number) => {
-                    sendSSE(controller, { type: 'stage', stage: `${stage} (~${Math.round(score)}%)` });
-                    await flushDelay(4);
-                  },
-                });
-                if (polish.text && polish.text.trim().length >= humanized.trim().length * 0.7) {
-                  const polishGate = rememberQualityCandidate(polish.text, 'detector polish');
-                  if (polishGate.safe && polishGate.outputAiScore <= activeQualityGate.outputAiScore + 2) {
-                    humanized = polish.text;
-                    latestHumanized = humanized;
-                    activeQualityGate = polishGate;
-                    currentAdaptiveScore = polishGate.outputAiScore;
+                const polishRemainingMs = NURU_POST_DEADLINE_MS - (Date.now() - nuruPostStart);
+                if (polishRemainingMs >= 1_000) {
+                  const polishBudget = Math.min(3_000, Math.max(1_000, polishRemainingMs - 250));
+                  const polish = await detectorTargetedPolish(humanized, {
+                    targetScore: adaptivePostPlan.targetScore,
+                    maxIterations: 4,
+                    timeBudgetMs: polishBudget,
+                    preserveLeadSentences: true,
+                    tone: tone ?? 'academic',
+                    strength: (strength ?? 'strong') as 'light' | 'medium' | 'strong',
+                    readabilityBias: adaptivePostPlan.readabilityBias,
+                    onStage: async (stage: string, score: number) => {
+                      sendSSE(controller, { type: 'stage', stage: `${stage} (~${Math.round(score)}%)` });
+                      await flushDelay(4);
+                    },
+                  });
+                  if (polish.text && polish.text.trim().length >= humanized.trim().length * 0.7) {
+                    const polishGate = rememberQualityCandidate(polish.text, 'detector polish');
+                    if (polishGate.safe && polishGate.outputAiScore <= activeQualityGate.outputAiScore + 2) {
+                      humanized = polish.text;
+                      latestHumanized = humanized;
+                      activeQualityGate = polishGate;
+                      currentAdaptiveScore = polishGate.outputAiScore;
 adaptivePostPlan = buildAdaptiveCleanupPlan(normalizedText, currentAdaptiveScore, tone ?? 'neutral', postProcessingProfile, humanizationPlan ?? undefined, effectiveStrength, hRate);
-                    sendSSE(controller, {
-                      type: 'stage',
-                      stage: `Detector polish complete: ${polish.signalsFixed.slice(0, 3).join(', ') || 'no gaps'} (~${Math.round(currentAdaptiveScore)}%)`,
-                    });
-                    await flushDelay(6);
+                      sendSSE(controller, {
+                        type: 'stage',
+                        stage: `Detector polish complete: ${polish.signalsFixed.slice(0, 3).join(', ') || 'no gaps'} (~${Math.round(currentAdaptiveScore)}%)`,
+                      });
+                      await flushDelay(6);
+                    }
                   }
                 }
               } catch (polishErr) {
@@ -3701,6 +3761,9 @@ const finalPlan = adaptivePostPlan ?? buildAdaptiveCleanupPlan(normalizedText, g
               console.warn(`[OutputWatch] ${eng} output ${_capOutputWC}w vs input ${_capInputWC}w (${(_capOutputWC / _capInputWC).toFixed(2)}x)`);
             }
           }
+
+          humanized = enforceNoContractions(humanized);
+          latestHumanized = humanized;
 
           if (!usePhasePipeline) {
             sendSSE(controller, { type: 'stage', stage: 'Analyzing' });
