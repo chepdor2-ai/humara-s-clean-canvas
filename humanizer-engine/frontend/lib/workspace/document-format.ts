@@ -234,7 +234,14 @@ export function collectUsedSources(content: WorkspaceDraftContent, sourceLibrary
 
 export function buildDraftMarkdown(content: WorkspaceDraftContent, sourceLibrary: WorkspaceSource[], style?: string | null) {
   const formatting = createFormattingProfile(style, content.title)
-  const references = collectUsedSources(content, sourceLibrary).map((source) => formatBibliographyEntry(source, formatting.style))
+  const sources = collectUsedSources(content, sourceLibrary)
+  // Sort references alphabetically by author's surname
+  const sortedSources = sources.sort((a, b) => {
+    const authorA = a.authors?.[0] || a.title || 'Unknown'
+    const authorB = b.authors?.[0] || b.title || 'Unknown'
+    return authorA.localeCompare(authorB)
+  })
+  const references = sortedSources.map((source) => formatBibliographyEntry(source, formatting.style))
 
   return [
     `# ${content.title}`,
@@ -262,7 +269,14 @@ function renderInlineHtml(text: string) {
 
 export function buildDraftHtml(content: WorkspaceDraftContent, sourceLibrary: WorkspaceSource[], style?: string | null) {
   const formatting = createFormattingProfile(style, content.title)
-  const references = collectUsedSources(content, sourceLibrary).map((source) => formatBibliographyEntry(source, formatting.style))
+  const sources = collectUsedSources(content, sourceLibrary)
+  // Sort references alphabetically by author's surname
+  const sortedSources = sources.sort((a, b) => {
+    const authorA = a.authors?.[0] || a.title || 'Unknown'
+    const authorB = b.authors?.[0] || b.title || 'Unknown'
+    return authorA.localeCompare(authorB)
+  })
+  const references = sortedSources.map((source) => formatBibliographyEntry(source, formatting.style))
 
   return [
     '<article class="workspace-document">',
@@ -274,11 +288,11 @@ export function buildDraftHtml(content: WorkspaceDraftContent, sourceLibrary: Wo
         .split(/\n{2,}/)
         .map((paragraph) => paragraph.trim())
         .filter(Boolean)
-        .map((paragraph) => `<p>${renderInlineHtml(paragraph)}</p>`),
+        .map((paragraph) => `<p style="text-indent: 0.5in; margin-left: 0;">${renderInlineHtml(paragraph)}</p>`),
       '</section>',
     ].join('')),
-    `<section class="workspace-references"><h2>${escapeHtml(formatting.bibliographyHeading)}</h2>`,
-    ...references.map((reference) => `<p>${escapeHtml(reference)}</p>`),
+    `<section class="workspace-references" style="page-break-before: always; margin-top: 40px;"><h2>${escapeHtml(formatting.bibliographyHeading)}</h2>`,
+    ...references.map((reference) => `<p style="text-indent: -0.5in; margin-left: 0.5in; line-height: 2;">${escapeHtml(reference)}</p>`),
     '</section>',
     '</article>',
   ].join('')

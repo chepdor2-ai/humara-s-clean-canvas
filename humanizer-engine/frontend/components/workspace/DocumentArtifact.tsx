@@ -90,12 +90,15 @@ export function DocumentArtifact({
     }
   }, [content])
 
-  // Update word count and page count
+  // Update word count and page count (body text only, excluding references)
   useEffect(() => {
     const text = content || ''
-    const words = text.split(/\s+/).filter(Boolean)
+    // Split by ---REFERENCES--- marker and count only body text
+    const [bodyText] = text.split(/---REFERENCES?---/i)
+    const bodyOnly = bodyText.trim()
+    const words = bodyOnly.split(/\s+/).filter(Boolean)
     setWordCount(words.length)
-    setCharCount(text.length)
+    setCharCount(bodyOnly.length)
     // Estimate pages: ~250 words per page
     setPageCount(Math.max(1, Math.ceil(words.length / 250)))
   }, [content])
@@ -113,7 +116,11 @@ export function DocumentArtifact({
       </div>`
     }
 
-    const paragraphsHtml = text
+    // Split content into body and references sections
+    const [bodyText, referencesText] = text.split(/---REFERENCES?---/i)
+    const paragraphIndent = format === 'MLA' ? '0' : '0.5in'
+
+    const bodyHtml = bodyText
       .split('\n\n')
       .map((paragraph) => {
         const trimmed = paragraph.trim()
@@ -143,12 +150,36 @@ export function DocumentArtifact({
           .replace(/\*(.+?)\*/g, '<em>$1</em>')
           .replace(/(?<!\w)\*+|\*+(?!\w)/g, '')
 
-        return `<p style="margin:0 0 12px;line-height:2;text-indent:0;text-align:justify;font-family:'${selectedFont}';font-size:${selectedSize}">${formatted}</p>`
+        return `<p style="margin:0 0 12px;line-height:2;text-indent:${paragraphIndent};text-align:justify;font-family:'${selectedFont}';font-size:${selectedSize}">${formatted}</p>`
       })
       .filter(Boolean)
       .join('')
 
-    return html + paragraphsHtml
+    let referencesHtml = ''
+    if (referencesText && referencesText.trim()) {
+      // Add page break before references section
+      referencesHtml = `<div style="page-break-before: always; margin-top: 40px;">
+        ${referencesText
+          .split('\n')
+          .map((line) => {
+            const trimmed = line.trim()
+            if (!trimmed) return ''
+            if (trimmed.startsWith('## ')) {
+              const headingText = trimmed.slice(3).trim()
+              return `<h2 style="font-size:18px;font-weight:bold;margin:18px 0 12px;font-family:'${selectedFont}';color:#334155">${headingText}</h2>`
+            }
+            // Add hanging indent for bibliography entries
+            if (trimmed && !trimmed.startsWith('# ') && !trimmed.startsWith('## ')) {
+              return `<p style="margin:0 0 8px;line-height:2;text-indent:-0.5in;margin-left:0.5in;font-family:'${selectedFont}';font-size:${selectedSize}">${trimmed}</p>`
+            }
+            return ''
+          })
+          .filter(Boolean)
+          .join('')}
+      </div>`
+    }
+
+    return html + bodyHtml + referencesHtml
   }
 
   // Handle editor input

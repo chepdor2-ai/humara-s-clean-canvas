@@ -1774,10 +1774,9 @@ aiAdaptivePlan = buildAdaptiveCleanupPlan(reassembleText(workingSentences, worki
             switch (eng) {
               case 'ghost_pro_wiki':
                 phases = [
-                  // Single-call LLM batch restructure — ONE API call for all sentences.
-                  // Paragraphs/titles protected. Sentence ratio: ±3 per 300 words.
-                  // All subsequent phases are non-LLM sentence-by-sentence (cost-effective).
-                  { name: 'Restructuring', type: 'batch', fn: (sents, wc) => batchRestructureSentences(sents, undefined, wc) },
+                  // Non-LLM Nuru restructuring as first phase — pure local rewriting.
+                  // All phases are non-LLM sentence-by-sentence (cost-effective).
+                  { name: 'Restructuring', type: 'nuru', passes: 10 },
                   { name: 'Deep Non-LLM Clean', type: 'sync', fn: (s) => deepNonLLMClean(s) },
                   { name: 'Nuru 2.0', type: 'nuru', passes: 10 },
                   { name: 'Readability Polish', type: 'async', fn: (s) => nuruReadabilityPolish(s) },
@@ -1786,9 +1785,9 @@ aiAdaptivePlan = buildAdaptiveCleanupPlan(reassembleText(workingSentences, worki
                 break;
               case 'ninja_1':
                 phases = [
-                  // Phase 1: Single-call LLM batch restructure — ONE API call for all sentences.
-                  // LLM is only used here; all later phases are non-LLM sentence-by-sentence.
-                  { name: 'Restructuring', type: 'batch', fn: (sents, wc) => batchRestructureSentences(sents, undefined, wc) }, // Phase 1: batch LLM structural rewrite
+                  // Phase 1: Non-LLM Nuru restructuring — cost-effective local rewriting.
+                  // LLM is used in downstream phases only (Humara 2.0, readability polish).
+                  { name: 'Restructuring', type: 'nuru', passes: 10 }, // Phase 1: non-LLM structural rewrite
                   { name: 'Deep Non-LLM Clean', type: 'sync', fn: (s) => deepNonLLMClean(s) },    // Phase 2: Rule-based AI vocabulary/phrase kill
                   { name: 'Humara 2.0 (Full)', type: 'async', fn: (s) => runHumara20Full(s) },    // Phase 3: Full Humara 2.0 pipeline
                   { name: 'Smoothing', type: 'sync', fn: (s) => smoothingPass(s) },               // Phase 4: Grammar + flow repair
@@ -1799,8 +1798,8 @@ aiAdaptivePlan = buildAdaptiveCleanupPlan(reassembleText(workingSentences, worki
                 break;
               case 'oxygen':
                 phases = [
-                  // Single batch LLM call for structural rewrite. Non-LLM phases follow.
-                  { name: 'Restructuring', type: 'batch', fn: (sents, wc) => batchRestructureSentences(sents, undefined, wc) },
+                  // Non-LLM Nuru restructuring as first phase — cost-effective local rewriting.
+                  { name: 'Restructuring', type: 'nuru', passes: 10 },
                   { name: 'Nuru 2.0', type: 'nuru', passes: 10 },
                   { name: 'Deep Non-LLM Clean', type: 'sync', fn: (s) => deepNonLLMClean(s) },
                   { name: 'Readability Polish', type: 'async', fn: (s) => nuruReadabilityPolish(s) },
