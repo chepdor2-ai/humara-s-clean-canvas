@@ -37,7 +37,7 @@ export function resolveChangeTargets(
   const baseByDepth: Record<HumanizationDepth, Omit<ChangeTargets, "strength">> = {
     light: {
       minDocumentChange: 0.75,
-      minSentenceChange: 0.25,  // ENFORCED: 25% minimum per sentence
+      minSentenceChange: 0.40,
       maxEngineRetries: 2,
       maxWordLevelPasses: 3,
       minChangedSentenceShare: 0.85,
@@ -45,7 +45,7 @@ export function resolveChangeTargets(
     },
     medium: {
       minDocumentChange: 0.80,
-      minSentenceChange: 0.25,  // ENFORCED: 25% minimum per sentence
+      minSentenceChange: 0.45,
       maxEngineRetries: 3,
       maxWordLevelPasses: 4,
       minChangedSentenceShare: 0.90,
@@ -53,7 +53,7 @@ export function resolveChangeTargets(
     },
     strong: {
       minDocumentChange: 0.85,
-      minSentenceChange: 0.25,  // ENFORCED: 25% minimum per sentence
+      minSentenceChange: 0.50,
       maxEngineRetries: 5,
       maxWordLevelPasses: 6,
       minChangedSentenceShare: 0.94,
@@ -72,8 +72,8 @@ export function resolveChangeTargets(
   return {
     strength: depth,
     minDocumentChange: Math.max(0.75, clamp(base.minDocumentChange + bonusPressure * 0.05, base.minDocumentChange, maxDocCap)),
-    // Hard 25% minimum sentence change across all depths
-    minSentenceChange: Math.max(0.25, clamp(base.minSentenceChange + bonusPressure * 0.02, base.minSentenceChange, maxSentCap)),
+    // Hard 40% minimum sentence change across all depths
+    minSentenceChange: Math.max(0.40, clamp(base.minSentenceChange + bonusPressure * 0.02, base.minSentenceChange, maxSentCap)),
     maxEngineRetries: base.maxEngineRetries + Math.round(bonusPressure * 2),
     maxWordLevelPasses: base.maxWordLevelPasses + Math.round(bonusPressure * 2),
     minChangedSentenceShare: clamp(base.minChangedSentenceShare + bonusPressure * 0.02, Math.max(base.minChangedSentenceShare, 0.85), 0.98),

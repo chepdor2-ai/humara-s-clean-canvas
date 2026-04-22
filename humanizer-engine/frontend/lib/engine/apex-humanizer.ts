@@ -101,6 +101,13 @@ async function llmCall(
   temperature: number,
   maxTokens = 512,
 ): Promise<string> {
+  try {
+    const groqContent = await groqCall(system, user, temperature, maxTokens);
+    if (groqContent) return groqContent;
+  } catch (err) {
+    console.warn("[Apex LLM] Groq failed, falling back to GPT-4o mini:", err instanceof Error ? err.message : err);
+  }
+
   const openai = getOpenAIDirectClient();
   if (openai) {
     try {
@@ -117,10 +124,10 @@ async function llmCall(
       const content = await withTimeout(callPromise, LLM_TIMEOUT_MS, "");
       if (content) return content;
     } catch (err) {
-      console.warn("[Apex LLM] GPT-4o mini failed:", err instanceof Error ? err.message : err);
+      console.warn("[Apex LLM] GPT-4o mini fallback failed:", err instanceof Error ? err.message : err);
     }
   }
-  return groqCall(system, user, temperature, maxTokens);
+  return "";
 }
 
 // ── Utility ──

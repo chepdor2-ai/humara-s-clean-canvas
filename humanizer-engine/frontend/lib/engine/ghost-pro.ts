@@ -15,7 +15,6 @@
  */
 
 import OpenAI from "openai";
-import { resolveGroqChatModel } from "./groq-client";
 import { sentTokenize } from "./utils";
 import { expandContractions } from "./advanced-transforms";
 import { validateAndRepairOutput } from "./validation-post-process";
@@ -50,9 +49,8 @@ import {
   type InputFeatures as SurgeryInputFeatures,
 } from "./sentence-surgery";
 
-// ── OpenAI config ──
-const LLM_MODEL = process.env.LLM_MODEL ?? 'gpt-4o-mini';
-const LLM_FALLBACK_MODEL = 'gpt-4.1-nano';
+// ── OpenAI fallback config ──
+const OPENAI_FALLBACK_MODEL = 'gpt-4o-mini';
 
 let _openaiClient: OpenAI | null = null;
 
@@ -117,8 +115,14 @@ async function groqCall(system: string, user: string, temperature: number, maxTo
 }
 
 async function llmCall(system: string, user: string, temperature: number, maxTokens?: number, modelOverride?: string): Promise<string> {
+  try {
+    return await groqCall(system, user, temperature, maxTokens);
+  } catch (err) {
+    console.warn(`  [GhostPro] Groq failed, falling back to GPT-4o mini: ${err instanceof Error ? err.message : String(err)}`);
+  }
+
   const client = getOpenAIClient();
-  const models = modelOverride ? [modelOverride] : [LLM_MODEL];
+  const models = modelOverride ? [modelOverride] : [OPENAI_FALLBACK_MODEL];
 
   for (let i = 0; i < models.length; i++) {
     const model = models[i];
@@ -142,9 +146,8 @@ async function llmCall(system: string, user: string, temperature: number, maxTok
       console.warn(`  [GhostPro] Model ${model} failed: ${errMsg}`);
     }
   }
-  
-  console.log(`  [GhostPro] Falling back to Groq...`);
-  return groqCall(system, user, temperature, maxTokens);
+
+  throw new Error("Groq primary and GPT-4o mini fallback both failed");
 }
 
 // ── Input Feature Detection ──

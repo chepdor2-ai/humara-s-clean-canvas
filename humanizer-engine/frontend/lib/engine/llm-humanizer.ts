@@ -49,14 +49,10 @@ import {
 } from "./shared-dictionaries";
 import { getDictionary } from "./dictionary";
 import {
-  buildSentenceItems,
-  applySentenceSurgery,
-  reassembleFromItems,
   enforceCapitalization,
   enforceStrictRules,
   enforceSingleSentence,
   getWordChangePercent,
-  type SurgeryItem,
   type InputFeatures as SurgeryInputFeatures,
 } from "./sentence-surgery";
 import { getGroqClient, resolveGroqChatModel } from "./groq-client";
@@ -69,6 +65,7 @@ const LLM_MODEL = resolveGroqChatModel(process.env.LLM_MODEL, "llama-3.3-70b-ver
 const GPT4O_MINI_MODEL = "gpt-4o-mini";
 const MAX_FEEDBACK_ITERATIONS_MAP: Record<string, number> = { light: 1, medium: 1, strong: 2 };
 const TARGET_AI_SCORE = 5.0;
+const MIN_SENTENCE_CHANGE_PCT = 40;
 
 // ── OpenAI direct client (for GPT-4o mini) ──
 let _openaiClient: OpenAI | null = null;
@@ -95,13 +92,20 @@ function groqCall(system: string, user: string, temperature: number, maxTokens =
   }).then((r: any) => r.choices[0]?.message?.content?.trim() ?? "");
 }
 
-// ── GPT-4o mini first, Groq fallback ──
+// ── Groq first, GPT-4o mini fallback ──
 async function llmCall(
   system: string,
   user: string,
   temperature: number,
   maxTokens = 1024,
 ): Promise<string> {
+  try {
+    const groqContent = await groqCall(system, user, temperature, maxTokens);
+    if (groqContent) return groqContent;
+  } catch (err) {
+    console.warn("[LLM] Groq failed, falling back to GPT-4o mini:", err instanceof Error ? err.message : err);
+  }
+
   const openai = getOpenAIDirectClient();
   if (openai) {
     try {
@@ -117,10 +121,11 @@ async function llmCall(
       const content = res.choices[0]?.message?.content?.trim();
       if (content) return content;
     } catch (err) {
-      console.warn("[LLM] GPT-4o mini failed, falling back to Groq:", err instanceof Error ? err.message : err);
+      console.warn("[LLM] GPT-4o mini fallback failed:", err instanceof Error ? err.message : err);
     }
   }
-  return groqCall(system, user, temperature, maxTokens);
+
+  return "";
 }
 
 // ── Input Feature Detection ──
@@ -2288,13 +2293,11 @@ export async function llmHumanize(
   const inputSentenceCount = countSentences(protectedText);
 
   // ═══════════════════════════════════════════
-  // PRE-HUMANIZATION: Sentence Merge/Split Surgery for Burstiness
+  // PRE-HUMANIZATION: Strict 1:1 sentence mapping
   // ═══════════════════════════════════════════
-  console.log("  [Ninja] Pre-surgery: Applying sentence merge/split for burstiness...");
-  const rawSurgeryItems = buildSentenceItems(protectedText);
-  const surgeryItems = applySentenceSurgery(rawSurgeryItems);
-  const surgeryText = reassembleFromItems(surgeryItems);
-  console.log(`  [Ninja] Surgery: ${rawSurgeryItems.filter(i => !i.isTitle).length} → ${surgeryItems.filter(i => !i.isTitle).length} sentences (merges + splits applied)`);
+  console.log("  [Ninja] Strict sentence-by-sentence mode: merge/split surgery disabled.");
+  const surgeryText = protectedText;
+  console.log(`  [Ninja] Sentence slots locked: ${inputSentenceCount} input sentences preserved`);
 
   // ═══════════════════════════════════════════
   // LAYER 1: SENTENCE-BY-SENTENCE LLM Pipeline
@@ -2372,7 +2375,39 @@ export async function llmHumanize(
         // Enforce capitalization
         rewritten = enforceCapitalization(trimmed, rewritten);
 
-        return rewritten;
+        let bestRewrite = rewritten;
+        let bestChangePct = getWordChangePercent(trimmed, rewritten);
+
+        if (bestChangePct < MIN_SENTENCE_CHANGE_PCT) {
+          try {
+            const retryPrompt = `${userPrompt}\n\nHARD FLOOR: rewrite this one sentence so at least ${MIN_SENTENCE_CHANGE_PCT}% of the wording changes while preserving the exact meaning. Keep exactly one sentence and do not merge or split anything.`;
+            let retried = llmFormatToPlaceholders(
+              await llmCall(
+                sentenceSystem,
+                retryPrompt,
+                Math.min(1.0, clampedTemp + 0.08),
+                Math.max(sentMaxTokens, Math.ceil(trimmed.split(/\s+/).length * 3.5)),
+              ) ?? ''
+            );
+
+            if (retried && retried.trim().length >= trimmed.length * 0.2) {
+              retried = retried.replace(/^\[TARGET\]:\s*/i, "").trim();
+              retried = enforceSingleSentence(retried);
+              retried = enforceStrictRules(trimmed, retried, surgeryFeatures).text;
+              retried = enforceCapitalization(trimmed, retried);
+
+              const retriedChangePct = getWordChangePercent(trimmed, retried);
+              if (retriedChangePct > bestChangePct) {
+                bestRewrite = retried;
+                bestChangePct = retriedChangePct;
+              }
+            }
+          } catch {
+            // Keep the strongest valid first-pass rewrite.
+          }
+        }
+
+        return bestRewrite;
       } catch {
         return trimmed;
       }

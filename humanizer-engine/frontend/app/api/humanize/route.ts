@@ -281,13 +281,13 @@ function adaptiveOxygenChain(
   phaseOneOutput: string,
   _originalText: string,
   sentenceTarget = 0.40,
-  sentencePassRateTarget = 0.80,
+  sentencePassRateTarget = 1.00,
   iterationBias = 0,
 ): string {
   const MIN_TOTAL = 3;           // minimum passes before gate check
-  const MAX_ITERATIONS = 3;      // reduced cap (was 6 — too many passes compound errors)
-  const TARGET_CHANGE = 0.25;    // 25% word-level change from phase-1 per sentence
-  const SENT_PASS_RATE = 0.65;   // 65% of sentences must meet per-sentence target before early exit
+  const MAX_ITERATIONS = Math.max(3, Math.min(6, 3 + Math.max(0, iterationBias)));
+  const TARGET_CHANGE = Math.max(0.40, sentenceTarget);
+  const SENT_PASS_RATE = Math.max(0.95, Math.min(1, sentencePassRateTarget));
 
   // Pre-compute per-sentence risk targets so high-AI sentences demand more change
   const documentDomain = detectDomain(phaseOneOutput);
@@ -325,7 +325,7 @@ function adaptiveOxygenChain(
         if (risk.tier === 'protected') { metCount++; continue; }
 
         // Per-sentence change target: higher for high/critical risk sentences
-        const sentTarget = risk.changeTarget > 0 ? risk.changeTarget : TARGET_CHANGE;
+        const sentTarget = Math.max(TARGET_CHANGE, risk.changeTarget > 0 ? risk.changeTarget : 0);
 
         // Find closest phase-1 sentence and measure how much oxygen chain changed it
         let bestChange = 0;
@@ -337,10 +337,10 @@ function adaptiveOxygenChain(
       }
       const total = curSentences.length;
       if (total > 0 && metCount / total >= SENT_PASS_RATE) {
-        console.log(`[AdaptiveChain] Gate passed at pass ${totalPasses}: ${metCount}/${total} sentences ≥40% from phase-1`);
+        console.log(`[AdaptiveChain] Gate passed at pass ${totalPasses}: ${metCount}/${total} sentences met the ${Math.round(TARGET_CHANGE * 100)}% floor`);
         break;
       }
-      console.log(`[AdaptiveChain] Pass ${totalPasses}: ${metCount}/${total} ≥40% from phase-1 — escalating`);
+      console.log(`[AdaptiveChain] Pass ${totalPasses}: ${metCount}/${total} met the ${Math.round(TARGET_CHANGE * 100)}% floor — escalating`);
     }
   }
 
@@ -389,7 +389,8 @@ function isHeadingParagraph(para: string): boolean {
 function enforceRestructuringThreshold(
   originalText: string,
   humanizedText: string,
-  threshold: number = 0.60,
+  threshold: number = 1.00,
+  sentenceMinChange: number = 0.40,
 ): string {
   // Split by paragraph boundaries first to avoid merging titles into body sentences
   const origParas = originalText.split(/\n\s*\n/).filter(p => p.trim());
@@ -440,8 +441,8 @@ function enforceRestructuringThreshold(
     changes.push({ idx: i, ratio: bestRatio, origIdx: bestOrigIdx });
   }
 
-  // Count sufficiently restructured sentences (≥25% word change)
-  const RESTRUCTURE_MIN = 0.25;
+  // Count sufficiently restructured sentences using a hard sentence floor.
+  const RESTRUCTURE_MIN = Math.max(0.40, Math.min(0.90, sentenceMinChange));
   const restructuredCount = changes.filter(c => c.ratio >= RESTRUCTURE_MIN).length;
   const totalCount = humanizedSentences.length;
   const currentPercent = restructuredCount / totalCount;
@@ -462,10 +463,12 @@ function enforceRestructuringThreshold(
     let s = humanizedSentences[w.idx];
     const before = s;
 
-    // Apply safe word-level transforms only (no clause swap / voice shift / restructuring
-    // — those produce garbled output like "is led by ." and "is stronglyed by")
-    s = applyAIWordKill(s);
-    s = synonymReplace(s, 0.5, usedWords);
+    // Apply repeated safe word-level transforms only.
+    for (const intensity of [0.55, 0.8, 1.0]) {
+      if (measureSentenceChange(origSentences[w.origIdx], s) >= RESTRUCTURE_MIN) break;
+      s = applyAIWordKill(s);
+      s = synonymReplace(s, intensity, usedWords);
+    }
 
     if (s !== before && measureSentenceChange(origSentences[w.origIdx], s) >= RESTRUCTURE_MIN) {
       humanizedSentences[w.idx] = s;
@@ -666,6 +669,8 @@ export async function POST(req: Request) {
       : (!strict_meaning && (strength ?? 'medium') === 'medium') ? 'strong'
       : (strength ?? 'medium');
     const changeTargets = resolveChangeTargets(effectiveStrength, Number(humanization_rate ?? 0));
+    const strictSentenceChangeFloor = Math.max(changeTargets.minSentenceChange, 0.40);
+    const strictSentenceShareFloor = 1.0;
 
     if (!text || typeof text !== 'string' || text.trim().length === 0) {
       return NextResponse.json({ error: 'Text is required' }, { status: 400 });
@@ -720,7 +725,7 @@ export async function POST(req: Request) {
     const runHumara20 = (input: string): string => {
       const oxygenMode = (body.oxygen_mode as string) || (effectiveStrength === 'light' ? 'fast' : effectiveStrength === 'strong' ? 'aggressive' : 'quality');
       let output = oxygenHumanize(input, effectiveStrength, oxygenMode, body.oxygen_sentence_by_sentence === true);
-      output = adaptiveOxygenChain(output, input);
+      output = adaptiveOxygenChain(output, input, strictSentenceChangeFloor, strictSentenceShareFloor, changeTargets.planIterationBias);
       return output;
     };
 
@@ -729,7 +734,7 @@ export async function POST(req: Request) {
       const humarinMode = strength === 'strong' ? 'quality' : strength === 'light' ? 'turbo' : 'fast';
       const humarinResult = await humarinHumanize(input, humarinMode, inputWordCount <= 220);
       let output = humarinResult.humanized;
-      output = adaptiveOxygenChain(output, input);
+      output = adaptiveOxygenChain(output, input, strictSentenceChangeFloor, strictSentenceShareFloor, changeTargets.planIterationBias);
       return output;
     };
 
@@ -1231,7 +1236,7 @@ const CHAIN_TS = 10;    const applySmartNuruPolish = (input: string, maxPasses =
     // Ensures at least 60% of sentences show meaningful word-level changes.
     // Applies additional transforms to under-changed sentences.
     if (engine !== 'oxygen' && engine !== 'apex' && engine !== 'king' && engine !== 'nuru_v2' && engine !== 'humara_v3_3' && !isDeepKill) {
-      humanized = enforceRestructuringThreshold(text, humanized, 0.35);
+      humanized = enforceRestructuringThreshold(text, humanized, strictSentenceShareFloor, strictSentenceChangeFloor);
     }
 
     // Post-capitalization formatting — fix sentence casing for all engine outputs

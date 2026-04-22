@@ -7,10 +7,9 @@
  */
 
 import OpenAI from 'openai';
-import { getGroqClient } from '../../groq-client';
+import { getGroqClient, resolveGroqChatModel } from '../../groq-client';
 
-const LLM_MODEL = process.env.LLM_MODEL ?? 'gpt-4o-mini';
-const LLM_FALLBACK_MODEL = 'gpt-4.1-nano';
+const LLM_MODEL = resolveGroqChatModel(process.env.LLM_MODEL, 'llama-3.3-70b-versatile');
 
 let _openaiClient: OpenAI | null = null;
 
@@ -26,7 +25,7 @@ function getOpenAIClient(): OpenAI | null {
  * Check whether LLM is available (API key present).
  */
 export function isLLMAvailable(): boolean {
-  return Boolean(process.env.OPENAI_API_KEY?.trim());
+  return Boolean(process.env.GROQ_API_KEY?.trim() || process.env.OPENAI_API_KEY?.trim());
 }
 
 /**
@@ -36,7 +35,7 @@ async function groqCall(system: string, user: string, temperature: number, maxTo
   const client = getGroqClient();
   try {
     const response = await client.chat.completions.create({
-      model: "llama-3.3-70b-versatile",
+      model: LLM_MODEL,
       messages: [
         { role: 'system', content: system },
         { role: 'user', content: user },
@@ -52,6 +51,13 @@ async function groqCall(system: string, user: string, temperature: number, maxTo
 }
 
 async function llmCall(system: string, user: string, temperature: number, maxTokens?: number): Promise<string> {
+  try {
+    const groqResult = await groqCall(system, user, temperature, maxTokens);
+    if (groqResult) return groqResult;
+  } catch (err: unknown) {
+    console.warn(`[V11 LLM] Groq failed: ${err instanceof Error ? err.message : String(err)}. Falling back to gpt-4o-mini.`);
+  }
+
   const client = getOpenAIClient();
   if (client) {
     try {
@@ -67,10 +73,10 @@ async function llmCall(system: string, user: string, temperature: number, maxTok
       const content = response.choices[0]?.message?.content?.trim();
       if (content) return content;
     } catch (err: unknown) {
-      console.warn(`[V11 LLM] gpt-4o-mini failed: ${err instanceof Error ? err.message : String(err)}. Falling back to Groq.`);
+      console.warn(`[V11 LLM] gpt-4o-mini fallback failed: ${err instanceof Error ? err.message : String(err)}`);
     }
   }
-  return groqCall(system, user, temperature, maxTokens);
+  return '';
 }
 
 const SYSTEM_PROMPT = `You are a real human writer — a university student, academic researcher, or high school essayist who writes naturally by hand. You are NOT an AI. You do NOT simulate human writing. You ARE a human, and this is how you naturally write. Rewrite the given text chunk as you would write it yourself.
