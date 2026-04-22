@@ -100,6 +100,25 @@ function stripLeadingHeadingEcho(text: string, headingKeys: Set<string>): string
   return result;
 }
 
+function stripLeadingGeneratedHeadingLabel(text: string, headingKeys: Set<string>): string {
+  const result = text.trim();
+  if (!result) return result;
+  const match = result.match(/^([A-Z0-9][A-Za-z0-9/&()'". -]{0,80}:)\s+(?=\S)/);
+  if (!match) return result;
+
+  const label = match[1].trim();
+  const labelKey = normalizeHeadingKey(label);
+  if (headingKeys.has(labelKey) || looksLikeHeadingLine(label)) {
+    return result.slice(match[0].length).trim();
+  }
+
+  return result;
+}
+
+function isStandaloneHeadingLine(line: string): boolean {
+  return looksLikeHeadingLine(line) && robustSentenceSplit(line).length <= 1;
+}
+
 function collapseInlineHeadingRepetitions(text: string): string {
   // Collapse duplicated section headings embedded in paragraph text.
   // Example: "3.3 Model Specification. 3.3 Model Specification."
@@ -110,7 +129,7 @@ function collapseInlineHeadingRepetitions(text: string): string {
 }
 
 function stripHeadingEchoSentences(rewritten: string, headingKeys: Set<string>): string {
-  if (!rewritten.trim() || headingKeys.size === 0) return rewritten;
+  if (!rewritten.trim()) return rewritten;
 
   const paragraphs = normalizeNewlines(rewritten).split(/\n\s*\n/);
   const cleanedParagraphs = paragraphs
@@ -118,11 +137,11 @@ function stripHeadingEchoSentences(rewritten: string, headingKeys: Set<string>):
       const flattened = paragraph
         .split('\n')
         .map((line) => line.trim())
-        .filter((line) => line && !isHeadingEcho(line, headingKeys))
+        .filter((line) => line && !isHeadingEcho(line, headingKeys) && !isStandaloneHeadingLine(line))
         .join(' ')
         .replace(/\s+/g, ' ')
         .trim();
-      const withoutLeadingHeading = stripLeadingHeadingEcho(flattened, headingKeys);
+      const withoutLeadingHeading = stripLeadingGeneratedHeadingLabel(stripLeadingHeadingEcho(flattened, headingKeys), headingKeys);
       const textForSentences = withoutLeadingHeading || flattened;
       if (!textForSentences) return '';
 
@@ -135,7 +154,7 @@ function stripHeadingEchoSentences(rewritten: string, headingKeys: Set<string>):
       const kept = sentences.filter((sentence) => {
         const words = sentence.trim().split(/\s+/);
         if (words.length > 16) return true; // Never strip long sentences
-        return !isHeadingEcho(sentence, headingKeys);
+        return !isHeadingEcho(sentence, headingKeys) && !looksLikeHeadingLine(sentence.trim());
       });
       // If ALL sentences would be removed, preserve the paragraph as-is
       if (kept.length === 0) return textForSentences;
@@ -331,12 +350,10 @@ export function preserveInputStructure(original: string, rewritten: string): str
     return normalizeNewlines(original);
   }
 
-  const rewrittenForAlignment = headingKeys.size > 0
-    ? stripHeadingEchoSentences(
-      collapseInlineHeadingRepetitions(normalizeNewlines(rewritten)),
-      headingKeys,
-    )
-    : normalizeNewlines(rewritten);
+  const rewrittenForAlignment = stripHeadingEchoSentences(
+    collapseInlineHeadingRepetitions(normalizeNewlines(rewritten)),
+    headingKeys,
+  );
 
   let rewrittenParagraphs = extractFlatParagraphs(rewrittenForAlignment, headingKeys);
   if (rewrittenParagraphs.length !== originalParagraphs.length) {

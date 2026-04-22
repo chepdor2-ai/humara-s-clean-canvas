@@ -739,10 +739,10 @@ export async function POST(req: Request) {
           };
           if (auto_model === true) {
             const autoSelection = resolveAutoEngine(normalizedText, tone ?? 'neutral', paperProfile?.overallCompositeAi);
-            eng = autoSelection.engine;
+            eng = 'ai_analysis';
             sendSSE(controller, {
               type: 'stage',
-              stage: `Auto Model: ${autoSelection.mode === 'core_engines' ? 'Core' : 'Detection'} → ${ENGINE_DISPLAY[eng] || eng}`,
+              stage: `Auto Model: AI Analysis stack (${autoSelection.mode === 'core_engines' ? 'Core' : 'Detection'} signal: ${ENGINE_DISPLAY[autoSelection.engine] || autoSelection.engine})`,
             });
             await flushDelay(12);
           }
@@ -2495,11 +2495,12 @@ aiAdaptivePlan = buildAdaptiveCleanupPlan(reassembleText(workingSentences, worki
           //   Undetectability → Nuru 10 iterations + 5×3 aggressive loops
           //
           // Every engine gets at least 2 processing phases (engine + this
-          // post-processing) before the final cleanup. Each iteration
-          // enforces ≥40% word change per sentence.
+          // post-processing) before the final cleanup. Nuru x10 uses an
+          // adaptive floor of at least 25% per sentence; post loops keep the
+          // stronger 40% floor.
           // Hard time budget: under 15 seconds for Nuru post-processing.
           // ═══════════════════════════════════════════════════════════════
-          if (eng !== 'ai_analysis' && !(deadlineReached || Date.now() - startTime > DEADLINE_MS - 12000)) {
+          if ((eng !== 'ai_analysis' || auto_model === true) && !(deadlineReached || Date.now() - startTime > DEADLINE_MS - 12000)) {
             const nuruPostStart = Date.now();
             const NURU_POST_DEADLINE_MS = 14_500;
             const nuruPostTimeOk = () => Date.now() - nuruPostStart < NURU_POST_DEADLINE_MS && !(deadlineReached || Date.now() - startTime > DEADLINE_MS - 8000);
@@ -3825,12 +3826,15 @@ const finalPlan = adaptivePostPlan ?? buildAdaptiveCleanupPlan(normalizedText, g
           }
           latestHumanized = humanized;
 
-          // ── FINAL 85% DOCUMENT-CHANGE GUARANTEE ──────────────────────
-          // Verify overall lexical change meets minimum 85% target.
+          // ── FINAL ADAPTIVE DOCUMENT-CHANGE GUARANTEE ─────────────────
+          // Verify overall lexical change meets the adaptive minimum target.
           // If below threshold, force aggressive cleanup on low-change sentences.
-          if (!isDeepKill && !(deadlineReached || Date.now() - startTime > DEADLINE_MS - 4000)) {
+          if (!(deadlineReached || Date.now() - startTime > DEADLINE_MS - 4000)) {
+            const finalGuaranteePlan = buildAdaptiveCleanupPlan(normalizedText, getDetectorAverage(detector.analyze(humanized)), tone ?? 'neutral', postProcessingProfile, humanizationPlan ?? undefined, effectiveStrength, hRate);
+            const finalDocumentFloor = clampRange(finalGuaranteePlan.minDocumentChange, 0.75, postProcessingProfile === 'undetectability' ? 0.90 : 0.86);
+            const finalSentenceFloor = clampRange(finalGuaranteePlan.minSentenceChange, 0.25, 0.40);
             const finalDocChange = measureLexicalChangeRatio(normalizedText, humanized);
-            if (finalDocChange < 0.85) {
+            if (finalDocChange < finalDocumentFloor) {
               try {
                 const { sentences: finalSents, paragraphBoundaries: finalBounds } = splitIntoIndexedSentences(humanized);
                 const { sentences: origSentsF } = splitIntoIndexedSentences(normalizedText);
@@ -3849,7 +3853,7 @@ const finalPlan = adaptivePostPlan ?? buildAdaptiveCleanupPlan(normalizedText, g
                     if (r < bestScore) { bestScore = r; bestIdx = j; }
                   }
                   // If sentence still too similar to original, force aggressive cleanup
-                  if (bestIdx >= 0 && bestScore < 0.60) {
+                  if (bestIdx >= 0 && bestScore < finalSentenceFloor) {
                     finalSents[i] = runNuruSinglePass(finalSents[i]);
                     finalSents[i] = applyAIWordKill(finalSents[i]);
                     finalSents[i] = synonymReplace(finalSents[i], 0.9, usedFinalWords);
@@ -3860,10 +3864,10 @@ const finalPlan = adaptivePostPlan ?? buildAdaptiveCleanupPlan(normalizedText, g
                 if (forcedFinalChange) {
                   humanized = reassembleText(finalSents, finalBounds.length ? finalBounds : [0]);
                   latestHumanized = humanized;
-                  console.log(`[Final85%] Forced target: was ${(finalDocChange * 100).toFixed(1)}%, now ${(measureLexicalChangeRatio(normalizedText, humanized) * 100).toFixed(1)}%`);
+                  console.log(`[FinalChange] Forced target ${Math.round(finalDocumentFloor * 100)}%: was ${(finalDocChange * 100).toFixed(1)}%, now ${(measureLexicalChangeRatio(normalizedText, humanized) * 100).toFixed(1)}%`);
                 }
               } catch (e85) {
-                console.warn('[Final85%] Non-fatal error during 85% enforcement:', e85);
+                console.warn('[FinalChange] Non-fatal error during adaptive enforcement:', e85);
               }
             }
           }
@@ -3877,7 +3881,7 @@ const finalPlan = adaptivePostPlan ?? buildAdaptiveCleanupPlan(normalizedText, g
             }
           }
 
-          humanized = removeFillerParentheticals(enforceNoContractions(humanized));
+          humanized = preserveInputStructure(normalizedText, removeFillerParentheticals(enforceNoContractions(humanized)));
           latestHumanized = humanized;
 
           if (!usePhasePipeline) {
