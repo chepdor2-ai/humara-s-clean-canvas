@@ -1745,6 +1745,117 @@ export async function POST(req: Request) {
       }
     }
 
+    // ── UNIVERSAL AI PHRASE FINAL SWEEP ──────────────────────
+    // Runs LAST — after every engine, every post-processor, every fix.
+    // Catches AI-sounding phrases that any step may have re-introduced.
+    // Targeted at the most common patterns flagged by real AI detectors.
+    {
+      const aiPhraseKills: Array<[RegExp, string]> = [
+        [/\bit is important to note that\s*/gi, ''],
+        [/\bit is worth noting that\s*/gi, ''],
+        [/\bit should be noted that\s*/gi, ''],
+        [/\bit must be noted that\s*/gi, ''],
+        [/\bit is (?:clear|evident|apparent|obvious) that\s*/gi, ''],
+        [/\bit goes without saying(?: that)?\s*/gi, ''],
+        [/\bneedless to say,?\s*/gi, ''],
+        [/\bof course,?\s*/gi, ''],
+        [/\bwithout a doubt,?\s*/gi, ''],
+        [/\bthere is no doubt that\s*/gi, ''],
+        [/\bin today'?s (?:world|society|landscape|era|age|digital age|environment)\b/gi, 'today'],
+        [/\bin (?:the )?(?:modern|current|contemporary) (?:era|age|world|landscape)\b/gi, 'today'],
+        [/\bin an ever-(?:changing|evolving) (?:world|landscape)\b/gi, 'today'],
+        [/\bplays? a (?:crucial|vital|key|significant|important|pivotal|central|major|essential) role in\b/gi, 'is central to'],
+        [/\bplays? a (?:crucial|vital|key|significant|important|pivotal|central|major|essential) role\b/gi, 'matters'],
+        [/\bhas a (?:significant|major|profound|substantial|considerable|direct) (?:impact|effect|influence) on\b/gi, 'affects'],
+        [/\bcannot be overstated\b/gi, 'matters greatly'],
+        [/\bdue to the fact that\b/gi, 'because'],
+        [/\bowing to the fact that\b/gi, 'because'],
+        [/\bgiven the fact that\b/gi, 'since'],
+        [/\bby virtue of the fact that\b/gi, 'because'],
+        [/\bthe fact that\b/gi, 'that'],
+        [/\ba (?:wide|broad|vast|diverse|rich) (?:range|array|spectrum|variety) of\b/gi, 'many'],
+        [/\ba (?:plethora|myriad|multitude|wealth|abundance) of\b/gi, 'many'],
+        [/\bin (?:summary|conclusion),?\s*/gi, 'overall, '],
+        [/\bto (?:summarize|conclude),?\s*/gi, 'in short, '],
+        [/\ball in all,?\s*/gi, 'overall, '],
+        [/\btaken together,?\s*/gi, 'overall, '],
+        [/\bthat being said,?\s*/gi, 'still, '],
+        [/\bhaving said that,?\s*/gi, 'still, '],
+        [/\bin other words,?\s*/gi, 'put simply, '],
+        [/\bmoving forward\b/gi, 'from here'],
+        [/\bgoing forward\b/gi, 'from here'],
+        [/\bat the end of the day\b/gi, 'in the end'],
+        [/\bwhen it comes to\b/gi, 'regarding'],
+        [/\bhas the potential to\b/gi, 'could'],
+        [/\bhave the potential to\b/gi, 'could'],
+        [/\bcutting-edge\b/gi, 'advanced'],
+        [/\bstate-of-the-art\b/gi, 'advanced'],
+        [/\bthought-provoking\b/gi, 'interesting'],
+        [/\bgame-changing\b/gi, 'important'],
+        [/\bgame changer\b/gi, 'important change'],
+        [/\bever-(?:changing|evolving|growing)\b/gi, 'changing'],
+        [/\bseamlessly\b/gi, 'smoothly'],
+        [/\bseamless\b/gi, 'smooth'],
+        [/\bempow(?:er|ers|ered|ering)\b/gi, 'enable'],
+        [/\bempowerment\b/gi, 'ability'],
+        [/\bshowcase[sd]?\b/gi, 'show'],
+        [/\bshowcasing\b/gi, 'showing'],
+        [/\bunderscore[sd]?\b/gi, 'show'],
+        [/\bunderscoring\b/gi, 'showing'],
+        [/\bhighlight(?:s|ed|ing)?\b/gi, 'show'],
+        [/\bspearhead(?:s|ed|ing)?\b/gi, 'lead'],
+        [/\bsynerg(?:y|ies|ize|istic|istically)\b/gi, 'combined effort'],
+        [/\bholistic(?:ally)?\b/gi, 'complete'],
+        [/\brobust\b/gi, 'strong'],
+        [/\bparadigm(?:atic|s)?\b/gi, 'model'],
+        [/\blandscape\b/gi, 'field'],
+        [/\btransformative\b/gi, 'significant'],
+        [/\btransformational\b/gi, 'significant'],
+        [/\bgroundbreaking\b/gi, 'pioneering'],
+        [/\binnovative\b/gi, 'new'],
+        [/\bimpactful\b/gi, 'important'],
+        [/\bpivotal\b/gi, 'important'],
+        [/\bcrucial\b/gi, 'important'],
+        [/\bbolster(?:s|ed|ing)?\b/gi, 'support'],
+        [/\bfoster(?:s|ed|ing)?\b/gi, 'support'],
+        [/\butili[sz](?:e|es|ed|ing)\b/gi, 'use'],
+        [/\bleverag(?:e|es|ed|ing)\b/gi, 'use'],
+        [/\bfacilitat(?:e|es|ed|ing)\b/gi, 'help'],
+        [/\boptimi[sz](?:e|es|ed|ing)\b/gi, 'improve'],
+        [/\bgarner(?:s|ed|ing)?\b/gi, 'get'],
+        [/\bcatalyz(?:e|es|ed|ing)\b/gi, 'drive'],
+        [/\bdelve[sd]?\b/gi, 'examine'],
+        [/\bdelving\b/gi, 'examining'],
+        [/\bthought leader(?:s|ship)?\b/gi, 'expert'],
+        [/\binterestingly,?\s*/gi, ''],
+        [/\bsurprisingly,?\s*/gi, ''],
+        [/\bremarkably,?\s*/gi, ''],
+        [/\bnotably,?\s*/gi, ''],
+        [/\bserves? as a (?:testament|reminder|beacon|symbol|cornerstone) (?:to|of)\b/gi, 'shows'],
+        [/\bsheds? light on\b/gi, 'clarifies'],
+        [/\bpaves? the way (?:for|to)\b/gi, 'enables'],
+      ];
+      for (const [pattern, replacement] of aiPhraseKills) {
+        humanized = humanized.replace(pattern, (match, ...groups) => {
+          let rep = replacement;
+          for (let i = 0; i < groups.length; i++) {
+            if (typeof groups[i] === 'string') rep = rep.replace(`$${i + 1}`, groups[i]);
+          }
+          if (!rep) return '';
+          // Preserve sentence-initial capitalization
+          const firstChar = match[0];
+          if (firstChar && firstChar === firstChar.toUpperCase() && firstChar !== firstChar.toLowerCase() && rep[0] === rep[0].toLowerCase()) {
+            return rep[0].toUpperCase() + rep.slice(1);
+          }
+          return rep;
+        });
+      }
+      // Clean double spaces left from removed phrases
+      humanized = humanized.replace(/ {2,}/g, ' ');
+      humanized = humanized.replace(/\.\s{2,}/g, '. ');
+      humanized = humanized.replace(/,\s{2,}/g, ', ');
+    }
+
     // ── FINAL AI CAPITALIZATION ──────────────────────────────
     // Must run after ALL post-processing since many phases re-lowercase "AI"
     if (!ozoneKeywordRestoreOnly) {

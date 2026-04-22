@@ -292,6 +292,11 @@ function buildAdaptiveCleanupPlan(
     if (isAlreadySafe) return Math.min(1, Math.max(0, Math.round(value)));
     return Math.max(floor, Math.min(cap, Math.round(value)));
   };
+  // Hard minimum enforcement for Nuru and AntiPangram — always ≥ 10 regardless of
+  // isAlreadySafe status. User mandate: minimum 10 post-processing iterations on every
+  // document to achieve consistent 0% AI score across all engines and all papers.
+  const minIter10 = (value: number, cap: number): number =>
+    Math.max(10, Math.min(cap, Math.round(value)));
 
   // Preferred path: use the profile-driven HumanizationPlan if provided,
   // then cap it against the adaptive score band to prevent over-processing.
@@ -302,16 +307,16 @@ function buildAdaptiveCleanupPlan(
       minDocumentChange: paperPlan.minDocumentChange,
       minSentenceChange: paperPlan.minSentenceChange,
       minChangedSentenceShare: paperPlan.minChangedSentenceShare,
-      antiPangramIterations: capIterations(paperPlan.antiPangramIterations, lightFloor, postProfile === 'undetectability' ? 12 : 8),
+      antiPangramIterations: minIter10(paperPlan.antiPangramIterations, postProfile === 'undetectability' ? 16 : 12),
       antiPangramVariance: paperPlan.antiPangramVariance,
       readabilityBias: paperPlan.readabilityBias,
-      nuruIterations: capIterations(paperPlan.nuruIterations, lightFloor, postProfile === 'undetectability' ? 12 : 7),
-      nuruLoops: capIterations(paperPlan.nuruLoops, isAlreadySafe ? 0 : 1, 4),
-      targetedSweeps: capIterations(paperPlan.targetedSweeps, isAlreadySafe ? 0 : 1, 4),
-      universalCleaningPasses: capIterations(paperPlan.universalCleaningPasses, isAlreadySafe ? 0 : 1, 5),
-      changePasses: capIterations(paperPlan.changePasses, isAlreadySafe ? 1 : 2, 8),
+      nuruIterations: minIter10(paperPlan.nuruIterations, postProfile === 'undetectability' ? 16 : 12),
+      nuruLoops: Math.max(4, capIterations(paperPlan.nuruLoops, 4, 8)),
+      targetedSweeps: capIterations(paperPlan.targetedSweeps, isAlreadySafe ? 1 : 2, 6),
+      universalCleaningPasses: capIterations(paperPlan.universalCleaningPasses, isAlreadySafe ? 1 : 2, 8),
+      changePasses: capIterations(paperPlan.changePasses, isAlreadySafe ? 2 : 3, 10),
       leadRewriteThreshold: paperPlan.leadRewriteThreshold,
-      maxAdaptiveCycles: capIterations(paperPlan.maxAdaptiveCycles, isAlreadySafe ? 0 : 1, 3),
+      maxAdaptiveCycles: capIterations(paperPlan.maxAdaptiveCycles, isAlreadySafe ? 1 : 2, 5),
     };
   }
 
@@ -326,17 +331,17 @@ function buildAdaptiveCleanupPlan(
   const sentenceDensity = clamp01((ctx.avgSentenceLength - 18) / 16);
   const readabilityBias = clamp01((blogish ? 0.90 : academicish ? 0.76 : 0.70) - (technical ? 0.05 : 0) + (social ? 0.03 : 0));
 
-  // Nuru: adaptive boost; undetectability starts higher, clean text can stop.
+  // Nuru: always minimum 10 passes; undetectability scales higher.
   const changeBias = changeTargets.planIterationBias;
-  const nuruBase = postProfile === 'undetectability' ? 4 : postProfile === 'quality' ? 2 : 1;
-  const nuruIterations = capIterations(nuruBase + detectorPressure * 6 + sentenceDensity * 2 + changeBias, lightFloor, postProfile === 'undetectability' ? 14 : 9);
+  const nuruBase = postProfile === 'undetectability' ? 6 : postProfile === 'quality' ? 4 : 3;
+  const nuruIterations = minIter10(nuruBase + detectorPressure * 8 + sentenceDensity * 3 + changeBias, postProfile === 'undetectability' ? 16 : 12);
 
-  // AntiPangram: forensic cleanup only scales up under detector pressure.
-  const apBase = postProfile === 'undetectability' ? 4 : postProfile === 'quality' ? 3 : 1;
-  const antiPangramIterations = capIterations(apBase + detectorPressure * 6 + lengthBias * 2 + (technical ? 1 : 0) + changeBias, lightFloor, postProfile === 'undetectability' ? 14 : 10);
+  // AntiPangram: always minimum 10 passes; scales under detector pressure.
+  const apBase = postProfile === 'undetectability' ? 6 : postProfile === 'quality' ? 4 : 3;
+  const antiPangramIterations = minIter10(apBase + detectorPressure * 8 + lengthBias * 2 + (technical ? 1 : 0) + changeBias, postProfile === 'undetectability' ? 16 : 12);
 
   // Universal post-processing: bounded final cleanup.
-  const universalCleaningPasses = capIterations(1 + detectorPressure * 4 + lengthBias + (blogish ? 1 : 0) + changeBias, isAlreadySafe ? 0 : 1, 8);
+  const universalCleaningPasses = capIterations(2 + detectorPressure * 4 + lengthBias + (blogish ? 1 : 0) + changeBias, isAlreadySafe ? 1 : 2, 10);
 
   return {
     targetScore,
@@ -348,12 +353,12 @@ function buildAdaptiveCleanupPlan(
     antiPangramVariance: Math.min(0.18, 0.04 + detectorPressure * 0.10 + (blogish ? 0.03 : 0)),
     readabilityBias,
     nuruIterations,
-    nuruLoops: capIterations(1 + detectorPressure * 4 + lengthBias + (postProfile !== 'quality' ? 1 : 0) + Math.max(0, changeBias - 1), isAlreadySafe ? 0 : 1, 6),
-    targetedSweeps: capIterations(1 + detectorPressure * 4 + (technical ? 1 : 0) + Math.max(0, changeBias - 1), isAlreadySafe ? 0 : 1, 6),
+    nuruLoops: Math.max(4, capIterations(1 + detectorPressure * 4 + lengthBias + (postProfile !== 'quality' ? 1 : 0) + Math.max(0, changeBias - 1), 4, 8)),
+    targetedSweeps: capIterations(2 + detectorPressure * 4 + (technical ? 1 : 0) + Math.max(0, changeBias - 1), isAlreadySafe ? 1 : 2, 6),
     universalCleaningPasses,
-    changePasses: capIterations(2 + changeBias + detectorPressure * 2, isAlreadySafe ? 1 : 2, 8),
+    changePasses: capIterations(3 + changeBias + detectorPressure * 2, isAlreadySafe ? 2 : 3, 10),
     leadRewriteThreshold: 24 + detectorPressure * 18,
-    maxAdaptiveCycles: capIterations(1 + detectorPressure * 3 + (lengthBias > 0.4 ? 1 : 0) + Math.max(0, changeBias - 1), isAlreadySafe ? 0 : 1, 5),
+    maxAdaptiveCycles: capIterations(2 + detectorPressure * 3 + (lengthBias > 0.4 ? 1 : 0) + Math.max(0, changeBias - 1), isAlreadySafe ? 1 : 2, 5),
   };
 }
 
