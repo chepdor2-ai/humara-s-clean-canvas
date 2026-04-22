@@ -2428,43 +2428,76 @@ export function stealthHumanize(
       let bestAiTierVal = 999;
       let bestChangeRatio = -1;
 
-      // Minimum 10 iterations, capped by sentMaxIter (up to 20)
-      const actualMaxIter = Math.max(10, sentMaxIter);
+      // Scale max iterations per sentence. Maximum 5 passes to ensure speed of light.
+      const actualMaxIter = Math.min(5, enforcedMaxIterations);
+
+      let iter = 1;
+      let best = originalSent;
+      let previousOutput = originalSent;
+      let bestAiTierVal = 999;
+      let bestChangeRatio = -1;
 
       while (iter <= actualMaxIter) {
-        const escalate = iter > 3 || rng.next() < detectorPressure * 0.35;
-        const iterStrength = escalate ? 'strong' : strength;
-        const rawNext = processSentence(
-          originalSent, hasFirstPerson, iter === 1 ? globalSentenceIdx : 0,
-          totalSentences, usedStarters, iterStrength as any, isParagraphLead, detectorPressure, stealthStrategy,
-        );
-        const next = guardSingleSentence(originalSent, rawNext);
-        
-        if (violatesPurity(next, effectiveShape)) {
-          iter++;
-          continue;
+        let loopBest = previousOutput;
+        let loopBestTier = 999;
+
+        // Each loop runs 3 sub-iterations with more aggression
+        for (let sub = 0; sub < 3; sub++) {
+            const escalate = iter > 2 || sub > 0 || rng.next() < detectorPressure * 0.35;
+            const iterStrength = escalate ? 'strong' : strength;
+            const rawNext = processSentence(
+              previousOutput, hasFirstPerson, iter === 1 && sub === 0 ? globalSentenceIdx : 0,
+              totalSentences, usedStarters, iterStrength as any, isParagraphLead, detectorPressure, stealthStrategy,
+            );
+            const next = guardSingleSentence(previousOutput, rawNext);
+            
+            if (violatesPurity(next, effectiveShape)) {
+              continue;
+            }
+            
+            const risk = scoreSentenceRisk(next, domainResult);
+            const changeFromPrev = wordChangeRatio(previousOutput, next);
+            
+            const tierMap = { protected: 0, low: 1, medium: 2, high: 3, critical: 4 };
+            const tierVal = tierMap[risk.tier as keyof typeof tierMap] || 4;
+            
+            // Prefer versions that achieve the minimum 25% change from previous output
+            const metChangeThreshold = changeFromPrev >= 0.25;
+            const loopBestMetThreshold = wordChangeRatio(previousOutput, loopBest) >= 0.25;
+
+            // Update loop best if it's better or if it hit the threshold when previous didn't
+            if (
+              tierVal < loopBestTier ||
+              (tierVal === loopBestTier && metChangeThreshold && !loopBestMetThreshold) ||
+              (tierVal === loopBestTier && metChangeThreshold === loopBestMetThreshold && changeFromPrev > wordChangeRatio(previousOutput, loopBest))
+            ) {
+               loopBestTier = tierVal;
+               loopBest = next;
+            }
         }
         
-        const risk = scoreSentenceRisk(next, domainResult);
-        const changeRatio = wordChangeRatio(originalSent, next);
-        
-        const tierMap = { protected: 0, low: 1, medium: 2, high: 3, critical: 4 };
-        const tierVal = tierMap[risk.tier as keyof typeof tierMap] || 4;
-        
-        // Track the best candidate (lowest AI score, highest change ratio)
-        // just in case we never perfectly hit the absolute criteria by the end.
-        if (tierVal < bestAiTierVal || (tierVal === bestAiTierVal && changeRatio > bestChangeRatio)) {
-           bestAiTierVal = tierVal;
-           bestChangeRatio = changeRatio;
-           best = next;
-        }
-        
-        // 0% AI (low or protected) and at least 40% change per sentence
-        const isSafe = risk.tier === 'protected' || risk.tier === 'low';
-        
-        if (iter >= 10 && isSafe && changeRatio >= 0.40) {
-          best = next; // We met the strict user requirements at or after 10 loops
-          break;
+        // After 3 runs, pick the best one and set it as previousOutput for next iter
+        if (loopBest !== previousOutput) {
+            previousOutput = loopBest;
+            const overallRisk = scoreSentenceRisk(loopBest, domainResult);
+            const overallChange = wordChangeRatio(originalSent, loopBest);
+            
+            const tierMap = { protected: 0, low: 1, medium: 2, high: 3, critical: 4 };
+            const tierVal = tierMap[overallRisk.tier as keyof typeof tierMap] || 4;
+            
+            if (tierVal < bestAiTierVal || (tierVal === bestAiTierVal && overallChange > bestChangeRatio)) {
+                bestAiTierVal = tierVal;
+                bestChangeRatio = overallChange;
+                best = loopBest;
+            }
+            
+            const isSafe = overallRisk.tier === 'protected' || overallRisk.tier === 'low';
+            
+            // If it's safe (0% AI) and we hit the 25% change from prev output threshold, we can break early
+            if (isSafe && wordChangeRatio(originalSent, previousOutput) >= 0.25) {
+                best = loopBest;
+                break;
+            }
         }
         
         iter++;

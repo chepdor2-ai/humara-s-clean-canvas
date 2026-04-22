@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Nuru Humanizer Engine v3 â€” Pure Non-LLM Per-Sentence Independent Processing
  * =============================================================================
  *
@@ -735,7 +735,7 @@ function enforceMinimumChange(original: string, current: string, seed: number): 
       'associated': ['linked', 'connected', 'tied'],
       'significant': ['considerable', 'notable', 'marked'],
       'important': ['central', 'vital', 'key'],
-      'critical': ['pivotal', 'decisive', 'central'],
+      'critical': ['decisive', 'central'],
       'essential': ['indispensable', 'vital', 'needed'],
       'objective': ['impartial', 'unbiased', 'dispassionate'],
       'also': ['too', 'likewise', 'as well'],
@@ -1265,7 +1265,7 @@ export function nuruHumanize(
     const postGarbleChange = calculateWordChangePercent(cls.text, processed);
     if (postGarbleChange < 70) {
       const SAFE_SWAPS: Record<string, string> = {
-        'significant': 'considerable', 'important': 'central', 'critical': 'pivotal',
+        'significant': 'considerable', 'important': 'central',
         'essential': 'vital', 'comprehensive': 'thorough', 'fundamental': 'core',
         'effective': 'productive', 'relevant': 'pertinent', 'various': 'diverse',
         'particular': 'distinct', 'specific': 'precise', 'common': 'frequent',
@@ -1292,7 +1292,7 @@ export function nuruHumanize(
         'based': 'grounded', 'associated': 'linked', 'related': 'connected',
         'while': 'whereas', 'although': 'though', 'despite': 'notwithstanding',
         'rather': 'instead', 'regarding': 'concerning', 'concerning': 'about',
-        'strong': 'robust', 'universal': 'broad', 'consistent': 'steady',
+        'universal': 'broad', 'consistent': 'steady',
       };
       const words = processed.split(/\s+/);
       const newWords = words.map((w, i) => {
