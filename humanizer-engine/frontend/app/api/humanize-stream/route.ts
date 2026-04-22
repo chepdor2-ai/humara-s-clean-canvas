@@ -303,20 +303,20 @@ function buildAdaptiveCleanupPlan(
   if (paperPlan) {
     return {
       targetScore: Math.max(paperPlan.targetScore, targetScore),
-      detectorPressure: Math.min(paperPlan.detectorPressure, Math.max(0.08, detectorPressure)),
-      minDocumentChange: paperPlan.minDocumentChange,
-      minSentenceChange: paperPlan.minSentenceChange,
-      minChangedSentenceShare: paperPlan.minChangedSentenceShare,
-      antiPangramIterations: minIter10(paperPlan.antiPangramIterations, postProfile === 'undetectability' ? 16 : 12),
+      detectorPressure: Math.min(paperPlan.detectorPressure, Math.max(0.4, detectorPressure)),
+      minDocumentChange: Math.max(0.65, paperPlan.minDocumentChange),
+      minSentenceChange: Math.max(0.60, paperPlan.minSentenceChange),
+      minChangedSentenceShare: Math.max(0.85, paperPlan.minChangedSentenceShare),
+      antiPangramIterations: minIter10(paperPlan.antiPangramIterations, postProfile === 'undetectability' ? 24 : 16),
       antiPangramVariance: paperPlan.antiPangramVariance,
       readabilityBias: paperPlan.readabilityBias,
-      nuruIterations: minIter10(paperPlan.nuruIterations, postProfile === 'undetectability' ? 16 : 12),
-      nuruLoops: Math.max(4, capIterations(paperPlan.nuruLoops, 4, 8)),
-      targetedSweeps: capIterations(paperPlan.targetedSweeps, isAlreadySafe ? 1 : 2, 6),
-      universalCleaningPasses: capIterations(paperPlan.universalCleaningPasses, isAlreadySafe ? 1 : 2, 8),
-      changePasses: capIterations(paperPlan.changePasses, isAlreadySafe ? 2 : 3, 10),
+      nuruIterations: minIter10(paperPlan.nuruIterations, postProfile === 'undetectability' ? 24 : 16),
+      nuruLoops: Math.max(6, capIterations(paperPlan.nuruLoops, 6, 8)),
+      targetedSweeps: capIterations(paperPlan.targetedSweeps, isAlreadySafe ? 2 : 4, 6),
+      universalCleaningPasses: capIterations(paperPlan.universalCleaningPasses, isAlreadySafe ? 2 : 4, 8),
+      changePasses: capIterations(paperPlan.changePasses, isAlreadySafe ? 4 : 5, 10),
       leadRewriteThreshold: paperPlan.leadRewriteThreshold,
-      maxAdaptiveCycles: capIterations(paperPlan.maxAdaptiveCycles, isAlreadySafe ? 1 : 2, 5),
+      maxAdaptiveCycles: capIterations(paperPlan.maxAdaptiveCycles, isAlreadySafe ? 2 : 3, 5),
     };
   }
 
@@ -333,32 +333,32 @@ function buildAdaptiveCleanupPlan(
 
   // Nuru: always minimum 10 passes; undetectability scales higher.
   const changeBias = changeTargets.planIterationBias;
-  const nuruBase = postProfile === 'undetectability' ? 6 : postProfile === 'quality' ? 4 : 3;
-  const nuruIterations = minIter10(nuruBase + detectorPressure * 8 + sentenceDensity * 3 + changeBias, postProfile === 'undetectability' ? 16 : 12);
+  const nuruBase = postProfile === 'undetectability' ? 12 : postProfile === 'quality' ? 10 : 10;
+  const nuruIterations = minIter10(nuruBase + detectorPressure * 8 + sentenceDensity * 3 + changeBias, postProfile === 'undetectability' ? 24 : 16);
 
   // AntiPangram: always minimum 10 passes; scales under detector pressure.
-  const apBase = postProfile === 'undetectability' ? 6 : postProfile === 'quality' ? 4 : 3;
-  const antiPangramIterations = minIter10(apBase + detectorPressure * 8 + lengthBias * 2 + (technical ? 1 : 0) + changeBias, postProfile === 'undetectability' ? 16 : 12);
+  const apBase = postProfile === 'undetectability' ? 10 : postProfile === 'quality' ? 8 : 10;
+  const antiPangramIterations = minIter10(apBase + detectorPressure * 8 + lengthBias * 2 + (technical ? 1 : 0) + changeBias, postProfile === 'undetectability' ? 24 : 16);
 
   // Universal post-processing: bounded final cleanup.
-  const universalCleaningPasses = capIterations(2 + detectorPressure * 4 + lengthBias + (blogish ? 1 : 0) + changeBias, isAlreadySafe ? 1 : 2, 10);
+  const universalCleaningPasses = capIterations(4 + detectorPressure * 6 + lengthBias + (blogish ? 1 : 0) + changeBias, isAlreadySafe ? 3 : 5, 12);
 
   return {
     targetScore,
-    detectorPressure,
-    minDocumentChange: changeTargets.minDocumentChange,
-    minSentenceChange: changeTargets.minSentenceChange,
-    minChangedSentenceShare: changeTargets.minChangedSentenceShare,
+    detectorPressure: Math.max(0.4, detectorPressure),
+    minDocumentChange: Math.max(0.65, changeTargets.minDocumentChange),
+    minSentenceChange: Math.max(0.60, changeTargets.minSentenceChange),
+    minChangedSentenceShare: Math.max(0.85, changeTargets.minChangedSentenceShare),
     antiPangramIterations,
-    antiPangramVariance: Math.min(0.18, 0.04 + detectorPressure * 0.10 + (blogish ? 0.03 : 0)),
+    antiPangramVariance: Math.min(0.25, 0.08 + detectorPressure * 0.15 + (blogish ? 0.05 : 0)),
     readabilityBias,
     nuruIterations,
-    nuruLoops: Math.max(4, capIterations(1 + detectorPressure * 4 + lengthBias + (postProfile !== 'quality' ? 1 : 0) + Math.max(0, changeBias - 1), 4, 8)),
-    targetedSweeps: capIterations(2 + detectorPressure * 4 + (technical ? 1 : 0) + Math.max(0, changeBias - 1), isAlreadySafe ? 1 : 2, 6),
+    nuruLoops: Math.max(6, capIterations(3 + detectorPressure * 4 + lengthBias + (postProfile !== 'quality' ? 2 : 1) + Math.max(0, changeBias), 6, 10)),
+    targetedSweeps: capIterations(4 + detectorPressure * 4 + (technical ? 1 : 0) + Math.max(0, changeBias), isAlreadySafe ? 2 : 4, 8),
     universalCleaningPasses,
-    changePasses: capIterations(3 + changeBias + detectorPressure * 2, isAlreadySafe ? 2 : 3, 10),
-    leadRewriteThreshold: 24 + detectorPressure * 18,
-    maxAdaptiveCycles: capIterations(2 + detectorPressure * 3 + (lengthBias > 0.4 ? 1 : 0) + Math.max(0, changeBias - 1), isAlreadySafe ? 1 : 2, 5),
+    changePasses: capIterations(5 + changeBias + detectorPressure * 2, isAlreadySafe ? 4 : 5, 12),
+    leadRewriteThreshold: 35 + detectorPressure * 25,
+    maxAdaptiveCycles: capIterations(3 + detectorPressure * 3 + (lengthBias > 0.4 ? 1 : 0) + Math.max(0, changeBias), isAlreadySafe ? 2 : 3, 6),
   };
 }
 
@@ -752,11 +752,11 @@ export async function POST(req: Request) {
           const inputRiskByIndex = new Map(inputRiskReport.sentences.map((sentence) => [sentence.index, sentence]));
           const getRiskAdaptiveMinChange = (sentenceIndex: number, baseMin: number): number => {
             const sentenceRisk = inputRiskByIndex.get(sentenceIndex);
-            if (!sentenceRisk) return baseMin;
+            if (!sentenceRisk) return Math.max(0.65, baseMin); // Boost baseline for better AI sweep
             if (sentenceRisk.styleClass === 'fact' || sentenceRisk.styleClass === 'citation') return Math.max(baseMin * 0.75, baseMin - 0.15);
             if (sentenceRisk.riskLevel === 'low') return Math.max(baseMin * 0.82, baseMin - 0.10);
             if (sentenceRisk.riskLevel === 'medium') return Math.max(baseMin * 0.9, baseMin - 0.06);
-            return baseMin;
+            return Math.max(0.70, baseMin); // Forces at least 70% rewrite on high/critical AI risk segments
           };
 
           sendSSE(controller, { type: 'stage', stage: 'Sentence Risk Analysis' });
@@ -887,7 +887,7 @@ export async function POST(req: Request) {
           const runNuruSinglePass = (input: string, options: StealthHumanizeOptions = {}): string => {
             // Protect special content (numbers, stats, citations) from Nuru transforms
             const { text: protectedInput, map: protMap } = protectSpecialContent(input);
-            const raw = stealthHumanize(protectedInput, effectiveStrength ?? 'medium', tone ?? 'academic', 1, options);
+            const raw = stealthHumanize(protectedInput, effectiveStrength ?? 'medium', tone ?? 'academic', 2, options);
             const output = raw && raw.trim().length > 0 ? raw : protectedInput;
             return restoreSpecialContent(output, protMap);
           };
@@ -2099,7 +2099,7 @@ aiAdaptivePlan = buildAdaptiveCleanupPlan(reassembleText(workingSentences, worki
                       if (!isHeadingSentCheck(currentSentences[i])) {
                         currentSentences[i] = runNuruSinglePass(currentSentences[i]);
                       }
-                      sendSSE(controller, { type: 'sentence', index: i, text: currentSentences[i], stage: phaseLabel });
+                      sendSSE(controller, { type: 'sentence', index: i, text: currentSentences[i], stage: `${phaseLabel} iter ${nuruPass + 1}/${phase.passes}` });
                     }
                     await flushDelay(5);
                     if (deadlineReached || Date.now() - startTime > DEADLINE_MS - 8000) break;
@@ -2129,7 +2129,7 @@ aiAdaptivePlan = buildAdaptiveCleanupPlan(reassembleText(workingSentences, worki
                       if (!isHeadingSentCheck(currentSentences[i])) {
                         currentSentences[i] = runNuruSinglePass(currentSentences[i]);
                       }
-                      sendSSE(controller, { type: 'sentence', index: i, text: currentSentences[i], stage: phaseLabel });
+                      sendSSE(controller, { type: 'sentence', index: i, text: currentSentences[i], stage: `${phaseLabel} iter ${pass + 1}/${adjustedBaseline}` });
                     }
                     await flushDelay(10);
                   }
@@ -2182,7 +2182,7 @@ aiAdaptivePlan = buildAdaptiveCleanupPlan(reassembleText(workingSentences, worki
                         if (!isHeadingSentCheck(currentSentences[i])) {
                           currentSentences[i] = runNuruSinglePass(currentSentences[i]);
                         }
-                        sendSSE(controller, { type: 'sentence', index: i, text: currentSentences[i], stage: phaseLabel });
+                        sendSSE(controller, { type: 'sentence', index: i, text: currentSentences[i], stage: `${phaseLabel} extra iter ${pass + 1}/${extraPasses}` });
                       }
                       await flushDelay(10);
                     }
@@ -2206,7 +2206,7 @@ aiAdaptivePlan = buildAdaptiveCleanupPlan(reassembleText(workingSentences, worki
                         } else {
                           currentSentences[idx] = runNuruSinglePass(currentSentences[idx]);
                         }
-                        sendSSE(controller, { type: 'sentence', index: idx, text: currentSentences[idx], stage: `${phaseLabel} (targeted)` });
+                        sendSSE(controller, { type: 'sentence', index: idx, text: currentSentences[idx], stage: `${phaseLabel} targeted iter ${pass + 1}/${TARGETED_PASSES}` });
                       }
                       await flushDelay(10);
                     }
@@ -2224,7 +2224,7 @@ aiAdaptivePlan = buildAdaptiveCleanupPlan(reassembleText(workingSentences, worki
                   while (change < sentenceMinChange && retry < NURU_MIN_RETRIES) {
                     currentSentences[i] = runNuruSinglePass(currentSentences[i]);
                     change = measureSentenceChange(original, currentSentences[i]);
-                    sendSSE(controller, { type: 'sentence', index: i, text: currentSentences[i], stage: phaseLabel });
+                    sendSSE(controller, { type: 'sentence', index: i, text: currentSentences[i], stage: `${phaseLabel} quality retry ${retry + 1}/${NURU_MIN_RETRIES}` });
                     retry++;
                   }
                   // Final fallback: if still below threshold after retries, apply synonym replacement
@@ -2232,7 +2232,7 @@ aiAdaptivePlan = buildAdaptiveCleanupPlan(reassembleText(workingSentences, worki
                     const usedFallback = new Set<string>();
                     currentSentences[i] = applyAIWordKill(currentSentences[i]);
                     currentSentences[i] = synonymReplace(currentSentences[i], 0.9, usedFallback);
-                    sendSSE(controller, { type: 'sentence', index: i, text: currentSentences[i], stage: phaseLabel });
+                    sendSSE(controller, { type: 'sentence', index: i, text: currentSentences[i], stage: `${phaseLabel} force sync` });
                   }
                 }
               }
@@ -2363,7 +2363,7 @@ aiAdaptivePlan = buildAdaptiveCleanupPlan(reassembleText(workingSentences, worki
           // ═══════════════════════════════════════════════════════════════
           if (eng !== 'ai_analysis' && !qualityGateStopsHeavyPost && !(deadlineReached || Date.now() - startTime > DEADLINE_MS - 12000)) {
             const nuruPostStart = Date.now();
-            const NURU_POST_DEADLINE_MS = 30_000;
+            const NURU_POST_DEADLINE_MS = 60_000;
             const nuruPostTimeOk = () => Date.now() - nuruPostStart < NURU_POST_DEADLINE_MS && !(deadlineReached || Date.now() - startTime > DEADLINE_MS - 8000);
             let currentAdaptiveScore = getDetectorAverage(detector.analyze(humanized));
 adaptivePostPlan = buildAdaptiveCleanupPlan(normalizedText, currentAdaptiveScore, tone ?? 'neutral', postProcessingProfile, humanizationPlan ?? undefined, effectiveStrength, hRate);

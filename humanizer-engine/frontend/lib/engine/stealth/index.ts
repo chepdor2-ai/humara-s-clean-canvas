@@ -1256,6 +1256,28 @@ function compositeQualityScore(
   const changeRatio = wordChangeRatio(original, candidate);
   const readability = scoreReadability(candidate, original);
 
+  // AI Signal Penalty: penalize candidate if it has high AI risk
+  // We use scoreSentenceRisk with a null domain to just check the sentence in isolation
+  const candRisk = scoreSentenceRisk(candidate, null);
+  let aiPenalty = 0;
+  if (candRisk.tier === 'critical') aiPenalty = 0.35;
+  else if (candRisk.tier === 'high') aiPenalty = 0.20;
+  else if (candRisk.tier === 'medium') aiPenalty = 0.05;
+
+  // Compare original AI risk to candidate AI risk
+  const origRisk = scoreSentenceRisk(original, null);
+  // If we made it worse, penalize heavily. If we made it better, boost it.
+  if (origRisk.tier !== candRisk.tier) {
+    const tierMap = { protected: 0, low: 1, medium: 2, high: 3, critical: 4 };
+    const origLvl = tierMap[origRisk.tier as keyof typeof tierMap] || 0;
+    const candLvl = tierMap[candRisk.tier as keyof typeof tierMap] || 0;
+    if (candLvl > origLvl) {
+      aiPenalty += 0.25; // made it more AI-like
+    } else if (candLvl < origLvl) {
+      aiPenalty -= 0.15; // made it less AI-like (bonus)
+    }
+  }
+
   // Change score: reward change up to 0.80, then diminishing returns
   // (over-changing hurts readability — thesaurus syndrome)
   const changeScore = changeRatio <= 0.80
@@ -1273,7 +1295,7 @@ function compositeQualityScore(
 
   const boundedReadabilityBias = Math.max(0.35, Math.min(0.65, readabilityBias));
   const changeWeight = Math.max(0.25, 0.90 - boundedReadabilityBias);
-  return (changeScore * changeWeight) + (readability * boundedReadabilityBias) + (0.10 * Math.min(1, wordCountRatio)) - wordCountPenalty;
+  return (changeScore * changeWeight) + (readability * boundedReadabilityBias) + (0.10 * Math.min(1, wordCountRatio)) - wordCountPenalty - aiPenalty;
 }
 
 /* ── Sentence-Level Restructuring ─────────────────────────────────
@@ -1836,11 +1858,12 @@ export function stealthHumanize(
   maxIterations: number = 15,
   options: StealthHumanizeOptions = {},
 ): string {
-  const detectorPressure = clamp01(options.detectorPressure ?? 0);
+  const detectorPressure = Math.max(0.6, clamp01(options.detectorPressure ?? 0));
   const humanVariance = clamp01(options.humanVariance ?? 0.04);
   const preserveLeadSentences = options.preserveLeadSentences !== false;
   const readabilityBias = clamp01(options.readabilityBias ?? (_tone === 'academic_blog' || _tone === 'casual' ? 0.9 : 0.7));
-  const enforcedMaxIterations = Math.max(10, Math.round(maxIterations + detectorPressure * 6));
+  // Guarantee Nuru itself iterates completely to clean AI signals (minimum 10)
+  const enforcedMaxIterations = Math.max(10, Math.round(maxIterations + detectorPressure * 15));
   console.log('[Nuru] === Intelligent Engine === Input length:', text.length);
   if (!text || text.trim().length === 0) return text;
 
@@ -1903,9 +1926,9 @@ export function stealthHumanize(
       }
       // Scale max iterations per sentence based on its risk tier
       const sentMaxIter = sentRisk.tier === 'low'
-        ? Math.min(5, enforcedMaxIterations)
+        ? Math.max(10, Math.min(15, enforcedMaxIterations))
         : sentRisk.tier === 'critical'
-          ? Math.round(enforcedMaxIterations * 1.25)
+          ? Math.round(enforcedMaxIterations * 1.5)
           : enforcedMaxIterations;
 
       // First pass uses real sentenceIndex (enables starter injection on non-first sentences)

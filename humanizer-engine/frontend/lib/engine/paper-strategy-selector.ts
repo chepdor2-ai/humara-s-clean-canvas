@@ -348,28 +348,28 @@ export function deriveHumanizationPlan(
   const lenMult = lengthMultiplier(profile.lengthBucket);
 
   // Nuru iterations — adaptive base on top of 10.
-  let nuruIterationsRaw = MIN_ITER + detectorPressure * 8 + composite * 0.05 + changeTargets.planIterationBias;
+  let nuruIterationsRaw = MIN_ITER + 4 + detectorPressure * 12 + composite * 0.08 + changeTargets.planIterationBias;
   if (postProfile === "undetectability") {
     // Hard mandate: Nuru ≥ 10 in undetectability + adaptive boost.
-    nuruIterationsRaw = MIN_ITER + 4 + detectorPressure * 10 + changeTargets.planIterationBias;
+    nuruIterationsRaw = MIN_ITER + 8 + detectorPressure * 16 + changeTargets.planIterationBias;
   }
   nuruIterationsRaw *= lenMult;
-  const nuruIterations = clampInt(nuruIterationsRaw, MIN_ITER, 24);
-  reasoning.push(`nuruIter=${nuruIterations} (min=${MIN_ITER}, pressure+length applied)`);
+  const nuruIterations = clampInt(nuruIterationsRaw, MIN_ITER + 2, 30);
+  reasoning.push(`nuruIter=${nuruIterations} (min=${MIN_ITER + 2}, pressure+length applied)`);
 
   // AntiPangram iterations — adaptive on top of 10.
-  let antiPangramRaw = MIN_ITER + detectorPressure * 8 + composite * 0.04 + changeTargets.planIterationBias;
+  let antiPangramRaw = MIN_ITER + 4 + detectorPressure * 12 + composite * 0.06 + changeTargets.planIterationBias;
   if (postProfile === "quality") {
-    antiPangramRaw = MIN_ITER + 4 + detectorPressure * 10 + changeTargets.planIterationBias;
+    antiPangramRaw = MIN_ITER + 8 + detectorPressure * 16 + changeTargets.planIterationBias;
   }
   antiPangramRaw *= lenMult;
-  const antiPangramIterations = clampInt(antiPangramRaw, MIN_ITER, 24);
-  reasoning.push(`antiPangramIter=${antiPangramIterations} (min=${MIN_ITER})`);
+  const antiPangramIterations = clampInt(antiPangramRaw, MIN_ITER + 2, 30);
+  reasoning.push(`antiPangramIter=${antiPangramIterations} (min=${MIN_ITER + 2})`);
 
   // Universal cleaning passes — post-processing mandate ≥ 10.
-  let universalRaw = MIN_ITER + detectorPressure * 4 + (composite > 30 ? 2 : 0) + changeTargets.planIterationBias;
+  let universalRaw = MIN_ITER + 2 + detectorPressure * 8 + (composite > 30 ? 4 : 0) + changeTargets.planIterationBias;
   universalRaw *= lenMult;
-  const universalCleaningPasses = clampInt(universalRaw, MIN_ITER, 18);
+  const universalCleaningPasses = clampInt(universalRaw, MIN_ITER + 2, 22);
   reasoning.push(`universalPasses=${universalCleaningPasses}`);
 
   // Detector-polish iterations — 4 base + adaptive.
