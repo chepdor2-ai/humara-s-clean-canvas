@@ -465,11 +465,12 @@ function resolveAutoEngine(
       );
 
       if (mode === 'core_engines') {
+        // Swift (easy) excluded from auto model — only deep-cleaning engines
         const engine = pickDeterministic(
           [
-            { value: 'easy', weight: conversational ? 7 : academicish ? 4 : 6 },
+            { value: 'nuru_v2', weight: conversational ? 7 : academicish ? 4 : 6 },
             { value: 'ninja_1', weight: academicish ? 5 : 3 },
-            { value: 'antipangram', weight: words > 500 ? 2 : 1 },
+            { value: 'oxygen', weight: words > 500 ? 3 : 2 },
           ],
           seed + 1,
         );
@@ -1353,7 +1354,7 @@ let aiAdaptivePlan = buildAdaptiveCleanupPlan(normalizedText, initialAiScore, to
                 ? true
                 : postProcessingProfile === 'undetectability'
                   ? false
-                  : (isMediumAI || Math.random() < 0.35);
+                  : (isMediumAI || Math.random() < 0.50); // 50/50 for balanced — truly random + adaptive
               console.log(`[AI Analysis] Initial score: ${Math.round(initialAiScore)}% | High: ${isHighAI} | PostProc: ${useAntiPangram ? 'Pangram' : 'Nuru 2.0'} | API-free mode`);
 
               // ── Phase 1: Agent 1 — Oxygen (Humara 2.0) local rewrite (NO external API) ──
@@ -1414,8 +1415,10 @@ let aiAdaptivePlan = buildAdaptiveCleanupPlan(normalizedText, initialAiScore, to
                 working = reassembleText(cleanSents, cleanBounds.length ? cleanBounds : [0]);
               }
 
-              // ── Phase 4: Post-Processing — AntiPangram (forensic) or Nuru 2.0 Full ──
+              // ── Phase 4: Post-Processing — AntiPangram + Nuru 2.0 Full (BOTH always run; order adaptive) ──
+              // useAntiPangram controls which runs FIRST; the complementary processor always runs second.
               if (timeOk()) {
+                // First pass: profile/score-selected processor
                 if (useAntiPangram) {
                   sendSSE(controller, { type: 'stage', stage: 'AI Analysis: Pangram Forensic Clean' });
                   await flushDelay(10);
@@ -1456,6 +1459,52 @@ let aiAdaptivePlan = buildAdaptiveCleanupPlan(normalizedText, initialAiScore, to
                     sendSSE(controller, { type: 'sentence', index: i, text: nuruSents[i], stage: 'Nuru 2.0 Full' });
                   }
                   working = reassembleText(nuruSents, nuruBounds.length ? nuruBounds : [0]);
+                }
+                // Second pass: always run the complementary processor (both MUST run every time)
+                if (timeOk()) {
+                  if (!useAntiPangram) {
+                    // AntiPangram second (when Nuru ran first)
+                    sendSSE(controller, { type: 'stage', stage: 'AI Analysis: Pangram Forensic Clean (2nd)' });
+                    await flushDelay(10);
+                    const { antiPangramSimple: antiPangramSimple2 } = await import('@/lib/engine/antipangram');
+                    working = antiPangramSimple2(
+                      working,
+                      (strength ?? 'strong') as 'light' | 'medium' | 'strong',
+                      antiPangramToneNarrow,
+                      {
+                        maxIterations: aiAdaptivePlan.antiPangramIterations,
+                        targetAiScore: aiAdaptivePlan.targetScore,
+                        detectorPressure: aiAdaptivePlan.detectorPressure,
+                        preserveLeadSentence: true,
+                        humanVariance: aiAdaptivePlan.antiPangramVariance,
+                        readabilityBias: aiAdaptivePlan.readabilityBias,
+                      },
+                    );
+                  } else {
+                    // Nuru 2.0 Full second (when AntiPangram ran first)
+                    sendSSE(controller, { type: 'stage', stage: 'AI Analysis: Nuru 2.0 Full (2nd Pass)' });
+                    await flushDelay(10);
+                    const { sentences: nuruSents2, paragraphBoundaries: nuruBounds2 } = splitIntoIndexedSentences(working);
+                    const contentIdxs2: number[] = [];
+                    for (let i = 0; i < nuruSents2.length; i++) {
+                      if (!isHeadingSentCheck(nuruSents2[i])) contentIdxs2.push(i);
+                    }
+                    const maxRestructPhase4b = Math.max(1, Math.ceil(contentIdxs2.length * MAX_RESTRUCTURE_ITERATION));
+                    let restructuredInPhase4b = 0;
+                    for (let i = 0; i < nuruSents2.length; i++) {
+                      if (!isHeadingSentCheck(nuruSents2[i]) && restructuredInPhase4b < maxRestructPhase4b) {
+                        const before2 = nuruSents2[i];
+                        nuruSents2[i] = await runNuru20Full(nuruSents2[i]);
+                        const splitCheck2 = robustSentenceSplit(nuruSents2[i]);
+                        if (splitCheck2.length > 1) {
+                          nuruSents2[i] = collapseToSingleSentence(before2, nuruSents2[i]);
+                        }
+                        if (nuruSents2[i] !== before2) restructuredInPhase4b++;
+                      }
+                      sendSSE(controller, { type: 'sentence', index: i, text: nuruSents2[i], stage: 'Nuru 2.0 Full (2nd)' });
+                    }
+                    working = reassembleText(nuruSents2, nuruBounds2.length ? nuruBounds2 : [0]);
+                  }
                 }
               }
 
@@ -2046,22 +2095,26 @@ aiAdaptivePlan = buildAdaptiveCleanupPlan(reassembleText(workingSentences, worki
                 }
               } else if (phase.type === 'nuru') {
                 if (skipUniversalNuruPost) {
-                  for (let i = 0; i < currentSentences.length; i++) {
-                    if (!isHeadingSentCheck(currentSentences[i])) {
-                      currentSentences[i] = runNuruSinglePass(currentSentences[i]);
+                  // Run the full phase.passes count — built-in-Nuru engines still need all iterations
+                  for (let nuruPass = 0; nuruPass < phase.passes; nuruPass++) {
+                    for (let i = 0; i < currentSentences.length; i++) {
+                      if (!isHeadingSentCheck(currentSentences[i])) {
+                        currentSentences[i] = runNuruSinglePass(currentSentences[i]);
+                      }
+                      sendSSE(controller, { type: 'sentence', index: i, text: currentSentences[i], stage: phaseLabel });
                     }
-                    sendSSE(controller, { type: 'sentence', index: i, text: currentSentences[i], stage: phaseLabel });
+                    await flushDelay(5);
+                    if (deadlineReached || Date.now() - startTime > DEADLINE_MS - 8000) break;
                   }
-                  await flushDelay(10);
                 } else {
                   // ═══════════════════════════════════════════════════════
                   // ADAPTIVE NURU WITH NON-LLM FORENSIC AI DETECTION
-                  // Phase 1: 5 baseline passes (minimum for ALL engines)
+                  // Phase 1: 10 baseline passes (minimum for ALL engines — user mandate)
                   // Phase 2: Non-LLM sentence-level forensic analysis
                   // Phase 3: Score-based extra bulk passes (0-5 more)
                   // Phase 4: 5 targeted passes on flagged sentences ONLY
                   // ═══════════════════════════════════════════════════════
-                  const MIN_NURU_PASSES = Math.min(phase.passes, 5);
+                  const MIN_NURU_PASSES = Math.min(phase.passes, 10);
                   const maxNuruPasses = Math.max(phase.passes, MIN_NURU_PASSES);
 
                   // Scale Nuru passes based on post-processing profile:
@@ -2361,8 +2414,60 @@ adaptivePostPlan = buildAdaptiveCleanupPlan(normalizedText, currentAdaptiveScore
 adaptivePostPlan = buildAdaptiveCleanupPlan(normalizedText, currentAdaptiveScore, tone ?? 'neutral', postProcessingProfile, humanizationPlan ?? undefined, effectiveStrength, hRate);
             };
 
-            if ((postProcessingProfile === 'quality' || postProcessingProfile === 'balanced') && nuruPostTimeOk()) {
-              await runAdaptiveAntiPangram(postProcessingProfile === 'quality' ? 'AntiPangram Quality Post-Processing' : 'AntiPangram Balanced Post-Processing');
+            // runAdaptiveNuruInitialPass: mirrors runAdaptiveAntiPangram but uses Nuru iterations.
+            // Called when coin-flip selects Nuru as the initial post-processor for 'balanced' profile.
+            const runAdaptiveNuruInitialPass = async (stageLabel: string) => {
+              if (!nuruPostTimeOk() || !adaptivePostPlan) return;
+              sendSSE(controller, { type: 'stage', stage: `${stageLabel} (${adaptivePostPlan.nuruIterations} iter)` });
+              await flushDelay(10);
+              const { sentences: initNuruSents, paragraphBoundaries: initNuruBounds } = splitIntoIndexedSentences(humanized);
+              for (let iter = 0; iter < adaptivePostPlan.nuruIterations && nuruPostTimeOk(); iter++) {
+                for (let i = 0; i < initNuruSents.length; i++) {
+                  if (!isHeadingSentCheck(initNuruSents[i])) {
+                    initNuruSents[i] = runNuruSinglePass(initNuruSents[i], {
+                      detectorPressure: adaptivePostPlan.detectorPressure,
+                      humanVariance: 0.02 + adaptivePostPlan.detectorPressure * 0.04,
+                      readabilityBias: adaptivePostPlan.readabilityBias,
+                    });
+                    initNuruSents[i] = deepNonLLMClean(initNuruSents[i]);
+                    initNuruSents[i] = finalSmoothGrammar(initNuruSents[i]);
+                  }
+                  sendSSE(controller, { type: 'sentence', index: i, text: initNuruSents[i], stage: `${stageLabel} iter ${iter + 1}/${adaptivePostPlan.nuruIterations}` });
+                }
+                await flushDelay(5);
+              }
+              humanized = reassembleText(initNuruSents, initNuruBounds.length ? initNuruBounds : [0]);
+              latestHumanized = humanized;
+              currentAdaptiveScore = getDetectorAverage(detector.analyze(humanized));
+              activeQualityGate = rememberQualityCandidate(humanized, stageLabel);
+              if (!activeQualityGate.safe && bestSafeGate) {
+                humanized = bestSafeHumanized;
+                latestHumanized = humanized;
+                currentAdaptiveScore = bestSafeGate.outputAiScore;
+              }
+              adaptivePostPlan = buildAdaptiveCleanupPlan(normalizedText, currentAdaptiveScore, tone ?? 'neutral', postProcessingProfile, humanizationPlan ?? undefined, effectiveStrength, hRate);
+            };
+
+            // Adaptive initial post-processor: seeded coin-flip per document for deterministic variety
+            // quality         → AntiPangram first (precision vocabulary forensics)
+            // undetectability → no pre-cycle pass (Nuru runs in adaptive cycle below)
+            // balanced        → seeded 50/50 random: Nuru-first or AntiPangram-first
+            const initPostSeed = hashTextForSeed(normalizedText) % 100;
+            const useAntiPangramInitial = postProcessingProfile === 'quality'
+              ? true
+              : postProcessingProfile === 'undetectability'
+                ? false
+                : initPostSeed < 50;
+            if (nuruPostTimeOk() && adaptivePostPlan) {
+              if (useAntiPangramInitial) {
+                await runAdaptiveAntiPangram(
+                  postProcessingProfile === 'quality'
+                    ? 'AntiPangram Quality Post-Processing'
+                    : 'AntiPangram Balanced Post-Processing',
+                );
+              } else if (postProcessingProfile === 'balanced') {
+                await runAdaptiveNuruInitialPass('Nuru Balanced Initial Post-Processing');
+              }
             }
 
             let adaptiveCycle = 0;
@@ -2378,7 +2483,8 @@ adaptivePostPlan = buildAdaptiveCleanupPlan(normalizedText, currentAdaptiveScore
               // fall through to full Nuru rewrite downstream.
               const paragraphLeadSet = pickLeadsToPreserve(postParaBounds, leadSeed, 0.60);
 
-              if (!skipUniversalNuruPost) {
+              // All engines run full adaptive Nuru post-processing (no skipUniversalNuruPost guard)
+              {
                 sendSSE(controller, { type: 'stage', stage: `Nuru Adaptive Post-Processing ${adaptiveCycle + 1}/${adaptivePostPlan.maxAdaptiveCycles}` });
                 await flushDelay(10);
                 for (let nuruIter = 0; nuruIter < adaptivePostPlan.nuruIterations; nuruIter++) {
