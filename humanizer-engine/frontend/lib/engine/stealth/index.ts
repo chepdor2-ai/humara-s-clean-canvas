@@ -157,14 +157,17 @@ function splitSentences(text: string): string[] {
   // Split on . ! ? followed by space+capital, but respect abbreviations
   return text
     .replace(/([.!?])\s+(?=[A-Z])/g, (match, punct, offset) => {
-      // Don't split if this period is part of an abbreviation like D.C., U.S., U.K.
+      // Don't split if this period is part of an abbreviation like D.C., U.S., U.K., vs., etc.
       // Pattern: the char before the period is a letter, and two chars back is a period (X.Y. pattern)
       if (punct === '.' && offset >= 2 && /[A-Za-z]/.test(text[offset - 1]) && text[offset - 2] === '.') {
         return match; // abbreviation — don't split
       }
-      return punct + '\n';
+      if (punct === '.' && offset >= 2 && text.slice(offset - 2, offset).toLowerCase() === 'vs') {
+        return match; // vs. abbreviation — don't split
+      }
+      return punct + '|||SPLIT|||';
     })
-    .split('\n')
+    .split('|||SPLIT|||')
     .map(s => s.trim())
     .filter(s => s.length > 0);
 }
@@ -1700,7 +1703,7 @@ function manageBurstiness(sentences: string[]): BurstResult[] {
     const w1 = s1.split(/\s+/).length;
     
     // Intelligent merging: Combine short sentences into medium ones
-    if (i < sentences.length - 1 && w1 < 8 && !/[?!]$/.test(s1)) {
+    if (i < sentences.length - 1 && w1 < 8 && /[.]$/.test(s1)) {
       const s2 = sentences[i + 1].trim();
       const w2 = s2.split(/\s+/).length;
       if (w2 < 20) {
@@ -2421,9 +2424,12 @@ export function stealthHumanize(
       const origRiskCache = scoreSentenceRisk(originalSent, domainResult);
 
       let iter = 1;
-      const candidates: { text: string; aiScore: number; readability: number }[] = [];
+      let best = originalSent;
 
-      while (iter <= sentMaxIter) {
+      // Minimum 10 iterations, capped by sentMaxIter (up to 20)
+      const actualMaxIter = Math.max(10, sentMaxIter);
+
+      while (iter <= actualMaxIter) {
         const escalate = iter > 3 || rng.next() < detectorPressure * 0.35;
         const iterStrength = escalate ? 'strong' : strength;
         const rawNext = processSentence(
@@ -2431,34 +2437,25 @@ export function stealthHumanize(
           totalSentences, usedStarters, iterStrength as any, isParagraphLead, detectorPressure, stealthStrategy,
         );
         const next = guardSingleSentence(originalSent, rawNext);
+        
         if (violatesPurity(next, effectiveShape)) {
           iter++;
           continue;
         }
         
-        const risk = scoreSentenceRisk(next, domainResult);
-        const tierMap = { protected: 0, low: 1, medium: 2, high: 3, critical: 4 };
-        const tierVal = tierMap[risk.tier as keyof typeof tierMap] || 0;
-        const aiScore = tierVal + risk.changeTarget; // Lower is better
+        best = next; // Just pick the final output that meets the requirements
         
-        const readability = scoreReadability(next, originalSent);
+        const risk = scoreSentenceRisk(best, domainResult);
+        const changeRatio = wordChangeRatio(originalSent, best);
         
-        candidates.push({ text: next, aiScore, readability });
+        // 0% AI (low or protected) and at least 40% change per sentence
+        const isSafe = risk.tier === 'protected' || risk.tier === 'low';
+        
+        if (iter >= 10 && isSafe && changeRatio >= 0.40) {
+          break;
+        }
+        
         iter++;
-      }
-      
-      let best = originalSent;
-      if (candidates.length > 0) {
-        // 1. Sort by lowest AI score (primary objective: remove AI)
-        candidates.sort((a, b) => a.aiScore - b.aiScore);
-        
-        // 2. Take top 2 candidates with the lowest AI scores
-        const top2 = candidates.slice(0, 2);
-        
-        // 3. From those top 2, pick the one with the best readability
-        top2.sort((a, b) => b.readability - a.readability);
-        
-        best = top2[0].text;
       }
 
       // Final per-sentence purity polish — expand any residual contractions,
