@@ -23,6 +23,7 @@ import { deriveHumanizationPlan, summarizePlan, type HumanizationPlan } from '@/
 import { sentenceFlowPolish } from '@/lib/engine/sentence-flow-polish';
 import { injectHumanImperfections } from '@/lib/engine/human-imperfections';
 import { applySentenceStartersDistribution, applyNuruDocumentFlowCalibration } from '@/lib/engine/stealth/nuru-document-phases';
+import { cleanZeroGPTPass, cleanOriginalityAIPass, cleanGPTZeroPass, cleanTurnitinPass, cleanCopyleaksPass, cleanWinstonPass, cleanPangramPass, cleanScribbrPass, universalPhraseSweep, swapAIMarkers, runFullDetectorForensicsCleanup } from '@/lib/engine/stealth/forensics';
 import { omegaHumanize } from '@/lib/engine/omega-humanizer';
 import { easyHumanize } from '@/lib/engine/easy-humanizer';
 import { ozoneHumanize } from '@/lib/engine/ozone-humanizer';
@@ -2112,34 +2113,72 @@ aiAdaptivePlan = buildAdaptiveCleanupPlan(reassembleText(workingSentences, worki
                 } else {
                   // ═══════════════════════════════════════════════════════
                   // ADAPTIVE NURU WITH NON-LLM FORENSIC AI DETECTION
-                  // Phase 1: 10 baseline passes (minimum for ALL engines — user mandate)
-                  // Phase 2: Non-LLM sentence-level forensic analysis
-                  // Phase 3: Score-based extra bulk passes (0-5 more)
-                  // Phase 4: 5 targeted passes on flagged sentences ONLY
+                  // Phase 1: ALWAYS 10 baseline passes (hard minimum — every pass
+                  //          uses the previous output as input, fully chained).
+                  //          'undetectability' profile gets +3 extra baseline passes.
+                  // Phase 2: Non-LLM forensic signal analysis on the chained output.
+                  // Phase 3: Deep forensic kill — all detector passes + universalSweep
+                  //          applied sentence-by-sentence on the post-10-pass text.
+                  // Phase 4: Score-based extra bulk Nuru passes (0–5 more).
+                  // Phase 5: Targeted Nuru on flagged sentences only.
                   // ═══════════════════════════════════════════════════════
-                  const MIN_NURU_PASSES = Math.min(phase.passes, 10);
-                  const maxNuruPasses = Math.max(phase.passes, MIN_NURU_PASSES);
 
-                  // Scale Nuru passes based on post-processing profile:
-                  // 'undetectability': +3 extra baseline, +3 targeted → more aggressive AI removal
-                  // 'quality': -1 baseline → preserve more natural flow
-                  // 'balanced': default behavior
-                  const profileBaselineBonus = postProcessingProfile === 'undetectability' ? 3 : postProcessingProfile === 'quality' ? -1 : 0;
+                  // Hard minimum: 10 chained rehumanizations always fire.
+                  // Profile can add bonus passes ON TOP — never reduce below 10.
+                  const BASE_NURU_MIN = 10;
+                  const profileBaselineBonus = postProcessingProfile === 'undetectability' ? 3 : 0;
+                  const adjustedBaseline = BASE_NURU_MIN + profileBaselineBonus;
+                  const maxNuruPasses = Math.max(phase.passes, adjustedBaseline);
                   const profileTargetedBonus = postProcessingProfile === 'undetectability' ? 3 : 0;
-                  const adjustedBaseline = Math.max(2, MIN_NURU_PASSES + profileBaselineBonus);
 
-                  // ── Phase 1: Baseline passes on ALL sentences ──
+                  // ── Phase 1: 10+ chained baseline passes on ALL sentences ──
+                  // Each pass feeds its output as input to the next — true chained rehumanization.
                   for (let pass = 0; pass < adjustedBaseline; pass++) {
                     for (let i = 0; i < currentSentences.length; i++) {
                       if (!isHeadingSentCheck(currentSentences[i])) {
                         currentSentences[i] = runNuruSinglePass(currentSentences[i]);
                       }
-                      sendSSE(controller, { type: 'sentence', index: i, text: currentSentences[i], stage: `${phaseLabel} iter ${pass + 1}/${adjustedBaseline}` });
+                      sendSSE(controller, { type: 'sentence', index: i, text: currentSentences[i], stage: `${phaseLabel} pass ${pass + 1}/${adjustedBaseline}` });
                     }
                     await flushDelay(10);
                   }
 
-                  // ── Phase 2: Non-LLM forensic sentence-level AI detection ──
+                  // ── Phase 2: Deep Forensic Kill — all detector passes on chained output ──
+                  // After the 10 baseline passes, run all per-detector forensic cleaners
+                  // sentence-by-sentence. This targets the specific signal patterns each
+                  // real detector (GPTZero, Turnitin, Originality, Copyleaks, ZeroGPT,
+                  // Winston, Pangram, Scribbr) uses — vocabulary, phrase structure, and
+                  // hedging language — and replaces them with natural human-written phrasing.
+                  if (!(deadlineReached || Date.now() - startTime > DEADLINE_MS - 10000)) {
+                    sendSSE(controller, { type: 'stage', stage: `${phaseLabel} → Deep Forensic Kill` });
+                    await flushDelay(8);
+                    for (let i = 0; i < currentSentences.length; i++) {
+                      if (isHeadingSentCheck(currentSentences[i])) continue;
+                      const { text: ps, map: pm } = protectSpecialContent(currentSentences[i]);
+                      let s = ps;
+                      // Run all detector forensic passes (each strips its detector's specific signals)
+                      s = cleanZeroGPTPass(s);
+                      s = cleanGPTZeroPass(s);
+                      s = cleanOriginalityAIPass(s);
+                      s = cleanTurnitinPass(s);
+                      s = cleanCopyleaksPass(s);
+                      s = cleanWinstonPass(s);
+                      s = cleanPangramPass(s);
+                      s = cleanScribbrPass(s);
+                      // Universal cross-detector phrase sweep (catches remaining high-signal phrases)
+                      s = universalPhraseSweep(s);
+                      // Aggressive AI marker word swap (replaces any remaining AI vocabulary)
+                      s = swapAIMarkers(s, true);
+                      s = restoreSpecialContent(s, pm);
+                      s = guardSingleSentence(currentSentences[i], s);
+                      currentSentences[i] = s;
+                      sendSSE(controller, { type: 'sentence', index: i, text: currentSentences[i], stage: `${phaseLabel} forensic kill` });
+                    }
+                    await flushDelay(10);
+                  }
+
+                  // ── Phase 3: Non-LLM forensic signal analysis (on post-kill output) ──
+
                   interface FlaggedSentence {
                     index: number;
                     ai_score: number;
@@ -2174,26 +2213,26 @@ aiAdaptivePlan = buildAdaptiveCleanupPlan(reassembleText(workingSentences, worki
                     console.warn(`[Nuru Non-LLM Forensic] Detection failed, using defaults: ${message}`);
                   }
 
-                  // ── Phase 3: Score-based extra bulk Nuru passes (0-5 more) ──
-                  if (maxNuruPasses > MIN_NURU_PASSES) {
+                  // ── Phase 4: Score-based extra bulk Nuru passes (0–5 more) ──
+                  if (maxNuruPasses > adjustedBaseline) {
                     const extraPasses = Math.round(
-                      Math.max(0, Math.min(maxNuruPasses - MIN_NURU_PASSES,
-                        ((overallAiScore - 30) / 50) * (maxNuruPasses - MIN_NURU_PASSES)))
+                      Math.max(0, Math.min(maxNuruPasses - adjustedBaseline,
+                        ((overallAiScore - 30) / 50) * (maxNuruPasses - adjustedBaseline)))
                     );
-                    console.log(`[Nuru Adaptive] AI score ${overallAiScore} → +${extraPasses} bulk passes (total ${MIN_NURU_PASSES + extraPasses}/${maxNuruPasses})`);
+                    console.log(`[Nuru Adaptive] AI score ${overallAiScore} → +${extraPasses} bulk passes (total ${adjustedBaseline + extraPasses}/${maxNuruPasses})`);
 
                     for (let pass = 0; pass < extraPasses; pass++) {
                       for (let i = 0; i < currentSentences.length; i++) {
                         if (!isHeadingSentCheck(currentSentences[i])) {
                           currentSentences[i] = runNuruSinglePass(currentSentences[i]);
                         }
-                        sendSSE(controller, { type: 'sentence', index: i, text: currentSentences[i], stage: `${phaseLabel} extra iter ${pass + 1}/${extraPasses}` });
+                        sendSSE(controller, { type: 'sentence', index: i, text: currentSentences[i], stage: `${phaseLabel} extra pass ${pass + 1}/${extraPasses}` });
                       }
                       await flushDelay(10);
                     }
                   }
 
-                  // ── Phase 4: 5 targeted passes on FLAGGED sentences only ──
+                  // ── Phase 5: Targeted Nuru on FLAGGED sentences only ──
                   if (flaggedSentences.length > 0 && !(deadlineReached || Date.now() - startTime > DEADLINE_MS - 8000)) {
                     const TARGETED_PASSES = 5 + profileTargetedBonus;
                     const flaggedSet = new Map<number, string[]>();
@@ -2206,12 +2245,11 @@ aiAdaptivePlan = buildAdaptiveCleanupPlan(reassembleText(workingSentences, worki
                       for (const [idx, phrases] of flaggedSet) {
                         if (isHeadingSentCheck(currentSentences[idx])) continue;
                         if (phrases.length > 0) {
-                          // Use phrase-targeted Nuru that focuses on suspicious spans
                           currentSentences[idx] = stealthHumanizeTargeted(currentSentences[idx], phrases, effectiveStrength ?? 'medium');
                         } else {
                           currentSentences[idx] = runNuruSinglePass(currentSentences[idx]);
                         }
-                        sendSSE(controller, { type: 'sentence', index: idx, text: currentSentences[idx], stage: `${phaseLabel} targeted iter ${pass + 1}/${TARGETED_PASSES}` });
+                        sendSSE(controller, { type: 'sentence', index: idx, text: currentSentences[idx], stage: `${phaseLabel} targeted pass ${pass + 1}/${TARGETED_PASSES}` });
                       }
                       await flushDelay(10);
                     }

@@ -233,6 +233,47 @@ const PHRASE_REPLACEMENTS: Array<{ pattern: RegExp; replacements: string[] }> = 
   { pattern: /\bultimately (?:drives|driving)\b/gi, replacements: ['eventually pushing', 'helping push'] },
   { pattern: /\bthis is particularly (?:important|relevant|significant|notable|true) (?:because|since|as|given)\b/gi, replacements: ['this matters because', 'this stands out since'] },
   { pattern: /\bthis (?:highlights|underscores|emphasizes) the (?:importance|need|significance|value) of\b/gi, replacements: ['this points to the value of', 'this shows why it matters to focus on'] },
+  // ── GPTZero / Turnitin / Originality.ai high-signal patterns ──
+  { pattern: /\bit can be argued that\s*/gi, replacements: ['arguably, ', 'one might say that '] },
+  { pattern: /\bit could be argued that\s*/gi, replacements: ['arguably, ', 'some would say that '] },
+  { pattern: /\bit is possible that\s*/gi, replacements: ['perhaps ', 'it may be that '] },
+  { pattern: /\bit is likely that\s*/gi, replacements: ['it appears that ', 'the evidence suggests that '] },
+  { pattern: /\bin recent years[,]?\s+/gi, replacements: ['lately, ', 'over the past few years, ', 'recently, '] },
+  { pattern: /\bmoving forward[,]?\s+/gi, replacements: ['from here, ', 'going ahead, ', 'from this point, '] },
+  { pattern: /\bgoing forward[,]?\s+/gi, replacements: ['from now on, ', 'in the future, ', 'ahead, '] },
+  { pattern: /\bbest practices?\b/gi, replacements: ['proven methods', 'standard methods', 'effective approaches'] },
+  { pattern: /\bkey (?:takeaway|takeaways)\b/gi, replacements: ['main point', 'the upshot', 'the central point'] },
+  { pattern: /\bat the (?:heart|core) of\b/gi, replacements: ['central to', 'at the center of', 'fundamental to'] },
+  { pattern: /\bat the forefront of\b/gi, replacements: ['leading in', 'ahead in', 'at the front of'] },
+  { pattern: /\bcutting[- ]edge\b/gi, replacements: ['advanced', 'latest', 'new'] },
+  { pattern: /\bstate[- ]of[- ]the[- ]art\b/gi, replacements: ['advanced', 'modern', 'current'] },
+  { pattern: /\bparadigm shift\b/gi, replacements: ['fundamental change', 'major shift', 'significant shift'] },
+  { pattern: /\bgame[- ]changer?\b/gi, replacements: ['major development', 'important shift', 'turning point'] },
+  { pattern: /\bgame[- ]changing\b/gi, replacements: ['major', 'transformative', 'significant'] },
+  { pattern: /\ba holistic (?:approach|view|understanding|perspective)\b/gi, replacements: ['a broad approach', 'an overall view', 'a wider perspective'] },
+  { pattern: /\bholistic (?:approach|view|understanding|perspective)\b/gi, replacements: ['broad approach', 'overall view', 'wider perspective'] },
+  { pattern: /\bfirst and foremost[,]?\s*/gi, replacements: ['above all, ', 'primarily, ', 'most importantly, '] },
+  { pattern: /\bneedless to say[,]?\s*/gi, replacements: ['of course, ', 'naturally, ', 'obviously, '] },
+  { pattern: /\bit goes without saying that\s*/gi, replacements: ['of course, ', 'naturally, '] },
+  { pattern: /\bin this day and age[,]?\s*/gi, replacements: ['today, ', 'nowadays, '] },
+  { pattern: /\bhas emerged as (?:a|an)\b/gi, replacements: ['has become a', 'now stands as a', 'has grown into a'] },
+  { pattern: /\bhave emerged as (?:a|an)\b/gi, replacements: ['have become a', 'now stand as a', 'have grown into a'] },
+  { pattern: /\bcan be attributed to\b/gi, replacements: ['stems from', 'comes down to', 'traces back to'] },
+  { pattern: /\bfosters a (?:sense|culture|environment|atmosphere) of\b/gi, replacements: ['builds a sense of', 'creates an atmosphere of', 'develops a culture of'] },
+  { pattern: /\bfosters?\b/gi, replacements: ['builds', 'supports', 'develops', 'helps build'] },
+  { pattern: /\bempowers? (?:individuals|people|students|users|learners) to\b/gi, replacements: ['helps people to', 'allows people to', 'gives people the ability to'] },
+  { pattern: /\bdemonstrates? (?:a|an) (?:commitment|dedication|focus) to\b/gi, replacements: ['shows commitment to', 'reflects a commitment to', 'signals a focus on'] },
+  { pattern: /\ba (?:growing|increasing|mounting) body of (?:research|evidence|literature|work)\b/gi, replacements: ['more research', 'increasing evidence', 'a body of research'] },
+  { pattern: /\bposes? (?:a|an) (?:significant|major|considerable|serious|unique) challenge\b/gi, replacements: ['presents a challenge', 'is a challenge', 'creates a challenge'] },
+  { pattern: /\bit is (?:widely|generally|commonly) (?:believed|accepted|agreed|recognized|understood) that\s*/gi, replacements: ['most agree that ', 'it is accepted that ', 'the consensus is that '] },
+  { pattern: /\bdemonstrat(?:es|ed|ing)? (?:a|the) need for\b/gi, replacements: ['shows a need for', 'highlights the need for', 'points to the need for'] },
+  { pattern: /\bdemonstr(?:ates|ated|ating) the (?:potential|ability|capacity) of\b/gi, replacements: ['shows what', 'reveals the potential of', 'shows the ability of'] },
+  { pattern: /\bcan (?:be|serve as) (?:a|an) (?:valuable|useful|effective|powerful) (?:tool|resource|approach)\b/gi, replacements: ['is a useful tool', 'works as a resource', 'serves as a practical tool'] },
+  { pattern: /\bserves? as (?:a|an) (?:crucial|vital|key|important|essential|critical|central|fundamental) (?:tool|mechanism|framework|foundation|basis|component|resource)\b/gi, replacements: ['acts as a key tool', 'functions as a resource', 'works as a framework'] },
+  { pattern: /\brepresents? (?:a|an) (?:significant|major|important|notable|key|crucial|critical) (?:step|shift|change|development|advancement|milestone) (?:in|toward|towards|for)\b/gi, replacements: ['marks a step in', 'is a major development in', 'marks a change in'] },
+  { pattern: /\bhas (?:significant|profound|important|major|far-reaching) implications for\b/gi, replacements: ['matters for', 'affects', 'has consequences for'] },
+  { pattern: /\bas (?:previously|earlier) (?:mentioned|noted|discussed|stated|outlined|explained)\b/gi, replacements: ['as noted', 'as covered', ''] },
+  { pattern: /\bover the (?:past|last) (?:few|several|many|recent) (?:years|decades)\b/gi, replacements: ['recently', 'in recent times', 'over recent years'] },
 ];
 
 /* ── Evaluative Phrase Surgery (sentence-level AI signal removal) ── */
@@ -284,6 +325,54 @@ const EVALUATIVE_SURGERIES: Array<{ pattern: RegExp; replaceFn: (match: string, 
     pattern: /\b[Ii]t is based on the idea that\b/gi,
     replaceFn: () => {
       const alts = ['The idea is that', 'The premise is that', 'It works on the basis that'];
+      return alts[Math.floor(Math.random() * alts.length)];
+    },
+  },
+  {
+    // "This serves as a [crucial/key/vital] [tool/mechanism/foundation]"
+    pattern: /\b[Tt]his (?:serves?|functions?|operates?|acts?) as (?:a|an) (?:crucial|vital|key|important|essential|critical|central|fundamental|primary|core) (?:tool|mechanism|framework|foundation|basis|component|resource|means|way)\b/gi,
+    replaceFn: (_m) => {
+      const alts = ['This works as a tool', 'This functions as a resource', 'This acts as a core element', 'This is a key resource'];
+      return alts[Math.floor(Math.random() * alts.length)];
+    },
+  },
+  {
+    // "This represents a [significant/major] [step/shift/development/change]"
+    pattern: /\b[Tt]his represents? (?:a|an) (?:significant|major|important|notable|key|crucial|critical|fundamental|substantial|remarkable) (?:step|shift|change|development|advancement|milestone|departure|move) (?:in|toward|towards|for|away from)\b/gi,
+    replaceFn: (_m) => {
+      const alts = ['This marks a step in', 'This is a key shift in', 'This signals a change in', 'This marks a development in'];
+      return alts[Math.floor(Math.random() * alts.length)];
+    },
+  },
+  {
+    // "The [significance/importance/value] of [X] cannot be [overstated/overlooked]"
+    pattern: /\b[Tt]he (?:significance|importance|value|impact|role|relevance) of (?:this|these|such|the|their) .{2,40}? cannot be (?:overstated|overlooked|underestimated|ignored)\b/gi,
+    replaceFn: (_m) => {
+      const alts = ['This deserves careful attention', 'This matters more than it may appear', 'This is worth taking seriously'];
+      return alts[Math.floor(Math.random() * alts.length)];
+    },
+  },
+  {
+    // "[X] has emerged as [a/an] [key/crucial] [tool/approach/solution]"
+    pattern: /\b(.{3,40}?) has emerged as (?:a|an) (?:key|crucial|vital|important|essential|leading|prominent|dominant|primary|critical) (?:tool|approach|method|solution|technique|mechanism|option|alternative|strategy|framework|resource)\b/gi,
+    replaceFn: (_m, subject) => {
+      const alts = [`${subject.trim()} has become a go-to option`, `${subject.trim()} is now a common approach`, `${subject.trim()} has grown into a key option`];
+      return alts[Math.floor(Math.random() * alts.length)];
+    },
+  },
+  {
+    // "It is [widely/generally] [known/accepted/recognized] that"
+    pattern: /\b[Ii]t is (?:widely|generally|commonly|broadly) (?:known|accepted|recognized|acknowledged|understood|agreed) that\s+/gi,
+    replaceFn: () => {
+      const alts = ['Most agree that ', 'The consensus is that ', 'It is accepted that '];
+      return alts[Math.floor(Math.random() * alts.length)];
+    },
+  },
+  {
+    // "X has gained [significant/considerable] attention/traction/momentum"
+    pattern: /\b(.{3,50}?) has (?:gained|garnered|received|attracted|drawn) (?:significant|considerable|substantial|growing|increasing|much|great|widespread) (?:attention|interest|traction|momentum|prominence|recognition)\b/gi,
+    replaceFn: (_m, subject) => {
+      const alts = [`${subject.trim()} has drawn attention`, `${subject.trim()} has become a topic of interest`, `${subject.trim()} is increasingly studied`];
       return alts[Math.floor(Math.random() * alts.length)];
     },
   },
@@ -1022,6 +1111,47 @@ const EXTRA_REPLACEMENTS: Record<string, string[]> = {
   overarching: ['main', 'broad', 'overall', 'wider'],
   substantive: ['real', 'meaningful', 'genuine', 'solid'],
   meticulous: ['careful', 'precise', 'thorough', 'exacting'],
+  // ── ChatGPT-specific AI vocabulary (heavily flagged by Originality.ai, GPTZero) ──
+  delve: ['explore', 'look into', 'examine', 'investigate'],
+  delves: ['explores', 'looks into', 'examines', 'investigates'],
+  elucidate: ['explain', 'clarify', 'describe', 'break down'],
+  elucidates: ['explains', 'clarifies', 'describes', 'lays out'],
+  illuminate: ['explain', 'reveal', 'show', 'make clear'],
+  illuminates: ['explains', 'reveals', 'shows', 'makes clear'],
+  encapsulate: ['capture', 'summarize', 'convey', 'reflect'],
+  encapsulates: ['captures', 'summarizes', 'conveys', 'reflects'],
+  exemplify: ['show', 'illustrate', 'demonstrate', 'represent'],
+  exemplifies: ['shows', 'illustrates', 'demonstrates', 'represents'],
+  resonate: ['connect', 'relate', 'appeal', 'strike'],
+  resonates: ['connects', 'relates', 'appeals', 'strikes'],
+  underscore: ['highlight', 'emphasize', 'stress', 'show'],
+  underscores: ['highlights', 'emphasizes', 'stresses', 'shows'],
+  embody: ['represent', 'show', 'reflect', 'capture'],
+  embodies: ['represents', 'shows', 'reflects', 'captures'],
+  seminal: ['key', 'influential', 'foundational', 'landmark'],
+  burgeoning: ['growing', 'rising', 'expanding', 'emerging'],
+  nascent: ['emerging', 'early-stage', 'developing', 'new'],
+  proliferation: ['growth', 'spread', 'rise', 'increase'],
+  culmination: ['result', 'outcome', 'endpoint', 'end point'],
+  culminates: ['results', 'ends', 'concludes', 'finishes'],
+  multifaceted: ['complex', 'many-sided', 'layered', 'broad'],
+  synergistic: ['combined', 'complementary', 'collaborative', 'mutually reinforcing'],
+  symbiotic: ['mutually beneficial', 'complementary', 'interdependent'],
+  vibrant: ['active', 'dynamic', 'lively', 'thriving'],
+  underpinning: ['basis', 'foundation', 'support', 'core'],
+  underpins: ['supports', 'forms the basis of', 'drives', 'lies behind'],
+  encompass: ['include', 'cover', 'span', 'contain'],
+  encompasses: ['includes', 'covers', 'spans', 'contains'],
+  innovative: ['new', 'fresh', 'original', 'creative'],
+  seamless: ['smooth', 'fluid', 'effortless', 'clean'],
+  seamlessly: ['smoothly', 'fluidly', 'effortlessly', 'without friction'],
+  empower: ['enable', 'allow', 'help', 'give capacity to'],
+  empowers: ['enables', 'allows', 'helps', 'gives people the ability to'],
+  fosters: ['builds', 'supports', 'develops', 'helps grow'],
+  bolster: ['strengthen', 'support', 'reinforce', 'shore up'],
+  bolsters: ['strengthens', 'supports', 'reinforces', 'shores up'],
+  nuanced: ['detailed', 'layered', 'subtle', 'complex'],
+  imperative: ['necessary', 'required', 'needed', 'essential'],
 };
 
 /* ── Morphology Helpers ───────────────────────────────────────────── */
@@ -1236,6 +1366,38 @@ const AI_TELL_PATTERNS = [
   /\bfoster(?:s|ed|ing)? (?:a )?(?:sense|culture|environment|atmosphere) of\b/i,
   /\bparadigm shift\b/i,
   /\bholistic (?:approach|understanding|view|perspective)\b/i,
+  // Extended real-detector patterns (GPTZero, Turnitin, Originality.ai, Copyleaks)
+  /\bin recent years\b/i,
+  /\bit can be argued\b/i,
+  /\bmoving forward\b/i,
+  /\bgoing forward\b/i,
+  /\bbest practices?\b/i,
+  /\bhas emerged as\b/i,
+  /\bcan be attributed to\b/i,
+  /\bdelve(?:s|d|ing)?\b/i,
+  /\belucidat(?:e|es|ed|ing)\b/i,
+  /\bencapsulat(?:e|es|ed|ing)\b/i,
+  /\bseamless(?:ly)?\b/i,
+  /\bsynergistic\b/i,
+  /\bmultifaceted\b/i,
+  /\bgroundbreaking\b/i,
+  /\binnovative (?:approach|solution|method|framework)\b/i,
+  /\bit is (?:widely|generally|commonly) (?:believed|accepted|recognized|acknowledged)\b/i,
+  /\ba growing body of\b/i,
+  /\bdemonstrates a commitment to\b/i,
+  /\bempowers (?:individuals|people|students|users)\b/i,
+  /\brepresents? (?:a|an) (?:significant|major) (?:step|shift|milestone)\b/i,
+  /\bserves? as (?:a|an) (?:crucial|vital|key|essential) (?:tool|foundation|mechanism)\b/i,
+  /\bhas (?:significant|profound|important) implications for\b/i,
+  /\bfirst and foremost\b/i,
+  /\bneedless to say\b/i,
+  /\bat the (?:heart|core|forefront) of\b/i,
+  /\bcutting[- ]edge\b/i,
+  /\bstate[- ]of[- ]the[- ]art\b/i,
+  /\btransformative (?:impact|change|shift|role|effect)\b/i,
+  /\bunprecedented (?:growth|success|rate|scale|level)\b/i,
+  /\bever[- ]evolving\b/i,
+  /\bvibrant (?:community|culture|ecosystem|landscape)\b/i,
 ];
 
 function scoreReadability(sentence: string, original: string): number {
@@ -1555,6 +1717,31 @@ function processSentence(
     [/^To summarize[,;]\s*/i, ['In short, ', 'Briefly, ', '']],
     [/^To conclude[,;]\s*/i, ['To wrap up, ', '']],
     [/^Overall[,;]\s*/i, ['All told, ', 'On the whole, ', '']],
+    [/^Historically[,;]\s*/i, ['In the past, ', 'Over the years, ', '']],
+    [/^Traditionally[,;]\s*/i, ['Conventionally, ', 'In the past, ', '']],
+    [/^Typically[,;]\s*/i, ['Usually, ', 'In most cases, ', '']],
+    [/^Generally[,;]\s*/i, ['Usually, ', 'For the most part, ', '']],
+    [/^Specifically[,;]\s*/i, ['In particular, ', 'To be clear, ', '']],
+    [/^Particularly[,;]\s*/i, ['Especially, ', 'Of note, ', '']],
+    [/^Effectively[,;]\s*/i, ['In practice, ', 'In effect, ', '']],
+    [/^Remarkably[,;]\s*/i, ['Notably, ', 'Worth noting, ', '']],
+    [/^Invariably[,;]\s*/i, ['Almost always, ', '']],
+    [/^Ideally[,;]\s*/i, ['In the best case, ', '']],
+    [/^Encouragingly[,;]\s*/i, ['On a positive note, ', '']],
+    [/^In recent years[,;]\s*/i, ['Lately, ', 'Over recent years, ', 'Recently, ']],
+    [/^In theory[,;]\s*/i, ['On paper, ', 'Conceptually, ', '']],
+    [/^In practice[,;]\s*/i, ['In reality, ', 'On the ground, ', '']],
+    [/^At its core[,;]\s*/i, ['At heart, ', 'Fundamentally, ', '']],
+    [/^At first glance[,;]\s*/i, ['On the surface, ', '']],
+    [/^At the same time[,;]\s*/i, ['Also, ', 'Simultaneously, ', '']],
+    [/^As a result[,;]\s*/i, ['So, ', 'Because of this, ', '']],
+    [/^As such[,;]\s*/i, ['So, ', 'For this reason, ', '']],
+    [/^To this end[,;]\s*/i, ['With this in mind, ', 'For this reason, ', '']],
+    [/^With this in mind[,;]\s*/i, ['Given this, ', 'So, ', '']],
+    [/^Given this[,;]\s*/i, ['So, ', 'With this in mind, ', '']],
+    [/^It is (?:worth noting|important to note|essential to note|crucial to note) that\s*/i, ['Notably, ', 'Worth noting, ', '']],
+    [/^It should be noted that\s*/i, ['Notably, ', 'Worth noting, ', '']],
+    [/^(?:Research|Studies|Evidence) (?:suggests?|shows?|indicates?|demonstrates?) that\s*/i, ['Studies show that ', 'Research shows ', '']],
   ];
   for (const [re, alts] of NUCLEAR_STARTERS) {
     if (re.test(text)) {
@@ -2030,11 +2217,29 @@ function injectHumanImperfections(
           ' (worth noting)',
           ', and this matters,',
           ' (to varying degrees)',
+          ' (in most cases)',
+          ', which is telling,',
+          ' (at least in this context)',
         ];
         const aside = asides[Math.floor(rng.next() * asides.length)];
         const insertPos = t.lastIndexOf(',', t.length - 6);
         if (insertPos > Math.floor(t.length * 0.45)) {
           return t.slice(0, insertPos) + aside + t.slice(insertPos);
+        }
+      }
+
+      // ── Type 4: Mid-sentence qualifier insertion (~5% of longer sentences) ──
+      // Adds a natural qualifier word mid-sentence that human writers use instinctively.
+      if (roll >= 0.95 && t.split(/\s+/).length > 10 && !/\?/.test(t)) {
+        const qualifiers = ['largely ', 'mostly ', 'broadly ', 'generally ', 'in large part '];
+        // Find a "which" or "that" or "where" in the second half to insert after
+        const midPoint = Math.floor(t.length * 0.4);
+        const afterMid = t.slice(midPoint);
+        const relMatch = afterMid.match(/\b(which|where|when)\s+(?=[a-z])/i);
+        if (relMatch && relMatch.index !== undefined) {
+          const insertAt = midPoint + relMatch.index + relMatch[0].length;
+          const qualifier = qualifiers[Math.floor(rng.next() * qualifiers.length)];
+          return t.slice(0, insertAt) + qualifier + t.slice(insertAt);
         }
       }
 
