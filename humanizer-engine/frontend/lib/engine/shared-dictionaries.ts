@@ -436,35 +436,40 @@ export const CONTRACTION_REGEX = new RegExp(
 // 3. FORMAL CONNECTOR NATURALIZER (shared)
 // ══════════════════════════════════════════════════════════════════════════
 
+// ── Connector replacement rules ───────────────────────────────────────────
+// CRITICAL: None of the replacement values may themselves be AI-flagged.
+// Do NOT use: furthermore, moreover, additionally, consequently, nevertheless,
+// notwithstanding, accordingly, thus, hence, indeed, notably, specifically,
+// crucially, importantly, undeniably, undoubtedly.
 export const FORMAL_CONNECTORS: Record<string, string[]> = {
-  "Furthermore, ": ["Also, ", "In addition, ", "Beyond that, "],
-  "Moreover, ": ["On top of that, ", "In addition, ", "Beyond that, "],
-  "Additionally, ": ["Also, ", "In addition, ", "Beyond that, "],
-  "Consequently, ": ["Because of that, ", "That meant ", "As a result, "],
+  "Furthermore, ": ["Also, ", "Beyond that, ", "On top of this, "],
+  "Moreover, ": ["Also, ", "Beyond that, ", "Plus, "],
+  "Additionally, ": ["Also, ", "And, ", "On top of this, "],
+  "Consequently, ": ["So, ", "Because of that, ", "That meant "],
   "Nevertheless, ": ["Still, ", "Even so, ", "All the same, "],
   "Nonetheless, ": ["Still, ", "Even so, ", "All the same, "],
-  "In contrast, ": ["On the other hand, ", "Then again, ", "On the flip side, "],
-  "Subsequently, ": ["After that, ", "Then ", "Later, "],
-  "In conclusion, ": ["All in all, ", "When you put it together, ", "Looking at the whole picture, "],
-  "Therefore, ": ["For that reason, ", "That is why ", "This is why "],
-  "However, ": ["Still, ", "Even so, ", "All the same, "],
-  "Thus, ": ["That way, ", "Through this, ", "This meant "],
-  "Hence, ": ["For that reason, ", "That is why ", "Because of that, "],
-  "Indeed, ": ["In fact, ", "Sure enough, ", "As it turned out, "],
+  "In contrast, ": ["On the other hand, ", "Then again, ", "By comparison, "],
+  "Subsequently, ": ["After that, ", "Then, ", "Later, "],
+  "In conclusion, ": ["All in all, ", "When all is considered, ", "Looking back, "],
+  "Therefore, ": ["For that reason, ", "That is why ", "So, "],
+  "However, ": ["Still, ", "Even so, ", "That said, "],
+  "Thus, ": ["So, ", "Through this, ", "This way, "],
+  "Hence, ": ["So, ", "For that reason, ", "Because of that, "],
+  "Indeed, ": ["In fact, ", "As it turned out, ", "Clearly, "],
   "Accordingly, ": ["In response, ", "Because of this, ", "Given this, "],
-  "Notably, ": ["What stands out is ", "One thing worth noting: ", "As it happens, "],
+  "Notably, ": ["What stands out is ", "Worth mentioning, ", "As it happens, "],
   "Specifically, ": ["In particular, ", "To be exact, ", "More precisely, "],
-  "As a result, ": ["So ", "Because of this, ", "That meant "],
+  "As a result, ": ["So, ", "Because of this, ", "That meant "],
   "For example, ": ["Take ", "Consider ", "To illustrate, "],
-  "For instance, ": ["Take ", "Consider ", "Say "],
-  "On the other hand, ": ["Then again, ", "But ", "At the same time, "],
+  "For instance, ": ["Take ", "Consider ", "Say, "],
+  "On the other hand, ": ["Then again, ", "By comparison, ", "At the same time, "],
   "In other words, ": ["Put simply, ", "In practice, ", "What that means is "],
   "To begin with, ": ["First off, ", "Starting with, ", "At the outset, "],
   "In particular, ": ["Especially, ", "Above all, ", "Chiefly, "],
-  "As such, ": ["So ", "Given that, ", "This means "],
-  "To that end, ": ["With that goal, ", "For that reason, ", "So "],
-  "By contrast, ": ["But ", "On the other side, ", "Compare that to "],
-  "In essence, ": ["At its core, ", "In practice, ", "Really, "],
+  "As such, ": ["So, ", "Given that, ", "This means "],
+  "To that end, ": ["With that goal, ", "For that reason, ", "So, "],
+  "By contrast, ": ["By comparison, ", "On the other side, ", "Compare that to "],
+  "In essence, ": ["At its core, ", "In practice, ", "At bottom, "],
   "In sum, ": ["Overall, ", "To wrap up, ", "All told, "],
   "To summarize, ": ["In short, ", "Briefly, ", "All told, "],
 };
@@ -2035,6 +2040,22 @@ function validateSentenceCoherence(sentences: string[]): string[] {
     // Fix doubled connectors: "However, however," → "However,"
     result = result.replace(/^(\w+),?\s+\1,?\s/i, (_, w) => w[0].toUpperCase() + w.slice(1) + ", ");
 
+    // ── STACKED CONNECTOR DEDUP ──
+    // Catch patterns like "However, although", "Also, additionally",
+    // "Furthermore, also", "In addition, moreover", "too too", etc.
+    // Remove the second connector, keeping only the first.
+    const STACKED_CONNECTOR_RE = /^(Also|Still|Plus|And|But|Yet|So|Then|However|Therefore|Thus|Hence|Furthermore|Moreover|Additionally|Consequently|Nevertheless|Nonetheless|Accordingly|Indeed|Notably|Specifically|In addition|On top of this|Beyond that|That said|Even so|All the same|By comparison|For that reason|Given this|What stands out is|Worth mentioning|As it happens|In particular|Above all|Chiefly|In fact|As it turned out|Clearly|In response|Because of this|After that|Later|Overall|In short|Briefly|First off|At the outset|Put simply|In practice|So|Take|Consider|Then again|At the same time|For example|To illustrate|Say),?\s+(also|still|plus|and|but|yet|so|then|however|therefore|thus|hence|furthermore|moreover|additionally|consequently|nevertheless|nonetheless|accordingly|indeed|notably|specifically|in addition|on top of this|beyond that|that said|even so|all the same|by comparison|for that reason|given this|in particular|above all|chiefly|in fact|although|while|despite|though|as well),?\s/i;
+    const stackedMatch = result.match(STACKED_CONNECTOR_RE);
+    if (stackedMatch) {
+      // Keep only the first connector + strip the second
+      const firstConn = stackedMatch[1];
+      const rest = result.slice(result.toLowerCase().indexOf(stackedMatch[2].toLowerCase(), firstConn.length)).trim();
+      if (rest.length > 10) {
+        const restFixed = rest.replace(/^,?\s*/, "");
+        result = firstConn[0].toUpperCase() + firstConn.slice(1) + ", " + restFixed[0].toLowerCase() + restFixed.slice(1);
+      }
+    }
+
     // Fix sentences ending mid-clause (no proper ending punctuation)
     if (result.length > 10 && !/[.!?]$/.test(result)) {
       result += ".";
@@ -2049,8 +2070,8 @@ function validateSentenceCoherence(sentences: string[]): string[] {
     // Fix dangling "and" / "or" / "but" at end
     result = result.replace(/\s+(?:and|or|but)\s*\.\s*$/, ".");
 
-    // Fix sentences starting with "And" immediately after a period was stripped
-    // (already handled by cleanSentenceStarters, but catch residual)
+    // Fix duplicate adjacent words: "too too", "very very", etc.
+    result = result.replace(/\b(\w{2,})\s+\1\b/gi, "$1");
 
     return result;
   });
@@ -2162,6 +2183,10 @@ export function deepCleaningPass(sentences: string[]): string[] {
  *   string  = replace the matched opener with this text
  */
 const BAD_STARTER_FIXES: [RegExp, string][] = [
+  // "Too" at sentence start — never valid academic opener
+  [/^Too,?\s*/i, "strip"],
+  // "Too [adj]" — e.g. "Too often," should become the content after it
+  [/^Too (?:often|rarely|frequently|commonly|easily|quickly|slowly|soon|late|early),?\s*/i, "strip"],
   // "By [gerund]" — AI hallmark, strip the whole prepositional phrase if short
   [/^By \w+ing\b[^,]{0,30},\s*/i, "strip"],
   // "By [noun]," — strip the whole prepositional phrase (e.g. "By employment, workers…")
@@ -2179,12 +2204,12 @@ const BAD_STARTER_FIXES: [RegExp, string][] = [
   // "Yet" as bare opener (not "Yet another")
   [/^Yet\s+(?!another|again|more|further)/i, "Still, "],
   // "Hence" / "Thus" bare starters
-  [/^Hence,?\s*/i, "As a result, "],
+  [/^Hence,?\s*/i, "For this reason, "],
   [/^Thus,?\s*/i, "In this way, "],
   // "Now," as filler
   [/^Now,\s*/i, "strip"],
-  // "Plus," as filler
-  [/^Plus,?\s*/i, "In addition, "],
+  // "Plus," as filler — replace with non-AI alternative
+  [/^Plus,?\s*/i, "Beyond that, "],
   // "Sure enough," — too informal
   [/^Sure enough,\s*/i, "As expected, "],
   // "Truth be told," — informal
@@ -2198,7 +2223,7 @@ const BAD_STARTER_FIXES: [RegExp, string][] = [
   // "Dig deeper and" — too casual
   [/^Dig deeper and\s*/i, "On closer examination, "],
   // "Strip it down and" — casual
-  [/^Strip it down and\s*/i, "Fundamentally, "],
+  [/^Strip it down and\s*/i, "At its core, "],
   // "Zoom in and" — casual
   [/^Zoom in and\s*/i, "On closer inspection, "],
   // "Step back and" — casual
@@ -2206,9 +2231,9 @@ const BAD_STARTER_FIXES: [RegExp, string][] = [
   // "In a way," — vague
   [/^In a way,\s*/i, "To some extent, "],
   // "Oddly enough," — informal
-  [/^Oddly enough,\s*/i, "Notably, "],
+  [/^Oddly enough,\s*/i, "What stands out, "],
   // "At a glance," — informal
-  [/^At a glance,\s*/i, "Initially, "],
+  [/^At a glance,\s*/i, "At first look, "],
   // "Consider this:" — imperative, informal
   [/^Consider this:\s*/i, "strip"],
   // "Worth noting:" — fragment
@@ -2219,6 +2244,10 @@ const BAD_STARTER_FIXES: [RegExp, string][] = [
   [/^The key insight here is that\s*/i, "strip"],
   // "A closer reading shows" — AI pattern
   [/^A closer reading shows\s*/i, "strip"],
+  // "In addition," when followed by another connector
+  [/^In addition,?\s+(?:also|furthermore|moreover|additionally),?\s*/i, "Beyond that, "],
+  // "Also," at sentence start (AI filler)
+  [/^Also,\s*/i, "strip"],
 ];
 
 /**

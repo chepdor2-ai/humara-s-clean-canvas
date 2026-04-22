@@ -1,30 +1,30 @@
-/**
- * Nuru Humanizer Engine v3 — Pure Non-LLM Per-Sentence Independent Processing
+﻿/**
+ * Nuru Humanizer Engine v3 â€” Pure Non-LLM Per-Sentence Independent Processing
  * =============================================================================
  *
  * ARCHITECTURE (mirrors Omega but zero LLM calls):
- *   Phase 1 — PRE-ANALYSIS
- *     • Detect first-person usage in input (preserve only if present)
- *     • Extract paragraphs → identify titles/headings → extract sentences
- *     • Classify each sentence: protected, needs-error, needs-starter, strategy assignment
- *     • 10 transformation strategies assigned RANDOMLY (not cycling)
+ *   Phase 1 â€” PRE-ANALYSIS
+ *     â€¢ Detect first-person usage in input (preserve only if present)
+ *     â€¢ Extract paragraphs â†’ identify titles/headings â†’ extract sentences
+ *     â€¢ Classify each sentence: protected, needs-error, needs-starter, strategy assignment
+ *     â€¢ 10 transformation strategies assigned RANDOMLY (not cycling)
  *
- *   Phase 2 — INDEPENDENT PROCESSING
- *     • Each sentence processed independently through its randomly assigned strategy
- *     • Each strategy applies different combinations of transforms
- *     • 60% word-change enforcement with escalating transform passes
+ *   Phase 2 â€” INDEPENDENT PROCESSING
+ *     â€¢ Each sentence processed independently through its randomly assigned strategy
+ *     â€¢ Each strategy applies different combinations of transforms
+ *     â€¢ 60% word-change enforcement with escalating transform passes
  *
- *   Phase 3 — REASSEMBLY + POST-PROCESSING
- *     • Reassemble sentences into paragraphs
- *     • Apply error injection + starter variation to marked sentences
- *     • 7-phase post-processing: AI word kill, AI phrase kill, starter kill,
+ *   Phase 3 â€” REASSEMBLY + POST-PROCESSING
+ *     â€¢ Reassemble sentences into paragraphs
+ *     â€¢ Apply error injection + starter variation to marked sentences
+ *     â€¢ 7-phase post-processing: AI word kill, AI phrase kill, starter kill,
  *       contraction kill, uniformity break, final cleanup, second AI word sweep
  *
  *   STRICT OUTPUT RULES:
- *     • NO contractions — ever
- *     • NO first person unless the input contained first person
- *     • NO colloquial, humorous, or informal phrases
- *     • Target: 0% AI detection score
+ *     â€¢ NO contractions â€” ever
+ *     â€¢ NO first person unless the input contained first person
+ *     â€¢ NO colloquial, humorous, or informal phrases
+ *     â€¢ Target: 0% AI detection score
  */
 
 import { validateAndRepairOutput } from "./validation-post-process";
@@ -59,9 +59,9 @@ import {
 import { robustSentenceSplit, humanizeTitle } from './content-protection';
 import { enforceSingleSentence } from './sentence-surgery';
 
-// ══════════════════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 // PHASE 0: PROPER NOUN & CITATION AUTHOR PROTECTION
-// ══════════════════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
 /**
  * Extract proper nouns from source text so we can restore their casing
@@ -128,9 +128,9 @@ function restoreProperNounCasing(text: string, properNouns: Set<string>): string
   return result;
 }
 
-// ══════════════════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 // PHASE 1: PRE-ANALYSIS
-// ══════════════════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
 /** Detect whether the input text contains first-person pronouns. */
 function detectFirstPerson(text: string): boolean {
@@ -158,10 +158,10 @@ function extractParagraphs(text: string): string[] {
       const trimmed = line.trim();
       if (!trimmed) continue;
       if (isProtectedLine(trimmed) && bodyLines.length === 0) {
-        // Heading at the start — push as its own paragraph
+        // Heading at the start â€” push as its own paragraph
         result.push(trimmed);
       } else if (isProtectedLine(trimmed) && bodyLines.length > 0) {
-        // Heading after body lines — flush body, then push heading
+        // Heading after body lines â€” flush body, then push heading
         result.push(bodyLines.join(' '));
         bodyLines = [];
         result.push(trimmed);
@@ -197,7 +197,7 @@ function isProtectedLine(line: string): boolean {
   const words = t.split(/\s+/);
   // ALL-CAPS lines (4+ chars) that are short
   if (words.length <= 12 && t === t.toUpperCase() && /[A-Z]/.test(t) && t.length >= 4) return true;
-  // Short lines (<=3 words) without ending punctuation — likely headings
+  // Short lines (<=3 words) without ending punctuation â€” likely headings
   if (words.length <= 3 && !/[.!?]$/.test(t)) return true;
   return false;
 }
@@ -292,9 +292,9 @@ function classifySentences(paragraphs: string[]): {
   return { classifications, paragraphMap, protectedParagraphs };
 }
 
-// ══════════════════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 // DICTIONARY-BASED REPLACEMENTS
-// ══════════════════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
 function applySwapDict(sentence: string, dict: Record<string, string[]>, seed: number): string {
   let result = sentence;
@@ -313,25 +313,25 @@ function applySwapDict(sentence: string, dict: Record<string, string[]>, seed: n
   return result;
 }
 
-// ══════════════════════════════════════════════════════════════════════════
-// 10 TRANSFORMATION STRATEGIES — each applies different transform combos
-// ══════════════════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// 10 TRANSFORMATION STRATEGIES â€” each applies different transform combos
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
 type Strategy = (sentence: string, seed: number) => string;
 
-/** Safe wrapper for applySyntacticTemplate — reverts if output is garbled */
+/** Safe wrapper for applySyntacticTemplate â€” reverts if output is garbled */
 function safeSyntacticTemplate(sentence: string): string {
   const result = applySyntacticTemplate(sentence);
   return isGarbledSentence(result) ? sentence : result;
 }
 
-/** Safe wrapper for deepRestructure — reverts if output is garbled */
+/** Safe wrapper for deepRestructure â€” reverts if output is garbled */
 function safeDeepRestructure(sentence: string, intensity: number): string {
   const result = deepRestructure(sentence, intensity);
   return isGarbledSentence(result) ? sentence : result;
 }
 
-/** Strategy 0: Analytical rewriter — clause rephrasings + verb swaps + restructure */
+/** Strategy 0: Analytical rewriter â€” clause rephrasings + verb swaps + restructure */
 function strategyAnalytical(sentence: string, seed: number): string {
   let s = applyAIWordKill(sentence);
   s = applySwapDict(s, CLAUSE_REPHRASINGS, seed);
@@ -341,7 +341,7 @@ function strategyAnalytical(sentence: string, seed: number): string {
   return s;
 }
 
-/** Strategy 1: Formal academic — phrase patterns + causal + temporal */
+/** Strategy 1: Formal academic â€” phrase patterns + causal + temporal */
 function strategyFormalAcademic(sentence: string, seed: number): string {
   let s = applyAIWordKill(sentence);
   s = applyPhrasePatterns(s);
@@ -352,7 +352,7 @@ function strategyFormalAcademic(sentence: string, seed: number): string {
   return s;
 }
 
-/** Strategy 2: Simplification — hedging removal + modifier simplification */
+/** Strategy 2: Simplification â€” hedging removal + modifier simplification */
 function strategySimplification(sentence: string, seed: number): string {
   let s = applyAIWordKill(sentence);
   s = applySwapDict(s, HEDGING_PHRASES, seed);
@@ -369,7 +369,7 @@ function strategySimplification(sentence: string, seed: number): string {
   return s;
 }
 
-/** Strategy 3: Voice shift heavy — passive voice + restructure */
+/** Strategy 3: Voice shift heavy â€” passive voice + restructure */
 function strategyVoiceShift(sentence: string, seed: number): string {
   let s = applyAIWordKill(sentence);
   const shifted = voiceShift(s, 0.5);
@@ -384,7 +384,7 @@ function strategyVoiceShift(sentence: string, seed: number): string {
   return s;
 }
 
-/** Strategy 4: Traditional scholarly — semicolons + measured phrasing */
+/** Strategy 4: Traditional scholarly â€” semicolons + measured phrasing */
 function strategyTraditional(sentence: string, seed: number): string {
   let s = applyAIWordKill(sentence);
   s = applyPhrasePatterns(s);
@@ -401,7 +401,7 @@ function strategyTraditional(sentence: string, seed: number): string {
   return s;
 }
 
-/** Strategy 5: Direct academic — connector naturalization + diversity */
+/** Strategy 5: Direct academic â€” connector naturalization + diversity */
 function strategyDirect(sentence: string, seed: number): string {
   let s = applyAIWordKill(sentence);
   s = applyConnectorNaturalization(s);
@@ -412,7 +412,7 @@ function strategyDirect(sentence: string, seed: number): string {
   return s;
 }
 
-/** Strategy 6: Deep restructure — maximum structural change */
+/** Strategy 6: Deep restructure â€” maximum structural change */
 function strategyDeepRestructure(sentence: string, seed: number): string {
   let s = applyAIWordKill(sentence);
   s = safeDeepRestructure(s, 0.45);
@@ -424,7 +424,7 @@ function strategyDeepRestructure(sentence: string, seed: number): string {
   return s;
 }
 
-/** Strategy 7: Precision rewrite — causal + quantifier + temporal */
+/** Strategy 7: Precision rewrite â€” causal + quantifier + temporal */
 function strategyPrecision(sentence: string, seed: number): string {
   let s = applyAIWordKill(sentence);
   s = applyPhrasePatterns(s);
@@ -436,7 +436,7 @@ function strategyPrecision(sentence: string, seed: number): string {
   return s;
 }
 
-/** Strategy 8: Full sweep — all dictionaries */
+/** Strategy 8: Full sweep â€” all dictionaries */
 function strategyFullSweep(sentence: string, seed: number): string {
   let s = applyAIWordKill(sentence);
   s = applyPhrasePatterns(s);
@@ -451,7 +451,7 @@ function strategyFullSweep(sentence: string, seed: number): string {
   return s;
 }
 
-/** Strategy 9: Measured scholarly — emphasis + hedging + voice */
+/** Strategy 9: Measured scholarly â€” emphasis + hedging + voice */
 function strategyMeasured(sentence: string, seed: number): string {
   let s = applyAIWordKill(sentence);
   s = applySwapDict(s, EMPHASIS_SWAPS, seed);
@@ -476,9 +476,9 @@ const STRATEGIES: Strategy[] = [
   strategyMeasured,
 ];
 
-// ══════════════════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 // 60% WORD CHANGE ENFORCEMENT
-// ══════════════════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
 function calculateWordChangePercent(original: string, rewritten: string): number {
   const normalize = (t: string) => t.toLowerCase().replace(/[^a-z\s]/g, '').split(/\s+/).filter(w => w.length > 2);
@@ -513,7 +513,7 @@ function isGarbledSentence(sentence: string): boolean {
   // Broken irregular past participles created by naive voice shift
   if (/\b(?:chosed|choosed|runned|comed|goed|taked|takened|gived|writed|speaked|leaved|finded|knowed|thinked|sayed|tolded|keeped|bringed|buyed|felted|cutted|putted|setted|digged|stronglyed|becomed|choosened|arised|losed|wined|growed|drived|hited|falled|holded|rised|maked|standed|telled|spended|builded|dealed|feeled|payed|successed|succeeded\s+by\s+\w+\s+natural|doed|hased|willed)\b/i.test(s)) return true;
   // SPECIFIC broken -ed on adverbs/adjectives/non-verbs: "philosophicallyed", "stronglyed", "positivelyed"
-  // NOTE: Do NOT use a broad regex like /\w+(ly|al|ive)ed/ — it matches legitimate words
+  // NOTE: Do NOT use a broad regex like /\w+(ly|al|ive)ed/ â€” it matches legitimate words
   // like "presented", "revealed", "represented", "implemented", "prevented", etc.
   // Instead, match ONLY the specific patterns that are NEVER valid English:
   if (/\b\w+(?:lyed|ouslyed|ivelyed|fullyed|ticlyed|callyed|entlyed|antlyed)\b/i.test(s)) return true;
@@ -545,15 +545,15 @@ function isGarbledSentence(sentence: string): boolean {
   if (/\bsuch[.!?]$/i.test(s)) return true;
   // Double prepositions or broken patterns
   if (/\b(?:by|of|in|on|at|for|to)\s+(?:by|of|in|on|at|for|to)\s+/i.test(s)) return true;
-  // "are expanded by transformation organizations" — passive + random noun mash
+  // "are expanded by transformation organizations" â€” passive + random noun mash
   if (/\bare\s+\w+ed\s+by\s+\w+\s+organizations?\b/i.test(s) && !/\bare\s+(?:used|employed|adopted|managed|operated|owned|run|funded|supported)\s+by\b/i.test(s)) return true;
   // Sentence starts with "are" or "is" + past participle (broken subject)
   if (/^(?:are|is)\s+\w+ed\b/i.test(s)) return true;
-  // "by measures risk" — preposition followed by noun then unrelated noun  
+  // "by measures risk" â€” preposition followed by noun then unrelated noun  
   if (/\bby\s+measures?\s+risk\b/i.test(s)) return true;
   // Garbled clause reordering: verb before subject at sentence start
   if (/^(?:do|does|did)\s+\w+\s+(?:from|in|at|by|of)\b/i.test(s) && !/^(?:do|does|did)\s+(?:not|n't)\b/i.test(s)) return true;
-  // "is [verb]ed by [noun], [pronoun] [noun]" — dangling passive reordering
+  // "is [verb]ed by [noun], [pronoun] [noun]" â€” dangling passive reordering
   if (/\bis\s+\w+ed\s+by\s+\w+\s*,\s*\w+\s+\w+\s*\./i.test(s)) return true;
   // Subject-less sentences starting with preposition + verb (broken reordering)
   if (/^(?:By|From|In|At|On)\s+\w+(?:\s+\w+)?\s*,\s*(?:is|are|was|were)\b/i.test(s)) return true;
@@ -562,7 +562,7 @@ function isGarbledSentence(sentence: string): boolean {
     const m = s.match(/by\s+(\w+\s+\w+)[.,]\s*$/i);
     if (m && !/^(?:the|a|an|this|that|these|those|some|many|most|its|his|her|their|our|my|your)\b/i.test(m[1])) return true;
   }
-  // "Because for" — double conjunction/preposition at start
+  // "Because for" â€” double conjunction/preposition at start
   if (/^Because\s+for\b/i.test(s)) return true;
   // Dangling prepositional phrase as sentence start + modal (no subject): "Before bedtime might..."
   if (/^(?:Before|After|During|At|In)\s+\w+\s+(?:might|could|can|would|should|will)\b/i.test(s)) return true;
@@ -572,10 +572,10 @@ function isGarbledSentence(sentence: string): boolean {
     if (tail && !/\b(?:is|are|was|were|has|have|had|do|does|did|can|could|will|would)\b/i.test(tail[1])) return true;
   }
 
-  // ── NEW GARBLE CHECKS (catch broken voice-shift & clause reordering) ──
+  // â”€â”€ NEW GARBLE CHECKS (catch broken voice-shift & clause reordering) â”€â”€
 
   // Inverted sentence ending with ", SUBJECT verb" pattern from broken fronting:
-  // e.g. "In the creation of..., he maintains" → catches bad inversions like
+  // e.g. "In the creation of..., he maintains" â†’ catches bad inversions like
   // "In the creation of an ethical environment..., he maintains that" which LOSE the main clause
   // ONLY flag if the main clause before comma has no subject (starts with prep phrase only)
   if (/^(?:In|On|At|By|From|Through|With|For|During)\s+[^,]{20,},\s*(?:he|she|it|they|we|this|the)\s+\w+(?:s|ed|es)?\s+that\b/i.test(s)) {
@@ -589,20 +589,20 @@ function isGarbledSentence(sentence: string): boolean {
     }
   }
 
-  // Sentence ending with ", SUBJECT." — dangling subject fragment (broken clause split)
+  // Sentence ending with ", SUBJECT." â€” dangling subject fragment (broken clause split)
   if (/,\s*(?:he|she|it|they|this)\s+\w{2,}\s*\.\s*$/i.test(s)) {
     const lastComma = s.lastIndexOf(',');
     const tail = s.slice(lastComma + 1).trim();
     if (tail.split(/\s+/).length <= 3) return true;
   }
 
-  // "is succeeded by X natural law" — garbled passive (voice shift broke it)
+  // "is succeeded by X natural law" â€” garbled passive (voice shift broke it)
   if (/\bis\s+succeeded\s+by\s+\w+\s+(?:natural|law|theory)\b/i.test(s)) return true;
 
   // Sentence contains "., " (double punctuation from broken join)
   if (/\.,\s/.test(s) && !/\bet\s+al\.,/i.test(s) && !/\betc\.,/i.test(s)) return true;
 
-  // "is thoughted by" — broken past participle of irregular verbs
+  // "is thoughted by" â€” broken past participle of irregular verbs
   if (/\b(?:is|was|are|were)\s+(?:thoughted|thinked|knowed|leaved|speaked|writed|finded|goed|comed|runned|sayed|maked)\b/i.test(s)) return true;
 
   // Sentence starts with bare third-person verb (no subject):
@@ -621,7 +621,7 @@ function isGarbledSentence(sentence: string): boolean {
   }
 
   // Passive ending with ", SUBJECT." pattern from broken clause reordering:
-  // "is offered by synthesis, Hill." — dangling proper noun after comma
+  // "is offered by synthesis, Hill." â€” dangling proper noun after comma
   if (/,\s+[A-Z][a-z]+\.\s*$/.test(s) && words.length > 5) {
     const lastComma = s.lastIndexOf(',');
     const tail = s.slice(lastComma + 1).trim();
@@ -649,7 +649,7 @@ function isGarbledSentence(sentence: string): boolean {
   // This is checked elsewhere, so skip.
 
   // Sentence contains BOTH the original subject AND a reordered version
-  // e.g., "X is Y is Z" — double "is" with no conjunction
+  // e.g., "X is Y is Z" â€” double "is" with no conjunction
   const isCount = (s.match(/\b(?:is|are|was|were)\b/gi) || []).length;
   if (isCount >= 3 && words.length < 30) return true;
 
@@ -665,9 +665,14 @@ function isGarbledSentence(sentence: string): boolean {
 }
 
 function enforceMinimumChange(original: string, current: string, seed: number): string {
-  const TARGET_CHANGE = 70; // 70% minimum word change
+  // Per-iteration floor: 25% must change each pass; overall target: 85%
+  const ITERATION_MIN = 25;
+  const TARGET_CHANGE = 85;
   let result = current;
   let changePercent = calculateWordChangePercent(original, result);
+
+  // Fast-exit: if already at target, skip all expensive passes
+  if (changePercent >= TARGET_CHANGE) return result;
 
   // Pass 1: Apply additional swap dicts (fire at <40%)
   if (changePercent < 40) {
@@ -828,9 +833,9 @@ function enforceMinimumChange(original: string, current: string, seed: number): 
   return result;
 }
 
-// ══════════════════════════════════════════════════════════════════════════
-// ERROR INJECTION — applied post-transform to statistically marked sentences
-// ══════════════════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ERROR INJECTION â€” applied post-transform to statistically marked sentences
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
 function injectAcademicError(sentence: string, sentIdx: number): string {
   const errors = [
@@ -903,9 +908,9 @@ function injectAcademicError(sentence: string, sentIdx: number): string {
   return sentence;
 }
 
-// ══════════════════════════════════════════════════════════════════════════
-// STARTER VARIATION — applied to statistically marked sentences
-// ══════════════════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// STARTER VARIATION â€” applied to statistically marked sentences
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
 const ACADEMIC_STARTERS = [
   'In this regard, ', 'On this point, ', 'Notably, ', 'To that end, ',
@@ -914,7 +919,7 @@ const ACADEMIC_STARTERS = [
   'In a broader sense, ', 'On closer inspection, ', 'As a result, ',
 ];
 
-// Phrases that already mark a sentence as having a transition — don't stack another on top
+// Phrases that already mark a sentence as having a transition â€” don't stack another on top
 const ALREADY_TRANSITIONED_RE = /^(?:In this regard|On this point|Notably|To that end|By extension|In particular|Along these lines|Accordingly|From this standpoint|With this in mind|At the same time|In a broader sense|On closer inspection|As a result|In addition|Furthermore|Moreover|Additionally|Consequently|Nevertheless|Nonetheless|However|Therefore|Thus|Hence|Indeed|That said|Meanwhile|By contrast|In contrast|On the other hand|In other words|In essence|Specifically|For example|For instance|As such|Beyond this|Building on this|Alongside this|What is more|On a related note|Even so|Regardless|To conclude|In summary|On balance|For this reason|Put differently|Especially|Given this|With this aim|On the contrary|Fundamentally|Equally,|Also,|Still,|In response|Correspondingly|Of particular note|Significantly|To illustrate|Conversely|From another perspective),?\s/i;
 
 function applyStarterVariation(sentence: string, sentIdx: number, usedStarters: Set<string>): string {
@@ -931,15 +936,15 @@ function applyStarterVariation(sentence: string, sentIdx: number, usedStarters: 
     if (commonStarts.has(firstWord.toLowerCase())) {
       return starter + sentence[0].toLowerCase() + sentence.slice(1);
     }
-    // Proper noun — keep capitalization
+    // Proper noun â€” keep capitalization
     return starter + sentence;
   }
   return starter + sentence;
 }
 
-// ══════════════════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 // ADDITIONAL AI PHRASE KILLS
-// ══════════════════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
 const EXTRA_AI_PHRASES: [RegExp, string][] = [
   [/\bit is (?:important|crucial|essential|vital) to (?:note|mention|recognize) that\b/gi, ''],
@@ -973,9 +978,9 @@ function extraAIPhraseKill(text: string): string {
   }).join('\n\n');
 }
 
-// ══════════════════════════════════════════════════════════════════════════
-// POST-PROCESSING PIPELINE — 7 phases
-// ══════════════════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// POST-PROCESSING PIPELINE â€” 7 phases
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
 const PP_AI_WORDS_RE = /\b(utilize|utilise|facilitate|leverage|comprehensive|multifaceted|paramount|delve|foster|harness|tapestry|cornerstone|myriad|plethora|landscape|realm|pivotal|intricate|meticulous|profound|overarching|transformative|noteworthy|elucidate|embark|robust|innovative|groundbreaking|streamline|optimize|bolster|catalyze|spearhead|unravel|unveil|nexus|holistic|substantive|salient|ubiquitous|enhance|crucial|vital|essential|imperative|underscores?d?|discourse|trajectory|paradigm|nuanced|culminate)\b/gi;
 
@@ -1044,7 +1049,7 @@ const PP_AI_PHRASE_PATTERNS: [RegExp, string][] = [
   [/\bfor the purpose of\b/gi, 'to'],
   [/\bin the event that\b/gi, 'if'],
   [/\bby virtue of\b/gi, 'through'],
-  // Only strip the most egregious AI-tell adverbs — keep natural transitions
+  // Only strip the most egregious AI-tell adverbs â€” keep natural transitions
   [/\bundeniably,?\s*/gi, ''], [/\bundoubtedly,?\s*/gi, ''],
   [/\bcrucially,?\s*/gi, ''],
   [/\barguably,?\s*/gi, ''],
@@ -1070,7 +1075,7 @@ function ppAIPhrasesKill(text: string): string {
 }
 
 const PP_AI_STARTERS = new Set([
-  // Only strip truly overused AI starters — leave natural transitions alone
+  // Only strip truly overused AI starters â€” leave natural transitions alone
   'notwithstanding', 'crucially',
   'importantly', 'arguably',
   'undeniably', 'undoubtedly', 'remarkably', 'evidently',
@@ -1182,9 +1187,9 @@ function ppKillFirstPerson(text: string): string {
   return r;
 }
 
-// ══════════════════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 // MAIN ENGINE
-// ══════════════════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
 export function nuruHumanize(
   text: string,
@@ -1193,11 +1198,11 @@ export function nuruHumanize(
 ): string {
   if (!text || !text.trim()) return text;
 
-  // ── PROPER NOUN EXTRACTION ──
+  // â”€â”€ PROPER NOUN EXTRACTION â”€â”€
   // Extract proper nouns BEFORE any transformation so we can restore casing later
   const properNouns = extractProperNouns(text);
 
-  // ── CITATION + STAT PROTECTION ──
+  // â”€â”€ CITATION + STAT PROTECTION â”€â”€
   // Protect citations (Author, Year) and numeric statistics from modification
   const citationMap = new Map<string, string>();
   let citIdx = 0;
@@ -1216,7 +1221,7 @@ export function nuruHumanize(
     });
   const textWithPlaceholders = protected_text;
 
-  // ── PHASE 1: PRE-ANALYSIS ──
+  // â”€â”€ PHASE 1: PRE-ANALYSIS â”€â”€
   const inputHasFirstPerson = detectFirstPerson(textWithPlaceholders);
   const intensity = strength === 'strong' ? 1.0 : strength === 'light' ? 0.4 : 0.7;
   // Tone drives contraction expansion: always expand for academic/professional
@@ -1224,7 +1229,7 @@ export function nuruHumanize(
   const paragraphs = extractParagraphs(textWithPlaceholders);
   const { classifications, paragraphMap, protectedParagraphs } = classifySentences(paragraphs);
 
-  // ── PHASE 2: INDEPENDENT PROCESSING ──
+  // â”€â”€ PHASE 2: INDEPENDENT PROCESSING â”€â”€
   // Each sentence processed independently through its randomly assigned strategy
   const results: Map<number, string> = new Map();
 
@@ -1255,7 +1260,7 @@ export function nuruHumanize(
     const preEnforce = processed;
     processed = enforceMinimumChange(cls.text, processed, cls.seed);
 
-    // CRITICAL: Re-check garble AFTER enforceMinimumChange — it re-applies
+    // CRITICAL: Re-check garble AFTER enforceMinimumChange â€” it re-applies
     // aggressive voice shifts that can break sentence structure
     if (isGarbledSentence(processed)) {
       // Fall back to the pre-enforcement version
@@ -1324,7 +1329,7 @@ export function nuruHumanize(
     results.set(cls.index, processed);
   }
 
-  // ── PHASE 3: REASSEMBLY + POST-PROCESSING ──
+  // â”€â”€ PHASE 3: REASSEMBLY + POST-PROCESSING â”€â”€
   const usedStarters = new Set<string>();
   const reassembledParagraphs: string[] = [];
 
@@ -1353,14 +1358,14 @@ export function nuruHumanize(
       if (subSents.length > 1) {
         const validSubs = subSents.filter(sub => !isGarbledSentence(sub));
         if (validSubs.length === 0) {
-          // All sub-sentences garbled — use the results version (which has safe swaps)
+          // All sub-sentences garbled â€” use the results version (which has safe swaps)
           sent = results.get(cls.index) ?? cls.text;
           // If that's also garbled as a whole, keep it anyway (safe swaps are safe)
         } else {
           sent = validSubs.join(' ');
         }
       } else if (isGarbledSentence(sent)) {
-        // Single sentence that is garbled — use results version
+        // Single sentence that is garbled â€” use results version
         sent = results.get(cls.index) ?? cls.text;
       }
 
@@ -1403,27 +1408,27 @@ export function nuruHumanize(
     reassembledParagraphs.push(antiDetected.join(' '));
   }
 
-  // ── FINAL SAFE-SWAP PASS ──
+  // â”€â”€ FINAL SAFE-SWAP PASS â”€â”€
   // After ALL structural transforms and garble checks, apply safe 1-to-1 word
   // swaps to every sentence that hasn't reached the 70% change target.
   // This is garble-safe because it only does word-level replacement.
   const origSentencesFlat = paragraphs.flatMap(p => robustSentenceSplit(p));
   const FINAL_SAFE_SWAPS: Record<string, string> = {
-    // ── Conjunctions / Connectives ──
+    // â”€â”€ Conjunctions / Connectives â”€â”€
     'but': 'yet', 'because': 'since', 'although': 'though',
     'while': 'whereas', 'however': 'nonetheless', 'therefore': 'thus',
     'also': 'likewise', 'yet': 'still', 'hence': 'as a result',
     'moreover': 'besides', 'furthermore': 'in addition', 'nevertheless': 'even so',
     'consequently': 'as a result', 'nonetheless': 'all the same',
     'despite': 'notwithstanding', 'rather': 'instead', 'thus': 'hence',
-    // ── Prepositions ──
+    // â”€â”€ Prepositions â”€â”€
     'about': 'concerning', 'regarding': 'concerning',
     'upon': 'on', 'within': 'inside', 'through': 'via', 'toward': 'towards',
     'among': 'amongst', 'between': 'amid', 'beyond': 'past',
-    // ── Pronouns / Reference ──
+    // â”€â”€ Pronouns / Reference â”€â”€
     'which': 'that', 'such': 'this kind of', 'these': 'those',
     'some': 'certain', 'other': 'additional',
-    // ── Adverbs ──
+    // â”€â”€ Adverbs â”€â”€
     'very': 'quite', 'often': 'frequently', 'particularly': 'notably',
     'especially': 'chiefly', 'specifically': 'precisely',
     'generally': 'broadly', 'typically': 'commonly', 'usually': 'commonly',
@@ -1432,7 +1437,7 @@ export function nuruHumanize(
     'largely': 'mostly', 'mainly': 'chiefly', 'mostly': 'largely',
     'already': 'previously', 'merely': 'only',
     'primarily': 'chiefly', 'essentially': 'basically', 'entirely': 'wholly',
-    // ── Common Verbs ──
+    // â”€â”€ Common Verbs â”€â”€
     'have': 'possess', 'has': 'possesses', 'make': 'construct', 'makes': 'produces',
     'give': 'grant', 'gives': 'grants', 'take': 'adopt', 'takes': 'adopts',
     'keep': 'retain', 'keeps': 'retains', 'need': 'require', 'needs': 'requires',
@@ -1460,7 +1465,7 @@ export function nuruHumanize(
     'continues': 'carries on', 'reduces': 'diminishes', 'increases': 'elevates',
     'improve': 'enhance', 'improves': 'enhances', 'adds': 'contributes',
     'based': 'grounded', 'associated': 'linked', 'related': 'connected',
-    // ── Common Adjectives ──
+    // â”€â”€ Common Adjectives â”€â”€
     'significant': 'considerable', 'important': 'central', 'critical': 'pivotal',
     'essential': 'vital', 'effective': 'productive', 'relevant': 'pertinent',
     'various': 'diverse', 'particular': 'distinct', 'specific': 'precise',
@@ -1477,7 +1482,7 @@ export function nuruHumanize(
     'political': 'governmental', 'social': 'societal', 'moral': 'ethical',
     'human': 'individual', 'practical': 'applied', 'rational': 'logical',
     'intrinsic': 'inherent', 'abstract': 'theoretical',
-    // ── Common Nouns ──
+    // â”€â”€ Common Nouns â”€â”€
     'approach': 'method', 'concept': 'notion', 'evidence': 'proof',
     'factor': 'element', 'framework': 'scaffold', 'issue': 'matter',
     'process': 'mechanism', 'role': 'function', 'structure': 'arrangement',
@@ -1502,10 +1507,10 @@ export function nuruHumanize(
     'description': 'depiction', 'defense': 'justification', 'indication': 'sign',
     'degradation': 'decline', 'hesitation': 'reluctance',
     'attempt': 'endeavor', 'construct': 'framework',
-    // ── Quantifiers ──
+    // â”€â”€ Quantifiers â”€â”€
     'many': 'numerous', 'most': 'the majority of', 'much': 'a great deal of',
     'few': 'a handful of', 'several': 'a number of', 'little': 'scant',
-    // ── High-frequency compensating swaps ──
+    // â”€â”€ High-frequency compensating swaps â”€â”€
     'each': 'every',
     'own': 'respective', 'goal': 'aim', 'main': 'primary',
     'well': 'effectively', 'able': 'capable',
@@ -1534,7 +1539,7 @@ export function nuruHumanize(
     reassembledParagraphs[pIdx] = newSents.join(' ');
   }
 
-  // ── PROTECT HEADINGS DURING POST-PROCESSING ──
+  // â”€â”€ PROTECT HEADINGS DURING POST-PROCESSING â”€â”€
   // Replace protected paragraphs with placeholders so post-processing won't mangle them
   const headingPlaceholders = new Map<string, string>();
   let hIdx = 0;
@@ -1551,7 +1556,7 @@ export function nuruHumanize(
   });
   let output = outputParagraphs.join('\n\n');
 
-  // ── POST-PROCESSING PIPELINE (per-sentence) ──
+  // â”€â”€ POST-PROCESSING PIPELINE (per-sentence) â”€â”€
   // All transforms applied independently to each sentence to prevent bulk processing
   {
     const ppParas = output.split(/\n\s*\n/).filter(p => p.trim());
@@ -1588,7 +1593,7 @@ export function nuruHumanize(
     }).join('\n\n');
   }
 
-  // Phase 5: ppBreakUniformity — DISABLED: splits sentences, violates 1-in=1-out
+  // Phase 5: ppBreakUniformity â€” DISABLED: splits sentences, violates 1-in=1-out
 
   // Restore protected headings
   for (const [placeholder, heading] of headingPlaceholders) {
@@ -1600,17 +1605,17 @@ export function nuruHumanize(
     output = output.replace(new RegExp(placeholder, 'gi'), citation);
   }
 
-  // Fix citation capitalization — capitalize author names in (Author, Year) patterns
+  // Fix citation capitalization â€” capitalize author names in (Author, Year) patterns
   output = output.replace(/\(([a-z][a-zA-Z&.\s]+,?\s*\d{4}[a-z]?(?:;\s*[a-z][a-zA-Z&.\s]+,?\s*\d{4}[a-z]?)*)\)/g, (match) => {
     return match.replace(/([(\s;])([a-z])/g, (_, pre, letter) => pre + letter.toUpperCase());
   });
 
-  // ── RESTORE PROPER NOUN CASING ──
+  // â”€â”€ RESTORE PROPER NOUN CASING â”€â”€
   // Transforms may have lowercased author names and proper nouns.
   // Restore them from the set we built before processing.
   output = restoreProperNounCasing(output, properNouns);
 
-  // ── DUPLICATE SENTENCE REMOVAL ──
+  // â”€â”€ DUPLICATE SENTENCE REMOVAL â”€â”€
   // Voice shifts and strategy retries can duplicate sentences.
   // Remove any sentence that has >85% word overlap with the previous sentence.
   output = output.split(/\n\s*\n/).map(para => {

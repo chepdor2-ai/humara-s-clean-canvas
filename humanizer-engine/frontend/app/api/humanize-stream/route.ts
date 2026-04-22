@@ -2133,10 +2133,29 @@ aiAdaptivePlan = buildAdaptiveCleanupPlan(reassembleText(workingSentences, worki
 
                   // ── Phase 1: 10+ chained baseline passes on ALL sentences ──
                   // Each pass feeds its output as input to the next — true chained rehumanization.
+                  // MINIMUM 25% PER-PASS CHANGE: if a pass produces <25% word change from its
+                  // input, we force one additional pass or synonym/word-kill fallback to ensure
+                  // no pass is wasted on micro-edits.
+                  const NURU_PASS_MIN = 0.25;
                   for (let pass = 0; pass < adjustedBaseline; pass++) {
                     for (let i = 0; i < currentSentences.length; i++) {
                       if (!isHeadingSentCheck(currentSentences[i])) {
-                        currentSentences[i] = runNuruSinglePass(currentSentences[i]);
+                        const prePass = currentSentences[i];
+                        let next = runNuruSinglePass(prePass);
+                        if (measureSentenceChange(prePass, next) < NURU_PASS_MIN) {
+                          // Force deeper processing: try one more pass from the current output
+                          const deeper = runNuruSinglePass(next);
+                          if (measureSentenceChange(prePass, deeper) >= NURU_PASS_MIN) {
+                            next = deeper;
+                          } else {
+                            // Final fallback: aggressive synonym replacement + AI word kill
+                            const _usedFb = new Set<string>();
+                            let fb = applyAIWordKill(prePass);
+                            fb = synonymReplace(fb, 0.85, _usedFb);
+                            if (measureSentenceChange(prePass, fb) > measureSentenceChange(prePass, next)) next = fb;
+                          }
+                        }
+                        currentSentences[i] = next;
                       }
                       sendSSE(controller, { type: 'sentence', index: i, text: currentSentences[i], stage: `${phaseLabel} pass ${pass + 1}/${adjustedBaseline}` });
                     }
@@ -3579,6 +3598,49 @@ const finalPlan = adaptivePostPlan ?? buildAdaptiveCleanupPlan(normalizedText, g
             activeQualityGate = finalQualityGate;
           }
           latestHumanized = humanized;
+
+          // ── FINAL 85% DOCUMENT-CHANGE GUARANTEE ──────────────────────
+          // Verify overall lexical change meets minimum 85% target.
+          // If below threshold, force aggressive cleanup on low-change sentences.
+          if (!isDeepKill && !(deadlineReached || Date.now() - startTime > DEADLINE_MS - 4000)) {
+            const finalDocChange = measureLexicalChangeRatio(normalizedText, humanized);
+            if (finalDocChange < 0.85) {
+              try {
+                const { sentences: finalSents, paragraphBoundaries: finalBounds } = splitIntoIndexedSentences(humanized);
+                const { sentences: origSentsF } = splitIntoIndexedSentences(normalizedText);
+                const isHeadingSentF = (s: string) => looksLikeHeadingLine(s.trim());
+                const usedFinalWords = new Set<string>();
+                let forcedFinalChange = false;
+
+                for (let i = 0; i < finalSents.length; i++) {
+                  if (isHeadingSentF(finalSents[i])) continue;
+                  let bestIdx = -1;
+                  let bestScore = Infinity;
+                  // Find closest original sentence to current humanized sentence
+                  for (let j = 0; j < origSentsF.length; j++) {
+                    if (isHeadingSentF(origSentsF[j])) continue;
+                    const r = measureSentenceChange(origSentsF[j], finalSents[i]);
+                    if (r < bestScore) { bestScore = r; bestIdx = j; }
+                  }
+                  // If sentence still too similar to original, force aggressive cleanup
+                  if (bestIdx >= 0 && bestScore < 0.60) {
+                    finalSents[i] = runNuruSinglePass(finalSents[i]);
+                    finalSents[i] = applyAIWordKill(finalSents[i]);
+                    finalSents[i] = synonymReplace(finalSents[i], 0.9, usedFinalWords);
+                    forcedFinalChange = true;
+                  }
+                }
+
+                if (forcedFinalChange) {
+                  humanized = reassembleText(finalSents, finalBounds.length ? finalBounds : [0]);
+                  latestHumanized = humanized;
+                  console.log(`[Final85%] Forced target: was ${(finalDocChange * 100).toFixed(1)}%, now ${(measureLexicalChangeRatio(normalizedText, humanized) * 100).toFixed(1)}%`);
+                }
+              } catch (e85) {
+                console.warn('[Final85%] Non-fatal error during 85% enforcement:', e85);
+              }
+            }
+          }
 
           // ── OUTPUT SIZE MONITORING ──────────────────────────────────
           {

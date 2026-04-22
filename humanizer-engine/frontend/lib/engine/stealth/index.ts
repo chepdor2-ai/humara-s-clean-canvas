@@ -1589,7 +1589,7 @@ function applySentenceRestructuring(sentence: string, strategy: number): string 
       'furthermore': ['Beyond that', 'On top of this', 'Also'], 'moreover': ['Also', 'Besides', 'On top of that'], 'additionally': ['Also', 'Plus', 'On top of that'],
       'consequently': ['So', 'Because of this'], 'nevertheless': ['Still', 'Even so'], 'nonetheless': ['Still', 'Even so'],
       'subsequently': ['Then', 'After that', 'Later'], 'accordingly': ['So', 'On that basis'], 'therefore': ['So', 'For that reason'],
-      'hence': ['So', 'For that reason'], 'indeed': ['In fact', 'Actually'], 'in contrast': ['But', 'By comparison'],
+      'hence': ['So', 'For that reason'], 'indeed': ['Actually', 'Granted', ''], 'however': ['Still', 'That said', 'Even so', ''], 'in contrast': ['But', 'By comparison'],
       'as a result': ['So', 'Because of this'], 'in addition': ['Also', 'Plus'],
       'in conclusion': ['To wrap up', 'Overall'], 'in summary': ['In short', 'Overall'], 'in essence': ['At its core', 'Basically'],
     };
@@ -1692,6 +1692,7 @@ function processSentence(
     [/^Moreover[,;]\s*/i, ['Also, ', 'Besides, ', 'On top of that, ', '']],
     [/^Additionally[,;]\s*/i, ['Also, ', 'Plus, ', 'On top of that, ', '']],
     [/^Consequently[,;]\s*/i, ['So, ', 'Because of this, ', '']],
+    [/^However[,;]\s*/i, ['Still, ', 'Even so, ', 'That said, ', 'Yet, ', '']],
     [/^Subsequently[,;]\s*/i, ['Then, ', 'After that, ', 'Later, ']],
     [/^Nevertheless[,;]\s*/i, ['Still, ', 'Even so, ', 'Yet, ']],
     [/^Notwithstanding[,;]\s*/i, ['Even so, ', 'Still, ', 'Despite this, ']],
@@ -1742,15 +1743,43 @@ function processSentence(
     [/^It is (?:worth noting|important to note|essential to note|crucial to note) that\s*/i, ['Notably, ', 'Worth noting, ', '']],
     [/^It should be noted that\s*/i, ['Notably, ', 'Worth noting, ', '']],
     [/^(?:Research|Studies|Evidence) (?:suggests?|shows?|indicates?|demonstrates?) that\s*/i, ['Studies show that ', 'Research shows ', '']],
+    // Sentence-initial additive fillers that cluster across paragraphs
+    [/^In fact[,;]\s*/i, ['Actually, ', 'Granted, ', 'True, ', '']],
+    [/^In addition[,;]\s*/i, ['Also, ', 'On top of that, ', '']],
+    [/^Too[,;]\s+(?=[A-Z])/i, ['']],
   ];
   for (const [re, alts] of NUCLEAR_STARTERS) {
     if (re.test(text)) {
-      const replacement = alts[Math.floor(Math.random() * alts.length)];
+      // ── Connector diversity: prefer alternatives not recently used in this document ──
+      // Uses the 'usedStarters' set (namespaced with 'nc:') to prevent consecutive
+      // sentences from all resolving to the same replacement (e.g. every 'Moreover'
+      // → 'Also, ' producing 'Also, X. Also, Y. Also, Z.' runs).
+      const usedKeys = new Set(
+        [...usedStarters]
+          .filter(k => k.startsWith('nc:'))
+          .map(k => k.slice(3))
+      );
+      const freshAlts = alts.filter(a => {
+        const key = a.replace(/[,;\s]+$/, '').toLowerCase().trim();
+        return key === '' || !usedKeys.has(key);
+      });
+      const pool = freshAlts.length > 0 ? freshAlts : alts;
+      const replacement = pool[Math.floor(Math.random() * pool.length)];
+      // Track this replacement for document-level diversity
+      const repKey = replacement.replace(/[,;\s]+$/, '').toLowerCase().trim();
+      if (repKey) usedStarters.add('nc:' + repKey);
       text = text.replace(re, replacement);
       // Re-capitalise first character if replacement is empty or lowercase
       if (text.length > 0) {
         text = text.charAt(0).toUpperCase() + text.slice(1);
       }
+      // Guard: double-conjunction check — if the replacement + remaining text forms
+      // a double-conjunction like 'Still, although X...' or 'So even though Y...'
+      // strip the second conjunction so the sentence reads naturally.
+      text = text.replace(
+        /^(Still|Even so|Yet|That said|Also|Besides|So|Plus|And|But|Then|After that|For that reason|Similarly)[,]?\s+(although|though|even though|while|whereas|since|because)\s+/i,
+        (_m, _c1, c2) => c2.charAt(0).toUpperCase() + c2.slice(1) + ' ',
+      );
       break; // only strip one connector per sentence
     }
   }

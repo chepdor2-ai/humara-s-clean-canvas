@@ -36,24 +36,24 @@ export function resolveChangeTargets(
 
   const baseByDepth: Record<HumanizationDepth, Omit<ChangeTargets, "strength">> = {
     light: {
-      minDocumentChange: 0.55,
-      minSentenceChange: 0.40,
+      minDocumentChange: 0.65,
+      minSentenceChange: 0.25,  // ENFORCED: 25% minimum per sentence
       maxEngineRetries: 2,
       maxWordLevelPasses: 3,
-      minChangedSentenceShare: 0.78,
+      minChangedSentenceShare: 0.85,
       planIterationBias: 1,
     },
     medium: {
-      minDocumentChange: 0.75,
-      minSentenceChange: 0.50,
+      minDocumentChange: 0.85,  // ENFORCED: 85% minimum document change
+      minSentenceChange: 0.25,  // ENFORCED: 25% minimum per sentence
       maxEngineRetries: 3,
       maxWordLevelPasses: 4,
-      minChangedSentenceShare: 0.88,
+      minChangedSentenceShare: 0.90,
       planIterationBias: 2,
     },
     strong: {
-      minDocumentChange: 0.85,
-      minSentenceChange: 0.65,
+      minDocumentChange: 0.85,  // ENFORCED: 85% minimum document change
+      minSentenceChange: 0.25,  // ENFORCED: 25% minimum per sentence
       maxEngineRetries: 5,
       maxWordLevelPasses: 6,
       minChangedSentenceShare: 0.94,
@@ -64,17 +64,20 @@ export function resolveChangeTargets(
   const base = baseByDepth[depth];
   const rate = clamp(Math.round(humanizationRate ?? 0), 0, 10);
   const ratePressure = rate > 0 ? rate / 10 : 0;
-  const maxDocCap = depth === "light" ? 0.68 : depth === "medium" ? 0.84 : 0.92;
-  const maxSentCap = depth === "light" ? 0.48 : depth === "medium" ? 0.58 : 0.72;
-  const bonusPressure = Math.max(0, ratePressure - (depth === "light" ? 0.5 : depth === "medium" ? 0.6 : 0.7));
+  // Hard floors: all depths must achieve 85% document + 25% sentence minimums
+  const maxDocCap = 0.92; // never exceed 92% (stay realistic)
+  const maxSentCap = 0.72; // never exceed 72% per sentence (readability floor)
+  const bonusPressure = Math.max(0, ratePressure - (depth === "light" ? 0.4 : depth === "medium" ? 0.5 : 0.6));
 
   return {
     strength: depth,
-    minDocumentChange: clamp(base.minDocumentChange + bonusPressure * 0.08, base.minDocumentChange, maxDocCap),
-    minSentenceChange: clamp(base.minSentenceChange + bonusPressure * 0.05, base.minSentenceChange, maxSentCap),
+    // Hard 85% minimum document change across all depths
+    minDocumentChange: Math.max(0.85, clamp(base.minDocumentChange + bonusPressure * 0.05, base.minDocumentChange, maxDocCap)),
+    // Hard 25% minimum sentence change across all depths
+    minSentenceChange: Math.max(0.25, clamp(base.minSentenceChange + bonusPressure * 0.02, base.minSentenceChange, maxSentCap)),
     maxEngineRetries: base.maxEngineRetries + Math.round(bonusPressure * 2),
     maxWordLevelPasses: base.maxWordLevelPasses + Math.round(bonusPressure * 2),
-    minChangedSentenceShare: clamp(base.minChangedSentenceShare + bonusPressure * 0.04, base.minChangedSentenceShare, 0.98),
+    minChangedSentenceShare: clamp(base.minChangedSentenceShare + bonusPressure * 0.02, Math.max(base.minChangedSentenceShare, 0.85), 0.98),
     planIterationBias: base.planIterationBias + Math.round(bonusPressure * 2),
   };
 }

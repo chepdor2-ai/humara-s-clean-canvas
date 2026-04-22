@@ -35,7 +35,7 @@ import { looksLikeHeadingLine } from "./structure-preserver";
 
 // ── Constants ─────────────────────────────────────────────────────────
 
-const FORMAL_CONNECTOR_RE = /^(Furthermore|Moreover|Additionally|Consequently|Subsequently|Nevertheless|Notwithstanding|Accordingly|Thus|Hence|Therefore|Indeed|Specifically|Notably)\b/i;
+const FORMAL_CONNECTOR_RE = /^(Furthermore|Moreover|Additionally|Consequently|Subsequently|Nevertheless|Notwithstanding|Accordingly|Thus|Hence|Therefore|Indeed|Specifically|Notably|Also|Plus|Besides|In addition)\b/i;
 
 const NATURAL_CONNECTOR_POOL = [
   "Beyond that",
@@ -75,6 +75,12 @@ const OPENER_FAMILIES: Array<{ family: string; pattern: RegExp; alternatives: st
     family: "however",
     pattern: /^However,\s+/i,
     alternatives: ["Still,", "Even so,", "Yet,", "That said,"],
+  },
+  // Catch additive light connectors that cluster after NUCLEAR_STARTERS replacement
+  {
+    family: "also",
+    pattern: /^(Also|Plus|Besides)[,]?\s+/i,
+    alternatives: ["On top of that,", "Beyond that,", "What is more,", "At the same time,"],
   },
 ];
 
@@ -399,6 +405,9 @@ export function sentenceFlowPolish(
       sents = smoothAbruptTransitions(sents, rng);
       // 6. Trailing -ing cleanup
       sents = cleanTrailingParticiples(sents);
+      // 7. Word-repeat deduplication — collapses accidental "word word" duplication
+      // that can arise from filler injection or multi-pass synonym replacement.
+      sents = sents.map(s => s.replace(/\b(\w{3,})\s+\1\b/gi, '$1'));
 
       processedParas.push(sents.join(" "));
     }
