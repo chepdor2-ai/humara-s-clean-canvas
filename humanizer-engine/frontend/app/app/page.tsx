@@ -746,28 +746,25 @@ function EditorPageInner() {
   }, [text]);
 
   /* ── Handlers ───────────────────────────────────────────────────────── */
-  /** Clean input text — strip emoji, bullets, line artifacts, numbering */
+  /** Clean input text — preserve user content, only remove system artifacts */
   const cleanInputText = (raw: string): string => {
+    // Remove only obvious panel labels
     let cleaned = stripLeadingPanelLabel(raw);
-    // Remove emoji (Unicode emoji ranges)
-    cleaned = cleaned.replace(/[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F1E0}-\u{1F1FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{FE00}-\u{FE0F}\u{1F900}-\u{1F9FF}\u{1FA00}-\u{1FA6F}\u{1FA70}-\u{1FAFF}\u{200D}\u{20E3}\u{E0020}-\u{E007F}]/gu, '');
-    // Remove bullet points and list markers
-    cleaned = cleaned.replace(/^[\s]*[•●○◉◆◇▪▫►▸▹▻★☆✦✧✩✪✫✬✭✮✯✰⭐⭑⚫⚪➤➣➢➡→⮕↗↘⇒⇨»«‣⁃∙⬤⬥⬦]\s*/gm, '');
-    // Remove numbered list markers: "1." "1)" "1-" "(1)" etc.
-    cleaned = cleaned.replace(/^[\s]*(?:\(?\d{1,3}[.):\-]\)?|\(?[a-zA-Z][.):\-]\)?)\s+/gm, '');
-    // Remove decorative horizontal lines and separators
+    
+    // Remove only decorative separator lines (3+ chars of same symbol)
     cleaned = cleaned.replace(/^[\s]*[─━═—\-_~]{3,}[\s]*$/gm, '');
-    // Remove decorative bracket/pipe patterns: "| text |", "[ text ]"
-    cleaned = cleaned.replace(/^\s*[|│┃]\s*/gm, '');
-    // Remove leading/trailing asterisks used for markdown bold (but keep the text)
-    cleaned = cleaned.replace(/\*{1,2}([^*]+)\*{1,2}/g, '$1');
-    // Collapse multiple blank lines to one
+    
+    // Normalize excessive line breaks (3+ → 2)
     cleaned = cleaned.replace(/\n{3,}/g, '\n\n');
-    // Trim each line
-    cleaned = cleaned.split('\n').map(l => l.trim()).join('\n');
-    // Remove completely empty lines at start/end
-    cleaned = cleaned.trim();
-    return cleaned;
+    
+    // Trim trailing whitespace per line
+    cleaned = cleaned
+      .split('\n')
+      .map(line => line.trimEnd())
+      .join('\n');
+    
+    // Final trim
+    return cleaned.trim();
   };
 
   const splitSentenceStrings = (value: string): string[] => {
@@ -1605,6 +1602,30 @@ function EditorPageInner() {
     if (popupType) { document.addEventListener('mousedown', h); return () => document.removeEventListener('mousedown', h); }
   }, [popupType, closePopup]);
 
+  /* ── Output State Sync ──────────────────────────────────────────────── */
+  // Ensure output textarea stays synchronized with result state
+  useEffect(() => {
+    if (outputRef.current && result !== undefined) {
+      if (outputRef.current.value !== result) {
+        outputRef.current.value = result;
+      }
+      // Reset scroll position when result changes significantly
+      if (result.length > 500 && outputRef.current.scrollTop > 100) {
+        outputRef.current.scrollTop = 0;
+      }
+    }
+  }, [result]);
+
+  // Ensure textarea is properly focused when switching to result view
+  useEffect(() => {
+    if (outputView === 'result' && outputRef.current && result.trim()) {
+      // Allow textarea to receive focus
+      setTimeout(() => {
+        outputRef.current?.focus({ preventScroll: true });
+      }, 50);
+    }
+  }, [outputView, result]);
+
   /* ── Render ───────────────────────────────────────────────────────────── */
   return (
     <div className="stealth-shell relative flex flex-col gap-4 animate-in fade-in duration-500 w-full p-1 sm:p-2">
@@ -1973,12 +1994,25 @@ function EditorPageInner() {
               onChange={(e) => setText(normalizeTypedInput(e.target.value))}
               onPaste={(e) => {
                 e.preventDefault();
-                const pasted = e.clipboardData.getData('text/plain');
-                const ta = e.currentTarget;
-                const before = text.slice(0, ta.selectionStart);
-                const after = text.slice(ta.selectionEnd);
-                const full = before + pasted + after;
-                setText(capitalizeSentenceStarts(normalizeTypedInput(full)));
+                const pasted = e.clipboardData?.getData('text/plain') ?? '';
+                
+                if (!pasted.trim()) {
+                  setError('Clipboard is empty.');
+                  return;
+                }
+                
+                // Apply transformations in correct order
+                let processed = normalizeTypedInput(pasted);
+                processed = capitalizeSentenceStarts(processed);
+                
+                // Get selection from current ref state
+                const start = inputRef.current?.selectionStart ?? text.length;
+                const end = inputRef.current?.selectionEnd ?? text.length;
+                
+                // Merge with existing text at cursor position
+                const merged = text.slice(0, start) + processed + text.slice(end);
+                setText(merged);
+                setError('');
               }}
               className={`editor-highlight-input relative z-10 w-full ${EDITOR_HEIGHT_CLASS} outline-none resize-y overflow-y-auto text-[14px] leading-[1.8] text-slate-800 dark:text-zinc-200 p-5 placeholder:text-slate-400 dark:placeholder:text-zinc-500`}
               placeholder="Paste text you want to humanize..." />
@@ -2062,28 +2096,32 @@ function EditorPageInner() {
               />
             </div>
           ) : result ? (
-            <div className={`relative flex-1 ${EDITOR_HEIGHT_CLASS} overflow-hidden`}>
-              {/* MetricsStrip for output */}
-              <div className="relative z-10 border-b border-emerald-100 dark:border-emerald-900/30">
+            <div className="relative flex-1 flex flex-col min-h-0 overflow-hidden">
+              {/* MetricsStrip for output - fixed height */}
+              <div className="flex-shrink-0 border-b border-emerald-100 dark:border-emerald-900/30 z-10">
                 <MetricsStrip text={result} label="Output" sentenceAveragedReadability />
               </div>
-              {outputView === 'result' && (
-                <textarea ref={outputRef} value={result}
-                  onChange={(e) => { setResult(e.target.value); }} onSelect={handleOutputSelect}
-                  className="editor-highlight-output relative z-10 flex-1 w-full h-[calc(100%-2.5rem)] outline-none resize-y overflow-y-auto text-[14px] leading-[1.8] text-slate-800 dark:text-zinc-200 p-5 cursor-text"
-                  style={{ fontFamily: 'inherit' }}
-                  placeholder="Output appears here…" />
-              )}
-              {outputView === 'diff' && (
-                <div className="relative z-10 h-[calc(100%-2.5rem)] overflow-y-auto p-5">
-                  <DiffView original={text} humanized={result} />
-                </div>
-              )}
-              {outputView === 'confidence' && (
-                <div className="relative z-10 h-[calc(100%-2.5rem)] overflow-y-auto p-5">
-                  <SentenceMeter text={result} salt={runSalt} key={`sm-${runSalt}`} onFixSentence={handleFixSentence} />
-                </div>
-              )}
+              
+              {/* Content area - flex-1 to fill remaining space */}
+              <div className="flex-1 min-h-0 overflow-hidden relative">
+                {outputView === 'result' && (
+                  <textarea ref={outputRef} value={result}
+                    onChange={(e) => { setResult(e.target.value); }} onSelect={handleOutputSelect}
+                    className="editor-highlight-output absolute inset-0 w-full h-full outline-none resize-none overflow-y-auto text-[14px] leading-[1.8] text-slate-800 dark:text-zinc-200 p-5 cursor-text"
+                    style={{ fontFamily: 'inherit' }}
+                    placeholder="Output appears here…" />
+                )}
+                {outputView === 'diff' && (
+                  <div className="absolute inset-0 w-full h-full overflow-y-auto p-5">
+                    <DiffView original={text} humanized={result} />
+                  </div>
+                )}
+                {outputView === 'confidence' && (
+                  <div className="absolute inset-0 w-full h-full overflow-y-auto p-5">
+                    <SentenceMeter text={result} salt={runSalt} key={`sm-${runSalt}`} onFixSentence={handleFixSentence} />
+                  </div>
+                )}
+              </div>
             </div>
           ) : (
             <div className="flex flex-col items-center justify-center min-h-[260px] text-slate-400 dark:text-zinc-700 gap-4 px-8 text-center">
