@@ -888,19 +888,20 @@ export async function POST(req: Request) {
             return output && output.trim().length > 0 ? output : input;
           };
 
-          // Single-pass Nuru for the outer iteration loop (1 internal iteration).
-          // The 10-cycle outer loop provides the 10 total Nuru iterations.
+          // Single-pass Nuru for the outer iteration loop.
+          // Since stealthHumanize now does internal iterations and picks the best (lowest AI score),
+          // we pass maxIterations = 10 and do NOT need to chain it 10 times externally.
           const runNuruSinglePass = (input: string, options: StealthHumanizeOptions = {}): string => {
             // Protect special content (numbers, stats, citations) from Nuru transforms
             const { text: protectedInput, map: protMap } = protectSpecialContent(input);
-            const raw = stealthHumanize(protectedInput, effectiveStrength ?? 'medium', tone ?? 'academic', 2, options);
+            const raw = stealthHumanize(protectedInput, effectiveStrength ?? 'medium', tone ?? 'academic', 10, options);
             const output = raw && raw.trim().length > 0 ? raw : protectedInput;
             return restoreSpecialContent(output, protMap);
           };
 
           // Nuru 2.0 post-processing depth applied at the tail of every pipeline.
-          const CHAIN_TS = 10;
-          const UNIVERSAL_POST_LOOPS = 5;
+          const CHAIN_TS = 1; // Reduced from 10 to 1 since stealthHumanize does 10 internal loops
+          const UNIVERSAL_POST_LOOPS = 1; // Reduced from 5 to 1
           const UNIVERSAL_POST_PASSES_PER_LOOP = 3;
           const chainSync = (fn: (s: string) => string, input: string, n: number): string => {
             let out = input;

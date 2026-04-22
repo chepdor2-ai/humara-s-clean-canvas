@@ -1687,17 +1687,34 @@ function isIndependentClause(fragment: string): boolean {
 }
 
 /**
- * STRICT NO-SPLIT / NO-MERGE: this function used to split long
- * sentences at safe clause boundaries and merge short adjacent
- * ones for GPTZero burstiness. That violates the post-LLM
- * invariant (output sentence count MUST equal input sentence
- * count). We keep the function signature for back-compat with
- * the downstream re-processing loop but it now always returns a
- * 1:1 pass-through. Burstiness is instead handled by in-sentence
- * clause reordering and per-sentence LLM rewrite variance.
+ * Burstiness Manager
+ *
+ * Intelligently restricting sentence splitting and only accepting merging
+ * where necessary to break AI burstiness while maintaining structure.
  */
 function manageBurstiness(sentences: string[]): BurstResult[] {
-  return sentences.map((s) => ({ text: s, needsReprocess: false }));
+  const results: BurstResult[] = [];
+  let i = 0;
+  while (i < sentences.length) {
+    const s1 = sentences[i].trim();
+    const w1 = s1.split(/\s+/).length;
+    
+    // Intelligent merging: Combine short sentences into medium ones
+    if (i < sentences.length - 1 && w1 < 8 && !/[?!]$/.test(s1)) {
+      const s2 = sentences[i + 1].trim();
+      const w2 = s2.split(/\s+/).length;
+      if (w2 < 20) {
+        const merged = s1.replace(/\.$/, '') + ', and ' + s2.charAt(0).toLowerCase() + s2.slice(1);
+        results.push({ text: merged, needsReprocess: true });
+        i += 2;
+        continue;
+      }
+    }
+    
+    results.push({ text: s1, needsReprocess: false });
+    i++;
+  }
+  return results;
 }
 
 /* ── Core: process one sentence ──────────────────────────────────── */
@@ -2330,8 +2347,8 @@ export function stealthHumanize(
   const humanVariance = clamp01(options.humanVariance ?? 0.04);
   const preserveLeadSentences = options.preserveLeadSentences !== false;
   const readabilityBias = clamp01(options.readabilityBias ?? (_tone === 'academic_blog' || _tone === 'casual' ? 0.9 : 0.7));
-  // Guarantee Nuru itself iterates completely to clean AI signals (minimum 10)
-  const enforcedMaxIterations = Math.max(10, Math.round(maxIterations + detectorPressure * 15));
+  // Guarantee Nuru itself iterates completely to clean AI signals but cap at 20
+  const enforcedMaxIterations = Math.min(20, Math.max(maxIterations, Math.round(maxIterations + detectorPressure * 5)));
   console.log('[Nuru] === Intelligent Engine === Input length:', text.length);
   if (!text || text.trim().length === 0) return text;
 
@@ -2403,27 +2420,10 @@ export function stealthHumanize(
       // Pass it into compositeQualityScore to avoid redundant re-scoring every loop.
       const origRiskCache = scoreSentenceRisk(originalSent, domainResult);
 
-      // First pass uses real sentenceIndex (enables starter injection on non-first sentences)
-      const rawFirst = processSentence(
-        sent, hasFirstPerson, globalSentenceIdx, totalSentences,
-        usedStarters, strength, isParagraphLead, detectorPressure, stealthStrategy,
-      );
-      // Strict 1:1 guard — if the transform accidentally split, collapse back.
-      let best = guardSingleSentence(originalSent, rawFirst);
-      // Purity: reject candidates that introduce banned patterns.
-      if (violatesPurity(best, effectiveShape)) best = originalSent;
-      let bestScore = compositeQualityScore(originalSent, best, 0.35 + readabilityBias * 0.30, origRiskCache);
-
-      // Iterative refinement: each pass starts from ORIGINAL to prevent
-      // compounding garble. We keep the best result (highest composite score
-      // balancing change ratio, readability, and AI signal absence).
-      // Subsequent passes use sentenceIndex=0 to prevent duplicate starter
-      // injection, and borrow entropy from the per-call RNG so repeated
-      // invocations of the same document produce different humanized text.
       let iter = 1;
+      const candidates: { text: string; aiScore: number; readability: number }[] = [];
+
       while (iter <= sentMaxIter) {
-        // Strength escalation: start escalating from iter 3 (was 5) so more
-        // iterations use 'strong' rewrites, increasing AI signal destruction speed.
         const escalate = iter > 3 || rng.next() < detectorPressure * 0.35;
         const iterStrength = escalate ? 'strong' : strength;
         const rawNext = processSentence(
@@ -2435,20 +2435,30 @@ export function stealthHumanize(
           iter++;
           continue;
         }
-        const nextScore = compositeQualityScore(originalSent, next, 0.35 + readabilityBias * 0.30, origRiskCache);
-        if (nextScore > bestScore) {
-          best = next;
-          bestScore = nextScore;
-        }
-        // Only exit early when BOTH conditions hold:
-        //   1. We have changed at least 80% of words (strong surface rewrite)
-        //   2. The current best has dropped to LOW risk tier (AI signals gone)
-        // Never break early for high/critical sentences — keep grinding.
-        if (iter >= 10 && wordChangeRatio(originalSent, best) >= 0.80) {
-          const bestRisk = scoreSentenceRisk(best, domainResult);
-          if (bestRisk.tier === 'low' || bestRisk.tier === 'protected') break;
-        }
+        
+        const risk = scoreSentenceRisk(next, domainResult);
+        const tierMap = { protected: 0, low: 1, medium: 2, high: 3, critical: 4 };
+        const tierVal = tierMap[risk.tier as keyof typeof tierMap] || 0;
+        const aiScore = tierVal + risk.changeTarget; // Lower is better
+        
+        const readability = scoreReadability(next, originalSent);
+        
+        candidates.push({ text: next, aiScore, readability });
         iter++;
+      }
+      
+      let best = originalSent;
+      if (candidates.length > 0) {
+        // 1. Sort by lowest AI score (primary objective: remove AI)
+        candidates.sort((a, b) => a.aiScore - b.aiScore);
+        
+        // 2. Take top 2 candidates with the lowest AI scores
+        const top2 = candidates.slice(0, 2);
+        
+        // 3. From those top 2, pick the one with the best readability
+        top2.sort((a, b) => b.readability - a.readability);
+        
+        best = top2[0].text;
       }
 
       // Final per-sentence purity polish — expand any residual contractions,
@@ -2497,6 +2507,11 @@ export function stealthHumanize(
   let result = outputParagraphs.join('\n\n');
   result = result.replace(/\bAi\b/g, 'AI');
   result = result.replace(/\bai\b/g, 'AI');
+
+  // Enforce zero contractions at the very end of the pipeline
+  for (const [contraction, expanded] of Object.entries(CONTRACTIONS)) {
+    result = result.replace(new RegExp(`\\b${contraction}\\b`, 'gi'), expanded);
+  }
 
   // Fix double/triple dots across entire output
   result = result.replace(/\.{2,}/g, '.');

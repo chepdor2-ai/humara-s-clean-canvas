@@ -791,21 +791,9 @@ function enforceMinimumChange(original: string, current: string, seed: number): 
     const origWords = original.toLowerCase().replace(/[^a-z\s]/g, '').split(/\s+/).filter(w => w.length > 3);
     const origSet = new Set(origWords);
     const BRUTE_SWAPS: Record<string, string> = {
-      'have': 'possess', 'make': 'render',
-      'give': 'grant', 'take': 'adopt', 'come': 'arrive', 'keep': 'retain',
-      'need': 'demand', 'help': 'assist', 'find': 'discover', 'tell': 'inform',
-      'know': 'recognize', 'think': 'consider', 'feel': 'sense', 'work': 'function',
-      'become': 'turn', 'leave': 'depart', 'call': 'term', 'grow': 'expand',
-      'begin': 'commence', 'seem': 'appear', 'move': 'shift', 'live': 'reside',
-      'hold': 'maintain', 'bring': 'introduce', 'lead': 'guide', 'stand': 'remain',
-      'turn': 'shift', 'lose': 'forfeit', 'meet': 'encounter', 'run': 'operate',
-      'mean': 'signify', 'read': 'interpret', 'form': 'constitute', 'change': 'alter',
-      'serve': 'function', 'appear': 'emerge', 'offer': 'propose', 'build': 'construct',
-      'view': 'regard', 'point': 'aspect', 'open': 'accessible', 'claim': 'assert',
-      'strong': 'robust', 'clear': 'evident', 'large': 'substantial', 'high': 'elevated',
-      'such': 'this kind of', 'very': 'quite', 'these': 'those', 'some': 'certain',
-      'many': 'numerous', 'most': 'the majority of', 'other': 'additional',
-      'still': 'nevertheless', 'even': 'indeed', 'just': 'merely', 'well': 'adequately',
+      // Intentionally left empty or extremely minimal.
+      // Replacing simple words with formal ones triggers AI detectors.
+      'very': 'quite', 'some': 'certain', 'many': 'numerous'
     };
     const words = result.split(/\s+/);
     const newWords = words.map((w, i) => {
@@ -1414,12 +1402,10 @@ export function nuruHumanize(
   // This is garble-safe because it only does word-level replacement.
   const origSentencesFlat = paragraphs.flatMap(p => robustSentenceSplit(p));
   const FINAL_SAFE_SWAPS: Record<string, string> = {
-    // â”€â”€ Conjunctions / Connectives â”€â”€
+    // â”€â”€ Conjunctions / Connectives (safe, natural flow) â”€â”€
     'but': 'yet', 'because': 'since', 'although': 'though',
     'while': 'whereas', 'however': 'nonetheless', 'therefore': 'thus',
     'also': 'likewise', 'yet': 'still', 'hence': 'as a result',
-    'moreover': 'besides', 'furthermore': 'in addition', 'nevertheless': 'even so',
-    'consequently': 'as a result', 'nonetheless': 'all the same',
     'despite': 'notwithstanding', 'rather': 'instead', 'thus': 'hence',
     // â”€â”€ Prepositions â”€â”€
     'about': 'concerning', 'regarding': 'concerning',
@@ -1428,88 +1414,6 @@ export function nuruHumanize(
     // â”€â”€ Pronouns / Reference â”€â”€
     'which': 'that', 'such': 'this kind of', 'these': 'those',
     'some': 'certain', 'other': 'additional',
-    // â”€â”€ Adverbs â”€â”€
-    'very': 'quite', 'often': 'frequently', 'particularly': 'notably',
-    'especially': 'chiefly', 'specifically': 'precisely',
-    'generally': 'broadly', 'typically': 'commonly', 'usually': 'commonly',
-    'clearly': 'evidently', 'certainly': 'undoubtedly', 'simply': 'merely',
-    'indeed': 'in fact', 'even': 'indeed', 'still': 'nevertheless',
-    'largely': 'mostly', 'mainly': 'chiefly', 'mostly': 'largely',
-    'already': 'previously', 'merely': 'only',
-    'primarily': 'chiefly', 'essentially': 'basically', 'entirely': 'wholly',
-    // â”€â”€ Common Verbs â”€â”€
-    'have': 'possess', 'has': 'possesses', 'make': 'construct', 'makes': 'produces',
-    'give': 'grant', 'gives': 'grants', 'take': 'adopt', 'takes': 'adopts',
-    'keep': 'retain', 'keeps': 'retains', 'need': 'require', 'needs': 'requires',
-    'help': 'assist', 'helps': 'assists', 'find': 'discover', 'finds': 'discovers',
-    'tell': 'inform', 'know': 'recognize', 'think': 'consider',
-    'feel': 'sense', 'seem': 'appear', 'seems': 'appears',
-    'become': 'turn into', 'leave': 'depart', 'bring': 'introduce',
-    'lead': 'guide', 'leads': 'guides', 'hold': 'retain', 'holds': 'retains',
-    'stand': 'remain', 'begin': 'commence', 'begins': 'commences',
-    'serve': 'function as', 'call': 'term', 'mean': 'signify', 'means': 'signifies',
-    'form': 'constitute', 'forms': 'constitutes', 'play': 'occupy', 'plays': 'occupies',
-    'use': 'employ', 'uses': 'employs', 'used': 'employed',
-    'can': 'is able to', 'may': 'might', 'must': 'is required to',
-    'see': 'observe', 'seen': 'observed', 'show': 'reveal',
-    'demonstrates': 'reveals', 'indicates': 'signals', 'suggests': 'proposes',
-    'provides': 'delivers', 'requires': 'demands', 'involves': 'entails',
-    'includes': 'covers', 'highlights': 'spotlights', 'emphasizes': 'stresses',
-    'maintains': 'upholds', 'supports': 'bolsters', 'addresses': 'tackles',
-    'examines': 'evaluates', 'remains': 'persists', 'presents': 'outlines',
-    'offers': 'proposes', 'argues': 'contends', 'shows': 'reveals',
-    'focuses': 'concentrates', 'regards': 'considers', 'creates': 'produces',
-    'develops': 'cultivates', 'considers': 'weighs', 'allows': 'permits',
-    'attempts': 'endeavors', 'establishes': 'sets up', 'determines': 'decides',
-    'results': 'culminates', 'contributes': 'lends', 'influences': 'shapes',
-    'continues': 'carries on', 'reduces': 'diminishes', 'increases': 'elevates',
-    'improve': 'enhance', 'improves': 'enhances', 'adds': 'contributes',
-    'based': 'grounded', 'associated': 'linked', 'related': 'connected',
-    // â”€â”€ Common Adjectives â”€â”€
-    'significant': 'considerable', 'important': 'central', 'critical': 'pivotal',
-    'essential': 'vital', 'effective': 'productive', 'relevant': 'pertinent',
-    'various': 'diverse', 'particular': 'distinct', 'specific': 'precise',
-    'common': 'frequent', 'current': 'present', 'modern': 'contemporary',
-    'objective': 'impartial', 'strong': 'robust', 'universal': 'broad',
-    'consistent': 'steady', 'similar': 'comparable', 'different': 'distinct',
-    'certain': 'definite', 'complex': 'intricate', 'broad': 'wide-ranging',
-    'deep': 'profound', 'clear': 'evident', 'large': 'substantial',
-    'high': 'elevated', 'low': 'reduced', 'long': 'extended',
-    'major': 'principal', 'key': 'central', 'new': 'novel',
-    'full': 'complete', 'possible': 'feasible', 'necessary': 'needed',
-    'available': 'accessible', 'likely': 'probable', 'true': 'accurate',
-    'real': 'genuine', 'basic': 'foundational', 'natural': 'organic',
-    'political': 'governmental', 'social': 'societal', 'moral': 'ethical',
-    'human': 'individual', 'practical': 'applied', 'rational': 'logical',
-    'intrinsic': 'inherent', 'abstract': 'theoretical',
-    // â”€â”€ Common Nouns â”€â”€
-    'approach': 'method', 'concept': 'notion', 'evidence': 'proof',
-    'factor': 'element', 'framework': 'scaffold', 'issue': 'matter',
-    'process': 'mechanism', 'role': 'function', 'structure': 'arrangement',
-    'theory': 'thesis', 'tradition': 'heritage', 'values': 'ideals',
-    'principles': 'tenets', 'standards': 'benchmarks', 'alternative': 'option',
-    'basis': 'foundation', 'perspective': 'viewpoint', 'environment': 'climate',
-    'argument': 'contention', 'analysis': 'examination', 'discussion': 'discourse',
-    'point': 'aspect', 'view': 'stance', 'work': 'research', 'study': 'inquiry',
-    'way': 'manner', 'change': 'shift', 'order': 'sequence',
-    'case': 'instance', 'example': 'illustration', 'result': 'outcome',
-    'effect': 'impact', 'problem': 'difficulty', 'question': 'inquiry',
-    'answer': 'response', 'reason': 'rationale', 'nature': 'character',
-    'truth': 'veracity', 'goods': 'assets', 'thought': 'reasoning',
-    'knowledge': 'understanding', 'school': 'tradition',
-    'center': 'core', 'part': 'segment', 'level': 'tier', 'type': 'category',
-    'area': 'domain', 'field': 'discipline', 'world': 'sphere',
-    'right': 'entitlement', 'power': 'authority', 'interest': 'stake',
-    'policy': 'directive', 'morality': 'ethics', 'integrity': 'soundness',
-    'yardstick': 'benchmark', 'freedom': 'liberty', 'justice': 'equity',
-    'weakness': 'shortcoming', 'strength': 'merit', 'rigor': 'thoroughness',
-    'applicability': 'relevance', 'revival': 'resurgence', 'creation': 'formation',
-    'description': 'depiction', 'defense': 'justification', 'indication': 'sign',
-    'degradation': 'decline', 'hesitation': 'reluctance',
-    'attempt': 'endeavor', 'construct': 'framework',
-    // â”€â”€ Quantifiers â”€â”€
-    'many': 'numerous', 'most': 'the majority of', 'much': 'a great deal of',
-    'few': 'a handful of', 'several': 'a number of', 'little': 'scant',
     // â”€â”€ High-frequency compensating swaps â”€â”€
     'each': 'every',
     'own': 'respective', 'goal': 'aim', 'main': 'primary',

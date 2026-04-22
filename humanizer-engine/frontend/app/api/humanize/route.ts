@@ -37,6 +37,8 @@ import { scoreSentenceRisk } from '@/lib/engine/sentence-risk-scorer';
 import { detectDomain } from '@/lib/engine/domain-detector';
 import { applyOutputProfile, resolveOutputProfile } from '@/lib/engine/output-profiles';
 import { mapSentenceChangeRatios, measureLexicalChangeRatio, resolveChangeTargets } from '@/lib/engine/change-targets';
+import { getAdaptiveDetectorStrategies, applyAdaptiveStrategies } from '@/lib/engine/adaptive-detector-strategies';
+
 
 export const maxDuration = 300; // LLM engines need more time
 
@@ -823,12 +825,12 @@ export async function POST(req: Request) {
       const output = stealthHumanize(input, strength ?? 'medium', tone ?? 'academic', 15);
       return output && output.trim().length > 0 ? output : input;
     };
+const runNuruSinglePass = (input: string): string => {
+  const output = stealthHumanize(input, strength ?? 'medium', tone ?? 'academic', 10);
+  return output && output.trim().length > 0 ? output : input;
+};
 
-    const runNuruSinglePass = (input: string): string => {
-      const output = stealthHumanize(input, strength ?? 'medium', tone ?? 'academic', 1);
-      return output && output.trim().length > 0 ? output : input;
-    };
-
+const CHAIN_TS = 1;
     const applySmartNuruPolish = (input: string, maxPasses = 15): string => {
       // Delegate to stealthHumanize which now inherently guarantees min 10 loops
       // and natively applies all our 6 detector specific non-LLM cleanups
@@ -1695,10 +1697,20 @@ export async function POST(req: Request) {
           const fbMode = fbStrength === 'light' ? 'fast' : fbStrength === 'strong' ? 'aggressive' : 'quality';
           const polished = oxygenHumanize(humanized, fbStrength, fbMode, true);
           if (polished && polished.trim().length > 0) {
+            // Apply detector-specific targeted humanization based on the top flagged detectors
+            const detectorScores = midAnalysis.detectors.map(d => ({ detector: d.detector, ai_score: d.ai_score }));
+            const adaptiveStrategies = getAdaptiveDetectorStrategies(detectorScores);
+            let advancedPolished = polished;
+            
+            if (adaptiveStrategies.length > 0) {
+              console.log(`[Feedback Loop] Applying specific counters for: ${adaptiveStrategies.map(s => s.targetDetector).join(', ')}`);
+              advancedPolished = applyAdaptiveStrategies(polished, adaptiveStrategies);
+            }
+
             // Verify meaning not destroyed
-            const fbOverlap = contentWordOverlap(text, polished);
+            const fbOverlap = contentWordOverlap(text, advancedPolished);
             if (fbOverlap >= 0.30) {
-              humanized = polished;
+              humanized = advancedPolished;
               // Re-apply critical safety nets after polish
               humanized = expandContractions(humanized);
               humanized = removeEmDashes(humanized);
