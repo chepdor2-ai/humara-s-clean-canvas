@@ -36,6 +36,7 @@ import { analyzeDocumentCoherence, fixDocumentCoherence, type CoherenceReport } 
 import { scoreSentenceRisk } from '@/lib/engine/sentence-risk-scorer';
 import { detectDomain } from '@/lib/engine/domain-detector';
 import { applyOutputProfile, resolveOutputProfile } from '@/lib/engine/output-profiles';
+import { mapSentenceChangeRatios, measureLexicalChangeRatio, resolveChangeTargets } from '@/lib/engine/change-targets';
 
 export const maxDuration = 300; // LLM engines need more time
 
@@ -276,7 +277,10 @@ function fixHyphenSpacing(text: string): string {
 // 9-10 use aggressive/strong.  All passes are pure TS (no LLM).
 function adaptiveOxygenChain(
   phaseOneOutput: string,
-  _originalText: string,   // kept for API compat; gate compares vs phase-1 output
+  _originalText: string,
+  sentenceTarget = 0.40,
+  sentencePassRateTarget = 0.80,
+  iterationBias = 0,
 ): string {
   const MIN_TOTAL = 3;           // minimum passes before gate check
   const MAX_ITERATIONS = 3;      // reduced cap (was 6 — too many passes compound errors)
@@ -653,12 +657,13 @@ export async function POST(req: Request) {
     } catch {
       return NextResponse.json({ error: 'Invalid or empty request body' }, { status: 400 });
     }
-    const { text, engine = 'oxygen', strength, tone, strict_meaning, no_contractions, enable_post_processing, premium } = body;
+    const { text, engine = 'oxygen', strength, tone, strict_meaning, no_contractions, enable_post_processing, premium, humanization_rate } = body;
 
     // 30% aggressiveness boost: when "Keep Meaning" is unchecked, bump strength one level
     const effectiveStrength = (!strict_meaning && strength === 'light') ? 'medium'
       : (!strict_meaning && (strength ?? 'medium') === 'medium') ? 'strong'
       : (strength ?? 'medium');
+    const changeTargets = resolveChangeTargets(effectiveStrength, Number(humanization_rate ?? 0));
 
     if (!text || typeof text !== 'string' || text.trim().length === 0) {
       return NextResponse.json({ error: 'Text is required' }, { status: 400 });

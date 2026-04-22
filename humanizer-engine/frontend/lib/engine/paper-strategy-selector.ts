@@ -24,6 +24,7 @@ import type {
   LengthBucket,
 } from "./paper-profiler";
 import type { Domain } from "./domain-detector";
+import { normalizeHumanizationDepth, resolveChangeTargets } from "./change-targets";
 
 // ── Types ─────────────────────────────────────────────────────────────
 
@@ -71,6 +72,10 @@ export interface HumanizationPlan {
   polishIterations: number;
   /** Sentence-flow polish iterations. */
   flowPolishIterations: number;
+  changePasses: number;
+  minDocumentChange: number;
+  minSentenceChange: number;
+  minChangedSentenceShare: number;
 
   // ── AntiPangram extras ──
   antiPangramVariance: number;
@@ -321,15 +326,10 @@ export function deriveHumanizationPlan(
   reasoning.push(`readabilityBias=${readabilityBias.toFixed(2)} (register=${register})`);
 
   // ── Overall strength resolution ──
-  let overallStrength: HumanizationStrength;
-  if (conservative) {
-    overallStrength = composite > 60 ? "medium" : "light";
-  } else if (aggressive) {
-    overallStrength = "strong";
-  } else {
-    overallStrength = requestedStrength === "light" ? "medium" : "strong";
-  }
+  const overallStrength = normalizeHumanizationDepth(requestedStrength);
+  const changeTargets = resolveChangeTargets(overallStrength);
   reasoning.push(`overallStrength=${overallStrength}`);
+  reasoning.push(`changeFloor=document:${Math.round(changeTargets.minDocumentChange * 100)}% sentence:${Math.round(changeTargets.minSentenceChange * 100)}%`);
 
   // ── Human variance ──
   const humanVariance = clamp01(
@@ -348,42 +348,44 @@ export function deriveHumanizationPlan(
   const lenMult = lengthMultiplier(profile.lengthBucket);
 
   // Nuru iterations — adaptive base on top of 10.
-  let nuruIterationsRaw = MIN_ITER + detectorPressure * 8 + composite * 0.05;
+  let nuruIterationsRaw = MIN_ITER + detectorPressure * 8 + composite * 0.05 + changeTargets.planIterationBias;
   if (postProfile === "undetectability") {
     // Hard mandate: Nuru ≥ 10 in undetectability + adaptive boost.
-    nuruIterationsRaw = MIN_ITER + 4 + detectorPressure * 10;
+    nuruIterationsRaw = MIN_ITER + 4 + detectorPressure * 10 + changeTargets.planIterationBias;
   }
   nuruIterationsRaw *= lenMult;
   const nuruIterations = clampInt(nuruIterationsRaw, MIN_ITER, 24);
   reasoning.push(`nuruIter=${nuruIterations} (min=${MIN_ITER}, pressure+length applied)`);
 
   // AntiPangram iterations — adaptive on top of 10.
-  let antiPangramRaw = MIN_ITER + detectorPressure * 8 + composite * 0.04;
+  let antiPangramRaw = MIN_ITER + detectorPressure * 8 + composite * 0.04 + changeTargets.planIterationBias;
   if (postProfile === "quality") {
-    antiPangramRaw = MIN_ITER + 4 + detectorPressure * 10;
+    antiPangramRaw = MIN_ITER + 4 + detectorPressure * 10 + changeTargets.planIterationBias;
   }
   antiPangramRaw *= lenMult;
   const antiPangramIterations = clampInt(antiPangramRaw, MIN_ITER, 24);
   reasoning.push(`antiPangramIter=${antiPangramIterations} (min=${MIN_ITER})`);
 
   // Universal cleaning passes — post-processing mandate ≥ 10.
-  let universalRaw = MIN_ITER + detectorPressure * 4 + (composite > 30 ? 2 : 0);
+  let universalRaw = MIN_ITER + detectorPressure * 4 + (composite > 30 ? 2 : 0) + changeTargets.planIterationBias;
   universalRaw *= lenMult;
   const universalCleaningPasses = clampInt(universalRaw, MIN_ITER, 18);
   reasoning.push(`universalPasses=${universalCleaningPasses}`);
 
   // Detector-polish iterations — 4 base + adaptive.
-  const polishIterations = clampInt(4 + detectorPressure * 4, 4, 10);
+  const polishIterations = clampInt(4 + detectorPressure * 4 + changeTargets.planIterationBias, 4, 12);
 
   // Flow-polish iterations — 2 base + adaptive on length.
-  const flowPolishIterations = clampInt(2 + (profile.lengthBucket === "long" || profile.lengthBucket === "very-long" ? 2 : 1), 2, 6);
+  const flowPolishIterations = clampInt(2 + (profile.lengthBucket === "long" || profile.lengthBucket === "very-long" ? 2 : 1) + Math.max(0, changeTargets.planIterationBias - 1), 2, 8);
 
   // Outer adaptive cycles
-  const maxAdaptiveCycles = clampInt(2 + detectorPressure * 3 + (profile.lengthBucket !== "short" ? 1 : 0), 2, 6);
+  const maxAdaptiveCycles = clampInt(2 + detectorPressure * 3 + (profile.lengthBucket !== "short" ? 1 : 0) + Math.max(0, changeTargets.planIterationBias - 1), 2, 8);
 
   // Nuru loops & targeted sweeps
-  const nuruLoops = clampInt(4 + detectorPressure * 5 + (postProfile !== "quality" ? 1 : 0), 4, 12);
-  const targetedSweeps = clampInt(3 + detectorPressure * 4 + (domain === "stem" || domain === "technical" ? 1 : 0), 3, 10);
+  const nuruLoops = clampInt(4 + detectorPressure * 5 + (postProfile !== "quality" ? 1 : 0) + changeTargets.planIterationBias, 4, 14);
+  const targetedSweeps = clampInt(3 + detectorPressure * 4 + (domain === "stem" || domain === "technical" ? 1 : 0) + Math.max(0, changeTargets.planIterationBias - 1), 3, 12);
+  const changePasses = clampInt(2 + changeTargets.planIterationBias + detectorPressure * 2, 2, 8);
+  reasoning.push(`changePasses=${changePasses}`);
 
   // AntiPangram variance
   const antiPangramVariance = clamp01(
@@ -434,6 +436,10 @@ export function deriveHumanizationPlan(
     universalCleaningPasses,
     polishIterations,
     flowPolishIterations,
+    changePasses,
+    minDocumentChange: changeTargets.minDocumentChange,
+    minSentenceChange: changeTargets.minSentenceChange,
+    minChangedSentenceShare: changeTargets.minChangedSentenceShare,
 
     antiPangramVariance,
     leadRewriteThreshold,
@@ -463,6 +469,9 @@ export function summarizePlan(plan: HumanizationPlan): string {
     `universal=${plan.universalCleaningPasses}`,
     `polish=${plan.polishIterations}`,
     `flow=${plan.flowPolishIterations}`,
+    `change=${plan.changePasses}`,
+    `docFloor=${Math.round(plan.minDocumentChange * 100)}%`,
+    `sentFloor=${Math.round(plan.minSentenceChange * 100)}%`,
     `target=${plan.targetScore}%`,
     `pressure=${plan.detectorPressure.toFixed(2)}`,
   ].join(" | ");

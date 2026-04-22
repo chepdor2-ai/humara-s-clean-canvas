@@ -41,6 +41,7 @@ import { analyze as analyzeContext } from '@/lib/engine/context-analyzer';
 import { detectDomain } from '@/lib/engine/domain-detector';
 import { applyOutputProfile, resolveOutputProfile } from '@/lib/engine/output-profiles';
 import { assessQualityGate, applyDeterministicSignalPolish, resolveAdaptiveTarget, resolveEngineQualityProfile, type QualityGateResult } from '@/lib/engine/quality-gate';
+import { mapSentenceChangeRatios, measureLexicalChangeRatio, resolveChangeTargets, type ChangeTargets } from '@/lib/engine/change-targets';
 import { createServiceClient } from '@/lib/supabase';
 import { getUsageStatsCompat, incrementUsageCompat } from '@/lib/server/usage-tracking';
 import { smartPreprocess, getMaxRestructureCount, selectForDownstreamRestructure, reassemblePreprocessed, measureWordChange, type SentenceAnalysis, type PreprocessResult, MAX_RESTRUCTURE_ITERATION } from '@/lib/engine/smart-preprocess';
@@ -150,6 +151,28 @@ function measureSentenceChange(original: string, modified: string): number {
   return changed / len;
 }
 
+function analyzeDocumentChangeTargets(
+  originalText: string,
+  candidateText: string,
+  sentenceMinChange: number,
+): { overallChange: number; passRate: number; weakestSentence: number } {
+  const originalSentences = splitIntoIndexedSentences(originalText).sentences;
+  const candidateSentences = splitIntoIndexedSentences(candidateText).sentences;
+  const sentenceMap = mapSentenceChangeRatios(originalSentences, candidateSentences, (sentence) => looksLikeHeadingLine(sentence.trim()));
+  const relevant = sentenceMap.filter((entry) => entry.originalIndex >= 0);
+  if (relevant.length === 0) {
+    return { overallChange: measureLexicalChangeRatio(originalText, candidateText), passRate: 1, weakestSentence: 1 };
+  }
+
+  const passed = relevant.filter((entry) => entry.ratio >= sentenceMinChange).length;
+  const weakestSentence = relevant.reduce((min, entry) => Math.min(min, entry.ratio), 1);
+  return {
+    overallChange: measureLexicalChangeRatio(originalText, candidateText),
+    passRate: passed / relevant.length,
+    weakestSentence,
+  };
+}
+
 function collapseToSingleSentence(original: string, candidate: string): string {
   const parts = robustSentenceSplit(candidate).map((part) => part.trim()).filter(Boolean);
   if (parts.length <= 1) return candidate.trim() || original;
@@ -184,6 +207,9 @@ function clamp01(value: number): number {
 interface AdaptiveCleanupPlan {
   targetScore: number;
   detectorPressure: number;
+  minDocumentChange: number;
+  minSentenceChange: number;
+  minChangedSentenceShare: number;
   antiPangramIterations: number;
   antiPangramVariance: number;
   readabilityBias: number;
@@ -191,6 +217,7 @@ interface AdaptiveCleanupPlan {
   nuruLoops: number;
   targetedSweeps: number;
   universalCleaningPasses: number;
+  changePasses: number;
   leadRewriteThreshold: number;
   maxAdaptiveCycles: number;
 }
@@ -240,6 +267,8 @@ function buildAdaptiveCleanupPlan(
   requestedTone: string | undefined,
   postProfile: string,
   paperPlan?: HumanizationPlan,
+  requestedStrength?: string,
+  humanizationRate?: number,
 ): AdaptiveCleanupPlan {
   // Adaptive ceilings replace fixed "maximum rewrite" loops.
   // Low-risk text gets 0-1 cleanup passes; high-risk text earns deeper
@@ -248,6 +277,17 @@ function buildAdaptiveCleanupPlan(
   const detectorPressure = clamp01((Math.max(score, targetScore) - targetScore) / 55);
   const isAlreadySafe = score <= targetScore + 3;
   const lightFloor = isAlreadySafe ? 0 : postProfile === 'undetectability' ? 4 : postProfile === 'quality' ? 2 : 1;
+  const changeTargets = paperPlan
+    ? {
+        strength: paperPlan.overallStrength,
+        minDocumentChange: paperPlan.minDocumentChange,
+        minSentenceChange: paperPlan.minSentenceChange,
+        minChangedSentenceShare: paperPlan.minChangedSentenceShare,
+        maxEngineRetries: 2,
+        maxWordLevelPasses: paperPlan.changePasses,
+        planIterationBias: paperPlan.changePasses,
+      }
+    : resolveChangeTargets(requestedStrength, humanizationRate);
   const capIterations = (value: number, floor: number, cap: number): number => {
     if (isAlreadySafe) return Math.min(1, Math.max(0, Math.round(value)));
     return Math.max(floor, Math.min(cap, Math.round(value)));
@@ -259,6 +299,9 @@ function buildAdaptiveCleanupPlan(
     return {
       targetScore: Math.max(paperPlan.targetScore, targetScore),
       detectorPressure: Math.min(paperPlan.detectorPressure, Math.max(0.08, detectorPressure)),
+      minDocumentChange: paperPlan.minDocumentChange,
+      minSentenceChange: paperPlan.minSentenceChange,
+      minChangedSentenceShare: paperPlan.minChangedSentenceShare,
       antiPangramIterations: capIterations(paperPlan.antiPangramIterations, lightFloor, postProfile === 'undetectability' ? 12 : 8),
       antiPangramVariance: paperPlan.antiPangramVariance,
       readabilityBias: paperPlan.readabilityBias,
@@ -266,6 +309,7 @@ function buildAdaptiveCleanupPlan(
       nuruLoops: capIterations(paperPlan.nuruLoops, isAlreadySafe ? 0 : 1, 4),
       targetedSweeps: capIterations(paperPlan.targetedSweeps, isAlreadySafe ? 0 : 1, 4),
       universalCleaningPasses: capIterations(paperPlan.universalCleaningPasses, isAlreadySafe ? 0 : 1, 5),
+      changePasses: capIterations(paperPlan.changePasses, isAlreadySafe ? 1 : 2, 8),
       leadRewriteThreshold: paperPlan.leadRewriteThreshold,
       maxAdaptiveCycles: capIterations(paperPlan.maxAdaptiveCycles, isAlreadySafe ? 0 : 1, 3),
     };
@@ -283,28 +327,33 @@ function buildAdaptiveCleanupPlan(
   const readabilityBias = clamp01((blogish ? 0.90 : academicish ? 0.76 : 0.70) - (technical ? 0.05 : 0) + (social ? 0.03 : 0));
 
   // Nuru: adaptive boost; undetectability starts higher, clean text can stop.
+  const changeBias = changeTargets.planIterationBias;
   const nuruBase = postProfile === 'undetectability' ? 4 : postProfile === 'quality' ? 2 : 1;
-  const nuruIterations = capIterations(nuruBase + detectorPressure * 6 + sentenceDensity * 2, lightFloor, postProfile === 'undetectability' ? 12 : 7);
+  const nuruIterations = capIterations(nuruBase + detectorPressure * 6 + sentenceDensity * 2 + changeBias, lightFloor, postProfile === 'undetectability' ? 14 : 9);
 
   // AntiPangram: forensic cleanup only scales up under detector pressure.
   const apBase = postProfile === 'undetectability' ? 4 : postProfile === 'quality' ? 3 : 1;
-  const antiPangramIterations = capIterations(apBase + detectorPressure * 6 + lengthBias * 2 + (technical ? 1 : 0), lightFloor, postProfile === 'undetectability' ? 12 : 8);
+  const antiPangramIterations = capIterations(apBase + detectorPressure * 6 + lengthBias * 2 + (technical ? 1 : 0) + changeBias, lightFloor, postProfile === 'undetectability' ? 14 : 10);
 
   // Universal post-processing: bounded final cleanup.
-  const universalCleaningPasses = capIterations(1 + detectorPressure * 4 + lengthBias + (blogish ? 1 : 0), isAlreadySafe ? 0 : 1, 5);
+  const universalCleaningPasses = capIterations(1 + detectorPressure * 4 + lengthBias + (blogish ? 1 : 0) + changeBias, isAlreadySafe ? 0 : 1, 8);
 
   return {
     targetScore,
     detectorPressure,
+    minDocumentChange: changeTargets.minDocumentChange,
+    minSentenceChange: changeTargets.minSentenceChange,
+    minChangedSentenceShare: changeTargets.minChangedSentenceShare,
     antiPangramIterations,
     antiPangramVariance: Math.min(0.18, 0.04 + detectorPressure * 0.10 + (blogish ? 0.03 : 0)),
     readabilityBias,
     nuruIterations,
-    nuruLoops: capIterations(1 + detectorPressure * 4 + lengthBias + (postProfile !== 'quality' ? 1 : 0), isAlreadySafe ? 0 : 1, 4),
-    targetedSweeps: capIterations(1 + detectorPressure * 4 + (technical ? 1 : 0), isAlreadySafe ? 0 : 1, 4),
+    nuruLoops: capIterations(1 + detectorPressure * 4 + lengthBias + (postProfile !== 'quality' ? 1 : 0) + Math.max(0, changeBias - 1), isAlreadySafe ? 0 : 1, 6),
+    targetedSweeps: capIterations(1 + detectorPressure * 4 + (technical ? 1 : 0) + Math.max(0, changeBias - 1), isAlreadySafe ? 0 : 1, 6),
     universalCleaningPasses,
+    changePasses: capIterations(2 + changeBias + detectorPressure * 2, isAlreadySafe ? 1 : 2, 8),
     leadRewriteThreshold: 24 + detectorPressure * 18,
-    maxAdaptiveCycles: capIterations(1 + detectorPressure * 3 + (lengthBias > 0.4 ? 1 : 0), isAlreadySafe ? 0 : 1, 3),
+    maxAdaptiveCycles: capIterations(1 + detectorPressure * 3 + (lengthBias > 0.4 ? 1 : 0) + Math.max(0, changeBias - 1), isAlreadySafe ? 0 : 1, 5),
   };
 }
 
@@ -461,8 +510,6 @@ export async function POST(req: Request) {
 
     // Humanization rate: 1-10 scale → minimum word-change threshold
     const hRate = Math.max(1, Math.min(10, Math.round(humanization_rate ?? 8)));
-    const minChangeThreshold = hRate / 10; // rate 8 → 0.80 = 80% min change
-    const phaseMinChangeThreshold = Math.max(0.40, minChangeThreshold);
     const oxygenMinChangeRaw = Number((body as Record<string, unknown>).oxygen_min_change_ratio);
     const oxygenRetryRaw = Number((body as Record<string, unknown>).oxygen_max_retries);
     const oxygenMinChangeRatio = Number.isFinite(oxygenMinChangeRaw)
@@ -479,6 +526,8 @@ export async function POST(req: Request) {
     const effectiveStrength = (!strict_meaning && strength === 'light') ? 'medium'
       : (!strict_meaning && (strength ?? 'medium') === 'medium') ? 'strong'
       : (strength ?? 'medium');
+    const changeTargets = resolveChangeTargets(effectiveStrength, hRate);
+    const phaseMinChangeThreshold = changeTargets.minSentenceChange;
 
     if (!text || typeof text !== 'string' || text.trim().length === 0) {
       return new Response('data: ' + JSON.stringify({ type: 'error', error: 'Text is required' }) + '\n\n', {
@@ -705,9 +754,9 @@ export async function POST(req: Request) {
           const getRiskAdaptiveMinChange = (sentenceIndex: number, baseMin: number): number => {
             const sentenceRisk = inputRiskByIndex.get(sentenceIndex);
             if (!sentenceRisk) return baseMin;
-            if (sentenceRisk.styleClass === 'fact' || sentenceRisk.styleClass === 'citation') return Math.min(baseMin, 0.18);
-            if (sentenceRisk.riskLevel === 'low') return Math.min(baseMin, 0.22);
-            if (sentenceRisk.riskLevel === 'medium') return Math.min(baseMin, 0.32);
+            if (sentenceRisk.styleClass === 'fact' || sentenceRisk.styleClass === 'citation') return Math.max(baseMin * 0.75, baseMin - 0.15);
+            if (sentenceRisk.riskLevel === 'low') return Math.max(baseMin * 0.82, baseMin - 0.10);
+            if (sentenceRisk.riskLevel === 'medium') return Math.max(baseMin * 0.9, baseMin - 0.06);
             return baseMin;
           };
 
@@ -1290,7 +1339,7 @@ export async function POST(req: Request) {
               const detector = getDetector();
               const preAnalysis = detector.analyze(normalizedText);
               const initialAiScore = getDetectorAverage(preAnalysis);
-              let aiAdaptivePlan = buildAdaptiveCleanupPlan(normalizedText, initialAiScore, tone ?? 'neutral', postProcessingProfile, humanizationPlan ?? undefined);
+let aiAdaptivePlan = buildAdaptiveCleanupPlan(normalizedText, initialAiScore, tone ?? 'neutral', postProcessingProfile, humanizationPlan ?? undefined, effectiveStrength, hRate);
               const MAX_ITER = Math.max(5, aiAdaptivePlan.maxAdaptiveCycles + 2);
               const TARGET_SCORE = aiAdaptivePlan.targetScore;
               const isHighAI = initialAiScore >= 55;
@@ -1411,7 +1460,7 @@ export async function POST(req: Request) {
               const totalContentSentsForCap = workingSentences.filter(s => !isHeadingSentCheck(s)).length;
               const maxRestructPerIter = Math.max(1, Math.ceil(totalContentSentsForCap * MAX_RESTRUCTURE_ITERATION));
               let currentScan = getFlaggedSentenceDetails(workingSentences);
-              aiAdaptivePlan = buildAdaptiveCleanupPlan(reassembleText(workingSentences, workingBounds.length ? workingBounds : [0]), currentScan.detectorAverage, tone ?? 'neutral', postProcessingProfile, humanizationPlan ?? undefined);
+aiAdaptivePlan = buildAdaptiveCleanupPlan(reassembleText(workingSentences, workingBounds.length ? workingBounds : [0]), currentScan.detectorAverage, tone ?? 'neutral', postProcessingProfile, humanizationPlan ?? undefined, effectiveStrength, hRate);
               sendSSE(controller, { type: 'stage', stage: `AI Analysis: Post-Agent Score ${Math.round(currentScan.detectorAverage)}%` });
               await flushDelay(12);
 
@@ -1424,7 +1473,7 @@ export async function POST(req: Request) {
                 if (!timeOk()) break;
 
                 const useHeavyPass = currentScan.detectorAverage >= 35;
-                aiAdaptivePlan = buildAdaptiveCleanupPlan(reassembleText(workingSentences, workingBounds.length ? workingBounds : [0]), currentScan.detectorAverage, tone ?? 'neutral', postProcessingProfile, humanizationPlan ?? undefined);
+aiAdaptivePlan = buildAdaptiveCleanupPlan(reassembleText(workingSentences, workingBounds.length ? workingBounds : [0]), currentScan.detectorAverage, tone ?? 'neutral', postProcessingProfile, humanizationPlan ?? undefined, effectiveStrength, hRate);
                 sendSSE(controller, {
                   type: 'stage',
                   stage: `AI Analysis: Iteration ${iteration + 1} (${Math.round(currentScan.detectorAverage)}%)`,
@@ -1480,7 +1529,7 @@ export async function POST(req: Request) {
                 }
 
                 currentScan = getFlaggedSentenceDetails(workingSentences);
-                aiAdaptivePlan = buildAdaptiveCleanupPlan(reassembleText(workingSentences, workingBounds.length ? workingBounds : [0]), currentScan.detectorAverage, tone ?? 'neutral', postProcessingProfile, humanizationPlan ?? undefined);
+aiAdaptivePlan = buildAdaptiveCleanupPlan(reassembleText(workingSentences, workingBounds.length ? workingBounds : [0]), currentScan.detectorAverage, tone ?? 'neutral', postProcessingProfile, humanizationPlan ?? undefined, effectiveStrength, hRate);
                 await flushDelay(8);
               }
 
@@ -1590,12 +1639,12 @@ export async function POST(req: Request) {
                     if (splitCheck.length > 1) {
                       final = collapseToSingleSentence(sentence, final);
                     }
-                    // LLM engines: max 1 retry (each call is expensive)
-                    const change = measureSentenceChange(sentence, final);
-                    if (change < phaseMinChangeThreshold) {
+                    // LLM engines: bounded retries; stronger depths earn more persistence.
+                    let change = measureSentenceChange(sentence, final);
+                    let retry = 0;
+                    while (change < phaseMinChangeThreshold && retry < Math.min(2, changeTargets.maxEngineRetries)) {
                       const retried = await runEngineOnSentence(final);
                       if (retried && retried.trim().length > 0) {
-                        // No-split/no-merge enforcement on retry
                         const retrySplitCheck = robustSentenceSplit(retried);
                         if (retrySplitCheck.length > 1) {
                           final = collapseToSingleSentence(sentence, retried);
@@ -1603,6 +1652,8 @@ export async function POST(req: Request) {
                           final = retried;
                         }
                       }
+                      change = measureSentenceChange(sentence, final);
+                      retry++;
                     }
                     sendSSE(controller, { type: 'sentence', index: i, text: final, stage: 'Engine' });
                     return final;
@@ -1637,7 +1688,7 @@ export async function POST(req: Request) {
                   }
                   let change = measureSentenceChange(sentence, final);
                   let retry = 0;
-                  const maxRetries = Math.max(3, hRate - 3);
+                  const maxRetries = changeTargets.maxEngineRetries;
                   while (change < phaseMinChangeThreshold && retry < maxRetries) {
                     const retried = await runEngineOnSentence(final);
                     if (retried && retried.trim().length > 0) {
@@ -2259,7 +2310,7 @@ export async function POST(req: Request) {
             const NURU_POST_DEADLINE_MS = 30_000;
             const nuruPostTimeOk = () => Date.now() - nuruPostStart < NURU_POST_DEADLINE_MS && !(deadlineReached || Date.now() - startTime > DEADLINE_MS - 8000);
             let currentAdaptiveScore = getDetectorAverage(detector.analyze(humanized));
-            adaptivePostPlan = buildAdaptiveCleanupPlan(normalizedText, currentAdaptiveScore, tone ?? 'neutral', postProcessingProfile, humanizationPlan ?? undefined);
+adaptivePostPlan = buildAdaptiveCleanupPlan(normalizedText, currentAdaptiveScore, tone ?? 'neutral', postProcessingProfile, humanizationPlan ?? undefined, effectiveStrength, hRate);
 
             const collectPostFlagged = (sentences: string[]) => {
               const postFullText = sentences.filter(s => !isHeadingSentCheck(s)).join(' ');
@@ -2302,7 +2353,7 @@ export async function POST(req: Request) {
                 latestHumanized = humanized;
                 currentAdaptiveScore = bestSafeGate.outputAiScore;
               }
-              adaptivePostPlan = buildAdaptiveCleanupPlan(normalizedText, currentAdaptiveScore, tone ?? 'neutral', postProcessingProfile, humanizationPlan ?? undefined);
+adaptivePostPlan = buildAdaptiveCleanupPlan(normalizedText, currentAdaptiveScore, tone ?? 'neutral', postProcessingProfile, humanizationPlan ?? undefined, effectiveStrength, hRate);
             };
 
             if ((postProcessingProfile === 'quality' || postProcessingProfile === 'balanced') && nuruPostTimeOk()) {
@@ -2403,7 +2454,7 @@ export async function POST(req: Request) {
                 currentAdaptiveScore = bestSafeGate.outputAiScore;
                 break;
               }
-              adaptivePostPlan = buildAdaptiveCleanupPlan(normalizedText, currentAdaptiveScore, tone ?? 'neutral', postProcessingProfile, humanizationPlan ?? undefined);
+adaptivePostPlan = buildAdaptiveCleanupPlan(normalizedText, currentAdaptiveScore, tone ?? 'neutral', postProcessingProfile, humanizationPlan ?? undefined, effectiveStrength, hRate);
 
               const { sentences: nuruPostSents, paragraphBoundaries: sharedBounds } = splitIntoIndexedSentences(humanized);
               const { sentences: sharedSource } = splitIntoIndexedSentences(normalizedText);
@@ -2419,7 +2470,7 @@ export async function POST(req: Request) {
                 currentAdaptiveScore = bestSafeGate.outputAiScore;
                 break;
               }
-              adaptivePostPlan = buildAdaptiveCleanupPlan(normalizedText, currentAdaptiveScore, tone ?? 'neutral', postProcessingProfile, humanizationPlan ?? undefined);
+adaptivePostPlan = buildAdaptiveCleanupPlan(normalizedText, currentAdaptiveScore, tone ?? 'neutral', postProcessingProfile, humanizationPlan ?? undefined, effectiveStrength, hRate);
 
               if (activeQualityGate.shouldStop || currentAdaptiveScore <= adaptivePostPlan.targetScore) break;
               if ((postProcessingProfile === 'undetectability' || currentAdaptiveScore > 12) && nuruPostTimeOk()) {
@@ -2461,7 +2512,7 @@ export async function POST(req: Request) {
                     latestHumanized = humanized;
                     activeQualityGate = polishGate;
                     currentAdaptiveScore = polishGate.outputAiScore;
-                    adaptivePostPlan = buildAdaptiveCleanupPlan(normalizedText, currentAdaptiveScore, tone ?? 'neutral', postProcessingProfile, humanizationPlan ?? undefined);
+adaptivePostPlan = buildAdaptiveCleanupPlan(normalizedText, currentAdaptiveScore, tone ?? 'neutral', postProcessingProfile, humanizationPlan ?? undefined, effectiveStrength, hRate);
                     sendSSE(controller, {
                       type: 'stage',
                       stage: `Detector polish complete: ${polish.signalsFixed.slice(0, 3).join(', ') || 'no gaps'} (~${Math.round(currentAdaptiveScore)}%)`,
@@ -2527,7 +2578,7 @@ export async function POST(req: Request) {
 
           if (!(deadlineReached || Date.now() - startTime > DEADLINE_MS - 6000)) {
             const { sentences: cleanSentences, paragraphBoundaries: cleanBounds } = splitIntoIndexedSentences(humanized);
-            const finalPlan = adaptivePostPlan ?? buildAdaptiveCleanupPlan(normalizedText, getDetectorAverage(detector.analyze(humanized)), tone ?? 'neutral', postProcessingProfile, humanizationPlan ?? undefined);
+const finalPlan = adaptivePostPlan ?? buildAdaptiveCleanupPlan(normalizedText, getDetectorAverage(detector.analyze(humanized)), tone ?? 'neutral', postProcessingProfile, humanizationPlan ?? undefined, effectiveStrength, hRate);
             const cleaningPasses = activeQualityGate.shouldStop
               ? Math.min(1, finalPlan.universalCleaningPasses)
               : finalPlan.universalCleaningPasses;
@@ -2663,48 +2714,78 @@ export async function POST(req: Request) {
             const { sentences: origSents } = splitIntoIndexedSentences(normalizedText);
             const { sentences: humanizedSents, paragraphBoundaries: humanParaBounds } = splitIntoIndexedSentences(humanized);
             const isHeadingSent = (s: string) => looksLikeHeadingLine(s.trim());
-            const usedWords = new Set<string>();
+            const activeChangeTargets: ChangeTargets = humanizationPlan
+              ? {
+                  ...changeTargets,
+                  minDocumentChange: humanizationPlan.minDocumentChange,
+                  minSentenceChange: humanizationPlan.minSentenceChange,
+                  minChangedSentenceShare: humanizationPlan.minChangedSentenceShare,
+                  maxWordLevelPasses: humanizationPlan.changePasses,
+                }
+              : changeTargets;
+            const maxWordPasses = Math.max(1, activeChangeTargets.maxWordLevelPasses);
             let changed = false;
-            for (let i = 0; i < humanizedSents.length; i++) {
-              if (isHeadingSent(humanizedSents[i])) continue; // Skip headings
 
-              // ENFORCE: No sentence splitting or merging
-              const sentCount = robustSentenceSplit(humanizedSents[i]).length;
-              if (sentCount > 1) {
-                const first = robustSentenceSplit(humanizedSents[i])[0];
-                if (first && first.trim().length > 0) humanizedSents[i] = first;
-              }
+            for (let pass = 0; pass < maxWordPasses; pass++) {
+              const usedWords = new Set<string>();
+              let passChanged = false;
+              for (let i = 0; i < humanizedSents.length; i++) {
+                if (isHeadingSent(humanizedSents[i])) continue;
 
-              // Only compare against non-heading original sentences
-              let bestOrigIdx = -1;
-              let bestScore = Infinity;
-              for (let j = 0; j < origSents.length; j++) {
-                if (isHeadingSent(origSents[j])) continue;
-                const r = measureSentenceChange(origSents[j], humanizedSents[i]);
-                if (r < bestScore) { bestScore = r; bestOrigIdx = j; }
-              }
-              if (bestOrigIdx >= 0) {
-                const sentenceWordChangeMin = getRiskAdaptiveMinChange(bestOrigIdx, 0.40);
-                if (bestScore < sentenceWordChangeMin) {
-                  let s = humanizedSents[i];
-                  // Word-level only: AI word kill + synonym replacement (NOT restructuring)
-                  s = applyAIWordKill(s);
-                  s = synonymReplace(s, 0.85, usedWords);
-                  // Re-check after synonym pass; apply more aggressive pass if still below
-                  const recheck = measureSentenceChange(origSents[bestOrigIdx], s);
-                  if (recheck < sentenceWordChangeMin) {
-                    s = synonymReplace(s, 1.0, usedWords);
+                const sentCount = robustSentenceSplit(humanizedSents[i]).length;
+                if (sentCount > 1) {
+                  const first = robustSentenceSplit(humanizedSents[i])[0];
+                  if (first && first.trim().length > 0) humanizedSents[i] = first;
+                }
+
+                let bestOrigIdx = -1;
+                let bestScore = Infinity;
+                for (let j = 0; j < origSents.length; j++) {
+                  if (isHeadingSent(origSents[j])) continue;
+                  const r = measureSentenceChange(origSents[j], humanizedSents[i]);
+                  if (r < bestScore) { bestScore = r; bestOrigIdx = j; }
+                }
+
+                if (bestOrigIdx >= 0) {
+                  const sentenceWordChangeMin = getRiskAdaptiveMinChange(bestOrigIdx, activeChangeTargets.minSentenceChange);
+                  if (bestScore < sentenceWordChangeMin) {
+                    let s = humanizedSents[i];
+                    let recheck = bestScore;
+                    let attempt = 0;
+                    while (recheck < sentenceWordChangeMin && attempt < 2) {
+                      s = applyAIWordKill(s);
+                      s = synonymReplace(s, Math.min(1, 0.82 + pass * 0.08 + attempt * 0.10), usedWords);
+                      recheck = measureSentenceChange(origSents[bestOrigIdx], s);
+                      attempt++;
+                    }
+                    if (s !== humanizedSents[i]) {
+                      humanizedSents[i] = s;
+                      passChanged = true;
+                      changed = true;
+                    }
                   }
-                  if (s !== humanizedSents[i]) { humanizedSents[i] = s; changed = true; }
                 }
               }
-            }
-            if (changed) {
-              humanized = reassembleText(humanizedSents, humanParaBounds.length ? humanParaBounds : [0]);
-              if (!usePhasePipeline) {
-                const { sentences: restructuredSents } = splitIntoIndexedSentences(humanized);
-                await emitSentencesStaggered(controller, restructuredSents, 'Word-Level Change', 20);
+
+              const candidateText = reassembleText(humanizedSents, humanParaBounds.length ? humanParaBounds : [0]);
+              const changeReport = analyzeDocumentChangeTargets(
+                normalizedText,
+                candidateText,
+                activeChangeTargets.minSentenceChange,
+              );
+              humanized = candidateText;
+              if (
+                changeReport.overallChange >= activeChangeTargets.minDocumentChange &&
+                changeReport.passRate >= activeChangeTargets.minChangedSentenceShare
+              ) {
+                break;
               }
+              if (!passChanged) break;
+            }
+
+            if (changed && !usePhasePipeline) {
+              const { sentences: restructuredSents } = splitIntoIndexedSentences(humanized);
+              await emitSentencesStaggered(controller, restructuredSents, 'Word-Level Change', 20);
             }
           }
           await flushDelay(30);
