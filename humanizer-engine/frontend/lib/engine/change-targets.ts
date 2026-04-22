@@ -36,7 +36,7 @@ export function resolveChangeTargets(
 
   const baseByDepth: Record<HumanizationDepth, Omit<ChangeTargets, "strength">> = {
     light: {
-      minDocumentChange: 0.65,
+      minDocumentChange: 0.75,
       minSentenceChange: 0.25,  // ENFORCED: 25% minimum per sentence
       maxEngineRetries: 2,
       maxWordLevelPasses: 3,
@@ -44,7 +44,7 @@ export function resolveChangeTargets(
       planIterationBias: 1,
     },
     medium: {
-      minDocumentChange: 0.85,  // ENFORCED: 85% minimum document change
+      minDocumentChange: 0.80,
       minSentenceChange: 0.25,  // ENFORCED: 25% minimum per sentence
       maxEngineRetries: 3,
       maxWordLevelPasses: 4,
@@ -52,7 +52,7 @@ export function resolveChangeTargets(
       planIterationBias: 2,
     },
     strong: {
-      minDocumentChange: 0.85,  // ENFORCED: 85% minimum document change
+      minDocumentChange: 0.85,
       minSentenceChange: 0.25,  // ENFORCED: 25% minimum per sentence
       maxEngineRetries: 5,
       maxWordLevelPasses: 6,
@@ -64,15 +64,14 @@ export function resolveChangeTargets(
   const base = baseByDepth[depth];
   const rate = clamp(Math.round(humanizationRate ?? 0), 0, 10);
   const ratePressure = rate > 0 ? rate / 10 : 0;
-  // Hard floors: all depths must achieve 85% document + 25% sentence minimums
+  // Hard floors: all depths must achieve at least 75% document + 25% sentence minimums.
   const maxDocCap = 0.92; // never exceed 92% (stay realistic)
   const maxSentCap = 0.72; // never exceed 72% per sentence (readability floor)
   const bonusPressure = Math.max(0, ratePressure - (depth === "light" ? 0.4 : depth === "medium" ? 0.5 : 0.6));
 
   return {
     strength: depth,
-    // Hard 85% minimum document change across all depths
-    minDocumentChange: Math.max(0.85, clamp(base.minDocumentChange + bonusPressure * 0.05, base.minDocumentChange, maxDocCap)),
+    minDocumentChange: Math.max(0.75, clamp(base.minDocumentChange + bonusPressure * 0.05, base.minDocumentChange, maxDocCap)),
     // Hard 25% minimum sentence change across all depths
     minSentenceChange: Math.max(0.25, clamp(base.minSentenceChange + bonusPressure * 0.02, base.minSentenceChange, maxSentCap)),
     maxEngineRetries: base.maxEngineRetries + Math.round(bonusPressure * 2),
@@ -122,4 +121,3 @@ export function mapSentenceChangeRatios(
     };
   });
 }
-

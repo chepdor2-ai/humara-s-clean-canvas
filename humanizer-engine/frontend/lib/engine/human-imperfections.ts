@@ -299,6 +299,14 @@ export function injectHumanImperfections(
   const paragraphBudget = conservative ? 1 : maxPerParagraph;
 
   const paragraphs = text.split(/\n\s*\n/);
+  const globalImperfectionBudget = Math.floor(
+    paragraphs.reduce((count, paragraph) => {
+      const trimmed = paragraph.trim();
+      if (!trimmed) return count;
+      if (trimmed.split("\n").every((line) => looksLikeHeadingLine(line.trim()))) return count;
+      return count + robustSentenceSplit(trimmed).length;
+    }, 0) * 0.10,
+  );
   const perParagraphCounts: number[] = [];
   let totalInjected = 0;
 
@@ -315,42 +323,44 @@ export function injectHumanImperfections(
     if (sentences.length === 0) { perParagraphCounts.push(0); return para; }
 
     let paragraphInjected = 0;
+    const paragraphSoftCap = sentences.length >= 10 ? Math.floor(sentences.length * 0.10) : 1;
+    const sentenceBudget = Math.min(paragraphBudget, paragraphSoftCap, Math.max(0, globalImperfectionBudget - totalInjected));
     const out: string[] = [];
     for (let i = 0; i < sentences.length; i++) {
       let s = sentences[i];
       const before = s;
-      const budgetLeft = paragraphBudget - paragraphInjected;
+      const budgetLeft = sentenceBudget - paragraphInjected;
 
       if (budgetLeft > 0) {
         // Category A: Punctuation drift
         s = commaAsideToEmDash(s, rng);
         if (s !== before) paragraphInjected++;
       }
-      if (paragraphInjected < paragraphBudget) {
+      if (paragraphInjected < sentenceBudget) {
         const before2 = s;
         s = dropOxfordComma(s, rng);
         if (s !== before2) paragraphInjected++;
       }
-      if (paragraphInjected < paragraphBudget) {
+      if (paragraphInjected < sentenceBudget) {
         const before3 = s;
         s = softenCompoundHyphens(s, rng);
         if (s !== before3) paragraphInjected++;
       }
 
       // Category B: Lexical softening
-      if (enableLexical && paragraphInjected < paragraphBudget) {
+      if (enableLexical && paragraphInjected < sentenceBudget) {
         const before4 = s;
         s = collapseInOrderTo(s, rng);
         if (s !== before4) paragraphInjected++;
       }
-      if (enableLexical && paragraphInjected < paragraphBudget) {
+      if (enableLexical && paragraphInjected < sentenceBudget) {
         const before5 = s;
         s = softenFrontConnectors(s, rng);
         if (s !== before5) paragraphInjected++;
       }
 
       // Category C: Micro-quirks (rare)
-      if (paragraphInjected < paragraphBudget) {
+      if (paragraphInjected < sentenceBudget) {
         const before6 = s;
         s = injectInlineAside(s, domain, rng);
         if (s !== before6) paragraphInjected++;

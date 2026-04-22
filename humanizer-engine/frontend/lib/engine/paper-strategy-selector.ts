@@ -105,6 +105,10 @@ function clamp01(x: number): number {
   return Math.max(0, Math.min(1, x));
 }
 
+function clampRange(x: number, lo: number, hi: number): number {
+  return Math.max(lo, Math.min(hi, x));
+}
+
 function clampInt(x: number, lo: number, hi: number): number {
   return Math.max(lo, Math.min(hi, Math.round(x)));
 }
@@ -330,8 +334,36 @@ export function deriveHumanizationPlan(
   // ── Overall strength resolution ──
   const overallStrength = normalizeHumanizationDepth(requestedStrength);
   const changeTargets = resolveChangeTargets(overallStrength);
+  const lengthFloorBoost = profile.lengthBucket === "very-long" ? 0.01 : profile.lengthBucket === "long" ? 0.02 : profile.lengthBucket === "medium" ? 0.03 : 0.04;
+  const strengthDocBoost = overallStrength === "strong" ? 0.04 : overallStrength === "medium" ? 0.02 : 0;
+  const strengthSentenceBoost = overallStrength === "strong" ? 0.03 : overallStrength === "medium" ? 0.01 : 0;
+  const profileDocBoost = postProfile === "undetectability" ? 0.04 : postProfile === "quality" ? -0.02 : 0;
+  const profileSentenceBoost = postProfile === "undetectability" ? 0.04 : postProfile === "quality" ? -0.02 : 0;
+  const conservativeDrag = conservative ? 0.03 : 0;
+  const aggressiveBoost = aggressive ? 0.03 : 0;
+  const adaptiveDocumentChange = clampRange(
+    Math.max(changeTargets.minDocumentChange, 0.75) +
+      detectorPressure * 0.06 +
+      lengthFloorBoost +
+      strengthDocBoost +
+      profileDocBoost +
+      aggressiveBoost -
+      conservativeDrag,
+    0.75,
+    postProfile === "undetectability" ? 0.90 : 0.86,
+  );
+  const adaptiveSentenceChange = clampRange(
+    Math.max(changeTargets.minSentenceChange, 0.25) +
+      detectorPressure * 0.08 +
+      strengthSentenceBoost +
+      profileSentenceBoost +
+      (register === "blog" || register === "narrative" ? 0.02 : 0) -
+      conservativeDrag,
+    0.25,
+    postProfile === "undetectability" ? 0.45 : 0.38,
+  );
   reasoning.push(`overallStrength=${overallStrength}`);
-  reasoning.push(`changeFloor=document:${Math.round(changeTargets.minDocumentChange * 100)}% sentence:${Math.round(changeTargets.minSentenceChange * 100)}%`);
+  reasoning.push(`changeFloor=document:${Math.round(adaptiveDocumentChange * 100)}% sentence:${Math.round(adaptiveSentenceChange * 100)}%`);
 
   // ── Human variance ──
   const humanVariance = clamp01(
@@ -445,8 +477,8 @@ export function deriveHumanizationPlan(
     polishIterations,
     flowPolishIterations,
     changePasses,
-    minDocumentChange: changeTargets.minDocumentChange,
-    minSentenceChange: changeTargets.minSentenceChange,
+    minDocumentChange: adaptiveDocumentChange,
+    minSentenceChange: adaptiveSentenceChange,
     minChangedSentenceShare: changeTargets.minChangedSentenceShare,
 
     antiPangramVariance,

@@ -39,6 +39,67 @@ function normalizeHeadingKey(text: string): string {
     .toLowerCase();
 }
 
+function headingTokens(text: string): Set<string> {
+  return new Set(
+    normalizeHeadingKey(text)
+      .replace(/^\d+(?:[.)]|(?:\.\d+)+)\s+/, '')
+      .split(/\s+/)
+      .filter((word) => word.length > 2),
+  );
+}
+
+function isHeadingEcho(candidate: string, headingKeys: Set<string>): boolean {
+  const key = normalizeHeadingKey(candidate);
+  if (!key || headingKeys.size === 0) return false;
+  if (headingKeys.has(key)) return true;
+
+  const words = key.split(/\s+/).filter(Boolean);
+  for (const heading of headingKeys) {
+    if (!heading) continue;
+    const headingWords = heading.split(/\s+/).filter(Boolean);
+    if (words.length > Math.max(headingWords.length + 3, 14)) continue;
+
+    const headingSet = headingTokens(heading);
+    const candidateSet = headingTokens(key);
+    if (headingSet.size === 0 || candidateSet.size === 0) continue;
+    let overlap = 0;
+    for (const token of headingSet) {
+      if (candidateSet.has(token)) overlap++;
+    }
+    if (overlap / Math.max(headingSet.size, candidateSet.size) >= 0.86) return true;
+  }
+
+  return false;
+}
+
+function stripLeadingHeadingEcho(text: string, headingKeys: Set<string>): string {
+  let result = text.trim();
+  if (!result || headingKeys.size === 0) return result;
+
+  for (const heading of [...headingKeys].sort((a, b) => b.length - a.length)) {
+    const headingWordCount = heading.split(/\s+/).filter(Boolean).length;
+    if (headingWordCount === 0) continue;
+
+    const words = result.split(/\s+/);
+    const possibleHeading = words.slice(0, headingWordCount).join(' ');
+    if (normalizeHeadingKey(possibleHeading) !== heading) continue;
+    const delimitedHeading =
+      /[.!?:;]$/.test(possibleHeading) ||
+      /^\d+(?:[.)]|(?:\.\d+)+)\s+/.test(possibleHeading) ||
+      /^#{1,6}\s+/.test(possibleHeading);
+    if (!delimitedHeading) continue;
+
+    result = words
+      .slice(headingWordCount)
+      .join(' ')
+      .replace(/^[.!?:;]+\s*/, '')
+      .trim();
+    break;
+  }
+
+  return result;
+}
+
 function collapseInlineHeadingRepetitions(text: string): string {
   // Collapse duplicated section headings embedded in paragraph text.
   // Example: "3.3 Model Specification. 3.3 Model Specification."
@@ -54,22 +115,30 @@ function stripHeadingEchoSentences(rewritten: string, headingKeys: Set<string>):
   const paragraphs = normalizeNewlines(rewritten).split(/\n\s*\n/);
   const cleanedParagraphs = paragraphs
     .map((paragraph) => {
-      const flattened = paragraph.replace(/\n/g, ' ').replace(/\s+/g, ' ').trim();
-      if (!flattened) return '';
+      const flattened = paragraph
+        .split('\n')
+        .map((line) => line.trim())
+        .filter((line) => line && !isHeadingEcho(line, headingKeys))
+        .join(' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+      const withoutLeadingHeading = stripLeadingHeadingEcho(flattened, headingKeys);
+      const textForSentences = withoutLeadingHeading || flattened;
+      if (!textForSentences) return '';
 
-      const sentences = robustSentenceSplit(flattened);
-      if (sentences.length === 0) return flattened;
+      const sentences = robustSentenceSplit(textForSentences);
+      if (sentences.length === 0) return textForSentences;
 
       // Only strip sentences that are short (≤12 words) AND exactly match a heading key.
       // This prevents stripping legitimate body sentences that merely share vocabulary
       // with a heading.
       const kept = sentences.filter((sentence) => {
         const words = sentence.trim().split(/\s+/);
-        if (words.length > 12) return true; // Never strip long sentences
-        return !headingKeys.has(normalizeHeadingKey(sentence));
+        if (words.length > 16) return true; // Never strip long sentences
+        return !isHeadingEcho(sentence, headingKeys);
       });
       // If ALL sentences would be removed, preserve the paragraph as-is
-      if (kept.length === 0) return flattened;
+      if (kept.length === 0) return textForSentences;
       return kept.join(' ').trim();
     })
     .filter(Boolean);
@@ -86,7 +155,7 @@ export function looksLikeHeadingLine(line: string): boolean {
   // Numbered headings: "1." "2.3" "10.2.1" followed by capitalized text
   if (/^\d+(?:[.)]|(?:\.\d+)+)\s+[A-Z]/.test(trimmed)) {
     const words = trimmed.split(/\s+/);
-    if (words.length <= 12 && !/[.!?]$/.test(trimmed)) return true;
+    if (words.length <= 12 && !/[!?]$/.test(trimmed)) return true;
   }
   // ALL-CAPS lines (4+ chars in uppercase)
   if (/^[A-Z][A-Z\s0-9:&()\-–—\/,'".]{4,}$/.test(trimmed)) {
@@ -212,7 +281,7 @@ function extractFlatParagraphs(text: string, headingKeys?: Set<string>): string[
 
   if (!headingKeys || headingKeys.size === 0) return paragraphs;
 
-  return paragraphs.filter((p) => !headingKeys.has(normalizeHeadingKey(p)));
+  return paragraphs.filter((p) => !isHeadingEcho(p, headingKeys));
 }
 
 function redistributeParagraphsBySentenceCount(

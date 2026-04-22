@@ -206,6 +206,11 @@ function clamp01(value: number): number {
   return Math.max(0, Math.min(1, value));
 }
 
+function clampRange(value: number, min: number, max: number): number {
+  if (!Number.isFinite(value)) return min;
+  return Math.max(min, Math.min(max, value));
+}
+
 interface AdaptiveCleanupPlan {
   targetScore: number;
   detectorPressure: number;
@@ -306,13 +311,15 @@ function buildAdaptiveCleanupPlan(
   // Preferred path: use the profile-driven HumanizationPlan if provided,
   // then cap it against the adaptive score band to prevent over-processing.
   if (paperPlan) {
+    const planDocumentFloor = clampRange(paperPlan.minDocumentChange, 0.75, postProfile === 'undetectability' ? 0.90 : 0.86);
+    const planSentenceFloor = clampRange(paperPlan.minSentenceChange, 0.25, postProfile === 'undetectability' ? 0.45 : 0.38);
     return {
       targetScore: Math.max(paperPlan.targetScore, targetScore),
       // Math.max: take the HIGHER of the plan's pressure and the score-derived pressure,
       // never cap it down. Floor of 0.75 guarantees full aggression at all depth levels.
       detectorPressure: Math.max(paperPlan.detectorPressure, Math.max(0.75, detectorPressure)),
-      minDocumentChange: Math.max(0.65, paperPlan.minDocumentChange),
-      minSentenceChange: Math.max(0.60, paperPlan.minSentenceChange),
+      minDocumentChange: planDocumentFloor,
+      minSentenceChange: planSentenceFloor,
       minChangedSentenceShare: Math.max(0.85, paperPlan.minChangedSentenceShare),
       antiPangramIterations: minIter10(paperPlan.antiPangramIterations, postProfile === 'undetectability' ? 30 : 22),
       antiPangramVariance: paperPlan.antiPangramVariance,
@@ -349,12 +356,22 @@ function buildAdaptiveCleanupPlan(
 
   // Universal post-processing: bounded final cleanup.
   const universalCleaningPasses = capIterations(5 + detectorPressure * 6 + lengthBias + (blogish ? 1 : 0) + changeBias, 5, 14);
+  const adaptiveDocumentFloor = clampRange(
+    changeTargets.minDocumentChange + detectorPressure * 0.04 + lengthBias * 0.03 + (postProfile === 'undetectability' ? 0.04 : postProfile === 'quality' ? -0.02 : 0),
+    0.75,
+    postProfile === 'undetectability' ? 0.90 : 0.86,
+  );
+  const adaptiveSentenceFloor = clampRange(
+    changeTargets.minSentenceChange + detectorPressure * 0.10 + sentenceDensity * 0.04 + (postProfile === 'undetectability' ? 0.04 : postProfile === 'quality' ? -0.02 : 0),
+    0.25,
+    postProfile === 'undetectability' ? 0.45 : 0.38,
+  );
 
   return {
     targetScore,
     detectorPressure: Math.max(0.75, detectorPressure),
-    minDocumentChange: Math.max(0.65, changeTargets.minDocumentChange),
-    minSentenceChange: Math.max(0.60, changeTargets.minSentenceChange),
+    minDocumentChange: adaptiveDocumentFloor,
+    minSentenceChange: adaptiveSentenceFloor,
     minChangedSentenceShare: Math.max(0.85, changeTargets.minChangedSentenceShare),
     antiPangramIterations,
     antiPangramVariance: Math.min(0.25, 0.08 + detectorPressure * 0.15 + (blogish ? 0.05 : 0)),
@@ -2510,7 +2527,8 @@ adaptivePostPlan = buildAdaptiveCleanupPlan(normalizedText, currentAdaptiveScore
               const reruns = 10;
               const postLoops = Math.min(5, Math.max(1, adaptivePostPlan.nuruLoops));
               const postLoopPasses = 3;
-              const mandatoryMinSentenceChange = 0.40;
+              const mandatoryBaseMinSentenceChange = clampRange(adaptivePostPlan.minSentenceChange, 0.25, 0.35);
+              const mandatoryLoopMinSentenceChange = 0.40;
               const aggressivePressure = Math.max(0.9, adaptivePostPlan.detectorPressure);
               const { sentences: postSents, paragraphBoundaries: postBounds } = splitIntoIndexedSentences(humanized);
               const usedMandatoryWords = new Set<string>();
@@ -2536,6 +2554,7 @@ adaptivePostPlan = buildAdaptiveCleanupPlan(normalizedText, currentAdaptiveScore
                 firstCandidate: string,
                 options: StealthHumanizeOptions,
                 seed: number,
+                minSentenceChange: number,
               ): Promise<string> => {
                 const updateBest = (candidate: string, currentBest: { text: string; change: number }) => {
                   const finalized = finalizeMandatoryCandidate(candidate);
@@ -2551,13 +2570,13 @@ adaptivePostPlan = buildAdaptiveCleanupPlan(normalizedText, currentAdaptiveScore
                   change: 0,
                 };
                 best.change = measureSentenceChange(feedSentence, best.text);
-                if (best.change >= mandatoryMinSentenceChange) return best.text;
+                if (best.change >= minSentenceChange) return best.text;
 
                 updateBest(runNuruSinglePass(best.text, options), best);
-                if (best.change >= mandatoryMinSentenceChange) return best.text;
+                if (best.change >= minSentenceChange) return best.text;
 
                 updateBest(synonymReplace(applyAIWordKill(best.text), 0.95, usedMandatoryWords), best);
-                if (best.change >= mandatoryMinSentenceChange) return best.text;
+                if (best.change >= minSentenceChange) return best.text;
 
                 if (nuruPostTimeOk()) {
                   try {
@@ -2574,10 +2593,10 @@ adaptivePostPlan = buildAdaptiveCleanupPlan(normalizedText, currentAdaptiveScore
                     // Restructuring is best-effort inside the strict post budget.
                   }
                 }
-                if (best.change >= mandatoryMinSentenceChange) return best.text;
+                if (best.change >= minSentenceChange) return best.text;
 
                 updateBest(synonymReplace(applyAIWordKill(forceNaturalRephrase(best.text, seed)), 1, usedMandatoryWords), best);
-                if (best.change < mandatoryMinSentenceChange) {
+                if (best.change < minSentenceChange) {
                   return finalizeMandatoryCandidate(forceNaturalRephrase(best.text, seed + 17));
                 }
                 return best.text;
@@ -2600,6 +2619,7 @@ adaptivePostPlan = buildAdaptiveCleanupPlan(normalizedText, currentAdaptiveScore
                       runNuruSinglePass(feedSentence, options),
                       options,
                       pass + i,
+                      mandatoryBaseMinSentenceChange,
                     );
                   }
                   sendSSE(controller, { type: 'sentence', index: i, text: postSents[i], stage: `Nuru Post x10 ${pass + 1}/${reruns}` });
@@ -2621,6 +2641,7 @@ adaptivePostPlan = buildAdaptiveCleanupPlan(normalizedText, currentAdaptiveScore
                         runNuruSinglePass(feedSentence, options),
                         options,
                         reruns + loop * postLoopPasses + pass + i,
+                        mandatoryLoopMinSentenceChange,
                       );
                     }
                     sendSSE(controller, { type: 'sentence', index: i, text: postSents[i], stage: `Nuru Post Loop ${loop + 1}/${postLoops}.${pass + 1}/${postLoopPasses}` });
@@ -2628,7 +2649,10 @@ adaptivePostPlan = buildAdaptiveCleanupPlan(normalizedText, currentAdaptiveScore
                 }
               }
 
-              humanized = removeFillerParentheticals(enforceNoContractions(reassembleText(postSents, postBounds.length ? postBounds : [0])));
+              humanized = preserveInputStructure(
+                normalizedText,
+                removeFillerParentheticals(enforceNoContractions(reassembleText(postSents, postBounds.length ? postBounds : [0]))),
+              );
               latestHumanized = humanized;
               currentAdaptiveScore = getDetectorAverage(detector.analyze(humanized));
               activeQualityGate = rememberQualityCandidate(humanized, 'mandatory Nuru post');
@@ -3074,7 +3098,7 @@ const finalPlan = adaptivePostPlan ?? buildAdaptiveCleanupPlan(normalizedText, g
             }
           }
 
-          // 5. Word-level change enforcement (40% minimum per sentence)
+          // 5. Word-level change enforcement (adaptive minimum per sentence)
           // NOTE: This is NOT structural restructuring — it only does synonym replacement
           // and AI word elimination. Structural restructuring was already done by LLM
           // in smart preprocessing. Non-LLM engines must NOT do structural restructuring.
