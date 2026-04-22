@@ -17,6 +17,16 @@
 
 import { robustSentenceSplit } from './content-protection';
 
+let activeHumanizationVariationSeed = "";
+
+export function setHumanizationVariationSeed(seed: string | null | undefined): void {
+  activeHumanizationVariationSeed = seed?.trim() ?? "";
+}
+
+export function getHumanizationVariationSeed(): string {
+  return activeHumanizationVariationSeed;
+}
+
 function deterministicChoiceSeed(value: string): number {
   let h = 2166136261;
   for (let i = 0; i < value.length; i++) {
@@ -28,7 +38,10 @@ function deterministicChoiceSeed(value: string): number {
 
 function pickDeterministicReplacement(options: string[], key: string | number): string {
   if (options.length === 0) return "";
-  const seed = typeof key === "number" ? key : deterministicChoiceSeed(key);
+  const seededKey = typeof key === "number"
+    ? `${activeHumanizationVariationSeed}:${key}`
+    : `${activeHumanizationVariationSeed}:${key}`;
+  const seed = deterministicChoiceSeed(seededKey);
   return options[seed % options.length];
 }
 
@@ -966,7 +979,7 @@ export function applyPhrasePatterns(text: string): string {
 
 /** Apply syntactic template transformations to a single sentence */
 export function applySyntacticTemplate(sentence: string): string {
-  const seedBase = deterministicChoiceSeed(sentence);
+  const seedBase = deterministicChoiceSeed(`${activeHumanizationVariationSeed}:${sentence}`);
   const shuffled = [...SYNTACTIC_TEMPLATES].sort((a, b) =>
     deterministicChoiceSeed(`${seedBase}:${a.pattern}`) -
     deterministicChoiceSeed(`${seedBase}:${b.pattern}`)

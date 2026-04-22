@@ -8,8 +8,9 @@ import {
   diversifyStarters,
   expandAllContractions,
   fixPunctuation,
+  getHumanizationVariationSeed,
 } from './shared-dictionaries';
-import { applySentenceSurgery, buildSentenceItems, getWordChangePercent, reassembleFromItems } from './sentence-surgery';
+import { getWordChangePercent } from './sentence-surgery';
 
 export type EngineQualityRole = 'light' | 'rewrite' | 'polish' | 'forensic' | 'router';
 
@@ -74,7 +75,7 @@ const DEFAULT_PROFILE: EngineQualityProfile = {
   maxLengthRatio: 1.38,
   maxSentenceRatioDrift: 0.45,
   maxReadabilityDrift: 32,
-  allowSurgery: true,
+  allowSurgery: false,
   allowForensic: false,
 };
 
@@ -187,7 +188,7 @@ export function resolveEngineQualityProfile(
       maxLengthRatio: 1.30,
       maxSentenceRatioDrift: 0.32,
       maxReadabilityDrift: 26,
-      allowSurgery: id !== 'oxygen3',
+      allowSurgery: false,
     });
   } else if (['antipangram', 'phantom'].includes(id)) {
     Object.assign(base, {
@@ -199,7 +200,7 @@ export function resolveEngineQualityProfile(
       maxLengthRatio: 1.45,
       maxSentenceRatioDrift: 0.55,
       maxReadabilityDrift: 38,
-      allowSurgery: true,
+      allowSurgery: false,
       allowForensic: true,
     });
   } else if (id === 'auto' || id === 'ai_analysis') {
@@ -253,6 +254,7 @@ export function assessQualityGate(
   const reasons: string[] = [];
 
   if (semanticSimilarity < profile.minSimilarity) reasons.push('meaning_drift');
+  if (candidateSentences !== originalSentences) reasons.push('sentence_count_changed');
   if (wordChangeRatio > profile.maxWordChange) reasons.push('word_change_over_cap');
   if (lengthRatio < profile.minLengthRatio || lengthRatio > profile.maxLengthRatio) reasons.push('length_drift');
   if (Math.abs(1 - sentenceRatio) > profile.maxSentenceRatioDrift) reasons.push('sentence_shape_drift');
@@ -263,6 +265,7 @@ export function assessQualityGate(
     reason === 'word_change_over_cap' ||
     reason === 'length_drift' ||
     reason === 'sentence_shape_drift' ||
+    reason === 'sentence_count_changed' ||
     reason === 'readability_drift' ||
     reason === 'meaning_drift'
   );
@@ -297,16 +300,6 @@ export function assessQualityGate(
   };
 }
 
-function sentenceLengthCv(text: string): number {
-  const lengths = robustSentenceSplit(text)
-    .map((sentence) => wordCount(sentence))
-    .filter((length) => length > 0);
-  if (lengths.length < 4) return 0.35;
-  const mean = lengths.reduce((sum, value) => sum + value, 0) / lengths.length;
-  const variance = lengths.reduce((sum, value) => sum + (value - mean) ** 2, 0) / lengths.length;
-  return Math.sqrt(variance) / Math.max(1, mean);
-}
-
 function cleanupSpacing(text: string): string {
   return text
     .replace(/[ \t]{2,}/g, ' ')
@@ -317,13 +310,67 @@ function cleanupSpacing(text: string): string {
     .trim();
 }
 
+function variationHash(value: string): number {
+  let h = 5381;
+  for (let i = 0; i < value.length; i++) h = ((h << 5) + h) ^ value.charCodeAt(i);
+  return h >>> 0;
+}
+
+function pickHumanVariant(options: string[], key: string): string {
+  if (options.length === 0) return "";
+  const seed = variationHash(`${getHumanizationVariationSeed()}:${key}`);
+  return options[seed % options.length];
+}
+
+function applyHumanCadencePolish(text: string): string {
+  const rules: Array<[RegExp, string[]]> = [
+    [/\bwould be used\b/gi, ["is used", "can be used"]],
+    [/\bto control order\b/gi, ["to maintain order", "to keep order"]],
+    [/\battain their objectives\b/gi, ["meet their goals", "achieve their goals"]],
+    [/\bcurrent social requirements\b/gi, ["present social needs", "current social needs"]],
+    [/\bmoral rationale\b/gi, ["moral reasoning", "moral judgment"]],
+    [/\bchanging standards of justice\b/gi, ["evolving standards of justice", "changing ideas of justice"]],
+    [/\bpopular policy\b/gi, ["public policy"]],
+    [/\bpolicy of the population\b/gi, ["public policy"]],
+    [/\bthe policies of the people\b/gi, ["public policy"]],
+    [/\bpublic schools\b/gi, ["public schools"]],
+    [/\bstate schools\b/gi, ["public schools"]],
+    [/\bparity of protection\b/gi, ["equal protection"]],
+    [/\bthe correctional employees\b/gi, ["correctional staff"]],
+    [/\bemployees and prisoners\b/gi, ["staff and prisoners"]],
+    [/\bprisoners and employees\b/gi, ["prisoners and staff"]],
+    [/\brigid powers\b/gi, ["strict authority"]],
+    [/\bclaustrophobic atmosphere\b/gi, ["restrictive environment"]],
+    [/\bhealthy prison environment\b/gi, ["positive prison climate", "sound prison environment"]],
+    [/\bpositive prison environment\b/gi, ["positive prison climate", "supportive prison environment"]],
+    [/\bmisbehavior\b/gi, ["misconduct"]],
+    [/\bProverbs 31:89\b/g, ["Proverbs 31:8-9"]],
+    [/\bProverbs 31:8–9\b/g, ["Proverbs 31:8-9"]],
+    [/\bcannot speak in your voice\b/gi, ["cannot speak for themselves"]],
+    [/\bas machine\b/gi, ["mechanically"]],
+    [/\bto a certain degree solve\b/gi, ["address"]],
+    [/\bon a final note\b/gi, ["In conclusion"]],
+  ];
+
+  let result = text;
+  for (const [pattern, variants] of rules) {
+    result = result.replace(pattern, (match) => {
+      const replacement = pickHumanVariant(variants, `${pattern.source}:${match}`);
+      if (match[0] === match[0].toUpperCase() && replacement[0] === replacement[0].toLowerCase()) {
+        return replacement[0].toUpperCase() + replacement.slice(1);
+      }
+      return replacement;
+    });
+  }
+  return result;
+}
+
 export function applyDeterministicSignalPolish(
   text: string,
   options: DeterministicSignalPolishOptions = {},
 ): string {
   if (!text.trim()) return text;
 
-  const profile = options.profile ?? resolveEngineQualityProfile(options.engine, options.strength, options.postProfile);
   const intensity = clamp01(options.intensity ?? 0.45);
   const { text: protectedText, map } = protectSpecialContent(text);
   let result = protectedText;
@@ -332,17 +379,9 @@ export function applyDeterministicSignalPolish(
   if (intensity >= 0.18) result = applyPhrasePatterns(result);
   if (intensity >= 0.35) result = applyConnectorNaturalization(result);
   result = diversifyStarters(result);
+  result = applyHumanCadencePolish(result);
   if (options.preserveContractions === false) result = expandAllContractions(result);
   result = fixPunctuation(cleanupSpacing(result));
-
-  const allowSurgery = options.allowSentenceSurgery ?? profile.allowSurgery;
-  if (allowSurgery && intensity >= 0.45 && sentenceLengthCv(result) < 0.36) {
-    const beforeSurgery = result;
-    const surgery = reassembleFromItems(applySentenceSurgery(buildSentenceItems(result)));
-    if (surgery.trim() && Math.abs(wordCount(surgery) - wordCount(beforeSurgery)) <= Math.max(12, wordCount(beforeSurgery) * 0.08)) {
-      result = surgery;
-    }
-  }
 
   result = cleanupSpacing(fixPunctuation(result));
   result = restoreSpecialContent(result, map);

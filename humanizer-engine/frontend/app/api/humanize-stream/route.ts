@@ -1,7 +1,7 @@
 import { robustSentenceSplit, protectSpecialContent, restoreSpecialContent, cleanOutputRepetitions, type ProtectionMap } from '@/lib/engine/content-protection';
 import { getDetector, TextSignals } from '@/lib/engine/multi-detector';
 import { isMeaningPreserved, isMeaningPreservedSync } from '@/lib/engine/semantic-guard';
-import { fixCapitalization, applyPhrasePatterns, fixPunctuation, expandAllContractions } from '@/lib/engine/shared-dictionaries';
+import { fixCapitalization, applyPhrasePatterns, fixPunctuation, expandAllContractions, setHumanizationVariationSeed } from '@/lib/engine/shared-dictionaries';
 import { deduplicateRepeatedPhrases, expandWordCount } from '@/lib/engine/premium-deep-clean';
 import { preserveInputStructure, looksLikeHeadingLine } from '@/lib/engine/structure-preserver';
 import { structuralPostProcess } from '@/lib/engine/structural-post-processor';
@@ -148,6 +148,21 @@ function measureSentenceChange(original: string, modified: string): number {
     if (!origWords[i] || !modWords[i] || origWords[i] !== modWords[i]) changed++;
   }
   return changed / len;
+}
+
+function collapseToSingleSentence(original: string, candidate: string): string {
+  const parts = robustSentenceSplit(candidate).map((part) => part.trim()).filter(Boolean);
+  if (parts.length <= 1) return candidate.trim() || original;
+  const collapsed = parts
+    .map((part, index) => {
+      let cleaned = part.replace(/[.!?]+$/g, '').trim();
+      if (index > 0 && cleaned[0]) cleaned = cleaned[0].toLowerCase() + cleaned.slice(1);
+      return cleaned;
+    })
+    .filter(Boolean)
+    .join('; ');
+  const punctuation = /[.!?]$/.test(candidate.trim()) ? candidate.trim().slice(-1) : '.';
+  return collapsed ? `${collapsed}${punctuation}` : original;
 }
 
 function pickWeighted<T>(options: Array<{ value: T; weight: number }>): T {
@@ -541,6 +556,8 @@ export async function POST(req: Request) {
         let latestHumanized = text;
         let streamClosed = false;
         let deadlineTimer: ReturnType<typeof setTimeout> | null = null;
+        const variationSeed = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}-${hashTextForSeed(text)}`;
+        setHumanizationVariationSeed(variationSeed);
 
         const finishStream = (payload: Record<string, unknown>) => {
           if (streamClosed) return;
@@ -556,6 +573,7 @@ export async function POST(req: Request) {
               ...payload,
             });
           } finally {
+            setHumanizationVariationSeed(null);
             try { controller.close(); } catch {}
           }
         };
@@ -1377,7 +1395,7 @@ export async function POST(req: Request) {
                       nuruSents[i] = await runNuru20Full(nuruSents[i]);
                       const splitCheck = robustSentenceSplit(nuruSents[i]);
                       if (splitCheck.length > 1) {
-                        nuruSents[i] = splitCheck[0] && splitCheck[0].trim().length > 0 ? splitCheck[0] : before;
+                        nuruSents[i] = collapseToSingleSentence(before, nuruSents[i]);
                       }
                       if (nuruSents[i] !== before) restructuredInPhase4++;
                     }
@@ -1435,7 +1453,7 @@ export async function POST(req: Request) {
 
                       const splitCheck = robustSentenceSplit(sent);
                       if (splitCheck.length > 1) {
-                        sent = splitCheck[0] && splitCheck[0].trim().length > 0 ? splitCheck[0] : before;
+                        sent = collapseToSingleSentence(before, sent);
                       }
 
                       if (sent !== before) restructuredThisIter++;
@@ -1447,7 +1465,7 @@ export async function POST(req: Request) {
                       sent = stealthHumanizeTargeted(sent, flagged.flaggedPhrases, strength ?? 'medium');
                       const stealthSplitCheck = robustSentenceSplit(sent);
                       if (stealthSplitCheck.length > 1) {
-                        sent = stealthSplitCheck[0] && stealthSplitCheck[0].trim().length > 0 ? stealthSplitCheck[0] : before;
+                        sent = collapseToSingleSentence(before, sent);
                       }
                     }
 
@@ -1569,7 +1587,7 @@ export async function POST(req: Request) {
                     // No-split/no-merge enforcement
                     const splitCheck = robustSentenceSplit(final);
                     if (splitCheck.length > 1) {
-                      final = splitCheck[0] && splitCheck[0].trim().length > 0 ? splitCheck[0] : sentence;
+                      final = collapseToSingleSentence(sentence, final);
                     }
                     // LLM engines: max 1 retry (each call is expensive)
                     const change = measureSentenceChange(sentence, final);
@@ -1579,7 +1597,7 @@ export async function POST(req: Request) {
                         // No-split/no-merge enforcement on retry
                         const retrySplitCheck = robustSentenceSplit(retried);
                         if (retrySplitCheck.length > 1) {
-                          final = retrySplitCheck[0] && retrySplitCheck[0].trim().length > 0 ? retrySplitCheck[0] : final;
+                          final = collapseToSingleSentence(sentence, retried);
                         } else {
                           final = retried;
                         }
@@ -1614,7 +1632,7 @@ export async function POST(req: Request) {
                   // No-split/no-merge enforcement
                   let splitCheck = robustSentenceSplit(final);
                   if (splitCheck.length > 1) {
-                    final = splitCheck[0] && splitCheck[0].trim().length > 0 ? splitCheck[0] : sentence;
+                    final = collapseToSingleSentence(sentence, final);
                   }
                   let change = measureSentenceChange(sentence, final);
                   let retry = 0;
@@ -1625,7 +1643,7 @@ export async function POST(req: Request) {
                       // No-split/no-merge enforcement on retry
                       splitCheck = robustSentenceSplit(retried);
                       if (splitCheck.length > 1) {
-                        final = splitCheck[0] && splitCheck[0].trim().length > 0 ? splitCheck[0] : final;
+                        final = collapseToSingleSentence(sentence, retried);
                       } else {
                         final = retried;
                       }
@@ -2154,7 +2172,7 @@ export async function POST(req: Request) {
           const inputAnalysis = detector.analyze(text);
           let adaptivePostPlan: AdaptiveCleanupPlan | null = null;
           const engineQualityProfile = resolveEngineQualityProfile(eng, effectiveStrength, postProcessingProfile);
-          let bestSafeHumanized = humanized;
+          let bestSafeHumanized = normalizedText;
           let bestSafeGate: QualityGateResult | null = null as QualityGateResult | null;
           const assessCandidateQuality = (candidate: string): QualityGateResult => {
             const outputScore = getDetectorAverage(detector.analyze(candidate));
@@ -2167,6 +2185,7 @@ export async function POST(req: Request) {
               outputAiScore: outputScore,
             });
           };
+          bestSafeGate = assessCandidateQuality(bestSafeHumanized);
           const rememberQualityCandidate = (candidate: string, label: string): QualityGateResult => {
             const gate = assessCandidateQuality(candidate);
             if (gate.safe) {
@@ -2196,7 +2215,7 @@ export async function POST(req: Request) {
               targetScore: activeQualityGate.targetScore,
               intensity: Math.max(0.22, activeQualityGate.detectorPressure),
               preserveContractions: no_contractions !== true,
-              allowSentenceSurgery: engineQualityProfile.allowSurgery && activeQualityGate.outputAiScore > activeQualityGate.targetScore,
+              allowSentenceSurgery: false,
             });
             if (deterministicPolish !== humanized) {
               const polishGate = rememberQualityCandidate(deterministicPolish, 'deterministic polish');
@@ -2607,7 +2626,15 @@ export async function POST(req: Request) {
           const inputAiScore = inputAnalysis.summary.overall_ai_score;
 
           if (eng !== 'humara' && eng !== 'humara_v1_3' && eng !== 'nuru' && eng !== 'omega' && eng !== 'oxygen' && !isDeepKill) {
-            humanized = unifiedSentenceProcess(humanized, earlyFirstPerson, inputAiScore);
+            const beforeUnified = humanized;
+            const beforeUnifiedCount = robustSentenceSplit(beforeUnified).length;
+            const unified = unifiedSentenceProcess(humanized, earlyFirstPerson, inputAiScore);
+            if (robustSentenceSplit(unified).length === beforeUnifiedCount) {
+              humanized = unified;
+            } else {
+              humanized = beforeUnified;
+              console.warn('[ShapeGuard] Unified sentence process skipped because it changed sentence count');
+            }
             if (!usePhasePipeline) {
               sendSSE(controller, { type: 'stage', stage: 'Sentence Processing' });
               await flushDelay(20);
@@ -2744,7 +2771,15 @@ export async function POST(req: Request) {
 
           // 9. Structural post-processing
           if (eng !== 'humara' && eng !== 'humara_v1_3' && eng !== 'nuru' && eng !== 'omega' && eng !== 'ninja' && eng !== 'undetectable' && !isDeepKill) {
-            humanized = structuralPostProcess(humanized);
+            const beforeStructural = humanized;
+            const beforeStructuralCount = robustSentenceSplit(beforeStructural).length;
+            const structured = structuralPostProcess(humanized);
+            if (robustSentenceSplit(structured).length === beforeStructuralCount) {
+              humanized = structured;
+            } else {
+              humanized = beforeStructural;
+              console.warn('[ShapeGuard] Structural post-process skipped because it changed sentence count');
+            }
           }
 
           // 9b. Word count restoration — ensure output is at least as long as input.

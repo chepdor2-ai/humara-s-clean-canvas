@@ -7,7 +7,7 @@ import { humanizeV11 } from '@/lib/engine/v11';
 import { humaraHumanize } from '@/lib/humara';
 import { getDetector } from '@/lib/engine/multi-detector';
 import { isMeaningPreserved, semanticSimilaritySync } from '@/lib/engine/semantic-guard';
-import { fixCapitalization } from '@/lib/engine/shared-dictionaries';
+import { fixCapitalization, setHumanizationVariationSeed } from '@/lib/engine/shared-dictionaries';
 import { fixMidSentenceCapitalization } from '@/lib/engine/validation-post-process';
 import { deduplicateRepeatedPhrases } from '@/lib/engine/premium-deep-clean';
 import { preserveInputStructure, looksLikeHeadingLine } from '@/lib/engine/structure-preserver';
@@ -635,6 +635,7 @@ function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: string): 
 }
 
 export async function POST(req: Request) {
+  let variationSeedApplied = false;
   try {
     let body: {
       text?: string;
@@ -666,6 +667,8 @@ export async function POST(req: Request) {
     if (text.length > 50000) {
       return NextResponse.json({ error: 'Text too long (max 50,000 characters)' }, { status: 400 });
     }
+    setHumanizationVariationSeed(`${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}-${text.length}`);
+    variationSeedApplied = true;
 
     // Detect input scores
     const detector = getDetector();
@@ -1212,7 +1215,10 @@ export async function POST(req: Request) {
     const earlyFirstPerson = FIRST_PERSON_RE_EARLY.test(text);
     const inputAiScore = inputAnalysis.summary.overall_ai_score;
     if (engine !== 'humara' && engine !== 'humara_v1_3' && engine !== 'humara_v3_3' && engine !== 'nuru' && engine !== 'nuru_v2' && engine !== 'omega' && engine !== 'oxygen' && engine !== 'apex' && engine !== 'king' && engine !== 'ghost_pro_wiki' && !isDeepKill) {
-      humanized = unifiedSentenceProcess(humanized, earlyFirstPerson, inputAiScore);
+      const beforeUnified = humanized;
+      const beforeUnifiedCount = robustSentenceSplit(beforeUnified).length;
+      const unified = unifiedSentenceProcess(humanized, earlyFirstPerson, inputAiScore);
+      humanized = robustSentenceSplit(unified).length === beforeUnifiedCount ? unified : beforeUnified;
     }
 
     // ── 60% Restructuring Enforcement ──────────────────────────────
@@ -1253,9 +1259,12 @@ export async function POST(req: Request) {
 
     // Structural post-processing — attacks document-level statistical signals
     // (spectral_flatness, burstiness, sentence_uniformity, readability_consistency, vocabulary_richness)
-    // Skip for humara engine: it has its own structural diversity layer
+  // Skip for humara engine: it has its own structural diversity layer
     if (engine !== 'humara' && engine !== 'humara_v1_3' && engine !== 'nuru' && engine !== 'nuru_v2' && engine !== 'omega' && engine !== 'ninja' && engine !== 'undetectable' && engine !== 'oxygen' && engine !== 'king' && engine !== 'ghost_pro_wiki' && !isDeepKill) {
-      humanized = structuralPostProcess(humanized);
+      const beforeStructural = humanized;
+      const beforeStructuralCount = robustSentenceSplit(beforeStructural).length;
+      const structured = structuralPostProcess(humanized);
+      humanized = robustSentenceSplit(structured).length === beforeStructuralCount ? structured : beforeStructural;
     }
 
     // Restore the original title/paragraph layout for EVERY engine output.
@@ -1811,5 +1820,7 @@ export async function POST(req: Request) {
       { error: error instanceof Error ? error.message : 'Humanization failed' },
       { status: 500 },
     );
+  } finally {
+    if (variationSeedApplied) setHumanizationVariationSeed(null);
   }
 }

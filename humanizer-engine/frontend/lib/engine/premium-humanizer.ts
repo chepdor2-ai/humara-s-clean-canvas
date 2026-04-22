@@ -50,14 +50,9 @@ import {
 } from "./shared-dictionaries";
 import { validateAndRepairOutput } from "./validation-post-process";
 import {
-  buildSentenceItems,
-  applySentenceSurgery,
-  reassembleFromItems,
   enforceCapitalization,
   enforceStrictRules,
   enforceSingleSentence,
-  getWordChangePercent,
-  type SurgeryItem,
   type InputFeatures as SurgeryInputFeatures,
 } from "./sentence-surgery";
 import OpenAI from "openai";
@@ -806,21 +801,12 @@ export async function premiumHumanize(
   const inputSentenceCount = countSentences(protectedText);
 
   // ═══════════════════════════════════════════
-  // PRE-HUMANIZATION: Sentence Merge/Split Surgery for Burstiness
-  // ═══════════════════════════════════════════
-  console.log("  [Premium] Pre-surgery: Applying sentence merge/split for burstiness...");
-  const rawSurgeryItems = buildSentenceItems(protectedText);
-  const surgeryItems = applySentenceSurgery(rawSurgeryItems);
-  const surgeryText = reassembleFromItems(surgeryItems);
-  console.log(`  [Premium] Surgery: ${rawSurgeryItems.filter(i => !i.isTitle).length} → ${surgeryItems.filter(i => !i.isTitle).length} sentences (merges + splits applied)`);
-
-  // ═══════════════════════════════════════════
   // PHASE A: Per-Sentence Deep Rewrite (LLM)
   // ═══════════════════════════════════════════
   console.log("  [Premium] Phase A: Per-sentence deep rewrite...");
 
   const phaseASystem = getPhaseASystemPrompt(features, config, tone);
-  const paragraphs = surgeryText
+  const paragraphs = protectedText
     .split(/\n\s*\n/)
     .filter((p) => p.trim());
   let totalSentencesProcessed = 0;

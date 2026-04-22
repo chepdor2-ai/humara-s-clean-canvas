@@ -43,14 +43,10 @@ import {
 } from "./shared-dictionaries";
 import { getDictionary } from "./dictionary";
 import {
-  buildSentenceItems,
-  applySentenceSurgery,
-  reassembleFromItems,
   enforceCapitalization,
   enforceStrictRules,
   enforceSingleSentence,
   getWordChangePercent,
-  type SurgeryItem,
   type InputFeatures as SurgeryInputFeatures,
 } from "./sentence-surgery";
 
@@ -2797,24 +2793,6 @@ export async function ghostProHumanize(
 
   // Final capitalization enforcement
   result = enforceCapitalization(original, result);
-
-  // Adaptive sentence surgery: add burstiness without rewriting facts.
-  if (strength !== "light") {
-    const beforeSurgery = result;
-    const surgeryText = reassembleFromItems(applySentenceSurgery(buildSentenceItems(result)));
-    const beforeCount = countSentences(beforeSurgery);
-    const afterCount = countSentences(surgeryText);
-    const countDrift = Math.abs(afterCount - beforeCount);
-    const maxDrift = Math.max(2, Math.ceil(beforeCount * 0.25));
-    if (
-      surgeryText.trim() &&
-      countDrift <= maxDrift &&
-      semanticSimilaritySync(protectedText, surgeryText) >= 0.78
-    ) {
-      result = surgeryText;
-      console.log(`  [GhostPro] Sentence surgery accepted: ${beforeCount} -> ${afterCount} sentences`);
-    }
-  }
 
   // Merge/split DISABLED — strict sentence count enforcement: input = output
 

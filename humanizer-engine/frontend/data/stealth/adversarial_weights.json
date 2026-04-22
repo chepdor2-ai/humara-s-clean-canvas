@@ -1,0 +1,16 @@
+{
+  "weights": {
+    "lexical": 0.8600580397252178,
+    "syntactic": 0.8600580397252178,
+    "semantic": 0.8600580397252178,
+    "phraseReplacement": 0.8600580397252178,
+    "passiveConversion": 0.8600580397252178,
+    "hedgingRemoval": 0.8600580397252178,
+    "starterVariation": 0.8600580397252178,
+    "sentenceSplitting": 0.8600580397252178,
+    "listBreaking": 0.8600580397252178,
+    "clicheRemoval": 0.8600580397252178
+  },
+  "lastUpdated": "2026-04-12T03:18:37.532Z",
+  "version": 1
+}

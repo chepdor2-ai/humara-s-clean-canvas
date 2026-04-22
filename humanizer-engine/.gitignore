@@ -37,6 +37,8 @@ venv_clean/
 
 # Data files
 data/
+!frontend/data/
+!frontend/data/curated_synonyms.json
 !frontend/lib/**/data/
 dictionaries/*.json
 dictionaries/*.jsonl
