@@ -17,6 +17,21 @@
 
 import { robustSentenceSplit } from './content-protection';
 
+function deterministicChoiceSeed(value: string): number {
+  let h = 2166136261;
+  for (let i = 0; i < value.length; i++) {
+    h ^= value.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
+}
+
+function pickDeterministicReplacement(options: string[], key: string | number): string {
+  if (options.length === 0) return "";
+  const seed = typeof key === "number" ? key : deterministicChoiceSeed(key);
+  return options[seed % options.length];
+}
+
 // ══════════════════════════════════════════════════════════════════════════
 // 1. AI VOCABULARY KILL DICTIONARY (120+ words, 42+ phrase patterns)
 //    Shared by Ghost Pro, Ninja, Ghost Mini
@@ -721,6 +736,8 @@ export const NATURAL_REROUTES: string[] = [
 /** Kill AI vocabulary in text using shared dictionaries */
 export function applyAIWordKill(text: string): string {
   let result = text;
+  const seedBase = deterministicChoiceSeed(text);
+  let wordOccurrence = 0;
 
   // Words that should never be replaced by AI word kill (academic/domain terms)
   const AIWK_PROTECTED = new Set([
@@ -793,7 +810,10 @@ export function applyAIWordKill(text: string): string {
       return !AIWK_PROTECTED.has(rLower);
     });
     if (safeReplacements.length === 0) return word;
-    let replacement = safeReplacements[Math.floor(Math.random() * safeReplacements.length)];
+    let replacement = pickDeterministicReplacement(
+      safeReplacements,
+      `${seedBase}:${lower}:${suffix}:${wordOccurrence++}`,
+    );
     // For multi-word replacements, suffix only the first word
     if (suffix && replacement.includes(" ")) {
       const parts = replacement.split(" ");
@@ -888,9 +908,14 @@ export function applyAIWordKill(text: string): string {
 /** Naturalize formal connectors using shared dictionary */
 export function applyConnectorNaturalization(text: string): string {
   let result = text;
+  const seedBase = deterministicChoiceSeed(text);
+  let connectorOccurrence = 0;
   for (const [formal, replacements] of Object.entries(FORMAL_CONNECTORS)) {
     while (result.includes(formal)) {
-      const rep = replacements[Math.floor(Math.random() * replacements.length)];
+      const rep = pickDeterministicReplacement(
+        replacements,
+        `${seedBase}:${formal}:${connectorOccurrence++}`,
+      );
       result = result.replace(formal, rep);
     }
   }
@@ -911,6 +936,8 @@ export function expandAllContractions(text: string): string {
 /** Apply phrase-level swaps from all pattern categories */
 export function applyPhrasePatterns(text: string): string {
   let result = text;
+  const seedBase = deterministicChoiceSeed(text);
+  let phraseOccurrence = 0;
   const allPatterns: Record<string, string[]>[] = [
     VERB_PHRASE_SWAPS, MODIFIER_SWAPS, CLAUSE_REPHRASINGS,
     HEDGING_PHRASES, TRANSITION_SWAPS, QUANTIFIER_SWAPS,
@@ -922,7 +949,10 @@ export function applyPhrasePatterns(text: string): string {
       const escaped = phrase.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
       const regex = new RegExp(`\\b${escaped}\\b`, "gi");
       result = result.replace(regex, (match) => {
-        const rep = replacements[Math.floor(Math.random() * replacements.length)];
+        const rep = pickDeterministicReplacement(
+          replacements,
+          `${seedBase}:${phrase}:${match.toLowerCase()}:${phraseOccurrence++}`,
+        );
         if (match[0] === match[0].toUpperCase() && rep[0] === rep[0].toLowerCase()) {
           return rep[0].toUpperCase() + rep.slice(1);
         }
@@ -936,13 +966,19 @@ export function applyPhrasePatterns(text: string): string {
 
 /** Apply syntactic template transformations to a single sentence */
 export function applySyntacticTemplate(sentence: string): string {
-  // Shuffle templates for variety
-  const shuffled = [...SYNTACTIC_TEMPLATES].sort(() => Math.random() - 0.5);
+  const seedBase = deterministicChoiceSeed(sentence);
+  const shuffled = [...SYNTACTIC_TEMPLATES].sort((a, b) =>
+    deterministicChoiceSeed(`${seedBase}:${a.pattern}`) -
+    deterministicChoiceSeed(`${seedBase}:${b.pattern}`)
+  );
 
   for (const template of shuffled) {
     const match = sentence.match(template.pattern);
     if (match) {
-      const replacement = template.replacements[Math.floor(Math.random() * template.replacements.length)];
+      const replacement = pickDeterministicReplacement(
+        template.replacements,
+        `${seedBase}:${template.pattern}:${match[0]}`,
+      );
       let result = sentence.replace(template.pattern, replacement);
       // Fix capitalization
       if (result[0] && result[0] !== result[0].toUpperCase()) {
@@ -2075,14 +2111,14 @@ function pickAcademicStarter(sent: string, usedStarters: Set<string>): string | 
     const first = starter.split(/\s+/)[0]?.toLowerCase() ?? "";
     if (!usedStarters.has(first)) return starter;
   }
-  // Fallback: scan all categories before resorting to random
+  // Fallback: scan all categories before resorting to a deterministic pick.
   for (const cat of Object.keys(ACADEMIC_STARTERS) as (keyof typeof ACADEMIC_STARTERS)[]) {
     for (const starter of ACADEMIC_STARTERS[cat]) {
       const first = starter.split(/\s+/)[0]?.toLowerCase() ?? "";
       if (!usedStarters.has(first)) return starter;
     }
   }
-  return ACADEMIC_STARTERS.addition[Math.floor(Math.random() * ACADEMIC_STARTERS.addition.length)];
+  return pickDeterministicReplacement(ACADEMIC_STARTERS.addition, sent);
 }
 
 /**

@@ -40,6 +40,7 @@ import { analyzeStyleStability, normalizeStyleStability } from '@/lib/engine/sty
 import { analyze as analyzeContext } from '@/lib/engine/context-analyzer';
 import { detectDomain } from '@/lib/engine/domain-detector';
 import { applyOutputProfile, resolveOutputProfile } from '@/lib/engine/output-profiles';
+import { assessQualityGate, applyDeterministicSignalPolish, resolveAdaptiveTarget, resolveEngineQualityProfile, type QualityGateResult } from '@/lib/engine/quality-gate';
 import { createServiceClient } from '@/lib/supabase';
 import { getUsageStatsCompat, incrementUsageCompat } from '@/lib/server/usage-tracking';
 import { smartPreprocess, getMaxRestructureCount, selectForDownstreamRestructure, reassemblePreprocessed, measureWordChange, type SentenceAnalysis, type PreprocessResult, MAX_RESTRUCTURE_ITERATION } from '@/lib/engine/smart-preprocess';
@@ -225,28 +226,33 @@ function buildAdaptiveCleanupPlan(
   postProfile: string,
   paperPlan?: HumanizationPlan,
 ): AdaptiveCleanupPlan {
-  // ── Hard minimums (user-mandated) ──
-  //   • Every engine: ≥ 10 iterations
-  //   • Undetectability: Nuru ≥ 10 on top of adaptive
-  //   • Quality: AntiPangram ≥ 10 on top of adaptive
-  //   • Universal post-processing: ≥ 10 passes
-  const MIN = 10;
+  // Adaptive ceilings replace fixed "maximum rewrite" loops.
+  // Low-risk text gets 0-1 cleanup passes; high-risk text earns deeper
+  // Nuru/AntiPangram/universal passes only while the quality gate allows it.
+  const targetScore = resolveAdaptiveTarget(score, undefined, postProfile);
+  const detectorPressure = clamp01((Math.max(score, targetScore) - targetScore) / 55);
+  const isAlreadySafe = score <= targetScore + 3;
+  const lightFloor = isAlreadySafe ? 0 : postProfile === 'undetectability' ? 4 : postProfile === 'quality' ? 2 : 1;
+  const capIterations = (value: number, floor: number, cap: number): number => {
+    if (isAlreadySafe) return Math.min(1, Math.max(0, Math.round(value)));
+    return Math.max(floor, Math.min(cap, Math.round(value)));
+  };
 
   // Preferred path: use the profile-driven HumanizationPlan if provided,
-  // falling back to pure heuristic calculation when it is not.
+  // then cap it against the adaptive score band to prevent over-processing.
   if (paperPlan) {
     return {
-      targetScore: paperPlan.targetScore,
-      detectorPressure: paperPlan.detectorPressure,
-      antiPangramIterations: Math.max(MIN, paperPlan.antiPangramIterations),
+      targetScore: Math.max(paperPlan.targetScore, targetScore),
+      detectorPressure: Math.min(paperPlan.detectorPressure, Math.max(0.08, detectorPressure)),
+      antiPangramIterations: capIterations(paperPlan.antiPangramIterations, lightFloor, postProfile === 'undetectability' ? 12 : 8),
       antiPangramVariance: paperPlan.antiPangramVariance,
       readabilityBias: paperPlan.readabilityBias,
-      nuruIterations: Math.max(MIN, paperPlan.nuruIterations),
-      nuruLoops: paperPlan.nuruLoops,
-      targetedSweeps: paperPlan.targetedSweeps,
-      universalCleaningPasses: Math.max(MIN, paperPlan.universalCleaningPasses),
+      nuruIterations: capIterations(paperPlan.nuruIterations, lightFloor, postProfile === 'undetectability' ? 12 : 7),
+      nuruLoops: capIterations(paperPlan.nuruLoops, isAlreadySafe ? 0 : 1, 4),
+      targetedSweeps: capIterations(paperPlan.targetedSweeps, isAlreadySafe ? 0 : 1, 4),
+      universalCleaningPasses: capIterations(paperPlan.universalCleaningPasses, isAlreadySafe ? 0 : 1, 5),
       leadRewriteThreshold: paperPlan.leadRewriteThreshold,
-      maxAdaptiveCycles: paperPlan.maxAdaptiveCycles,
+      maxAdaptiveCycles: capIterations(paperPlan.maxAdaptiveCycles, isAlreadySafe ? 0 : 1, 3),
     };
   }
 
@@ -257,22 +263,20 @@ function buildAdaptiveCleanupPlan(
   const blogish = toneId === 'academic_blog' || toneId === 'casual' || toneId === 'simple';
   const technical = new Set(['technology', 'science', 'health', 'economics']).has(ctx.primaryTopic);
   const social = new Set(['society', 'education', 'politics']).has(ctx.primaryTopic);
-  const targetScore = 5;
-  const detectorPressure = clamp01((Math.max(score, targetScore) - targetScore) / 55);
   const lengthBias = clamp01((ctx.totalWords - 220) / 900);
   const sentenceDensity = clamp01((ctx.avgSentenceLength - 18) / 16);
   const readabilityBias = clamp01((blogish ? 0.90 : academicish ? 0.76 : 0.70) - (technical ? 0.05 : 0) + (social ? 0.03 : 0));
 
-  // Nuru: ≥ 10 base + adaptive boost. Undetectability adds baseline 4 on top.
-  const nuruBase = postProfile === 'undetectability' ? MIN + 4 : MIN;
-  const nuruIterations = Math.max(MIN, Math.min(24, Math.round(nuruBase + detectorPressure * 6 + sentenceDensity * 2)));
+  // Nuru: adaptive boost; undetectability starts higher, clean text can stop.
+  const nuruBase = postProfile === 'undetectability' ? 4 : postProfile === 'quality' ? 2 : 1;
+  const nuruIterations = capIterations(nuruBase + detectorPressure * 6 + sentenceDensity * 2, lightFloor, postProfile === 'undetectability' ? 12 : 7);
 
-  // AntiPangram: ≥ 10 base + adaptive boost. Quality adds baseline 4 on top.
-  const apBase = postProfile === 'quality' ? MIN + 4 : MIN;
-  const antiPangramIterations = Math.max(MIN, Math.min(24, Math.round(apBase + detectorPressure * 6 + lengthBias * 2 + (technical ? 1 : 0))));
+  // AntiPangram: forensic cleanup only scales up under detector pressure.
+  const apBase = postProfile === 'undetectability' ? 4 : postProfile === 'quality' ? 3 : 1;
+  const antiPangramIterations = capIterations(apBase + detectorPressure * 6 + lengthBias * 2 + (technical ? 1 : 0), lightFloor, postProfile === 'undetectability' ? 12 : 8);
 
-  // Universal post-processing: ≥ 10, adaptive on top.
-  const universalCleaningPasses = Math.max(MIN, Math.min(18, Math.round(MIN + detectorPressure * 4 + lengthBias + (blogish ? 1 : 0))));
+  // Universal post-processing: bounded final cleanup.
+  const universalCleaningPasses = capIterations(1 + detectorPressure * 4 + lengthBias + (blogish ? 1 : 0), isAlreadySafe ? 0 : 1, 5);
 
   return {
     targetScore,
@@ -281,11 +285,11 @@ function buildAdaptiveCleanupPlan(
     antiPangramVariance: Math.min(0.18, 0.04 + detectorPressure * 0.10 + (blogish ? 0.03 : 0)),
     readabilityBias,
     nuruIterations,
-    nuruLoops: Math.max(4, Math.min(10, Math.round(4 + detectorPressure * 5 + lengthBias + (postProfile !== 'quality' ? 1 : 0)))),
-    targetedSweeps: Math.max(3, Math.min(8, Math.round(3 + detectorPressure * 4 + (technical ? 1 : 0)))),
+    nuruLoops: capIterations(1 + detectorPressure * 4 + lengthBias + (postProfile !== 'quality' ? 1 : 0), isAlreadySafe ? 0 : 1, 4),
+    targetedSweeps: capIterations(1 + detectorPressure * 4 + (technical ? 1 : 0), isAlreadySafe ? 0 : 1, 4),
     universalCleaningPasses,
     leadRewriteThreshold: 24 + detectorPressure * 18,
-    maxAdaptiveCycles: Math.max(2, Math.min(5, Math.round(2 + detectorPressure * 3 + (lengthBias > 0.4 ? 1 : 0)))),
+    maxAdaptiveCycles: capIterations(1 + detectorPressure * 3 + (lengthBias > 0.4 ? 1 : 0), isAlreadySafe ? 0 : 1, 3),
   };
 }
 
@@ -444,6 +448,14 @@ export async function POST(req: Request) {
     const hRate = Math.max(1, Math.min(10, Math.round(humanization_rate ?? 8)));
     const minChangeThreshold = hRate / 10; // rate 8 → 0.80 = 80% min change
     const phaseMinChangeThreshold = Math.max(0.40, minChangeThreshold);
+    const oxygenMinChangeRaw = Number((body as Record<string, unknown>).oxygen_min_change_ratio);
+    const oxygenRetryRaw = Number((body as Record<string, unknown>).oxygen_max_retries);
+    const oxygenMinChangeRatio = Number.isFinite(oxygenMinChangeRaw)
+      ? Math.max(0.2, Math.min(0.8, oxygenMinChangeRaw))
+      : 0.4;
+    const oxygenMaxRetries = Number.isFinite(oxygenRetryRaw)
+      ? Math.max(1, Math.min(15, Math.round(oxygenRetryRaw)))
+      : 5;
     const postProcessingProfile = post_processing_profile === 'undetectability' || post_processing_profile === 'quality'
       ? post_processing_profile
       : 'balanced';
@@ -727,13 +739,27 @@ export async function POST(req: Request) {
           };
 
           // ── Adaptive Oxygen Chain (inline) ──
-          // Iterates oxygenHumanize until target word-change per sentence or max 2 passes
+          // Iterates oxygenHumanize until the UI-configured sentence change target
+          // is reached or the UI-configured retry cap is exhausted.
           const adaptiveOxygenChain = (phaseOneOutput: string): string => {
-            const MAX_ITER = 2;
+            const phaseOneSentences = robustSentenceSplit(phaseOneOutput).filter((sentence) => sentence.trim().length > 0);
             let current = phaseOneOutput;
-            for (let iter = 0; iter < MAX_ITER; iter++) {
+            for (let iter = 0; iter < oxygenMaxRetries; iter++) {
+              const before = current;
               const r = oxygenHumanize(current, 'medium', 'quality', false);
               if (r && r.trim().length > 0) current = r;
+              if (current === before) break;
+
+              const currentSentences = robustSentenceSplit(current).filter((sentence) => sentence.trim().length > 0);
+              if (phaseOneSentences.length === 0 || currentSentences.length === 0) continue;
+              let metCount = 0;
+              const comparableCount = Math.min(phaseOneSentences.length, currentSentences.length);
+              for (let i = 0; i < comparableCount; i++) {
+                if (measureSentenceChange(phaseOneSentences[i], currentSentences[i]) >= oxygenMinChangeRatio) {
+                  metCount++;
+                }
+              }
+              if (metCount / comparableCount >= 0.65) break;
             }
             return current;
           };
@@ -2012,8 +2038,9 @@ export async function POST(req: Request) {
                     })).filter(d => d.index >= 0 && d.index < currentSentences.length);
 
                     console.log(`[Nuru Non-LLM Forensic] Overall AI score: ${overallAiScore}, flagged sentences: ${flaggedSentences.length}/${currentSentences.length}`);
-                  } catch (e: any) {
-                    console.warn(`[Nuru Non-LLM Forensic] Detection failed, using defaults: ${e.message}`);
+                  } catch (e: unknown) {
+                    const message = e instanceof Error ? e.message : String(e);
+                    console.warn(`[Nuru Non-LLM Forensic] Detection failed, using defaults: ${message}`);
                   }
 
                   // ── Phase 3: Score-based extra bulk Nuru passes (0-5 more) ──
@@ -2126,6 +2153,68 @@ export async function POST(req: Request) {
           const detector = getDetector();
           const inputAnalysis = detector.analyze(text);
           let adaptivePostPlan: AdaptiveCleanupPlan | null = null;
+          const engineQualityProfile = resolveEngineQualityProfile(eng, effectiveStrength, postProcessingProfile);
+          let bestSafeHumanized = humanized;
+          let bestSafeGate: QualityGateResult | null = null as QualityGateResult | null;
+          const assessCandidateQuality = (candidate: string): QualityGateResult => {
+            const outputScore = getDetectorAverage(detector.analyze(candidate));
+            return assessQualityGate(normalizedText, candidate, {
+              engine: eng,
+              strength: effectiveStrength,
+              postProfile: postProcessingProfile,
+              profile: engineQualityProfile,
+              inputAiScore: inputAnalysis.summary.overall_ai_score,
+              outputAiScore: outputScore,
+            });
+          };
+          const rememberQualityCandidate = (candidate: string, label: string): QualityGateResult => {
+            const gate = assessCandidateQuality(candidate);
+            if (gate.safe) {
+              const beatsBest =
+                !bestSafeGate ||
+                gate.outputAiScore < bestSafeGate.outputAiScore - 1 ||
+                (gate.outputAiScore <= gate.targetScore + 2 && gate.semanticSimilarity > bestSafeGate.semanticSimilarity);
+              if (beatsBest) {
+                bestSafeHumanized = candidate;
+                bestSafeGate = gate;
+              }
+            } else {
+              console.warn(`[QualityGate] ${label} blocked: ${gate.reasons.join(', ')}`);
+            }
+            return gate;
+          };
+
+          let activeQualityGate = rememberQualityCandidate(humanized, 'engine output');
+          if (eng !== 'ai_analysis' && !activeQualityGate.shouldStop) {
+            const deterministicPolish = applyDeterministicSignalPolish(humanized, {
+              sourceText: normalizedText,
+              engine: eng,
+              strength: effectiveStrength,
+              postProfile: postProcessingProfile,
+              profile: engineQualityProfile,
+              inputAiScore: inputAnalysis.summary.overall_ai_score,
+              targetScore: activeQualityGate.targetScore,
+              intensity: Math.max(0.22, activeQualityGate.detectorPressure),
+              preserveContractions: no_contractions !== true,
+              allowSentenceSurgery: engineQualityProfile.allowSurgery && activeQualityGate.outputAiScore > activeQualityGate.targetScore,
+            });
+            if (deterministicPolish !== humanized) {
+              const polishGate = rememberQualityCandidate(deterministicPolish, 'deterministic polish');
+              const acceptPolish =
+                polishGate.safe &&
+                (polishGate.outputAiScore <= activeQualityGate.outputAiScore + 2 ||
+                  polishGate.outputAiScore <= polishGate.targetScore ||
+                  activeQualityGate.overProcessed);
+              if (acceptPolish) {
+                humanized = deterministicPolish;
+                latestHumanized = humanized;
+                activeQualityGate = polishGate;
+                sendSSE(controller, { type: 'stage', stage: `Quality Gate Polish: ${Math.round(activeQualityGate.outputAiScore)}%` });
+                await flushDelay(6);
+              }
+            }
+          }
+          const qualityGateStopsHeavyPost = activeQualityGate.shouldStop || activeQualityGate.overProcessed || !activeQualityGate.safe;
 
           // ═══════════════════════════════════════════════════════════════
           // UNIVERSAL POST-PROCESSING — profile-driven
@@ -2140,7 +2229,7 @@ export async function POST(req: Request) {
           // enforces ≥40% word change per sentence.
           // Hard time budget: 30 seconds max for post-processing.
           // ═══════════════════════════════════════════════════════════════
-          if (eng !== 'ai_analysis' && !(deadlineReached || Date.now() - startTime > DEADLINE_MS - 12000)) {
+          if (eng !== 'ai_analysis' && !qualityGateStopsHeavyPost && !(deadlineReached || Date.now() - startTime > DEADLINE_MS - 12000)) {
             const nuruPostStart = Date.now();
             const NURU_POST_DEADLINE_MS = 30_000;
             const nuruPostTimeOk = () => Date.now() - nuruPostStart < NURU_POST_DEADLINE_MS && !(deadlineReached || Date.now() - startTime > DEADLINE_MS - 8000);
@@ -2182,6 +2271,12 @@ export async function POST(req: Request) {
               );
               latestHumanized = humanized;
               currentAdaptiveScore = getDetectorAverage(detector.analyze(humanized));
+              activeQualityGate = rememberQualityCandidate(humanized, stageLabel);
+              if (!activeQualityGate.safe && bestSafeGate) {
+                humanized = bestSafeHumanized;
+                latestHumanized = humanized;
+                currentAdaptiveScore = bestSafeGate.outputAiScore;
+              }
               adaptivePostPlan = buildAdaptiveCleanupPlan(normalizedText, currentAdaptiveScore, tone ?? 'neutral', postProcessingProfile, humanizationPlan ?? undefined);
             };
 
@@ -2194,7 +2289,7 @@ export async function POST(req: Request) {
             // whole post-processing cycle — same paragraph gets the same
             // preserve/rewrite verdict in every phase.
             const leadSeed = hashTextForSeed(normalizedText);
-            while (nuruPostTimeOk() && adaptivePostPlan && adaptiveCycle < adaptivePostPlan.maxAdaptiveCycles) {
+            while (nuruPostTimeOk() && adaptivePostPlan && !activeQualityGate.shouldStop && adaptiveCycle < adaptivePostPlan.maxAdaptiveCycles) {
               const { sentences: postSentences, paragraphBoundaries: postParaBounds } = splitIntoIndexedSentences(humanized);
               const postSents = [...postSentences];
               // 60% preserve / 40% rewrite (user mandate) — only the ~60%
@@ -2276,6 +2371,13 @@ export async function POST(req: Request) {
               humanized = reassembleText(postSents, postParaBounds.length ? postParaBounds : [0]);
               latestHumanized = humanized;
               currentAdaptiveScore = getDetectorAverage(detector.analyze(humanized));
+              activeQualityGate = rememberQualityCandidate(humanized, `adaptive cycle ${adaptiveCycle + 1}`);
+              if (!activeQualityGate.safe && bestSafeGate) {
+                humanized = bestSafeHumanized;
+                latestHumanized = humanized;
+                currentAdaptiveScore = bestSafeGate.outputAiScore;
+                break;
+              }
               adaptivePostPlan = buildAdaptiveCleanupPlan(normalizedText, currentAdaptiveScore, tone ?? 'neutral', postProcessingProfile, humanizationPlan ?? undefined);
 
               const { sentences: nuruPostSents, paragraphBoundaries: sharedBounds } = splitIntoIndexedSentences(humanized);
@@ -2285,9 +2387,16 @@ export async function POST(req: Request) {
               humanized = reassembleText(nuruPostSents, sharedBounds.length ? sharedBounds : [0]);
               latestHumanized = humanized;
               currentAdaptiveScore = getDetectorAverage(detector.analyze(humanized));
+              activeQualityGate = rememberQualityCandidate(humanized, `flow calibration ${adaptiveCycle + 1}`);
+              if (!activeQualityGate.safe && bestSafeGate) {
+                humanized = bestSafeHumanized;
+                latestHumanized = humanized;
+                currentAdaptiveScore = bestSafeGate.outputAiScore;
+                break;
+              }
               adaptivePostPlan = buildAdaptiveCleanupPlan(normalizedText, currentAdaptiveScore, tone ?? 'neutral', postProcessingProfile, humanizationPlan ?? undefined);
 
-              if (currentAdaptiveScore <= adaptivePostPlan.targetScore) break;
+              if (activeQualityGate.shouldStop || currentAdaptiveScore <= adaptivePostPlan.targetScore) break;
               if ((postProcessingProfile === 'undetectability' || currentAdaptiveScore > 12) && nuruPostTimeOk()) {
                 await runAdaptiveAntiPangram('AntiPangram Detector Sweep');
               }
@@ -2302,7 +2411,7 @@ export async function POST(req: Request) {
             // Provides the last ~5-10% of score reduction needed to hit
             // <5% average across all 22 detectors consistently.
             // ═══════════════════════════════════════════════════════════
-            if (nuruPostTimeOk() && currentAdaptiveScore > adaptivePostPlan.targetScore) {
+            if (nuruPostTimeOk() && !activeQualityGate.shouldStop && currentAdaptiveScore > adaptivePostPlan.targetScore) {
               try {
                 sendSSE(controller, { type: 'stage', stage: `Detector Polish (signal-targeted): ${Math.round(currentAdaptiveScore)}%` });
                 await flushDelay(8);
@@ -2321,15 +2430,19 @@ export async function POST(req: Request) {
                   },
                 });
                 if (polish.text && polish.text.trim().length >= humanized.trim().length * 0.7) {
-                  humanized = polish.text;
-                  latestHumanized = humanized;
-                  currentAdaptiveScore = getDetectorAverage(detector.analyze(humanized));
-                  adaptivePostPlan = buildAdaptiveCleanupPlan(normalizedText, currentAdaptiveScore, tone ?? 'neutral', postProcessingProfile, humanizationPlan ?? undefined);
-                  sendSSE(controller, {
-                    type: 'stage',
-                    stage: `Detector polish complete: ${polish.signalsFixed.slice(0, 3).join(', ') || 'no gaps'} (~${Math.round(currentAdaptiveScore)}%)`,
-                  });
-                  await flushDelay(6);
+                  const polishGate = rememberQualityCandidate(polish.text, 'detector polish');
+                  if (polishGate.safe && polishGate.outputAiScore <= activeQualityGate.outputAiScore + 2) {
+                    humanized = polish.text;
+                    latestHumanized = humanized;
+                    activeQualityGate = polishGate;
+                    currentAdaptiveScore = polishGate.outputAiScore;
+                    adaptivePostPlan = buildAdaptiveCleanupPlan(normalizedText, currentAdaptiveScore, tone ?? 'neutral', postProcessingProfile, humanizationPlan ?? undefined);
+                    sendSSE(controller, {
+                      type: 'stage',
+                      stage: `Detector polish complete: ${polish.signalsFixed.slice(0, 3).join(', ') || 'no gaps'} (~${Math.round(currentAdaptiveScore)}%)`,
+                    });
+                    await flushDelay(6);
+                  }
                 }
               } catch (polishErr) {
                 console.warn('[DetectorPolish] skipped:', polishErr);
@@ -2357,7 +2470,7 @@ export async function POST(req: Request) {
           // ══════════════════════════════════════════════════════════════
           if (!(deadlineReached || Date.now() - startTime > DEADLINE_MS - 4000)) {
             try {
-              const flowIterations = humanizationPlan?.flowPolishIterations ?? 2;
+              const flowIterations = activeQualityGate.shouldStop ? 1 : (humanizationPlan?.flowPolishIterations ?? 2);
               sendSSE(controller, { type: 'stage', stage: `Sentence Flow Polish (${flowIterations}×)` });
               await flushDelay(6);
               const flowResult = sentenceFlowPolish(humanized, {
@@ -2370,13 +2483,17 @@ export async function POST(req: Request) {
                 },
               });
               if (flowResult.text && flowResult.text.trim().length >= humanized.trim().length * 0.75) {
-                humanized = flowResult.text;
-                latestHumanized = humanized;
-                sendSSE(controller, {
-                  type: 'stage',
-                  stage: `Flow polish complete (${flowResult.iterationsRun} iter)`,
-                });
-                await flushDelay(6);
+                const flowGate = rememberQualityCandidate(flowResult.text, 'sentence flow polish');
+                if (flowGate.safe && (flowGate.outputAiScore <= activeQualityGate.outputAiScore + 3 || !activeQualityGate.shouldStop)) {
+                  humanized = flowResult.text;
+                  latestHumanized = humanized;
+                  activeQualityGate = flowGate;
+                  sendSSE(controller, {
+                    type: 'stage',
+                    stage: `Flow polish complete (${flowResult.iterationsRun} iter)`,
+                  });
+                  await flushDelay(6);
+                }
               }
             } catch (flowErr) {
               console.warn('[FlowPolish] skipped:', flowErr);
@@ -2386,30 +2503,42 @@ export async function POST(req: Request) {
           if (!(deadlineReached || Date.now() - startTime > DEADLINE_MS - 6000)) {
             const { sentences: cleanSentences, paragraphBoundaries: cleanBounds } = splitIntoIndexedSentences(humanized);
             const finalPlan = adaptivePostPlan ?? buildAdaptiveCleanupPlan(normalizedText, getDetectorAverage(detector.analyze(humanized)), tone ?? 'neutral', postProcessingProfile, humanizationPlan ?? undefined);
+            const cleaningPasses = activeQualityGate.shouldStop
+              ? Math.min(1, finalPlan.universalCleaningPasses)
+              : finalPlan.universalCleaningPasses;
+            let previousUniversalText = humanized;
             // Same probabilistic lead preservation (60/40) applied to
             // final universal cleaning. Uses the same seed as the Nuru
             // post-processing block so verdicts are consistent.
             const universalSeed = hashTextForSeed(normalizedText);
             const paragraphLeadSet = pickLeadsToPreserve(cleanBounds, universalSeed, 0.60);
-            for (let pass = 0; pass < finalPlan.universalCleaningPasses; pass++) {
-              sendSSE(controller, { type: 'stage', stage: `Universal Cleaning ${pass + 1}/${finalPlan.universalCleaningPasses}` });
+            for (let pass = 0; pass < cleaningPasses; pass++) {
+              sendSSE(controller, { type: 'stage', stage: `Universal Cleaning ${pass + 1}/${cleaningPasses}` });
               await flushDelay(8);
               for (let i = 0; i < cleanSentences.length; i++) {
                 if (!isHeadingSentCheck(cleanSentences[i])) {
                   const isParagraphLead = paragraphLeadSet.has(i);
                   let cleaned = cleanSentences[i];
-                  if (!(isParagraphLead && pass < finalPlan.universalCleaningPasses - 1)) {
+                  if (!(isParagraphLead && pass < cleaningPasses - 1)) {
                     cleaned = deduplicateRepeatedPhrases(cleaned);
                   }
                   cleaned = deepNonLLMClean(cleaned);
                   cleaned = finalSmoothGrammar(cleaned);
                   cleanSentences[i] = cleaned;
                 }
-                sendSSE(controller, { type: 'sentence', index: i, text: cleanSentences[i], stage: `Universal Cleaning ${pass + 1}/${finalPlan.universalCleaningPasses}` });
+                sendSSE(controller, { type: 'sentence', index: i, text: cleanSentences[i], stage: `Universal Cleaning ${pass + 1}/${cleaningPasses}` });
               }
               humanized = reassembleText(cleanSentences, cleanBounds.length ? cleanBounds : [0]);
               latestHumanized = humanized;
-              if (getDetectorAverage(detector.analyze(humanized)) <= finalPlan.targetScore) break;
+              const universalGate = rememberQualityCandidate(humanized, `universal cleaning ${pass + 1}`);
+              if (!universalGate.safe) {
+                humanized = bestSafeGate ? bestSafeHumanized : previousUniversalText;
+                latestHumanized = humanized;
+                break;
+              }
+              activeQualityGate = universalGate;
+              if (activeQualityGate.shouldStop || activeQualityGate.outputAiScore <= finalPlan.targetScore) break;
+              previousUniversalText = humanized;
             }
           }
 
@@ -2444,13 +2573,17 @@ export async function POST(req: Request) {
                 enableLexical: true,
               });
               if (impResult.text && impResult.text.trim().length >= humanized.trim().length * 0.80) {
-                humanized = impResult.text;
-                latestHumanized = humanized;
-                sendSSE(controller, {
-                  type: 'stage',
-                  stage: `Human imperfections: +${impResult.injectedCount} across ${impResult.perParagraphCounts.length} paragraphs`,
-                });
-                await flushDelay(6);
+                const impGate = rememberQualityCandidate(impResult.text, 'human imperfections');
+                if (impGate.safe && impGate.outputAiScore <= activeQualityGate.outputAiScore + 3) {
+                  humanized = impResult.text;
+                  latestHumanized = humanized;
+                  activeQualityGate = impGate;
+                  sendSSE(controller, {
+                    type: 'stage',
+                    stage: `Human imperfections: +${impResult.injectedCount} across ${impResult.perParagraphCounts.length} paragraphs`,
+                  });
+                  await flushDelay(6);
+                }
               }
             } catch (impErr) {
               console.warn('[HumanImperfections] skipped:', impErr);
@@ -2466,7 +2599,7 @@ export async function POST(req: Request) {
           // ═══════════════════════════════════════════════════════════════
           // ── POST-PROCESSING ──
           const prePostProcessSnapshot = humanized;
-          if (eng !== 'ai_analysis') {
+          if (eng !== 'ai_analysis' && !activeQualityGate.shouldStop) {
           const _ppWC = (t: string) => t.trim().split(/\s+/).filter(Boolean).length;
           // 4. Unified Sentence Process
           const FIRST_PERSON_RE_EARLY = /\b(I|me|my|mine|myself|we|us|our|ours|ourselves)\b/i;
@@ -3161,6 +3294,15 @@ export async function POST(req: Request) {
             }
           }
 
+          const finalQualityGate = rememberQualityCandidate(humanized, 'final output');
+          if (!finalQualityGate.safe && bestSafeGate) {
+            humanized = bestSafeHumanized;
+            activeQualityGate = bestSafeGate;
+            sendSSE(controller, { type: 'stage', stage: `Quality Gate Recovered: ${Math.round(activeQualityGate.outputAiScore)}%` });
+            await flushDelay(6);
+          } else {
+            activeQualityGate = finalQualityGate;
+          }
           latestHumanized = humanized;
 
           // ── OUTPUT SIZE MONITORING ──────────────────────────────────

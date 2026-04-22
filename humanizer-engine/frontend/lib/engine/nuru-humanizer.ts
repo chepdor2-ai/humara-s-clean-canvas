@@ -1201,7 +1201,7 @@ export function nuruHumanize(
   // Protect citations (Author, Year) and numeric statistics from modification
   const citationMap = new Map<string, string>();
   let citIdx = 0;
-  let protected_text = text
+  const protected_text = text
     // Protect citations: (Topol, 2019), (Esteva et al., 2017)
     .replace(/\(([A-Z][a-zA-Z&.\s]+,?\s*\d{4}[a-z]?(?:;\s*[A-Z][a-zA-Z&.\s]+,?\s*\d{4}[a-z]?)*)\)/g, (match) => {
       const placeholder = `__CITE_${citIdx++}__`;
@@ -1506,10 +1506,9 @@ export function nuruHumanize(
     'many': 'numerous', 'most': 'the majority of', 'much': 'a great deal of',
     'few': 'a handful of', 'several': 'a number of', 'little': 'scant',
     // ── High-frequency compensating swaps ──
-    'each': 'every', 'new': 'fresh', 'real': 'genuine', 'full': 'complete',
-    'likely': 'probable', 'issue': 'concern', 'key': 'pivotal',
+    'each': 'every',
     'own': 'respective', 'goal': 'aim', 'main': 'primary',
-    'large': 'extensive', 'well': 'effectively', 'able': 'capable',
+    'well': 'effectively', 'able': 'capable',
     'set': 'established', 'given': 'provided',
   };
   for (let pIdx = 0; pIdx < reassembledParagraphs.length; pIdx++) {

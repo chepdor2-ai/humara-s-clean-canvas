@@ -921,9 +921,9 @@ export async function premiumHumanize(
   );
 
   // ═══════════════════════════════════════════
-  // PHASE B: Per-Sentence AI Vocabulary Purge (LLM)
+  // PHASE B: Per-Sentence AI Vocabulary Purge (deterministic)
   // ═══════════════════════════════════════════
-  console.log("  [Premium] Phase B: Per-sentence AI vocabulary purge...");
+  console.log("  [Premium] Phase B: Deterministic AI vocabulary purge...");
 
   const phaseBParagraphs = result
     .split(/\n\s*\n/)
@@ -949,18 +949,16 @@ export async function premiumHumanize(
             return trimmed; // Already clean, skip LLM call
           }
 
-          const userPrompt = buildPhaseBUserPrompt(
-            placeholdersToLLMFormat(trimmed),
-          );
-          const sentMaxTokens = Math.max(
-            256,
-            Math.ceil(trimmed.split(/\s+/).length * 2.5),
-          );
-
           try {
-            let purged = llmFormatToPlaceholders(
-              await llmCall(PHASE_B_SYSTEM, userPrompt, 0.3, sentMaxTokens),
-            );
+            let purged = applyAIWordKill(trimmed);
+            purged = applyPhrasePatterns(purged);
+            purged = applyConnectorNaturalization(purged);
+            purged = diversifyStarters(purged);
+            if (!features.hasContractions) {
+              purged = expandAllContractions(purged);
+              purged = expandContractions(purged);
+            }
+            purged = fixPunctuation(purged);
             if (!purged || purged.trim().length < trimmed.length * 0.3)
               return trimmed;
 
@@ -994,11 +992,10 @@ export async function premiumHumanize(
   console.log(`  [Premium] Phase B complete: ${purgedCount} sentences purged`);
 
   // ═══════════════════════════════════════════
-  // PHASE C: Per-Sentence Final Stealth Polish (LLM)
+  // PHASE C: Per-Sentence Final Stealth Polish (deterministic)
   // ═══════════════════════════════════════════
-  console.log("  [Premium] Phase C: Per-sentence stealth polish...");
+  console.log("  [Premium] Phase C: Deterministic stealth polish...");
 
-  const phaseCSystem = getPhaseCSystemPrompt(features, tone);
   const phaseCParagraphs = result
     .split(/\n\s*\n/)
     .filter((p) => p.trim());
@@ -1023,18 +1020,12 @@ export async function premiumHumanize(
 
           if (!needsPolish) return trimmed;
 
-          const userPrompt = buildPhaseCUserPrompt(
-            placeholdersToLLMFormat(trimmed),
-          );
-          const sentMaxTokens = Math.max(
-            256,
-            Math.ceil(trimmed.split(/\s+/).length * 2.5),
-          );
-
           try {
-            let polished = llmFormatToPlaceholders(
-              await llmCall(phaseCSystem, userPrompt, 0.35, sentMaxTokens),
-            );
+            let polished = applyConnectorNaturalization(trimmed);
+            polished = diversifyStarters(polished);
+            polished = applyPhrasePatterns(polished);
+            polished = applyAIWordKill(polished);
+            polished = fixPunctuation(polished);
             if (!polished || polished.trim().length < trimmed.length * 0.3)
               return trimmed;
 
@@ -1069,7 +1060,7 @@ export async function premiumHumanize(
   );
 
   // ═══════════════════════════════════════════
-  // VERIFICATION + RETRY: Check all sentences for remaining banned words
+  // VERIFICATION + REPAIR: Check all sentences for remaining banned words
   // ═══════════════════════════════════════════
   console.log("  [Premium] Verification: checking for remaining banned content...");
 
@@ -1103,20 +1094,16 @@ export async function premiumHumanize(
             totalBanned += banned.length;
 
             if (banned.length > 0) {
-              // Retry with targeted fix
-              const retryUser = buildRetryPrompt(
-                placeholdersToLLMFormat(trimmed),
-                banned,
-              );
-              const sentMaxTokens = Math.max(
-                256,
-                Math.ceil(trimmed.split(/\s+/).length * 2.5),
-              );
-
               try {
-                let fixed = llmFormatToPlaceholders(
-                  await llmCall(RETRY_SYSTEM, retryUser, 0.2, sentMaxTokens),
-                );
+                let fixed = applyAIWordKill(trimmed);
+                fixed = applyPhrasePatterns(fixed);
+                fixed = applyConnectorNaturalization(fixed);
+                fixed = diversifyStarters(fixed);
+                if (!features.hasContractions) {
+                  fixed = expandAllContractions(fixed);
+                  fixed = expandContractions(fixed);
+                }
+                fixed = fixPunctuation(fixed);
                 if (fixed && fixed.trim().length >= trimmed.length * 0.3) {
                   const sents = robustSentenceSplit(fixed.trim());
                   if (sents.length > 1) {
@@ -1166,25 +1153,13 @@ export async function premiumHumanize(
   // ═══════════════════════════════════════════
   console.log("  [Premium] Enforcing constraints...");
 
-  // Contraction expansion (LLM-based)
+  // Contraction expansion (deterministic)
   if (!features.hasContractions) {
     const contractionRe =
       /\b(can't|won't|don't|doesn't|didn't|isn't|aren't|wasn't|weren't|hasn't|haven't|hadn't|wouldn't|shouldn't|couldn't|mustn't|it's|that's|there's|here's|he's|she's|they're|we're|you're|I'm|they've|we've|you've|I've|they'll|we'll|you'll|I'll|he'll|she'll|it'll|let's|who's|what's)\b/gi;
     if (contractionRe.test(result)) {
-      try {
-        const expanded = await llmCall(
-          CONTRACTION_EXPAND_SYSTEM,
-          `Expand ALL contractions in this text:\n\n${result}`,
-          0.1,
-          Math.max(4096, Math.ceil(result.split(/\s+/).length * 2)),
-        );
-        if (expanded && expanded.trim().length >= result.length * 0.8) {
-          result = expanded.trim();
-        }
-      } catch {
-        // Fallback: programmatic expansion
-        result = expandContractions(result);
-      }
+      result = expandAllContractions(result);
+      result = expandContractions(result);
     }
   }
 
@@ -1351,25 +1326,6 @@ export async function premiumHumanize(
 
   // ── Safety net: fix doubled subordinate conjunctions ("when when", "since since") ──
   result = result.replace(/\b(when|since|though|although|because|while|if|unless|after|before|until|once)\s+\1\b/gi, "$1");
-
-  // ═══════════════════════════════════════════
-  // STRICT LLM PUNCTUATION/CAPITALIZATION CLEANUP
-  // Only fixes punctuation — loops if any words are added/removed
-  // ═══════════════════════════════════════════
-  console.log("  [Premium] Running strict LLM punctuation cleanup...");
-  for (let puncLoop = 0; puncLoop < 3; puncLoop++) {
-    const beforePunc = result;
-    const puncResult = await llmFixPremiumPunctuation(result);
-    const beforeWords = beforePunc.replace(/[^a-zA-Z\s]/g, "").toLowerCase().split(/\s+/).filter(w => w);
-    const afterWords = puncResult.replace(/[^a-zA-Z\s]/g, "").toLowerCase().split(/\s+/).filter(w => w);
-    if (Math.abs(beforeWords.length - afterWords.length) <= 2) {
-      result = puncResult;
-      console.log(`  [Premium] Punctuation pass ${puncLoop + 1}: accepted (${afterWords.length} words)`);
-      break;
-    } else {
-      console.warn(`  [Premium] Punctuation pass ${puncLoop + 1}: rejected — word count changed (${beforeWords.length} → ${afterWords.length}), retrying...`);
-    }
-  }
 
   // ═══════════════════════════════════════════
   // FINAL CAPITALIZATION ENFORCEMENT
