@@ -274,9 +274,11 @@ function buildAdaptiveCleanupPlan(
   // Low-risk text gets 0-1 cleanup passes; high-risk text earns deeper
   // Nuru/AntiPangram/universal passes only while the quality gate allows it.
   const targetScore = resolveAdaptiveTarget(score, undefined, postProfile);
-  const detectorPressure = clamp01((Math.max(score, targetScore) - targetScore) / 55);
-  const isAlreadySafe = score <= targetScore + 3;
-  const lightFloor = isAlreadySafe ? 0 : postProfile === 'undetectability' ? 4 : postProfile === 'quality' ? 2 : 1;
+  // Raise pressure divisor from 55→35 so mid-range scores generate real pressure,
+  // and enforce a hard floor of 0.75 — even "already safe" text must be fully processed
+  // to reach 0% AI across all detectors. User mandate: aggressive at ALL depth levels.
+  const detectorPressure = Math.max(0.75, clamp01((Math.max(score, targetScore) - targetScore) / 35));
+  const lightFloor = postProfile === 'undetectability' ? 4 : postProfile === 'quality' ? 2 : 1;
   const changeTargets = paperPlan
     ? {
         strength: paperPlan.overallStrength,
@@ -288,8 +290,9 @@ function buildAdaptiveCleanupPlan(
         planIterationBias: paperPlan.changePasses,
       }
     : resolveChangeTargets(requestedStrength, humanizationRate);
+  // Never short-circuit iterations based on current score — we always process
+  // to full depth because the goal is 0% AI across ALL detectors, not just "low enough".
   const capIterations = (value: number, floor: number, cap: number): number => {
-    if (isAlreadySafe) return Math.min(1, Math.max(0, Math.round(value)));
     return Math.max(floor, Math.min(cap, Math.round(value)));
   };
   // Hard minimum enforcement for Nuru and AntiPangram — always ≥ 10 regardless of
@@ -303,20 +306,22 @@ function buildAdaptiveCleanupPlan(
   if (paperPlan) {
     return {
       targetScore: Math.max(paperPlan.targetScore, targetScore),
-      detectorPressure: Math.min(paperPlan.detectorPressure, Math.max(0.4, detectorPressure)),
+      // Math.max: take the HIGHER of the plan's pressure and the score-derived pressure,
+      // never cap it down. Floor of 0.75 guarantees full aggression at all depth levels.
+      detectorPressure: Math.max(paperPlan.detectorPressure, Math.max(0.75, detectorPressure)),
       minDocumentChange: Math.max(0.65, paperPlan.minDocumentChange),
       minSentenceChange: Math.max(0.60, paperPlan.minSentenceChange),
       minChangedSentenceShare: Math.max(0.85, paperPlan.minChangedSentenceShare),
-      antiPangramIterations: minIter10(paperPlan.antiPangramIterations, postProfile === 'undetectability' ? 24 : 16),
+      antiPangramIterations: minIter10(paperPlan.antiPangramIterations, postProfile === 'undetectability' ? 30 : 22),
       antiPangramVariance: paperPlan.antiPangramVariance,
       readabilityBias: paperPlan.readabilityBias,
-      nuruIterations: minIter10(paperPlan.nuruIterations, postProfile === 'undetectability' ? 24 : 16),
-      nuruLoops: Math.max(6, capIterations(paperPlan.nuruLoops, 6, 8)),
-      targetedSweeps: capIterations(paperPlan.targetedSweeps, isAlreadySafe ? 2 : 4, 6),
-      universalCleaningPasses: capIterations(paperPlan.universalCleaningPasses, isAlreadySafe ? 2 : 4, 8),
-      changePasses: capIterations(paperPlan.changePasses, isAlreadySafe ? 4 : 5, 10),
+      nuruIterations: minIter10(paperPlan.nuruIterations, postProfile === 'undetectability' ? 30 : 22),
+      nuruLoops: Math.max(10, capIterations(paperPlan.nuruLoops, 10, 14)),
+      targetedSweeps: capIterations(paperPlan.targetedSweeps, 4, 6),
+      universalCleaningPasses: capIterations(paperPlan.universalCleaningPasses, 5, 10),
+      changePasses: capIterations(paperPlan.changePasses, 5, 12),
       leadRewriteThreshold: paperPlan.leadRewriteThreshold,
-      maxAdaptiveCycles: capIterations(paperPlan.maxAdaptiveCycles, isAlreadySafe ? 2 : 3, 5),
+      maxAdaptiveCycles: capIterations(paperPlan.maxAdaptiveCycles, 3, 6),
     };
   }
 
@@ -341,11 +346,11 @@ function buildAdaptiveCleanupPlan(
   const antiPangramIterations = minIter10(apBase + detectorPressure * 8 + lengthBias * 2 + (technical ? 1 : 0) + changeBias, postProfile === 'undetectability' ? 24 : 16);
 
   // Universal post-processing: bounded final cleanup.
-  const universalCleaningPasses = capIterations(4 + detectorPressure * 6 + lengthBias + (blogish ? 1 : 0) + changeBias, isAlreadySafe ? 3 : 5, 12);
+  const universalCleaningPasses = capIterations(5 + detectorPressure * 6 + lengthBias + (blogish ? 1 : 0) + changeBias, 5, 14);
 
   return {
     targetScore,
-    detectorPressure: Math.max(0.4, detectorPressure),
+    detectorPressure: Math.max(0.75, detectorPressure),
     minDocumentChange: Math.max(0.65, changeTargets.minDocumentChange),
     minSentenceChange: Math.max(0.60, changeTargets.minSentenceChange),
     minChangedSentenceShare: Math.max(0.85, changeTargets.minChangedSentenceShare),
@@ -353,12 +358,12 @@ function buildAdaptiveCleanupPlan(
     antiPangramVariance: Math.min(0.25, 0.08 + detectorPressure * 0.15 + (blogish ? 0.05 : 0)),
     readabilityBias,
     nuruIterations,
-    nuruLoops: Math.max(6, capIterations(3 + detectorPressure * 4 + lengthBias + (postProfile !== 'quality' ? 2 : 1) + Math.max(0, changeBias), 6, 10)),
-    targetedSweeps: capIterations(4 + detectorPressure * 4 + (technical ? 1 : 0) + Math.max(0, changeBias), isAlreadySafe ? 2 : 4, 8),
+    nuruLoops: Math.max(10, capIterations(5 + detectorPressure * 5 + lengthBias + (postProfile !== 'quality' ? 2 : 1) + Math.max(0, changeBias), 10, 14)),
+    targetedSweeps: capIterations(4 + detectorPressure * 4 + (technical ? 1 : 0) + Math.max(0, changeBias), 4, 8),
     universalCleaningPasses,
-    changePasses: capIterations(5 + changeBias + detectorPressure * 2, isAlreadySafe ? 4 : 5, 12),
+    changePasses: capIterations(5 + changeBias + detectorPressure * 2, 5, 12),
     leadRewriteThreshold: 35 + detectorPressure * 25,
-    maxAdaptiveCycles: capIterations(3 + detectorPressure * 3 + (lengthBias > 0.4 ? 1 : 0) + Math.max(0, changeBias), isAlreadySafe ? 2 : 3, 6),
+    maxAdaptiveCycles: capIterations(3 + detectorPressure * 3 + (lengthBias > 0.4 ? 1 : 0) + Math.max(0, changeBias), 3, 7),
   };
 }
 

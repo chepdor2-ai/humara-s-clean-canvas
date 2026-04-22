@@ -983,8 +983,7 @@ const EXTRA_REPLACEMENTS: Record<string, string[]> = {
   differences: ['distinctions', 'contrasts', 'gaps', 'variations'],
   divergence: ['split', 'separation', 'gap', 'divide'],
   intersection: ['overlap', 'crossover', 'meeting point', 'juncture'],
-  interplay: ['interplay', 'dynamic', 'relationship', 'connection'],
-  complexity: ['difficulty', 'depth', 'intricacy', 'complication'],
+  interplay: ['dynamic', 'relationship', 'connection', 'interaction'],
   nuance: ['detail', 'subtlety', 'shade', 'distinction'],
   nuances: ['details', 'subtleties', 'shades', 'distinctions'],
   compelling: ['strong', 'convincing', 'solid', 'persuasive'],
@@ -1318,6 +1317,7 @@ function compositeQualityScore(
   original: string,
   candidate: string,
   readabilityBias = 0.45,
+  cachedOrigRisk?: ReturnType<typeof scoreSentenceRisk>,
 ): number {
   const changeRatio = wordChangeRatio(original, candidate);
   const readability = scoreReadability(candidate, original);
@@ -1331,7 +1331,8 @@ function compositeQualityScore(
   else if (candRisk.tier === 'medium') aiPenalty = 0.20; // meaningful nudge away
 
   // Directional delta: compare original AI risk tier to candidate tier.
-  const origRisk = scoreSentenceRisk(original, null);
+  // Use cached value when available (avoids re-scoring the same original every iteration).
+  const origRisk = cachedOrigRisk ?? scoreSentenceRisk(original, null);
   if (origRisk.tier !== candRisk.tier) {
     const tierMap = { protected: 0, low: 1, medium: 2, high: 3, critical: 4 };
     const origLvl = tierMap[origRisk.tier as keyof typeof tierMap] || 0;
@@ -1969,6 +1970,86 @@ function processSentence(
   return text;
 }
 
+/* ── Human Imperfection Injector ──────────────────────────────────────────
+ * Applied ONCE as the very last transformation in stealthHumanize.
+ * Introduces deliberate, authentic human writing patterns that register
+ * as natural authorship signals to AI detectors.
+ *
+ * STRICT RULES (user mandate — never violate):
+ *   - NO contractions injected under any circumstance
+ *   - NO first-person pronouns (I/me/my/we/our) unless already in input
+ *   - NO rhetorical questions
+ *   - Only impersonal blog-style natural flow variations permitted
+ * ─────────────────────────────────────────────────────────────────────── */
+function injectHumanImperfections(
+  text: string,
+  _activeTone: ToneSettings | null,
+  rng: { next: () => number },
+): string {
+  const paragraphs = text.split(/\n\s*\n/);
+  const processed = paragraphs.map((para, paraIdx) => {
+    if (!para.trim()) return para;
+    const sentences = splitSentences(para.trim());
+    if (sentences.length === 0) return para;
+
+    const outputSentences = sentences.map((sent, sentIdx) => {
+      const t = sent.trim();
+      // Skip headings, citations, URLs, and very short fragments
+      if (
+        t.length < 15 ||
+        /^#{1,6}\s/.test(t) ||
+        /^\[\d+\]/.test(t) ||
+        /^https?:\/\//.test(t) ||
+        /^[A-Z][a-zA-Z, .&]+\(\d{4}\)/.test(t)
+      ) return sent;
+
+      const roll = rng.next();
+
+      // ── Type 1: Sentence-initial conjunction (~9% of non-first sentences) ──
+      // "And this shows..." / "But the data suggests..." — classic blog openers.
+      // Only applies inside the body (not paragraph 0) so the opening stays clean.
+      // Safety: never inject if the result would start with a first-person pronoun.
+      if (sentIdx > 0 && paraIdx > 0 && roll < 0.09) {
+        const conj = rng.next() < 0.55 ? 'And ' : 'But ';
+        const lowered = t.charAt(0).toLowerCase() + t.slice(1);
+        if (!/^(i |i'|me |my |we |our )/.test(lowered) && !/\?/.test(t)) {
+          return conj + lowered;
+        }
+      }
+
+      // ── Type 2: Oxford comma removal (~18% of eligible list sentences) ──
+      // "X, Y, and Z" → "X, Y and Z" — a natural human stylistic variation.
+      if (roll >= 0.72 && roll < 0.90 && /,\s+and\s+[a-z]/i.test(t)) {
+        return t.replace(/,(\s+and\s+[a-z])/i, '$1');
+      }
+
+      // ── Type 3: Light parenthetical aside (~5% of longer sentences) ──
+      // Mimics the natural tangents human writers drop mid-sentence.
+      // All asides are strictly impersonal — no question forms, no "I think".
+      if (roll >= 0.90 && roll < 0.95 && t.split(/\s+/).length > 12) {
+        const asides = [
+          ' (though this varies)',
+          ', at least in practice,',
+          ' (worth noting)',
+          ', and this matters,',
+          ' (to varying degrees)',
+        ];
+        const aside = asides[Math.floor(rng.next() * asides.length)];
+        const insertPos = t.lastIndexOf(',', t.length - 6);
+        if (insertPos > Math.floor(t.length * 0.45)) {
+          return t.slice(0, insertPos) + aside + t.slice(insertPos);
+        }
+      }
+
+      return sent;
+    });
+
+    return outputSentences.join(' ');
+  });
+
+  return processed.join('\n\n');
+}
+
 /* ── Public API ───────────────────────────────────────────────────── */
 
 export function stealthHumanize(
@@ -2044,12 +2125,16 @@ export function stealthHumanize(
         globalSentenceIdx++;
         continue;
       }
-      // Scale max iterations per sentence based on its risk tier
-      const sentMaxIter = sentRisk.tier === 'low'
-        ? Math.max(10, Math.min(15, enforcedMaxIterations))
-        : sentRisk.tier === 'critical'
-          ? Math.round(enforcedMaxIterations * 1.5)
-          : enforcedMaxIterations;
+      // Scale max iterations per sentence based on its risk tier.
+      // ALL tiers including 'low' now use full iterations — user mandate:
+      // aggressive at LowDepth, AI evasion is priority at every depth level.
+      const sentMaxIter = sentRisk.tier === 'critical'
+        ? Math.round(enforcedMaxIterations * 1.5)
+        : enforcedMaxIterations;
+
+      // Cache the original sentence's AI risk — it never changes across iterations.
+      // Pass it into compositeQualityScore to avoid redundant re-scoring every loop.
+      const origRiskCache = scoreSentenceRisk(originalSent, domainResult);
 
       // First pass uses real sentenceIndex (enables starter injection on non-first sentences)
       const rawFirst = processSentence(
@@ -2060,7 +2145,7 @@ export function stealthHumanize(
       let best = guardSingleSentence(originalSent, rawFirst);
       // Purity: reject candidates that introduce banned patterns.
       if (violatesPurity(best, effectiveShape)) best = originalSent;
-      let bestScore = compositeQualityScore(originalSent, best, 0.35 + readabilityBias * 0.30);
+      let bestScore = compositeQualityScore(originalSent, best, 0.35 + readabilityBias * 0.30, origRiskCache);
 
       // Iterative refinement: each pass starts from ORIGINAL to prevent
       // compounding garble. We keep the best result (highest composite score
@@ -2070,9 +2155,9 @@ export function stealthHumanize(
       // invocations of the same document produce different humanized text.
       let iter = 1;
       while (iter <= sentMaxIter) {
-        // Mild strength escalation biased by the per-call RNG so every run
-        // takes a slightly different iteration path.
-        const escalate = iter > 5 || rng.next() < detectorPressure * 0.25;
+        // Strength escalation: start escalating from iter 3 (was 5) so more
+        // iterations use 'strong' rewrites, increasing AI signal destruction speed.
+        const escalate = iter > 3 || rng.next() < detectorPressure * 0.35;
         const iterStrength = escalate ? 'strong' : strength;
         const rawNext = processSentence(
           originalSent, hasFirstPerson, iter === 1 ? globalSentenceIdx : 0,
@@ -2083,7 +2168,7 @@ export function stealthHumanize(
           iter++;
           continue;
         }
-        const nextScore = compositeQualityScore(originalSent, next, 0.35 + readabilityBias * 0.30);
+        const nextScore = compositeQualityScore(originalSent, next, 0.35 + readabilityBias * 0.30, origRiskCache);
         if (nextScore > bestScore) {
           best = next;
           bestScore = nextScore;
@@ -2183,6 +2268,12 @@ export function stealthHumanize(
     });
     result = paragraphsWithVariance.join('\n\n');
   }
+
+  // ── Deliberate Human Imperfection Injection ──────────────────────────────
+  // Applied LAST — after all cleanup and tone adjustment — so imperfections
+  // survive into the final output. These signals natural human authorship to
+  // AI detectors without harming readability or flow.
+  result = injectHumanImperfections(result, activeTone, rng);
 
   return result;
 }
