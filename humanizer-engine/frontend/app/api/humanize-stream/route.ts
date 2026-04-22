@@ -2501,8 +2501,78 @@ adaptivePostPlan = buildAdaptiveCleanupPlan(normalizedText, currentAdaptiveScore
               const reruns = 10;
               const postLoops = Math.min(5, Math.max(1, adaptivePostPlan.nuruLoops));
               const postLoopPasses = 3;
+              const mandatoryMinSentenceChange = 0.40;
               const aggressivePressure = Math.max(0.9, adaptivePostPlan.detectorPressure);
               const { sentences: postSents, paragraphBoundaries: postBounds } = splitIntoIndexedSentences(humanized);
+              const usedMandatoryWords = new Set<string>();
+
+              const finalizeMandatoryCandidate = (value: string): string =>
+                enforceNoContractions(finalSmoothGrammar(deepNonLLMClean(value)));
+
+              const forceNaturalRephrase = (value: string, seed: number): string => {
+                const trimmed = value.trim();
+                const becauseMatch = trimmed.match(/^(.+?)\s+because\s+(.+?)([.!?])?$/i);
+                if (becauseMatch) {
+                  const main = becauseMatch[1].trim().replace(/[,.]$/, '');
+                  const reason = becauseMatch[2].trim().replace(/[.!?]$/, '');
+                  return `Because ${reason}, ${main.charAt(0).toLowerCase()}${main.slice(1)}.`;
+                }
+                const starters = ['In practice', 'In this case', 'At this point', 'In simple terms', 'For this reason'];
+                const stripped = trimmed.replace(/^(?:In practice|In this case|At this point|In simple terms|For this reason),\s+/i, '');
+                return `${starters[seed % starters.length]}, ${stripped.charAt(0).toLowerCase()}${stripped.slice(1)}`;
+              };
+
+              const enforceMandatoryChange = async (
+                feedSentence: string,
+                firstCandidate: string,
+                options: StealthHumanizeOptions,
+                seed: number,
+              ): Promise<string> => {
+                const updateBest = (candidate: string, currentBest: { text: string; change: number }) => {
+                  const finalized = finalizeMandatoryCandidate(candidate);
+                  const change = measureSentenceChange(feedSentence, finalized);
+                  if (change > currentBest.change) {
+                    currentBest.text = finalized;
+                    currentBest.change = change;
+                  }
+                };
+
+                const best = {
+                  text: finalizeMandatoryCandidate(firstCandidate),
+                  change: 0,
+                };
+                best.change = measureSentenceChange(feedSentence, best.text);
+                if (best.change >= mandatoryMinSentenceChange) return best.text;
+
+                updateBest(runNuruSinglePass(best.text, options), best);
+                if (best.change >= mandatoryMinSentenceChange) return best.text;
+
+                updateBest(synonymReplace(applyAIWordKill(best.text), 0.95, usedMandatoryWords), best);
+                if (best.change >= mandatoryMinSentenceChange) return best.text;
+
+                if (nuruPostTimeOk()) {
+                  try {
+                    const remaining = NURU_POST_DEADLINE_MS - (Date.now() - nuruPostStart);
+                    if (remaining > 900) {
+                      const restructured = await withTimeout(
+                        restructureSentence(best.text),
+                        Math.min(1_200, Math.max(500, remaining - 350)),
+                        'mandatory_nuru_restructure',
+                      );
+                      updateBest(guardSingleSentence(feedSentence, restructured), best);
+                    }
+                  } catch {
+                    // Restructuring is best-effort inside the strict post budget.
+                  }
+                }
+                if (best.change >= mandatoryMinSentenceChange) return best.text;
+
+                updateBest(synonymReplace(applyAIWordKill(forceNaturalRephrase(best.text, seed)), 1, usedMandatoryWords), best);
+                if (best.change < mandatoryMinSentenceChange) {
+                  return finalizeMandatoryCandidate(forceNaturalRephrase(best.text, seed + 17));
+                }
+                return best.text;
+              };
 
               sendSSE(controller, { type: 'stage', stage: `Nuru Post x${reruns} + Loop ${postLoops}x${postLoopPasses}` });
               await flushDelay(2);
@@ -2510,12 +2580,18 @@ adaptivePostPlan = buildAdaptiveCleanupPlan(normalizedText, currentAdaptiveScore
               for (let pass = 0; pass < reruns && nuruPostTimeOk(); pass++) {
                 for (let i = 0; i < postSents.length && nuruPostTimeOk(); i++) {
                   if (!isHeadingSentCheck(postSents[i])) {
-                    postSents[i] = runNuruSinglePass(postSents[i], {
+                    const feedSentence = postSents[i];
+                    const options: StealthHumanizeOptions = {
                       detectorPressure: aggressivePressure,
                       humanVariance: 0.02 + aggressivePressure * 0.04,
                       readabilityBias: adaptivePostPlan.readabilityBias,
-                    });
-                    postSents[i] = finalSmoothGrammar(deepNonLLMClean(postSents[i]));
+                    };
+                    postSents[i] = await enforceMandatoryChange(
+                      feedSentence,
+                      runNuruSinglePass(feedSentence, options),
+                      options,
+                      pass + i,
+                    );
                   }
                   sendSSE(controller, { type: 'sentence', index: i, text: postSents[i], stage: `Nuru Post x10 ${pass + 1}/${reruns}` });
                 }
@@ -2525,12 +2601,18 @@ adaptivePostPlan = buildAdaptiveCleanupPlan(normalizedText, currentAdaptiveScore
                 for (let pass = 0; pass < postLoopPasses && nuruPostTimeOk(); pass++) {
                   for (let i = 0; i < postSents.length && nuruPostTimeOk(); i++) {
                     if (!isHeadingSentCheck(postSents[i])) {
-                      postSents[i] = runNuruSinglePass(postSents[i], {
+                      const feedSentence = postSents[i];
+                      const options: StealthHumanizeOptions = {
                         detectorPressure: aggressivePressure,
                         humanVariance: 0.04 + aggressivePressure * 0.05,
                         readabilityBias: adaptivePostPlan.readabilityBias,
-                      });
-                      postSents[i] = finalSmoothGrammar(deepNonLLMClean(postSents[i]));
+                      };
+                      postSents[i] = await enforceMandatoryChange(
+                        feedSentence,
+                        runNuruSinglePass(feedSentence, options),
+                        options,
+                        reruns + loop * postLoopPasses + pass + i,
+                      );
                     }
                     sendSSE(controller, { type: 'sentence', index: i, text: postSents[i], stage: `Nuru Post Loop ${loop + 1}/${postLoops}.${pass + 1}/${postLoopPasses}` });
                   }
