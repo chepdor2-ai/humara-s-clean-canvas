@@ -830,8 +830,7 @@ const runNuruSinglePass = (input: string): string => {
   return output && output.trim().length > 0 ? output : input;
 };
 
-const CHAIN_TS = 1;
-    const applySmartNuruPolish = (input: string, maxPasses = 15): string => {
+const CHAIN_TS = 10;    const applySmartNuruPolish = (input: string, maxPasses = 15): string => {
       // Delegate to stealthHumanize which now inherently guarantees min 10 loops
       // and natively applies all our 6 detector specific non-LLM cleanups
       const output = stealthHumanize(input, strength ?? 'medium', tone ?? 'academic', maxPasses);

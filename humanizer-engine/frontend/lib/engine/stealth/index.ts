@@ -1999,11 +1999,11 @@ function processSentence(
   // Chain: try curated EXTRA_REPLACEMENTS / AI_WORD_REPLACEMENTS,
   //        then fall back to extended dictionary with aggressive POS filtering.
   const currentChange = wordChangeRatio(original, text);
-  if (currentChange < 0.65) {
+  if (currentChange < 0.85) {
     const tokens2 = text.split(/(\b)/);
     const result2: string[] = [];
     let extraSwaps = 0;
-    const neededChange = 0.65 - currentChange;
+    const neededChange = 0.85 - currentChange;
     const maxExtra = Math.ceil(wordCount * neededChange) + 6;
 
     for (let i = 0; i < tokens2.length; i++) {
@@ -2425,6 +2425,8 @@ export function stealthHumanize(
 
       let iter = 1;
       let best = originalSent;
+      let bestAiTierVal = 999;
+      let bestChangeRatio = -1;
 
       // Minimum 10 iterations, capped by sentMaxIter (up to 20)
       const actualMaxIter = Math.max(10, sentMaxIter);
@@ -2443,15 +2445,25 @@ export function stealthHumanize(
           continue;
         }
         
-        best = next; // Just pick the final output that meets the requirements
+        const risk = scoreSentenceRisk(next, domainResult);
+        const changeRatio = wordChangeRatio(originalSent, next);
         
-        const risk = scoreSentenceRisk(best, domainResult);
-        const changeRatio = wordChangeRatio(originalSent, best);
+        const tierMap = { protected: 0, low: 1, medium: 2, high: 3, critical: 4 };
+        const tierVal = tierMap[risk.tier as keyof typeof tierMap] || 4;
+        
+        // Track the best candidate (lowest AI score, highest change ratio)
+        // just in case we never perfectly hit the absolute criteria by the end.
+        if (tierVal < bestAiTierVal || (tierVal === bestAiTierVal && changeRatio > bestChangeRatio)) {
+           bestAiTierVal = tierVal;
+           bestChangeRatio = changeRatio;
+           best = next;
+        }
         
         // 0% AI (low or protected) and at least 40% change per sentence
         const isSafe = risk.tier === 'protected' || risk.tier === 'low';
         
         if (iter >= 10 && isSafe && changeRatio >= 0.40) {
+          best = next; // We met the strict user requirements at or after 10 loops
           break;
         }
         

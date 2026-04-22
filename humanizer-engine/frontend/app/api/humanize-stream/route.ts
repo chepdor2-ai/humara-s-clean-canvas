@@ -900,7 +900,7 @@ export async function POST(req: Request) {
           };
 
           // Nuru 2.0 post-processing depth applied at the tail of every pipeline.
-          const CHAIN_TS = 1; // Reduced from 10 to 1 since stealthHumanize does 10 internal loops
+          const CHAIN_TS = 10;
           const UNIVERSAL_POST_LOOPS = 1; // Reduced from 5 to 1
           const UNIVERSAL_POST_PASSES_PER_LOOP = 3;
           const chainSync = (fn: (s: string) => string, input: string, n: number): string => {
