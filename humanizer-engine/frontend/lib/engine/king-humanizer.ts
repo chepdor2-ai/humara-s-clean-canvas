@@ -329,7 +329,7 @@ async function processSentence(
 
   // Phase 2+3 only if Phase 1 didn't change enough (saves 2 LLM calls per sentence)
   const change = measureWordChange(sentence, result);
-  if (change < 0.45) {
+  if (change < 0.65) {
     // Phase 2: self-audit
     const diagnosis = await phase2Audit(result);
 

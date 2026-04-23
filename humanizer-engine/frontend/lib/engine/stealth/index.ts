@@ -2423,7 +2423,9 @@ export function stealthHumanize(
       // Pass it into compositeQualityScore to avoid redundant re-scoring every loop.
       const origRiskCache = scoreSentenceRisk(originalSent, domainResult);
 
-      const actualMaxIter = Math.min(5, enforcedMaxIterations);
+      // MANDATE: Hardened independent processing. Capping iterations at 5 was a bottleneck.
+      // Now allow up to the full enforcedMaxIterations (typically 15-20) for maximum aggression.
+      const actualMaxIter = Math.min(20, enforcedMaxIterations);
 
       let iter = 1;
       let best = originalSent;
@@ -2441,7 +2443,7 @@ export function stealthHumanize(
             const iterStrength = escalate ? 'strong' : strength;
             const rawNext = processSentence(
               previousOutput, hasFirstPerson, iter === 1 && sub === 0 ? globalSentenceIdx : 0,
-              totalSentences, usedStarters, iterStrength as any, isParagraphLead, detectorPressure, stealthStrategy,
+              totalSentences, new Set<string>(), iterStrength as any, isParagraphLead, detectorPressure, stealthStrategy,
             );
             const next = guardSingleSentence(previousOutput, rawNext);
             
@@ -2486,9 +2488,10 @@ export function stealthHumanize(
             }
             
             const isSafe = overallRisk.tier === 'protected' || overallRisk.tier === 'low';
-            
-            // If it's safe (0% AI) and we hit the 25% change from prev output threshold, we can break early
-            if (isSafe && wordChangeRatio(originalSent, previousOutput) >= 0.25) {
+
+            // If it's safe (0% AI) and we hit the 40% change threshold (was 25%), we can break.
+            // Aggressive mode requires at least 40% structural divergence even if AI score is low.
+            if (isSafe && wordChangeRatio(originalSent, previousOutput) >= 0.40) {
                 best = loopBest;
                 break;
             }
@@ -2517,12 +2520,12 @@ export function stealthHumanize(
       if (item.needsReprocess && item.text.trim().length >= 8) {
         // Run 3 iterations on the new sentence and pick the best
         let reprocessBest = processSentence(
-          item.text, hasFirstPerson, 0, totalSentences, usedStarters, strength, false, detectorPressure, stealthStrategy,
+          item.text, hasFirstPerson, 0, totalSentences, new Set<string>(), strength, false, detectorPressure, stealthStrategy,
         );
         let reprocessBestScore = compositeQualityScore(item.text, reprocessBest, 0.35 + readabilityBias * 0.30);
         for (let ri = 0; ri < 3; ri++) {
           const candidate = processSentence(
-            item.text, hasFirstPerson, 0, totalSentences, usedStarters, strength, false, detectorPressure, stealthStrategy,
+            item.text, hasFirstPerson, 0, totalSentences, new Set<string>(), strength, false, detectorPressure, stealthStrategy,
           );
           const score = compositeQualityScore(item.text, candidate, 0.35 + readabilityBias * 0.30);
           if (score > reprocessBestScore) {

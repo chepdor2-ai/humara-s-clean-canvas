@@ -674,8 +674,8 @@ function enforceMinimumChange(original: string, current: string, seed: number): 
   // Fast-exit: if already at target, skip all expensive passes
   if (changePercent >= TARGET_CHANGE) return result;
 
-  // Pass 1: Apply additional swap dicts (fire at <40%)
-  if (changePercent < 40) {
+  // Pass 1: Apply additional swap dicts (fire at <60% - was 40%)
+  if (changePercent < 60) {
     result = applySwapDict(result, VERB_PHRASE_SWAPS, seed + 20);
     result = applySwapDict(result, CLAUSE_REPHRASINGS, seed + 21);
     result = applySwapDict(result, TRANSITION_SWAPS, seed + 22);
@@ -683,8 +683,8 @@ function enforceMinimumChange(original: string, current: string, seed: number): 
     changePercent = calculateWordChangePercent(original, result);
   }
 
-  // Pass 2: Voice shift + deep restructure (fire at <50%)
-  if (changePercent < 50) {
+  // Pass 2: Voice shift + deep restructure (fire at <70% - was 50%)
+  if (changePercent < 70) {
     let pass2 = voiceShift(result, 0.5);
     if (isGarbledSentence(pass2)) pass2 = result;
     let pass2b = deepRestructure(pass2, 0.35);
@@ -694,8 +694,8 @@ function enforceMinimumChange(original: string, current: string, seed: number): 
     changePercent = calculateWordChangePercent(original, result);
   }
 
-  // Pass 3: All remaining dicts + syntactic template (fire at <55%)
-  if (changePercent < 55) {
+  // Pass 3: All remaining dicts + syntactic template (fire at <80% - was 55%)
+  if (changePercent < 80) {
     result = applySwapDict(result, MODIFIER_SWAPS, seed + 30);
     result = applySwapDict(result, HEDGING_PHRASES, seed + 31);
     result = applySwapDict(result, QUANTIFIER_SWAPS, seed + 32);
