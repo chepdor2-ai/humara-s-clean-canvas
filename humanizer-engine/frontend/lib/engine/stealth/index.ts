@@ -2423,12 +2423,6 @@ export function stealthHumanize(
       // Pass it into compositeQualityScore to avoid redundant re-scoring every loop.
       const origRiskCache = scoreSentenceRisk(originalSent, domainResult);
 
-      let iter = 1;
-      let best = originalSent;
-      let bestAiTierVal = 999;
-      let bestChangeRatio = -1;
-
-      // Scale max iterations per sentence. Maximum 5 passes to ensure speed of light.
       const actualMaxIter = Math.min(5, enforcedMaxIterations);
 
       let iter = 1;
